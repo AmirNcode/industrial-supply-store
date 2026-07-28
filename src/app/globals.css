@@ -1,0 +1,199 @@
+@import "tailwindcss";
+
+/*
+ * Design tokens read off the reference screenshots. The palette is deliberately
+ * narrow: one green, one link blue, one callout yellow, and four grays. The
+ * reference site's density comes from restraint, not from a large system.
+ */
+@theme {
+  --color-catalog-green: #16653a;
+  --color-catalog-green-dark: #0b4f2c;
+  --color-catalog-green-light: #2d8055;
+
+  /* Part numbers are links; unvisited blue / visited purple is load-bearing
+     information for a buyer working down a long spec table. */
+  --color-part-link: #3f3fbf;
+  --color-part-visited: #7a3f9d;
+
+  --color-callout-bg: #fdfce4;
+  --color-callout-border: #ddd68f;
+
+  --color-rule: #cfcfcf;
+  --color-rule-light: #e3e3e3;
+  --color-panel: #f2f2f2;
+  --color-panel-alt: #fafafa;
+
+  --color-ink: #222222;
+  --color-ink-muted: #666666;
+  --color-ink-faint: #8a8a8a;
+
+  --color-accent-bar: #f2c200;
+
+  --font-sans: Arial, Helvetica, "Helvetica Neue", sans-serif;
+  --font-fa: Vazirmatn, "IRANSans", Tahoma, "Segoe UI", sans-serif;
+
+  --text-xxs: 0.6875rem; /* 11px — spec table body */
+  --text-xs: 0.75rem;    /* 12px — table headers, footer */
+  --text-sm: 0.8125rem;  /* 13px — base body */
+  --text-base: 0.875rem; /* 14px */
+}
+
+html {
+  font-size: 16px;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  color: var(--color-ink);
+  background: #ffffff;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Persian needs a different family and a touch more line height — Arabic-script
+   glyphs have taller ascenders and descenders than Latin at the same size. */
+html[lang="fa"] body {
+  font-family: var(--font-fa);
+  line-height: 1.7;
+}
+
+a {
+  color: var(--color-catalog-green);
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}
+
+/*
+ * Dimensions, part numbers, and other technical values must never mirror under
+ * RTL — 0.239" reversed is unreadable. Cells carrying them opt out of the
+ * paragraph direction while still aligning to the correct edge.
+ */
+.tech {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+/* Scoped to table cells only. A full-width LTR textarea or input should align
+   to its own start edge (left), not be dragged to the right by this rule. */
+html[dir="rtl"] td.tech,
+html[dir="rtl"] th.tech {
+  text-align: right;
+}
+html[dir="rtl"] td.tech-num,
+html[dir="rtl"] th.tech-num {
+  text-align: left;
+}
+
+/* Dense data table shared by the spec table and the cart. */
+.spec-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: var(--text-xxs);
+}
+.spec-table th {
+  font-weight: 700;
+  text-align: start;
+  padding: 2px 7px;
+  vertical-align: bottom;
+  border-bottom: 1px solid var(--color-ink);
+  white-space: nowrap;
+}
+/* No row rules. The reference table gets its legibility from tight leading and
+   column alignment; horizontal lines at this density read as noise. */
+.spec-table td {
+  padding: 1px 7px;
+  vertical-align: middle;
+  white-space: nowrap;
+  line-height: 1.55;
+}
+.spec-table tbody tr:hover {
+  background: #eef5f0;
+}
+/* Group header spanning the quantity-break price columns. */
+.spec-table th.group {
+  text-align: center;
+  border-bottom: 1px solid var(--color-rule);
+  padding-bottom: 0;
+  font-weight: 400;
+  color: var(--color-ink-muted);
+}
+
+/* Numeric columns right-align in LTR and stay visually consistent in RTL. */
+.num {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+
+input[type="text"],
+input[type="number"],
+input[type="email"],
+input[type="password"],
+textarea,
+select {
+  border: 1px solid var(--color-rule);
+  background: #fff;
+  padding: 3px 6px;
+  font-size: var(--text-sm);
+  font-family: inherit;
+  color: var(--color-ink);
+}
+input:focus,
+textarea:focus,
+select:focus {
+  outline: 2px solid var(--color-catalog-green-light);
+  outline-offset: -1px;
+}
+
+/* Hide the number spinners — quantity cells are too narrow for them. */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.btn-primary {
+  background: var(--color-catalog-green);
+  color: #fff;
+  font-weight: 700;
+  font-size: var(--text-xs);
+  letter-spacing: 0.03em;
+  padding: 7px 18px;
+  border: none;
+  cursor: pointer;
+}
+.btn-primary:hover {
+  background: var(--color-catalog-green-dark);
+}
+.btn-primary:disabled {
+  background: #9bb3a4;
+  cursor: default;
+}
+
+.btn-small {
+  background: var(--color-catalog-green);
+  color: #fff;
+  font-size: var(--text-xxs);
+  font-weight: 700;
+  padding: 2px 7px;
+  border: none;
+  cursor: pointer;
+  line-height: 1.4;
+}
+.btn-small:hover {
+  background: var(--color-catalog-green-dark);
+}
+.btn-small:disabled {
+  background: #b7c7bd;
+  cursor: default;
+}
+
+/* Wide content scrolls inside its own container; the page body never does. */
+.scroll-x {
+  overflow-x: auto;
+  max-width: 100%;
+}

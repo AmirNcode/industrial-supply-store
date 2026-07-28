@@ -1,0 +1,49 @@
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: isupply-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: isupply
+      POSTGRES_PASSWORD: isupply
+      POSTGRES_DB: isupply
+      # Deterministic collation so ORDER BY on part numbers is stable.
+      POSTGRES_INITDB_ARGS: "--locale=C --encoding=UTF8"
+    ports:
+      # 5432 is taken by other stacks on this machine; expose on 5433.
+      - "5433:5432"
+    volumes:
+      - isupply-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U isupply -d isupply"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # Build-time only. `docker build` has no access to the compose network,
+        # so the prerender step reaches the db through the host's published port.
+        DATABASE_URL: postgres://isupply:isupply@host.docker.internal:5433/isupply
+    container_name: isupply-app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://isupply:isupply@db:5432/isupply
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-changeme}
+      USD_TO_TOMAN: ${USD_TO_TOMAN:-110000}
+      NODE_ENV: production
+    ports:
+      - "3000:3000"
+    profiles:
+      # Only starts with `--profile full`. Day-to-day you run the app on the
+      # host against the dockerised db, which is far faster to iterate on.
+      - full
+
+volumes:
+  isupply-pgdata:

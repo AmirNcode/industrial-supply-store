@@ -1,0 +1,263 @@
+import {
+  pgTable,
+  serial,
+  integer,
+  text,
+  boolean,
+  jsonb,
+  doublePrecision,
+  timestamp,
+  uuid,
+  index,
+  uniqueIndex,
+  primaryKey,
+  type AnyPgColumn,
+} from "drizzle-orm/pg-core";
+
+/**
+ * Spec value as stored in `products.specs`. Numbers stay numbers so the spec
+ * table can right-align and sort them without re-parsing.
+ */
+export type SpecValue = string | number | null;
+export type SpecBag = Record<string, SpecValue>;
+
+/** A single quantity-break price row, denormalised onto the product for display. */
+export type PriceTier = { minQty: number; priceCents: number };
+
+// ---------------------------------------------------------------------------
+// Catalog taxonomy
+// ---------------------------------------------------------------------------
+
+/**
+ * Adjacency list (`parentId`) plus a materialised `path` so subtree queries are
+ * a single indexed prefix scan instead of a recursive CTE. `path` is the slug
+ * chain joined by "/", with no leading or trailing slash:
+ *   "fastening-joining/fasteners/screws-bolts"
+ */
+export const categories = pgTable(
+  "categories",
+  {
+    id: serial("id").primaryKey(),
+    slug: text("slug").notNull(),
+    parentId: integer("parent_id").references((): AnyPgColumn => categories.id, {
+      onDelete: "cascade",
+    }),
+    path: text("path").notNull(),
+    depth: integer("depth").notNull().default(0),
+    nameEn: text("name_en").notNull(),
+    nameFa: text("name_fa").notNull(),
+    /** Key into the in-house SVG icon set. */
+    icon: text("icon").notNull().default("box"),
+    sort: integer("sort").notNull().default(0),
+    /** Denormalised count of SKUs in this subtree; filled by the seeder. */
+    productCount: integer("product_count").notNull().default(0),
+  },
+  (t) => [
+    uniqueIndex("categories_path_key").on(t.path),
+    index("categories_parent_idx").on(t.parentId, t.sort),
+    index("categories_depth_idx").on(t.depth),
+  ],
+);
+
+/**
+ * A product family is one heading in the spec table view — "Oil-Resistant
+ * Buna-N O-Rings". It always hangs off a leaf category and owns its own spec
+ * column definitions.
+ */
+export const productFamilies = pgTable(
+  "product_families",
+  {
+    id: serial("id").primaryKey(),
+    slug: text("slug").notNull(),
+    categoryId: integer("category_id")
+      .notNull()
+      .references(() => categories.id, { onDelete: "cascade" }),
+    nameEn: text("name_en").notNull(),
+    nameFa: text("name_fa").notNull(),
+    /** Short line under the family name on category cards. */
+    descEn: text("desc_en").notNull().default(""),
+    descFa: text("desc_fa").notNull().default(""),
+    /** Long body of the yellow "About" callout on the family page. */
+    aboutEn: text("about_en").notNull().default(""),
+    aboutFa: text("about_fa").notNull().default(""),
+    icon: text("icon").notNull().default("box"),
+    sort: integer("sort").notNull().default(0),
+    productCount: integer("product_count").notNull().default(0),
+    /** Grouping heading above a run of family cards, e.g. "Oil-Resistant O-Rings". */
+    groupEn: text("group_en").notNull().default(""),
+    groupFa: text("group_fa").notNull().default(""),
+  },
+  (t) => [
+    uniqueIndex("families_slug_key").on(t.slug),
+    index("families_category_idx").on(t.categoryId, t.sort),
+  ],
+);
+
+/**
+ * Declares the spec table columns for one family: which jsonb keys render, in
+ * what order, with what label and unit, and whether they get a facet.
+ * The spec table is entirely data-driven off this table — adding a new product
+ * category requires no UI code.
+ */
+export const specDefs = pgTable(
+  "spec_defs",
+  {
+    id: serial("id").primaryKey(),
+    familyId: integer("family_id")
+      .notNull()
+      .references(() => productFamilies.id, { onDelete: "cascade" }),
+    key: text("key").notNull(),
+    labelEn: text("label_en").notNull(),
+    labelFa: text("label_fa").notNull(),
+    /** Rendered after the value, e.g. `"` or `mm`. Empty for unitless. */
+    unit: text("unit").notNull().default(""),
+    /** "number" right-aligns and enables numeric facet sorting; "text" does not. */
+    kind: text("kind", { enum: ["number", "text"] }).notNull().default("text"),
+    filterable: boolean("filterable").notNull().default(false),
+    sort: integer("sort").notNull().default(0),
+  },
+  (t) => [
+    uniqueIndex("spec_defs_family_key").on(t.familyId, t.key),
+    index("spec_defs_family_sort_idx").on(t.familyId, t.sort),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// Products
+// ---------------------------------------------------------------------------
+
+export const products = pgTable(
+  "products",
+  {
+    id: serial("id").primaryKey(),
+    partNumber: text("part_number").notNull(),
+    familyId: integer("family_id")
+      .notNull()
+      .references(() => productFamilies.id, { onDelete: "cascade" }),
+    /** Display + detail source of truth. Faceting reads productSpecValues instead. */
+    specs: jsonb("specs").$type<SpecBag>().notNull().default({}),
+    /** Unit price at qty 1, in USD cents. Persian prices convert at render time. */
+    priceCents: integer("price_cents").notNull(),
+    priceTiers: jsonb("price_tiers").$type<PriceTier[]>().notNull().default([]),
+    /** Items ship in packs; qty in the table means "packs", as on the reference site. */
+    packQty: integer("pack_qty").notNull().default(1),
+    leadDays: integer("lead_days").notNull().default(0),
+    inStock: boolean("in_stock").notNull().default(true),
+    /** Flattened part number + family + spec values, fed to the FTS index. */
+    searchText: text("search_text").notNull().default(""),
+    sort: integer("sort").notNull().default(0),
+  },
+  (t) => [
+    uniqueIndex("products_part_number_key").on(t.partNumber),
+    index("products_family_sort_idx").on(t.familyId, t.sort),
+  ],
+);
+
+/**
+ * Denormalised facet index. Exists purely so filter and facet-count queries hit
+ * a btree instead of unnesting `products.specs`. Written by the seeder in the
+ * same transaction as the product, so it cannot drift.
+ */
+export const productSpecValues = pgTable(
+  "product_spec_values",
+  {
+    productId: integer("product_id")
+      .notNull()
+      .references(() => products.id, { onDelete: "cascade" }),
+    familyId: integer("family_id")
+      .notNull()
+      .references(() => productFamilies.id, { onDelete: "cascade" }),
+    specKey: text("spec_key").notNull(),
+    /** Always populated — the display string, and what filters match on. */
+    valText: text("val_text").notNull(),
+    /** Populated only for numeric specs, so ranges and sorting work. */
+    valNum: doublePrecision("val_num"),
+  },
+  (t) => [
+    primaryKey({ columns: [t.productId, t.specKey] }),
+    // Drives both "which products match this filter" and facet counts.
+    index("psv_family_key_text_idx").on(t.familyId, t.specKey, t.valText),
+    index("psv_family_key_num_idx").on(t.familyId, t.specKey, t.valNum),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// Cart
+// ---------------------------------------------------------------------------
+
+/** Anonymous cart keyed by an httpOnly cookie. No account required in v1. */
+export const carts = pgTable("carts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const cartItems = pgTable(
+  "cart_items",
+  {
+    cartId: uuid("cart_id")
+      .notNull()
+      .references(() => carts.id, { onDelete: "cascade" }),
+    productId: integer("product_id")
+      .notNull()
+      .references(() => products.id, { onDelete: "cascade" }),
+    qty: integer("qty").notNull().default(1),
+    addedAt: timestamp("added_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.cartId, t.productId] })],
+);
+
+// ---------------------------------------------------------------------------
+// Quotes (RFQ) — stands in for checkout while payment is out of scope
+// ---------------------------------------------------------------------------
+
+export const quotes = pgTable(
+  "quotes",
+  {
+    id: serial("id").primaryKey(),
+    /** Human-facing reference shown on the confirmation screen, e.g. RFQ-7Q4M2X. */
+    ref: text("ref").notNull(),
+    company: text("company").notNull(),
+    contactName: text("contact_name").notNull(),
+    email: text("email").notNull(),
+    phone: text("phone").notNull().default(""),
+    poNumber: text("po_number").notNull().default(""),
+    address: text("address").notNull().default(""),
+    city: text("city").notNull().default(""),
+    country: text("country").notNull().default(""),
+    notes: text("notes").notNull().default(""),
+    status: text("status").notNull().default("submitted"),
+    locale: text("locale").notNull().default("en"),
+    /** Currency the buyer was shown when they submitted. */
+    currency: text("currency").notNull().default("USD"),
+    totalCents: integer("total_cents").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("quotes_ref_key").on(t.ref),
+    index("quotes_created_idx").on(t.createdAt),
+  ],
+);
+
+/**
+ * Line items snapshot part number, name and specs at submission time so a later
+ * catalog edit cannot silently rewrite a quote that was already sent.
+ */
+export const quoteItems = pgTable(
+  "quote_items",
+  {
+    id: serial("id").primaryKey(),
+    quoteId: integer("quote_id")
+      .notNull()
+      .references(() => quotes.id, { onDelete: "cascade" }),
+    productId: integer("product_id").references(() => products.id, {
+      onDelete: "set null",
+    }),
+    partNumber: text("part_number").notNull(),
+    familyName: text("family_name").notNull().default(""),
+    specsSnapshot: jsonb("specs_snapshot").$type<SpecBag>().notNull().default({}),
+    qty: integer("qty").notNull(),
+    unitPriceCents: integer("unit_price_cents").notNull(),
+  },
+  (t) => [index("quote_items_quote_idx").on(t.quoteId)],
+);

@@ -1,0 +1,3 @@
+# v1 runs locally on generated demo data and should not be indexed.
+User-agent: *
+Disallow: /
