@@ -32,7 +32,7 @@ export default async function HomePage({
       <CategorySidebar locale={l} />
 
       <main className="min-w-0 flex-1">
-        <h1 className="border-b border-[var(--color-ink)] pb-1 mb-3 text-[13px] font-bold">
+        <h1 className="mb-3 hidden border-b border-[var(--color-ink)] pb-1 text-[13px] font-bold lg:block">
           {t.allCategories}
         </h1>
 
@@ -44,11 +44,11 @@ export default async function HomePage({
           const loose = kids.filter((k) => (byParent.get(k.id) ?? []).length === 0);
 
           return (
-            <section key={top.id} className="mb-8">
+            <section key={top.id} className="mb-6 lg:mb-8">
               <h2 className="mb-3 border-b border-[var(--color-rule)] pb-1">
                 <Link
                   href={`/${l}/c/${top.path}`}
-                  className="text-[21px] font-bold text-[var(--color-catalog-green)]"
+                  className="text-[19px] font-bold text-[var(--color-catalog-green)] lg:text-[21px]"
                 >
                   {pick(top, "name", l)}
                 </Link>
@@ -77,16 +77,18 @@ export default async function HomePage({
 function TileGrid({ locale, items }: { locale: Locale; items: CategoryRow[] }) {
   if (items.length === 0) return null;
   return (
-    <ul className="mb-4 flex flex-wrap gap-x-2 gap-y-3">
+    // Four across on a phone, matching the reference app; fixed-width tiles on
+    // desktop so a short row does not stretch into oversized squares.
+    <ul className="mb-4 grid grid-cols-4 gap-x-2 gap-y-3 sm:grid-cols-6 lg:[grid-template-columns:repeat(auto-fill,92px)]">
       {items.map((c) => (
-        <li key={c.id} style={{ width: 90 }}>
+        <li key={c.id}>
           <Link
             href={`/${locale}/c/${c.path}`}
             prefetch={false}
             className="group block text-center hover:no-underline"
           >
-            <span className="mx-auto flex h-[72px] w-[72px] items-center justify-center border border-[var(--color-rule)] bg-white group-hover:border-[var(--color-catalog-green)]">
-              <ProductIcon name={c.icon} size={54} />
+            <span className="mx-auto flex aspect-square w-full items-center justify-center border border-[var(--color-rule)] bg-white group-hover:border-[var(--color-catalog-green)] lg:h-[72px] lg:w-[72px]">
+              <ProductIcon name={c.icon} size={54} className="h-3/5 w-3/5 lg:h-auto lg:w-auto" />
             </span>
             <span className="mt-1 block text-[11px] leading-tight text-[var(--color-ink)] group-hover:text-[var(--color-catalog-green)] group-hover:underline">
               {pick(c, "name", locale)}

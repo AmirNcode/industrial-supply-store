@@ -29,7 +29,13 @@ export async function CategorySidebar({
   );
 
   return (
-    <nav className="shrink-0 border-e border-[var(--color-rule)] pe-3" style={{ width: 250 }}>
+    // Hidden below lg: at phone width this rail consumed two thirds of the
+    // screen. Mobile reaches the same categories through the on-page grid and
+    // the header drawer.
+    <nav
+      className="hidden shrink-0 border-e border-[var(--color-rule)] pe-3 lg:block"
+      style={{ width: 250 }}
+    >
       <h2 className="border-b border-[var(--color-ink)] pb-1 mb-1.5 text-[13px] font-bold">
         {heading ?? t.chooseCategory}
       </h2>

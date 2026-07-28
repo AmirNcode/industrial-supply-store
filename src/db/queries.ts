@@ -334,6 +334,74 @@ export async function search(q: string): Promise<SearchResults> {
   };
 }
 
+export type SubtreeProduct = ProductRow & {
+  familyId: number;
+  familySlug: string;
+  familyEn: string;
+  familyFa: string;
+  icon: string;
+};
+
+/**
+ * Spec columns for several families at once, keyed by family. A mixed-family
+ * list still has to describe each part — without this every card in the
+ * "list of products" view renders as just a name and a part number, and
+ * consecutive sizes look identical.
+ */
+export async function getSpecDefsForFamilies(
+  familyIds: number[],
+): Promise<Map<number, SpecDefRow[]>> {
+  const out = new Map<number, SpecDefRow[]>();
+  if (familyIds.length === 0) return out;
+  const rows = await sql<(SpecDefRow & { familyId: number })[]>`
+    SELECT family_id AS "familyId", key, label_en AS "labelEn",
+           label_fa AS "labelFa", unit, kind, filterable, sort
+    FROM spec_defs WHERE family_id = ANY(${familyIds}) ORDER BY family_id, sort
+  `;
+  for (const r of rows) {
+    if (!out.has(r.familyId)) out.set(r.familyId, []);
+    out.get(r.familyId)!.push(r);
+  }
+  return out;
+}
+
+/**
+ * Every SKU at or below a category, for the "list of products" view. The
+ * reference app offers this on mobile so a buyer can scan actual parts without
+ * first drilling into a family.
+ */
+export async function getProductsInSubtree(
+  path: string,
+  limit: number,
+  offset: number,
+): Promise<SubtreeProduct[]> {
+  return sql<SubtreeProduct[]>`
+    SELECT p.id, p.part_number AS "partNumber", p.specs,
+           p.price_tiers AS "priceTiers", p.price_cents AS "priceCents",
+           p.pack_qty AS "packQty", p.lead_days AS "leadDays",
+           p.in_stock AS "inStock",
+           f.id AS "familyId", f.slug AS "familySlug", f.name_en AS "familyEn",
+           f.name_fa AS "familyFa", f.icon
+    FROM products p
+    JOIN product_families f ON f.id = p.family_id
+    JOIN categories c ON c.id = f.category_id
+    WHERE c.path = ${path} OR c.path LIKE ${path + "/%"}
+    ORDER BY f.sort, p.sort
+    LIMIT ${limit} OFFSET ${offset}
+  `;
+}
+
+export async function countProductsInSubtree(path: string): Promise<number> {
+  const rows = await sql<{ n: number }[]>`
+    SELECT count(*)::int AS n
+    FROM products p
+    JOIN product_families f ON f.id = p.family_id
+    JOIN categories c ON c.id = f.category_id
+    WHERE c.path = ${path} OR c.path LIKE ${path + "/%"}
+  `;
+  return rows[0]?.n ?? 0;
+}
+
 /** Exact part-number lookup used by quick order. */
 export async function findByPartNumbers(
   partNumbers: string[],

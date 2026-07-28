@@ -5,20 +5,28 @@ import {
   getChildren,
   getAncestors,
   getFamiliesInSubtree,
+  getProductsInSubtree,
+  getSpecDefsForFamilies,
   type FamilyRow,
 } from "@/db/queries";
 import { CategorySidebar } from "@/components/CategorySidebar";
 import { Breadcrumb } from "@/components/Breadcrumb";
 import { ProductIcon } from "@/components/ProductIcon";
+import { ViewAsToggle } from "@/components/ViewAsToggle";
+import { ProductCardList } from "@/components/ProductCardList";
 import { isLocale, getDict, pick, type Locale } from "@/lib/i18n";
 import { formatInt } from "@/lib/money";
 
 export const revalidate = 3600;
 
+const LIST_PAGE_SIZE = 100;
+
 export default async function CategoryPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ locale: string; slug: string[] }>;
+  searchParams: Promise<{ view?: string; page?: string }>;
 }) {
   const { locale, slug } = await params;
   if (!isLocale(locale)) notFound();
@@ -29,11 +37,34 @@ export default async function CategoryPage({
   const category = await getCategoryByPath(path);
   if (!category) notFound();
 
+  const sp = await searchParams;
+  const view = sp.view === "list" ? "list" : "categories";
+  const page = Math.max(1, Number(sp.page) || 1);
+  const base = `/${l}/c/${path}`;
+
   const [children, ancestors, families] = await Promise.all([
     getChildren(category.id),
     getAncestors(category.path),
     getFamiliesInSubtree(category.path),
   ]);
+
+  // Only pay for the SKU list when it is the view actually being rendered.
+  const listProducts =
+    view === "list"
+      ? await getProductsInSubtree(
+          category.path,
+          LIST_PAGE_SIZE,
+          (page - 1) * LIST_PAGE_SIZE,
+        )
+      : [];
+  const listPages =
+    view === "list" ? Math.ceil(category.productCount / LIST_PAGE_SIZE) : 0;
+
+  // One extra query for the whole page, keyed on the families actually shown.
+  const listDefs =
+    listProducts.length > 0
+      ? await getSpecDefsForFamilies([...new Set(listProducts.map((p) => p.familyId))])
+      : undefined;
 
   // Families are grouped by their declared heading, preserving catalog order.
   const groups: { name: string; items: FamilyRow[] }[] = [];
@@ -57,21 +88,65 @@ export default async function CategoryPage({
           countLabel={`${formatInt(category.productCount, l)} ${t.products}`}
         />
 
-        <h1 className="mb-4 border-b border-[var(--color-rule)] pb-1 text-[21px] font-bold text-[var(--color-catalog-green)]">
-          {pick(category, "name", l)}
-        </h1>
+        <div className="mb-4 flex items-baseline justify-between gap-3 border-b border-[var(--color-rule)] pb-1">
+          <h1 className="text-[19px] font-bold text-[var(--color-catalog-green)] lg:text-[21px]">
+            {pick(category, "name", l)}
+          </h1>
+          {category.productCount > 0 && (
+            <ViewAsToggle
+              locale={l}
+              categoriesHref={base}
+              listHref={`${base}?view=list`}
+              current={view}
+            />
+          )}
+        </div>
 
+        {view === "list" ? (
+          <>
+            <ProductCardList
+              locale={l}
+              products={listProducts}
+              defsByFamily={listDefs}
+            />
+            {listPages > 1 && (
+              <nav className="mt-4 flex flex-wrap items-center gap-2 text-[13px]">
+                {Array.from({ length: listPages }, (_, i) => i + 1)
+                  .filter((p) => p === 1 || p === listPages || Math.abs(p - page) <= 2)
+                  .map((p, i, arr) => (
+                    <span key={p} className="flex items-center gap-2">
+                      {i > 0 && arr[i - 1] !== p - 1 && (
+                        <span className="text-[var(--color-ink-faint)]">…</span>
+                      )}
+                      {p === page ? (
+                        <span className="tech font-bold">{formatInt(p, l)}</span>
+                      ) : (
+                        <Link
+                          href={`${base}?view=list${p > 1 ? `&page=${p}` : ""}`}
+                          prefetch={false}
+                          className="tech tap px-1"
+                        >
+                          {formatInt(p, l)}
+                        </Link>
+                      )}
+                    </span>
+                  ))}
+              </nav>
+            )}
+          </>
+        ) : (
+          <>
         {children.length > 0 && (
-          <ul className="mb-6 flex flex-wrap gap-x-2 gap-y-3">
+          <ul className="mb-6 grid grid-cols-4 gap-x-2 gap-y-3 sm:grid-cols-6 lg:[grid-template-columns:repeat(auto-fill,108px)]">
             {children.map((c) => (
-              <li key={c.id} style={{ width: 108 }}>
+              <li key={c.id}>
                 <Link
                   href={`/${l}/c/${c.path}`}
                   prefetch={false}
                   className="group block text-center hover:no-underline"
                 >
-                  <span className="mx-auto flex h-[84px] w-[84px] items-center justify-center border border-[var(--color-rule)] bg-white group-hover:border-[var(--color-catalog-green)]">
-                    <ProductIcon name={c.icon} size={62} />
+                  <span className="mx-auto flex aspect-square w-full items-center justify-center border border-[var(--color-rule)] bg-white group-hover:border-[var(--color-catalog-green)] lg:h-[84px] lg:w-[84px]">
+                    <ProductIcon name={c.icon} size={62} className="h-3/5 w-3/5 lg:h-auto lg:w-auto" />
                   </span>
                   <span className="mt-1 block text-[11px] leading-tight group-hover:text-[var(--color-catalog-green)] group-hover:underline">
                     {pick(c, "name", l)}
@@ -121,6 +196,8 @@ export default async function CategoryPage({
 
         {children.length === 0 && families.length === 0 && (
           <p className="text-[13px] text-[var(--color-ink-muted)]">{t.noResults}</p>
+        )}
+          </>
         )}
       </main>
     </div>

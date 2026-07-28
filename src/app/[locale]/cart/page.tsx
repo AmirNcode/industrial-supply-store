@@ -37,7 +37,79 @@ export default async function CartPage({
         </p>
       ) : (
         <>
-          <div className="scroll-x">
+          {/* Phone layout: each line stacks so the quantity, Update and Remove
+              controls stay on screen. The table version scrolled them out of
+              reach, which is unacceptable on the one page where the buyer has
+              to edit what they are about to submit. */}
+          <ul className="divide-y divide-[var(--color-rule-light)] border-y border-[var(--color-rule-light)] lg:hidden">
+            {lines.map((line) => {
+              const unit = unitPriceAt(line, line.qty);
+              const summary = Object.entries(line.specs)
+                .slice(0, 3)
+                .map(([, v]) =>
+                  typeof v === "number" ? String(v) : specValueLabel(String(v), l),
+                )
+                .join(" · ");
+              return (
+                <li key={line.productId} className="py-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <Link
+                        href={`/${l}/f/${line.familySlug}?pn=${encodeURIComponent(line.partNumber)}`}
+                        prefetch={false}
+                        className="tech block text-[13px] font-bold !text-[var(--color-part-link)]"
+                      >
+                        {line.partNumber}
+                      </Link>
+                      <span className="block text-[13px] leading-snug">
+                        {l === "fa" ? line.familyFa : line.familyEn}
+                      </span>
+                      <bdi className="tech mt-0.5 block text-[11px] text-[var(--color-ink-faint)]">
+                        {summary}
+                      </bdi>
+                    </div>
+                    <span className="tech shrink-0 text-[15px] font-bold">
+                      {formatPrice(unit * line.qty, l)}
+                    </span>
+                  </div>
+
+                  <div className="mt-2 flex items-center gap-3">
+                    <span className="tech text-[12px] text-[var(--color-ink-muted)]">
+                      {formatPrice(unit, l)} / {t.each}
+                    </span>
+                    <form
+                      action={updateQtyAction}
+                      className="ms-auto flex items-center gap-1.5"
+                    >
+                      <input type="hidden" name="productId" value={line.productId} />
+                      <input
+                        type="number"
+                        name="qty"
+                        min={0}
+                        defaultValue={line.qty}
+                        aria-label={t.qty}
+                        className="w-16 px-1 py-1 text-center"
+                      />
+                      <button type="submit" className="btn-small">
+                        {t.update}
+                      </button>
+                    </form>
+                    <form action={removeLineAction}>
+                      <input type="hidden" name="productId" value={line.productId} />
+                      <button
+                        type="submit"
+                        className="tap text-[12px] text-[var(--color-ink-muted)] underline"
+                      >
+                        {t.remove}
+                      </button>
+                    </form>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+
+          <div className="scroll-x hidden lg:block">
             <table className="spec-table">
               <thead>
                 <tr>
@@ -117,16 +189,21 @@ export default async function CartPage({
             </table>
           </div>
 
-          <div className="mt-4 flex items-center justify-end gap-6 border-t border-[var(--color-ink)] pt-3">
-            <span className="text-[13px]">
+          <div className="mt-4 flex flex-col items-stretch gap-3 border-t border-[var(--color-ink)] pt-3 sm:flex-row sm:items-center sm:justify-end sm:gap-6">
+            <span className="text-[15px] sm:text-[13px]">
               {t.subtotal}:{" "}
-              <strong className="tech text-[15px]">{formatPrice(subtotal, l)}</strong>
+              <strong className="tech text-[17px] sm:text-[15px]">
+                {formatPrice(subtotal, l)}
+              </strong>
             </span>
-            <Link href={`/${l}/quote`} className="btn-primary hover:no-underline">
+            <Link
+              href={`/${l}/quote`}
+              className="btn-primary py-3 text-center hover:no-underline sm:py-[7px]"
+            >
               {t.requestQuote}
             </Link>
           </div>
-          <p className="mt-2 text-end text-[11px] text-[var(--color-ink-faint)]">
+          <p className="mt-2 text-[11px] text-[var(--color-ink-faint)] sm:text-end">
             {t.rfqIntro}
           </p>
         </>

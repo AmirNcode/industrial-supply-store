@@ -13,6 +13,9 @@ import {
 } from "@/db/queries";
 import { sql } from "@/db";
 import { FacetSidebar } from "@/components/FacetSidebar";
+import { MobileFilterBar } from "@/components/MobileFilterBar";
+import { ActiveFilterPills } from "@/components/ActiveFilterPills";
+import { ProductCardList } from "@/components/ProductCardList";
 import { Breadcrumb } from "@/components/Breadcrumb";
 import { AddToCartRow } from "@/components/AddToCartRow";
 import { ProductIcon } from "@/components/ProductIcon";
@@ -21,7 +24,20 @@ import { formatInt, formatPriceBare, formatSpecNumber, currencyLabel } from "@/l
 import { specValueLabel, isTechnicalValue } from "@/lib/specValues";
 import { parseFilters, pageHref, clearAllHref, type RawSearchParams } from "@/lib/filters";
 
-const PAGE_SIZE = 200;
+/**
+ * 100 rather than 200.
+ *
+ * The page renders the desktop table and the mobile card list from the same
+ * data and hides one with CSS, so every row costs two renders and two
+ * add-to-cart islands in the RSC payload. At 200 rows that measured ~95ms
+ * against ~27ms before the mobile layout existed. Halving the page restores
+ * the original latency and 100 rows is still a long page to scan.
+ *
+ * The alternative — sniffing the User-Agent to render only one layout — was
+ * rejected because it breaks resizing a desktop window to check the mobile
+ * view, which is exactly how this gets reviewed.
+ */
+const PAGE_SIZE = 100;
 
 export default async function FamilyPage({
   params,
@@ -65,7 +81,9 @@ export default async function FamilyPage({
     // The family page drops the top-level category rail — as the reference site
     // does — and gives that width to the spec table. Persian labels are wider
     // than their English equivalents, so the table needs every pixel.
-    <div className="px-3 pt-2">
+    // Bottom padding reserves room for the fixed mobile filter bar so the last
+    // rows are not hidden behind it.
+    <div className="px-3 pt-2 pb-24 lg:pb-0">
       <main className="min-w-0">
         <Breadcrumb
           locale={l}
@@ -92,18 +110,22 @@ export default async function FamilyPage({
         )}
 
         <div className="flex gap-5">
-          <FacetSidebar
-            locale={l}
-            base={base}
-            searchParams={sp}
-            facets={facets}
-            defs={defs}
-            filters={filters}
-          />
+          {/* The rail is desktop-only; MobileFilterBar carries the same facets
+              at phone width. */}
+          <div className="hidden lg:block">
+            <FacetSidebar
+              locale={l}
+              base={base}
+              searchParams={sp}
+              facets={facets}
+              defs={defs}
+              filters={filters}
+            />
+          </div>
 
           <section className="min-w-0 flex-1">
             <div className="mb-2 flex items-start gap-3">
-              <ProductIcon name={family.icon} size={64} />
+              <ProductIcon name={family.icon} size={64} className="hidden sm:block" />
               <div className="min-w-0">
                 <h1 className="text-[19px] font-bold text-[var(--color-catalog-green)]">
                   {pick(family, "name", l)}
@@ -114,6 +136,14 @@ export default async function FamilyPage({
               </div>
             </div>
 
+            <ActiveFilterPills
+              locale={l}
+              base={base}
+              searchParams={sp}
+              filters={filters}
+              defs={defs}
+            />
+
             {products.length === 0 ? (
               <p className="py-6 text-[13px]">
                 {t.noResults}{" "}
@@ -123,12 +153,22 @@ export default async function FamilyPage({
               </p>
             ) : (
               <>
-                <div className="scroll-x">
+                <div className="scroll-x hidden lg:block">
                   <SpecTable
                     locale={l}
                     defs={defs}
                     products={products}
                     highlighted={highlighted}
+                  />
+                </div>
+
+                <div className="lg:hidden">
+                  <ProductCardList
+                    locale={l}
+                    products={products}
+                    defs={defs}
+                    familyName={pick(family, "name", l)}
+                    familyIcon={family.icon}
                   />
                 </div>
 
@@ -161,6 +201,16 @@ export default async function FamilyPage({
             )}
           </section>
         </div>
+
+        <MobileFilterBar
+          locale={l}
+          base={base}
+          searchParams={sp}
+          facets={facets}
+          defs={defs}
+          filters={filters}
+          total={total}
+        />
       </main>
     </div>
   );

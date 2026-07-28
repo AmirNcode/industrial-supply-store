@@ -31,7 +31,7 @@ npm run dev
 
 Then open http://localhost:3000 — it redirects to `/en`. Persian is at `/fa`.
 
-Seeding takes about 10 seconds and produces ~31,000 products across 97
+Seeding takes about 14 seconds and produces ~34,000 products across 97
 categories. It is deterministic: reseeding yields byte-identical part numbers,
 so bookmarks and screenshots survive a reset.
 
@@ -73,6 +73,8 @@ stacks. Admin password and FX rate live in `.env`.
 | Quantity-break pricing (1–9 / 10+) | ✅ |
 | Search with type-ahead (parts, families, categories) | ✅ |
 | Quick order by pasted part number list | ✅ |
+| Mobile layout (drawer, filter sheet, card lists) | ✅ |
+| "View as" categories / list of products | ✅ |
 | Cart persisted to Postgres via cookie session | ✅ |
 | RFQ submission with reference number | ✅ |
 | Admin inbox for submitted RFQs | ✅ |
@@ -106,17 +108,18 @@ Client JavaScript is confined to four islands: search autocomplete, the
 add-to-cart row, the facet filter box, and the cart badge. Everything else is
 server-rendered.
 
-### Measured (production build, warm)
+### Measured (production build, fully warm, best of 5)
 
 | Route | Time |
 |---|---|
-| Home | 3–7 ms |
-| Category page | 10–17 ms |
-| Spec table, 200 rows + facets | 32–50 ms |
-| Filtered spec table | 25–27 ms |
-| Search autocomplete | 3–5 ms |
+| Home | 4 ms |
+| Category page | 9 ms |
+| Category "list of products" view | 27 ms |
+| Filtered spec table | 33 ms |
+| Largest spec table (1,374-product family) | 61 ms |
+| Search autocomplete | 3 ms |
 
-The facet aggregation runs in ~4.7 ms against 146,000 facet rows, entirely on
+The facet aggregation runs in ~4.7 ms against ~160,000 facet rows, entirely on
 index scans.
 
 ---
@@ -155,6 +158,41 @@ Verified after seeding: zero duplicate spec combinations, zero rows where
 `OD <= ID`.
 
 ---
+
+## Mobile
+
+The phone layout is a different structure, not a narrower desktop one. Squeezing
+the desktop three-column masthead and the 250px category rail into 375px was
+what made the first pass unusable — the rail alone ate two thirds of the screen.
+
+What changes below `lg`:
+
+| Desktop | Phone |
+|---|---|
+| Wordmark + centred search + order links in one row | Wordmark row on home only; elsewhere a square logo tile beside a full-width search |
+| Persistent 250px category rail | Removed; categories reached via the on-page grid and the header drawer |
+| Left facet rail | Fixed bottom bar → full-height filter sheet with three-column chips |
+| 14-column spec table | Card list leading with the specs that distinguish each row |
+| Cart table | Stacked cards so quantity, Update and Remove stay on screen |
+
+Three details that are easy to get wrong and are handled explicitly:
+
+- **The card summary shows the specs that actually *vary* across the visible
+  rows**, computed per page. Showing the first N columns instead printed
+  "Dash 004 · Width 0.07"" on six consecutive cards that differed only by
+  durometer — a list of apparent duplicates.
+- **Spec summaries render as `<bdi>`-wrapped parts, not one joined string.**
+  Concatenating Persian labels with Latin values let the bidi algorithm reorder
+  each Latin run, detaching numbers from their labels.
+- **The filter bar is `position: fixed`, not `sticky`.** Sticky can only travel
+  inside its own containing block, and the wrapper was exactly as tall as the
+  bar, so it never pinned.
+
+Both layouts are rendered from the same data and one is hidden with CSS, which
+costs a second render per row. That doubled spec-table latency (~27 ms → ~95 ms
+at 200 rows), so the page size is 100. Sniffing the User-Agent to render only one
+layout would be faster still, but it breaks resizing a desktop window to check
+the mobile view — which is how this actually gets reviewed.
 
 ## Persian / RTL notes
 
