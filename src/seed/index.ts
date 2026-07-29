@@ -212,7 +212,13 @@ async function main() {
   `);
 
   console.log("→ analyzing");
-  await sql.unsafe("ANALYZE");
+  // Named tables, not a bare ANALYZE. Bare ANALYZE walks every relation the
+  // role can see, including system catalogs a managed Postgres will not grant —
+  // which produced a wall of "permission denied to analyze pg_authid" warnings
+  // on Supabase. These are the only tables the planner needs fresh stats for.
+  await sql.unsafe(`
+    ANALYZE categories, product_families, spec_defs, products, product_spec_values
+  `);
 
   const [{ count: catCount }] = await sql`SELECT count(*)::int FROM categories`;
   const [{ count: famCount }] = await sql`SELECT count(*)::int FROM product_families`;
