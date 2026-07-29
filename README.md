@@ -105,16 +105,30 @@ failure the Docker image hits, which is why `docker-compose` passes a build-time
    several Postgres round trips, so a mismatch here is the easiest way to make
    the deployed site feel slower than localhost.
 
-3. **Use the pooled connection string.** On Neon that is the host containing
-   `-pooler`; on Supabase it is the pgBouncer port (6543). A direct connection
-   will exhaust the database's connection limit as soon as more than a couple of
-   function instances are warm. `src/db/index.ts` already drops its pool to 2
-   connections when it detects `VERCEL` or `NETLIFY`.
+3. **Use the right connection string — there are three, and the obvious one is
+   usually wrong.** On Supabase they are all behind the **Connect** button at the
+   top of the project dashboard, not under Project Settings:
+
+   | | Host:port | Network | Use for |
+   |---|---|---|---|
+   | Direct | `db.<ref>.supabase.co:5432` | **IPv6 only** | nothing here, unless you have the IPv4 add-on |
+   | Session pooler | `aws-<region>.pooler.supabase.com:5432` | IPv4 | `DIRECT_DATABASE_URL` — schema push and seeding |
+   | Transaction pooler | `aws-<region>.pooler.supabase.com:6543` | IPv4 | `DATABASE_URL` — the app |
+
+   Supabase's direct connection is IPv6-only without the paid IPv4 add-on, and
+   both Vercel and most home networks are IPv4-only — so it fails with
+   `ENETUNREACH` rather than anything informative. Session mode behaves like a
+   direct connection and supports prepared statements, which is what
+   `drizzle-kit push` and the bulk seeder need; transaction mode does not, which
+   is why the app sets `prepare: false`.
+
+   `src/db/index.ts` drops its pool to 2 connections when it detects `VERCEL` or
+   `NETLIFY`, because otherwise the pool size multiplies by the instance count.
 
 4. **Push the schema and seed**, from your machine against the remote database:
 
    ```bash
-   echo 'DATABASE_URL=<pooled-url>' > .env.production.local && npm run db:setup:remote
+   printf 'DATABASE_URL=<transaction-pooler-6543>\nDIRECT_DATABASE_URL=<session-pooler-5432>\n' > .env.production.local && npm run db:setup:remote
    ```
 
    The seeder makes a few hundred round trips, so expect a couple of minutes
