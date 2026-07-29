@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import "../globals.css";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
+import { DemoBanner } from "@/components/DemoBanner";
 import { isLocale, dir, locales, getDict, type Locale } from "@/lib/i18n";
 
 export const metadata: Metadata = {
@@ -38,6 +39,7 @@ export default async function LocaleLayout({
         >
           {t.products}
         </a>
+        <DemoBanner locale={l} />
         <Header locale={l} />
         <div id="main">{children}</div>
         <Footer locale={l} />

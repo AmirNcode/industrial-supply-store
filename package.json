@@ -14,7 +14,7 @@
     "db:reset": "tsx src/seed/reset.ts && drizzle-kit push && tsx src/seed/index.ts",
     "i18n:missing": "tsx scripts/find-untranslated.mjs",
     "db:push:remote": "dotenv -e .env.production.local -- drizzle-kit push",
-    "db:seed:remote": "dotenv -e .env.production.local -- tsx src/seed/index.ts",
+    "db:seed:remote": "dotenv -e .env.production.local -v ALLOW_REMOTE_SEED=1 -- tsx src/seed/index.ts",
     "db:setup:remote": "npm run db:push:remote && npm run db:seed:remote"
   },
   "dependencies": {

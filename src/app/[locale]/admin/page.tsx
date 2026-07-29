@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { sql } from "@/db";
 import { isAdmin, signInAdmin, signOutAdmin } from "@/lib/admin";
+import { DEMO_MODE } from "@/lib/demo";
 import { isLocale, getDict, type Locale } from "@/lib/i18n";
 import { formatPrice, formatInt } from "@/lib/money";
 import type { SpecBag } from "@/db/schema";
@@ -60,7 +61,12 @@ export default async function AdminPage({
   const t = getDict(l);
   const { error } = await searchParams;
 
-  if (!(await isAdmin())) {
+  // In demo mode the inbox is deliberately open so it can be shown without
+  // handing out a credential. Everything that reaches this page is generated
+  // demo data, and the RFQ form warns before anything is submitted.
+  const authorised = DEMO_MODE || (await isAdmin());
+
+  if (!authorised) {
     return (
       <main className="mx-auto max-w-[360px] px-3 pt-16">
         <h1 className="mb-3 border-b border-[var(--color-ink)] pb-1 text-[15px] font-bold">
@@ -118,13 +124,21 @@ export default async function AdminPage({
             {formatInt(quotes.length, l)}
           </span>
         </h1>
-        <form action={logoutAction}>
-          <input type="hidden" name="locale" value={l} />
-          <button type="submit" className="text-[11px] underline">
-            {t.signOut}
-          </button>
-        </form>
+        {!DEMO_MODE && (
+          <form action={logoutAction}>
+            <input type="hidden" name="locale" value={l} />
+            <button type="submit" className="text-[11px] underline">
+              {t.signOut}
+            </button>
+          </form>
+        )}
       </div>
+
+      {DEMO_MODE && (
+        <p className="mb-3 border border-[var(--color-warn)] bg-[var(--color-warn-soft)] px-3 py-2 text-[12px] text-[var(--color-warn)]">
+          {t.demoAdminPublic}
+        </p>
+      )}
 
       {quotes.length === 0 && (
         <p className="py-8 text-[13px] text-[var(--color-ink-muted)]">{t.noQuotes}</p>

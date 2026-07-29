@@ -2,7 +2,7 @@ import "dotenv/config";
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { db, sql } from "@/db";
+import { db, sql, assertSafeTarget, targetHost } from "@/db/script-client";
 import {
   categories,
   productFamilies,
@@ -35,7 +35,13 @@ function specValueToText(v: unknown): string {
 }
 
 async function main() {
+  // TRUNCATE ... CASCADE wipes the whole catalog, carts and submitted quotes.
+  // Seeding a hosted database is a supported workflow, but it has to be asked
+  // for rather than happening because DATABASE_URL was still exported.
+  assertSafeTarget("truncate and reseed the catalog", "ALLOW_REMOTE_SEED");
+
   const t0 = Date.now();
+  console.log(`→ target: ${targetHost()}`);
   console.log("→ applying extensions and expression indexes");
   const ext = readFileSync(join(__dirname, "../db/extensions.sql"), "utf8");
   await sql.unsafe(ext);

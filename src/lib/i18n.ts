@@ -119,6 +119,13 @@ const en = {
   footerNote: "By using this website, you agree to our Terms and Conditions.",
   seedNotice:
     "Demonstration catalog. Product data is generated for interface testing and must not be used to select a real part.",
+  // Demo mode
+  demoBanner:
+    "DEMO — sample data. Quote requests submitted here are publicly visible.",
+  demoAdminPublic:
+    "Public demo view — no sign-in required. Anyone with this link can read these requests.",
+  demoQuoteWarning:
+    "This is a public demo. Anything you submit here can be read by anyone — please do not enter real contact details.",
 };
 
 /**
@@ -231,6 +238,12 @@ const fa: typeof en = {
   footerNote: "استفاده از این وب‌سایت به معنای پذیرش شرایط و مقررات است.",
   seedNotice:
     "کاتالوگ نمایشی. داده‌های کالا برای آزمایش رابط کاربری تولید شده و مبنای انتخاب قطعه واقعی نیست.",
+  demoBanner:
+    "نسخه نمایشی — داده‌های نمونه. درخواست‌های استعلام ثبت‌شده برای عموم قابل مشاهده است.",
+  demoAdminPublic:
+    "نمای عمومی نسخه نمایشی — بدون نیاز به ورود. هر کسی با این لینک می‌تواند این درخواست‌ها را ببیند.",
+  demoQuoteWarning:
+    "این یک نسخه نمایشی عمومی است. هر آنچه ثبت کنید برای دیگران قابل مشاهده خواهد بود — لطفاً اطلاعات تماس واقعی وارد نکنید.",
 };
 
 export type Dict = typeof en;

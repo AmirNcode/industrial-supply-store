@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { getCartLines, unitPriceAt } from "@/lib/cart";
 import { submitQuoteAction } from "@/app/actions";
 import { isLocale, getDict, type Locale } from "@/lib/i18n";
+import { DEMO_MODE } from "@/lib/demo";
 import { formatPrice, formatInt } from "@/lib/money";
 
 export default async function QuotePage({
@@ -28,6 +29,14 @@ export default async function QuotePage({
         {t.requestAQuote}
       </h1>
       <p className="mb-4 text-[12px] text-[var(--color-ink-muted)]">{t.rfqIntro}</p>
+
+      {/* Shown before the form, not after: the point is to inform the decision
+          to type real details, which is too late once they are submitted. */}
+      {DEMO_MODE && (
+        <p className="mb-3 border border-[var(--color-warn)] bg-[var(--color-warn-soft)] px-3 py-2 text-[12px] font-semibold text-[var(--color-warn)]">
+          {t.demoQuoteWarning}
+        </p>
+      )}
 
       {error === "missing" && (
         <p className="mb-3 border border-[#e0b4b0] bg-[#fdf2f1] px-3 py-2 text-[12px] text-[#a3312a]">
