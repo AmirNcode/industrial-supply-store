@@ -62,6 +62,112 @@ stacks. Admin password and FX rate live in `.env`.
 
 ---
 
+## Deploying (Vercel)
+
+**The Docker setup does not come along.** Vercel ignores the `Dockerfile` and
+builds Next.js natively; `docker-compose` stays the local development path. The
+two share only the source.
+
+The app splits three ways once deployed:
+
+| Part | Where it runs |
+|---|---|
+| `/en`, `/fa` home, fonts, `robots.txt` | CDN, static |
+| Category pages (`revalidate = 3600`) | Rendered on demand, then cached (ISR) |
+| Family pages, search, cart, quote, admin | Server functions |
+| `/api/*` and all Server Actions | Server functions |
+
+There is no separate backend to host — the "backend" is Server Components and
+Server Actions, which the platform runs as managed functions. The only genuinely
+new piece of infrastructure is a managed Postgres.
+
+### Order matters
+
+Provision the database **before** the first deploy. The home page is
+prerendered at build time, so `next build` queries Postgres — with no
+`DATABASE_URL` the build fails while prerendering `/en`. (This is the same
+failure the Docker image hits, which is why `docker-compose` passes a build-time
+`DATABASE_URL`.)
+
+### Steps
+
+1. **Provision Postgres.** From the Vercel dashboard, or:
+
+   ```bash
+   vercel integration add neon
+   ```
+
+   This creates the database and injects `DATABASE_URL` into the project. Pick a
+   region and remember it — the next step depends on it.
+
+2. **Match the function region to the database region** in `vercel.ts`. It ships
+   set to `fra1`, assuming Neon in `aws-eu-central-1`. Almost every request makes
+   several Postgres round trips, so a mismatch here is the easiest way to make
+   the deployed site feel slower than localhost.
+
+3. **Use the pooled connection string.** On Neon that is the host containing
+   `-pooler`; on Supabase it is the pgBouncer port (6543). A direct connection
+   will exhaust the database's connection limit as soon as more than a couple of
+   function instances are warm. `src/db/index.ts` already drops its pool to 2
+   connections when it detects `VERCEL` or `NETLIFY`.
+
+4. **Push the schema and seed**, from your machine against the remote database:
+
+   ```bash
+   echo 'DATABASE_URL=<pooled-url>' > .env.production.local && npm run db:setup:remote
+   ```
+
+   The seeder makes a few hundred round trips, so expect a couple of minutes
+   over a WAN rather than the ~14 seconds it takes locally.
+
+5. **Set the remaining environment variables** in the Vercel project:
+   `ADMIN_PASSWORD` (see the warning below) and `USD_TO_TOMAN`.
+
+6. Deploy.
+
+### Why the driver did not change
+
+Vercel's Neon guidance points at `@neondatabase/serverless` with
+`drizzle-orm/neon-http`. This project deliberately stays on `postgres-js` over
+TCP:
+
+- Fluid Compute runs full Node.js, so TCP sockets work and Neon's pooled
+  endpoint speaks the standard Postgres wire protocol.
+- `neon-http` has no interactive transactions, which would break the `sql.begin()`
+  wrapping RFQ submission — the one place atomicity actually matters here.
+- Every read in `db/queries.ts` is a raw tagged-template query; switching drivers
+  would mean rewriting all of them for no gain.
+
+`prepare: false` was already set for jsonb payloads and happens to be exactly
+what a transaction-mode pooler requires, since a statement prepared on one
+backend is invisible to the next.
+
+### Netlify
+
+Netlify will very likely work — its Next runtime supports App Router SSR, ISR
+and Server Actions, and Netlify DB is Neon underneath. The reason this documents
+Vercel is version currency: the project is on **Next.js 16.2**, and Netlify's
+runtime is a separate adapter that has historically lagged a release or two on
+new Next features. This app leans on exactly that surface. If you deploy to
+Netlify, the same database steps apply; `next.config.ts` and `src/db/index.ts`
+already check for `NETLIFY` alongside `VERCEL`.
+
+### Before you share the URL
+
+Deploying makes this internet-reachable, which changes the risk on two things:
+
+- **`/admin` is not authentication.** One shared password, no accounts, no rate
+  limiting, no audit trail — and it defaults to `changeme`. It exposes every
+  submitted RFQ with contact details. Set a strong `ADMIN_PASSWORD`, and put the
+  whole deployment behind Vercel's Deployment Protection so the demo is not
+  publicly reachable at all.
+- `robots.txt` disallows everything, which discourages search engines but is
+  **not** access control.
+
+Also worth remembering that free-tier Neon suspends an idle database, so the
+first request after a quiet spell pays a wake-up delay. Fine for a demo; worth
+knowing before you open it in front of someone.
+
 ## What is built
 
 | Area | Status |

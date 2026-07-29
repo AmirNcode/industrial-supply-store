@@ -1,9 +1,10 @@
 node_modules
 .next
 out
-# Holds the admin password and FX rate — copy .env.example to .env locally.
-.env
-.env.local
+# Holds secrets and connection strings — copy .env.example to .env locally.
+# .env.example is the only one committed.
+.env*
+!.env.example
 next-env.d.ts
 *.tsbuildinfo
 .DS_Store
