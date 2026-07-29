@@ -12,6 +12,7 @@ export function dir(locale: Locale): "ltr" | "rtl" {
 
 const en = {
   brand: "PARSTECH SUPPLY",
+  tagline: "Industrial Parts",
   browseCatalog: "BROWSE CATALOG",
   search: "Search",
   searchPlaceholder: "Search",
@@ -127,6 +128,7 @@ const en = {
  */
 const fa: typeof en = {
   brand: "پارس‌تک ساپلای",
+  tagline: "قطعات صنعتی",
   browseCatalog: "مرور کاتالوگ",
   search: "جستجو",
   searchPlaceholder: "جستجو",

@@ -74,6 +74,23 @@ export default async function FamilyPage({
   ]);
 
   const trail = category ? [...ancestors, category] : ancestors;
+
+  /*
+   * Standards and lead time are family-wide facts, so they are derived once
+   * here for the header pills instead of being read off every row. Only specs
+   * the seeder marks non-filterable and constant qualify — a value that varies
+   * across the family is a column, not a badge.
+   */
+  const specStandards = [...new Set(
+    products.map((p) => p.specs.spec).filter((v): v is string => typeof v === "string" && v !== ""),
+  )].slice(0, 2);
+  const maxLead = products.reduce((n, p) => Math.max(n, p.leadDays), 0);
+  const leadLabel =
+    maxLead >= 7
+      ? `${t.shipsIn} ${formatInt(Math.round(maxLead / 7), l)} ${t.weeks}`
+      : maxLead > 0
+        ? `${t.shipsIn} ${formatInt(maxLead, l)} ${t.days}`
+        : null;
   const highlighted = typeof sp.pn === "string" ? sp.pn.toUpperCase() : null;
   const pages = Math.ceil(total / PAGE_SIZE);
 
@@ -94,12 +111,12 @@ export default async function FamilyPage({
         />
 
         {(family.aboutEn || family.aboutFa) && (
-          <div className="mb-4 flex items-start gap-3 border border-[var(--color-callout-border)] bg-[var(--color-callout-bg)] p-3">
+          <div className="mb-4 flex items-start gap-3 rounded-[4px] border border-[var(--color-amber-line)] border-s-[3px] border-s-[var(--color-amber)] bg-[var(--color-amber-soft)] p-3.5">
             <span className="shrink-0">
               <ProductIcon name={family.icon} size={46} />
             </span>
             <div className="min-w-0">
-              <h2 className="text-[15px] font-bold text-[var(--color-catalog-green)]">
+              <h2 className="text-[15px] font-bold text-[var(--color-pine)]">
                 {t.aboutPrefix} {pick(family, "name", l)}
               </h2>
               <p className="mt-0.5 text-[12px] leading-snug text-[var(--color-ink)]">
@@ -127,12 +144,25 @@ export default async function FamilyPage({
             <div className="mb-2 flex items-start gap-3">
               <ProductIcon name={family.icon} size={64} className="hidden sm:block" />
               <div className="min-w-0">
-                <h1 className="text-[19px] font-bold text-[var(--color-catalog-green)]">
+                <h1 className="text-[19px] font-bold text-[var(--color-pine)]">
                   {pick(family, "name", l)}
                 </h1>
                 <p className="text-[12px] text-[var(--color-ink-muted)]">
                   {pick(family, "desc", l)}
                 </p>
+                {/* Availability and standards, surfaced once for the family
+                    rather than repeated down every row. */}
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {products.some((p) => p.inStock) && (
+                    <span className="pill pill-ok">● {t.inStock}</span>
+                  )}
+                  {specStandards.map((s) => (
+                    <span key={s} className="pill">
+                      {s}
+                    </span>
+                  ))}
+                  {leadLabel && <span className="pill pill-warn">{leadLabel}</span>}
+                </div>
               </div>
             </div>
 
@@ -153,7 +183,7 @@ export default async function FamilyPage({
               </p>
             ) : (
               <>
-                <div className="scroll-x hidden lg:block">
+                <div className="table-card scroll-x hidden lg:block">
                   <SpecTable
                     locale={l}
                     defs={defs}
@@ -256,8 +286,8 @@ function SpecTable({
           <th className="num">{t.pkgQty}</th>
           <th>{t.partNumber}</th>
           {/* Quantity-break captions are Latin ranges; they must not mirror. */}
-          <th className="num tech tech-num">1–9</th>
-          {hasBulk && <th className="num tech tech-num">10+</th>}
+          <th className="num tech tech-num price-col">1–9</th>
+          {hasBulk && <th className="num tech tech-num price-col">10+</th>}
           <th>{t.qty}</th>
         </tr>
       </thead>
@@ -269,7 +299,7 @@ function SpecTable({
           return (
             <tr
               key={p.id}
-              className={isHit ? "bg-[var(--color-callout-bg)]" : undefined}
+              className={isHit ? "bg-[var(--color-amber-soft)]" : undefined}
             >
               {defs.map((d) => {
                 const raw = p.specs[d.key];
@@ -299,16 +329,14 @@ function SpecTable({
               })}
               <td className="num tech tech-num">{p.packQty}</td>
               <td>
-                <span className="tech font-bold text-[var(--color-part-link)]">
-                  {p.partNumber}
-                </span>
+                <span className="part-no tech">{p.partNumber}</span>
               </td>
               {/* Bare amounts — the currency is named once in the group header.
                   Repeating "تومان" on 200 rows costs ~40px of table width and
                   tells the buyer nothing they don't already know. */}
-              <td className="num tech tech-num">{formatPriceBare(base, locale)}</td>
+              <td className="num tech tech-num price-col font-semibold">{formatPriceBare(base, locale)}</td>
               {hasBulk && (
-                <td className="num tech tech-num text-[var(--color-ink-muted)]">
+                <td className="num tech tech-num price-col text-[var(--color-ink-muted)]">
                   {bulk !== undefined ? formatPriceBare(bulk, locale) : ""}
                 </td>
               )}

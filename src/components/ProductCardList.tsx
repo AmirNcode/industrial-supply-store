@@ -140,7 +140,7 @@ export function ProductCardList({
               className={`block leading-snug ${
                 inFamily && hasSummary
                   ? "text-[13px] font-bold text-[var(--color-ink)]"
-                  : "text-[14px] font-bold text-[var(--color-catalog-green)]"
+                  : "text-[14px] font-bold text-[var(--color-pine)]"
               }`}
             >
               {inFamily && hasSummary ? renderSummary(parts) : name}

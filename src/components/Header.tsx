@@ -12,65 +12,88 @@ import { MobileHeader } from "./MobileHeader";
  * pass unusable — at phone width the search needs the full row and the nav has
  * to collapse behind a drawer, which is a different structure, not a narrower
  * version of the same one.
+ *
+ * The chrome is near-black pulled toward green so it reads as part of the
+ * palette rather than neutral furniture sitting on top of it. The amber rule
+ * beneath is the one piece of the original design worth keeping intact.
  */
 export function Header({ locale }: { locale: Locale }) {
   const t = getDict(locale);
   const other: Locale = locale === "fa" ? "en" : "fa";
 
   return (
-    <header className="border-b-2 border-[var(--color-accent-bar)]">
-      <MobileHeader locale={locale} />
+    <header>
+      <div className="bg-[var(--color-chrome)]">
+        <MobileHeader locale={locale} />
 
-      <div className="hidden items-start gap-4 px-3 pt-1 pb-2 lg:flex">
-        <div className="shrink-0" style={{ width: 262 }}>
+        <div className="hidden items-center gap-5 px-4 py-2.5 lg:flex">
           <Link
             href={`/${locale}`}
-            className="flex items-center gap-1 text-[10px] font-bold tracking-wide text-[var(--color-catalog-green)] uppercase"
+            className="shrink-0 hover:no-underline"
+            style={{ width: 236 }}
           >
-            <span aria-hidden="true">☰</span> {t.browseCatalog}
-          </Link>
-          <Link href={`/${locale}`} className="block hover:no-underline">
             <span
-              className="block whitespace-nowrap font-bold text-[var(--color-catalog-green-dark)] leading-tight"
+              className="block whitespace-nowrap font-bold leading-none text-white"
               style={{
-                // Sized to fit the wordmark on one line in both scripts; Persian
-                // glyphs are wider at the same nominal size.
-                fontSize: locale === "fa" ? 20 : 22,
-                letterSpacing: locale === "fa" ? 0 : "-0.02em",
-                fontFamily: locale === "fa" ? undefined : "Georgia, 'Times New Roman', serif",
+                fontSize: locale === "fa" ? 19 : 20,
+                letterSpacing: locale === "fa" ? 0 : "0.02em",
               }}
             >
               {t.brand}
-              <sup className="text-[9px] align-super">®</sup>
+              <sup className="ms-0.5 align-super text-[8px] text-[var(--color-chrome-muted)]">
+                ®
+              </sup>
+            </span>
+            <span className="mt-1 block text-[9px] uppercase tracking-[0.22em] text-[var(--color-chrome-muted)]">
+              {t.tagline}
             </span>
           </Link>
-        </div>
 
-        <div className="min-w-0 flex-1 pt-3">
-          <SearchBar locale={locale} />
-        </div>
-
-        <div className="shrink-0 text-end" style={{ width: 300 }}>
-          <div className="flex items-center justify-end gap-2 pt-1 text-[11px] text-[var(--color-ink-muted)]">
-            <span className="tech">+98 21 8888 0000</span>
-            <span className="text-[var(--color-rule)]">|</span>
-            <a href="mailto:sales@parstech.example">{t.emailUs}</a>
-            <span className="text-[var(--color-rule)]">|</span>
-            <Link href={`/${other}`} lang={other} className="font-bold">
-              {other === "fa" ? "فارسی" : "English"}
-            </Link>
+          <div className="min-w-0 flex-1">
+            <SearchBar locale={locale} />
           </div>
-          <div className="flex items-center justify-end gap-4 pt-2">
-            <CartLink locale={locale} />
-            <Link
-              href={`/${locale}/quick-order`}
-              className="text-[13px] font-bold uppercase tracking-wide text-[var(--color-catalog-green)]"
-            >
-              {t.quickOrder}
-            </Link>
+
+          <div className="shrink-0 text-end">
+            <div className="flex items-center justify-end gap-3 text-[11px] text-[var(--color-chrome-muted)]">
+              <span className="tech">+98 21 8888 0000</span>
+              <span className="text-[var(--color-chrome-line)]">|</span>
+              <a
+                href="mailto:sales@parstech.example"
+                className="!text-[var(--color-chrome-ink)] hover:!text-white"
+              >
+                {t.emailUs}
+              </a>
+              <span className="text-[var(--color-chrome-line)]">|</span>
+              <Link
+                href={`/${other}`}
+                lang={other}
+                className="font-bold !text-[var(--color-chrome-ink)] hover:!text-white"
+              >
+                {other === "fa" ? "فارسی" : "English"}
+              </Link>
+            </div>
+            <div className="mt-1.5 flex items-center justify-end gap-4">
+              <CartLink locale={locale} />
+              <Link
+                href={`/${locale}/quick-order`}
+                className="text-[12px] font-semibold uppercase tracking-[0.08em] !text-[var(--color-amber-lift)] hover:!text-white"
+              >
+                {t.quickOrder}
+              </Link>
+            </div>
           </div>
         </div>
       </div>
+
+      {/* Descended from the reference site's gold rule; a gradient so it reads
+          as a deliberate edge rather than a slab of colour. */}
+      <div
+        className="h-[3px]"
+        style={{
+          background:
+            "linear-gradient(90deg, var(--color-amber) 0%, var(--color-amber-lift) 38%, var(--color-rule) 100%)",
+        }}
+      />
     </header>
   );
 }

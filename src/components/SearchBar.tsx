@@ -86,10 +86,12 @@ export function SearchBar({ locale }: { locale: Locale }) {
 
   return (
     <div ref={boxRef} className="relative">
+      {/* Sits on the dark masthead, so the field is a light well rather than a
+          bordered box — the contrast does the work the border used to. */}
       <form
         action={`/${locale}/search`}
         onSubmit={() => setOpen(false)}
-        className="flex items-center border border-[var(--color-ink-muted)] bg-white"
+        className="flex items-center rounded-[3px] border border-[var(--color-chrome-line)] bg-white focus-within:border-[var(--color-amber)] focus-within:ring-[3px] focus-within:ring-[rgba(200,134,13,0.25)]"
       >
         <input
           name="q"
@@ -100,12 +102,12 @@ export function SearchBar({ locale }: { locale: Locale }) {
           placeholder={t.searchPlaceholder}
           autoComplete="off"
           aria-label={t.search}
-          className="flex-1 border-0 px-2 py-1.5 text-[14px] outline-none"
+          className="flex-1 border-0 bg-transparent px-3 py-1.5 text-[14px] outline-none focus:shadow-none focus:ring-0"
         />
         <button
           type="submit"
           aria-label={t.search}
-          className="px-3 py-1 text-[var(--color-ink-muted)] hover:text-[var(--color-catalog-green)]"
+          className="px-3 py-1 text-[var(--color-ink-muted)] hover:text-[var(--color-pine)]"
         >
           <svg width="17" height="17" viewBox="0 0 20 20" fill="none" aria-hidden="true">
             <circle cx="8.5" cy="8.5" r="6" stroke="currentColor" strokeWidth="1.8" />

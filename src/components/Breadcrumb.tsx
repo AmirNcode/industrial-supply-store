@@ -26,10 +26,8 @@ export function Breadcrumb({
     >
       {count !== undefined && (
         <>
-          <span className="font-bold text-[var(--color-ink)]">
-            <span className="tech">{countLabel}</span>
-          </span>
-          <span className="text-[var(--color-rule)]">|</span>
+          <span className="count-pill text-[var(--color-ink)]">{countLabel}</span>
+          <span className="text-[var(--color-rule)]">/</span>
         </>
       )}
       {trail.map((c, i) => (

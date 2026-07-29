@@ -20,11 +20,14 @@ export function FacetList({
   items,
   searchable,
   columns = 1,
+  asChips = false,
   searchLabel,
 }: {
   items: FacetItem[];
   searchable: boolean;
   columns?: number;
+  /** Render values as tappable chips rather than a text list. */
+  asChips?: boolean;
   searchLabel: string;
 }) {
   const [q, setQ] = useState("");
@@ -55,29 +58,54 @@ export function FacetList({
         </div>
       )}
 
-      <ul
-        className={searchable ? "max-h-[170px] overflow-y-auto border border-[var(--color-rule)] bg-white px-1.5 py-1" : ""}
-        style={columns > 1 ? { columnCount: columns, columnGap: "0.75rem" } : undefined}
-      >
-        {shown.map((i) => (
-          <li key={i.value} className="break-inside-avoid">
-            <Link
-              href={i.href}
-              prefetch={false}
-              scroll={false}
-              className={`block py-[1px] text-[12px] leading-snug ${
-                i.selected ? "font-bold text-[var(--color-ink)]" : ""
-              }`}
-            >
-              <span className="tech">{i.label}</span>
-              {i.selected && <span aria-hidden="true"> ✕</span>}
-            </Link>
-          </li>
-        ))}
-        {shown.length === 0 && (
-          <li className="py-1 text-[11px] text-[var(--color-ink-faint)]">—</li>
-        )}
-      </ul>
+      {/* Short numeric facets render as chips so a dimension is a target, not a
+          line of text; long ones stay a scrolling list, which is the only shape
+          that works for 229 inside diameters. */}
+      {asChips ? (
+        <ul className="flex flex-wrap gap-1.5">
+          {shown.map((i) => (
+            <li key={i.value}>
+              <Link
+                href={i.href}
+                prefetch={false}
+                scroll={false}
+                data-selected={i.selected}
+                className="facet-chip tech"
+              >
+                {i.label}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <ul
+          className={
+            searchable
+              ? "max-h-[170px] overflow-y-auto rounded-[3px] border border-[var(--color-rule)] bg-[var(--color-panel-alt)] px-1.5 py-1"
+              : ""
+          }
+          style={columns > 1 ? { columnCount: columns, columnGap: "0.75rem" } : undefined}
+        >
+          {shown.map((i) => (
+            <li key={i.value} className="break-inside-avoid">
+              <Link
+                href={i.href}
+                prefetch={false}
+                scroll={false}
+                className={`block py-[1px] text-[12px] leading-snug ${
+                  i.selected ? "font-semibold text-[var(--color-pine-deep)]" : ""
+                }`}
+              >
+                <span className="tech">{i.label}</span>
+                {i.selected && <span aria-hidden="true"> ✕</span>}
+              </Link>
+            </li>
+          ))}
+          {shown.length === 0 && (
+            <li className="py-1 text-[11px] text-[var(--color-ink-faint)]">—</li>
+          )}
+        </ul>
+      )}
     </div>
   );
 }

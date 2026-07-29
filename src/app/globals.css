@@ -1,41 +1,148 @@
 @import "tailwindcss";
 
+/* ---------------------------------------------------------------------------
+   Typefaces — self-hosted, no external request.
+
+   IBM Plex Sans / Plex Mono were drawn for technical documentation: real
+   tabular figures, unambiguous 1/l/I and 0/O, and a mono that sits at the same
+   optical weight as the sans. That matters more here than novelty — the whole
+   product is a wall of dimensions and part numbers.
+
+   `unicode-range` means a subset is only fetched if a glyph in it is actually
+   rendered, so the Persian face costs an English visitor nothing and the
+   latin-ext files stay unfetched unless an accented character appears.
+   --------------------------------------------------------------------------- */
+
+@font-face {
+  font-family: "Plex Sans";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("/fonts/plex-sans-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122, U+2191,
+    U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Plex Sans";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("/fonts/plex-sans-latin-ext.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
+    U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020,
+    U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+  font-family: "Plex Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/plex-mono-400-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122, U+2191,
+    U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Plex Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/plex-mono-400-latin-ext.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
+    U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113,
+    U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: "Plex Mono";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("/fonts/plex-mono-600-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122, U+2191,
+    U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Plex Mono";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("/fonts/plex-mono-600-latin-ext.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
+    U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113,
+    U+2C60-2C7F, U+A720-A7FF;
+}
+
+/* Persian. Arabic subset only — Latin inside a Persian page falls through to
+   Plex Sans, which keeps part numbers consistent across both locales. */
+@font-face {
+  font-family: "Vazirmatn";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("/fonts/vazirmatn-arabic.woff2") format("woff2");
+  unicode-range: U+0600-06FF, U+0750-077F, U+0870-088E, U+0890-0891,
+    U+0898-08E1, U+08E3-08FF, U+200C-200E, U+2010-2011, U+204F, U+2E41,
+    U+FB50-FDFF, U+FE70-FEFF;
+}
+
 /*
- * Design tokens read off the reference screenshots. The palette is deliberately
- * narrow: one green, one link blue, one callout yellow, and four grays. The
- * reference site's density comes from restraint, not from a large system.
+ * Design tokens.
+ *
+ * Colour is information, never decoration:
+ *   pine   — navigation, actions, anything clickable
+ *   amber  — money, and the masthead rule it descends from
+ *   link   — part numbers only, so they read as the identifiers they are
+ *   hues   — one per top-level category, worn as a 3px spine on its tile
  */
 @theme {
-  --color-catalog-green: #16653a;
-  --color-catalog-green-dark: #0b4f2c;
-  --color-catalog-green-light: #2d8055;
+  --color-pine: #14603d;
+  --color-pine-deep: #0d4128;
+  --color-pine-lift: #1f8055;
+  --color-pine-tint: #e8f2ec;
 
-  /* Part numbers are links; unvisited blue / visited purple is load-bearing
-     information for a buyer working down a long spec table. */
-  --color-part-link: #3f3fbf;
+  /* Masthead: near-black, but pulled toward green so it belongs to the palette
+     rather than sitting on top of it as neutral chrome. */
+  --color-chrome: #101d17;
+  --color-chrome-2: #1a2c23;
+  --color-chrome-line: #2c453a;
+  --color-chrome-ink: #e6ede9;
+  --color-chrome-muted: #8ba396;
+
+  --color-amber: #c8860d;
+  --color-amber-lift: #e8b84b;
+  --color-amber-soft: #fdf7e6;
+  --color-amber-line: #e8dcae;
+  --color-amber-wash: rgba(200, 134, 13, 0.05);
+
+  --color-part-link: #2f4fbf;
   --color-part-visited: #7a3f9d;
 
-  --color-callout-bg: #fdfce4;
-  --color-callout-border: #ddd68f;
+  --color-ink: #161a18;
+  --color-ink-muted: #5a625c;
+  --color-ink-faint: #8d958f;
 
-  --color-rule: #cfcfcf;
-  --color-rule-light: #e3e3e3;
-  --color-panel: #f2f2f2;
-  --color-panel-alt: #fafafa;
+  --color-rule: #dbe1dc;
+  --color-rule-light: #edf0ee;
+  --color-panel: #f4f7f5;
+  --color-panel-alt: #fafbfa;
 
-  --color-ink: #222222;
-  --color-ink-muted: #666666;
-  --color-ink-faint: #8a8a8a;
+  --color-ok: #1c7a52;
+  --color-ok-soft: #e4f3ea;
+  --color-warn: #b4690e;
+  --color-warn-soft: #fbf0dc;
+  --color-danger: #a3312a;
 
-  --color-accent-bar: #f2c200;
+  --font-sans: "Plex Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-mono: "Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --font-fa: "Vazirmatn", "Plex Sans", Tahoma, sans-serif;
 
-  --font-sans: Arial, Helvetica, "Helvetica Neue", sans-serif;
-  --font-fa: Vazirmatn, "IRANSans", Tahoma, "Segoe UI", sans-serif;
-
-  --text-xxs: 0.6875rem; /* 11px — spec table body */
-  --text-xs: 0.75rem;    /* 12px — table headers, footer */
-  --text-sm: 0.8125rem;  /* 13px — base body */
-  --text-base: 0.875rem; /* 14px */
+  --text-xxs: 0.6875rem;
+  --text-xs: 0.75rem;
+  --text-sm: 0.8125rem;
+  --text-base: 0.875rem;
 }
 
 html {
@@ -48,17 +155,16 @@ body {
   color: var(--color-ink);
   background: #ffffff;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
-/* Persian needs a different family and a touch more line height — Arabic-script
-   glyphs have taller ascenders and descenders than Latin at the same size. */
 html[lang="fa"] body {
   font-family: var(--font-fa);
   line-height: 1.7;
 }
 
 a {
-  color: var(--color-catalog-green);
+  color: var(--color-pine);
   text-decoration: none;
 }
 a:hover {
@@ -66,16 +172,26 @@ a:hover {
 }
 
 /*
- * Dimensions, part numbers, and other technical values must never mirror under
- * RTL — 0.239" reversed is unreadable. Cells carrying them opt out of the
- * paragraph direction while still aligning to the correct edge.
+ * `.tech` marks a measured value, a code, or anything a buyer matches against a
+ * manufacturer catalog. It gets the mono face, tabular figures, and — critically
+ * — opts out of the paragraph direction so a dimension never mirrors under RTL.
  */
 .tech {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
   direction: ltr;
   unicode-bidi: isolate;
 }
-/* Scoped to table cells only. A full-width LTR textarea or input should align
-   to its own start edge (left), not be dragged to the right by this rule. */
+/*
+ * Under Persian, Plex Mono still leads so Latin part numbers stay identical
+ * across locales; Vazirmatn sits behind it to catch Persian digits. Font
+ * fallback is per-glyph, so a price like "۳۲۴٬۵۰۰" picks up Vazirmatn while
+ * "1000A7" stays in the mono — no per-element class needed.
+ */
+html[lang="fa"] .tech {
+  font-family: "Plex Mono", "Vazirmatn", ui-monospace, monospace;
+}
 html[dir="rtl"] td.tech,
 html[dir="rtl"] th.tech {
   text-align: right;
@@ -85,45 +201,95 @@ html[dir="rtl"] th.tech-num {
   text-align: left;
 }
 
-/* Dense data table shared by the spec table and the cart. */
+/* --------------------------------------------------------------------------
+   Spec table
+   -------------------------------------------------------------------------- */
+
+.table-card {
+  border: 1px solid var(--color-rule);
+  border-radius: 5px;
+  overflow: hidden;
+  background: #fff;
+}
+
 .spec-table {
   border-collapse: collapse;
   width: 100%;
   font-size: var(--text-xxs);
 }
-.spec-table th {
-  font-weight: 700;
+
+/* Header band matches the masthead. Uppercase mono labels read as column codes
+   on a datasheet rather than sentence-case prose. */
+.spec-table thead th {
+  background: var(--color-chrome-2);
+  color: var(--color-chrome-ink);
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 10px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
   text-align: start;
-  padding: 2px 7px;
+  padding: 8px 9px;
+  white-space: nowrap;
   vertical-align: bottom;
-  border-bottom: 1px solid var(--color-ink);
-  white-space: nowrap;
 }
-/* No row rules. The reference table gets its legibility from tight leading and
-   column alignment; horizontal lines at this density read as noise. */
-.spec-table td {
-  padding: 1px 7px;
-  vertical-align: middle;
-  white-space: nowrap;
-  line-height: 1.55;
+html[lang="fa"] .spec-table thead th {
+  font-family: var(--font-fa);
+  letter-spacing: 0;
+  text-transform: none;
+  font-size: 11px;
 }
-.spec-table tbody tr:hover {
-  background: #eef5f0;
-}
-/* Group header spanning the quantity-break price columns. */
-.spec-table th.group {
+.spec-table thead th.group {
   text-align: center;
-  border-bottom: 1px solid var(--color-rule);
-  padding-bottom: 0;
   font-weight: 400;
-  color: var(--color-ink-muted);
+  color: var(--color-amber-lift);
+  padding-bottom: 0;
 }
 
-/* Numeric columns right-align in LTR and stay visually consistent in RTL. */
+.spec-table td {
+  padding: 4px 9px;
+  vertical-align: middle;
+  white-space: nowrap;
+  line-height: 1.5;
+  border-bottom: 1px solid var(--color-rule-light);
+}
+/* 2% zebra — enough to carry the eye across fourteen columns, not enough to
+   register as stripes. */
+.spec-table tbody tr:nth-child(even) {
+  background: #fafbfa;
+}
+.spec-table tbody tr:hover {
+  background: var(--color-pine-tint);
+}
+.spec-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+/* Money gets a faint amber wash so it is findable without scanning headers. */
+.price-col {
+  background: var(--color-amber-wash);
+}
+.spec-table tbody tr:hover .price-col {
+  background: transparent;
+}
+
 .num {
   text-align: end;
   font-variant-numeric: tabular-nums;
 }
+
+.part-no {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--color-part-link);
+}
+.part-no:visited {
+  color: var(--color-part-visited);
+}
+
+/* --------------------------------------------------------------------------
+   Controls
+   -------------------------------------------------------------------------- */
 
 input[type="text"],
 input[type="number"],
@@ -132,20 +298,22 @@ input[type="password"],
 textarea,
 select {
   border: 1px solid var(--color-rule);
+  border-radius: 3px;
   background: #fff;
-  padding: 3px 6px;
+  padding: 4px 7px;
   font-size: var(--text-sm);
   font-family: inherit;
   color: var(--color-ink);
+  transition: border-color 0.12s, box-shadow 0.12s;
 }
 input:focus,
 textarea:focus,
 select:focus {
-  outline: 2px solid var(--color-catalog-green-light);
-  outline-offset: -1px;
+  outline: none;
+  border-color: var(--color-pine-lift);
+  box-shadow: 0 0 0 3px var(--color-pine-tint);
 }
 
-/* Hide the number spinners — quantity cells are too narrow for them. */
 input[type="number"]::-webkit-outer-spin-button,
 input[type="number"]::-webkit-inner-spin-button {
   -webkit-appearance: none;
@@ -157,50 +325,200 @@ input[type="number"] {
 }
 
 .btn-primary {
-  background: var(--color-catalog-green);
+  background: var(--color-pine);
   color: #fff;
-  font-weight: 700;
+  font-weight: 600;
   font-size: var(--text-xs);
-  letter-spacing: 0.03em;
-  padding: 7px 18px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 8px 18px;
   border: none;
+  border-radius: 3px;
   cursor: pointer;
+  transition: background 0.12s, transform 0.12s;
 }
 .btn-primary:hover {
-  background: var(--color-catalog-green-dark);
+  background: var(--color-pine-deep);
+}
+.btn-primary:active {
+  transform: translateY(1px);
 }
 .btn-primary:disabled {
   background: #9bb3a4;
   cursor: default;
+  transform: none;
 }
 
 .btn-small {
-  background: var(--color-catalog-green);
+  background: var(--color-pine);
   color: #fff;
   font-size: var(--text-xxs);
-  font-weight: 700;
-  padding: 2px 7px;
+  font-weight: 600;
+  padding: 3px 8px;
   border: none;
+  border-radius: 3px;
   cursor: pointer;
   line-height: 1.4;
+  transition: background 0.12s, transform 0.12s;
 }
 .btn-small:hover {
-  background: var(--color-catalog-green-dark);
+  background: var(--color-pine-deep);
+  transform: translateY(-1px);
 }
 .btn-small:disabled {
   background: #b7c7bd;
   cursor: default;
+  transform: none;
 }
 
-/* Wide content scrolls inside its own container; the page body never does. */
+/* --------------------------------------------------------------------------
+   Pills, chips, badges
+   -------------------------------------------------------------------------- */
+
+/* Status and standards shown on a family page. */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 4px 8px;
+  border-radius: 3px;
+  background: var(--color-pine-tint);
+  color: var(--color-pine-deep);
+  white-space: nowrap;
+}
+html[lang="fa"] .pill {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 11px;
+}
+.pill-ok {
+  background: var(--color-ok-soft);
+  color: var(--color-ok);
+}
+.pill-warn {
+  background: var(--color-warn-soft);
+  color: var(--color-warn);
+}
+
+/* Result count in the breadcrumb. */
+.count-pill {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  background: var(--color-panel);
+  border: 1px solid var(--color-rule);
+  border-radius: 3px;
+  padding: 1px 7px;
+}
+html[lang="fa"] .count-pill {
+  font-family: var(--font-fa);
+}
+
+/* Facet values in the mobile sheet. */
+.chip {
+  display: block;
+  width: 100%;
+  border: 1px solid var(--color-rule);
+  border-radius: 3px;
+  background: #fff;
+  padding: 9px 6px;
+  text-align: center;
+  font-size: 13px;
+  line-height: 1.2;
+  color: var(--color-ink);
+  transition: border-color 0.12s, background 0.12s;
+}
+.chip[data-selected="true"] {
+  border-color: var(--color-pine);
+  background: var(--color-pine-tint);
+  font-weight: 600;
+  color: var(--color-pine-deep);
+}
+
+/* Compact facet values on the desktop rail. */
+.facet-chip {
+  display: block;
+  padding: 3px 7px;
+  border: 1px solid var(--color-rule);
+  border-radius: 3px;
+  font-size: 11.5px;
+  background: #fff;
+  color: var(--color-ink);
+  transition: border-color 0.12s, background 0.12s;
+}
+.facet-chip:hover {
+  border-color: var(--color-pine-lift);
+  text-decoration: none;
+}
+.facet-chip[data-selected="true"] {
+  border-color: var(--color-pine);
+  background: var(--color-pine-tint);
+  color: var(--color-pine-deep);
+  font-weight: 600;
+}
+
+.filter-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  border: 1px solid var(--color-pine);
+  border-radius: 3px;
+  color: var(--color-pine);
+  padding: 5px 10px;
+  font-size: 12px;
+}
+
+/* --------------------------------------------------------------------------
+   Category tiles — each top-level category owns a hue, worn as a spine.
+   Enough for the grid to be navigable by colour memory; not enough to become
+   decoration.
+   -------------------------------------------------------------------------- */
+
+.tile-face {
+  border: 1px solid var(--color-rule);
+  border-radius: 4px;
+  border-bottom: 3px solid var(--spine, var(--color-rule));
+  background: #fff;
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
+}
+a:hover > .tile-face {
+  border-color: var(--color-pine-lift);
+  border-bottom-color: var(--spine, var(--color-pine-lift));
+  box-shadow: 0 2px 10px rgba(20, 96, 61, 0.13);
+  transform: translateY(-2px);
+}
+
+/* --------------------------------------------------------------------------
+   Layout helpers
+   -------------------------------------------------------------------------- */
+
 .scroll-x {
   overflow-x: auto;
   max-width: 100%;
 }
 
-/* ---------------------------------------------------------------------------
+.sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+}
+.sheet-body {
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* --------------------------------------------------------------------------
    Mobile
-   --------------------------------------------------------------------------- */
+   -------------------------------------------------------------------------- */
 
 /* iOS zooms the page when a focused input is under 16px. The desktop UI is
    deliberately 13px, so bump form controls only at phone widths. */
@@ -215,8 +533,6 @@ input[type="number"] {
   }
 }
 
-/* Touch targets. Pointer-coarse rather than a width query, so a small tablet
-   with a mouse keeps the dense desktop hit areas. */
 @media (pointer: coarse) {
   .tap {
     min-height: 44px;
@@ -229,48 +545,11 @@ input[type="number"] {
   }
 }
 
-/* Facet values as chips in the mobile filter sheet. */
-.chip {
-  display: block;
-  width: 100%;
-  border: 1px solid var(--color-rule);
-  background: #fff;
-  padding: 9px 6px;
-  text-align: center;
-  font-size: 13px;
-  line-height: 1.2;
-  color: var(--color-ink);
-}
-.chip[data-selected="true"] {
-  border-color: var(--color-catalog-green);
-  background: #eef5f0;
-  font-weight: 700;
-  color: var(--color-catalog-green-dark);
-}
-
-/* Active-filter pills above the results, scrolled horizontally. */
-.filter-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  white-space: nowrap;
-  border: 1px solid var(--color-catalog-green);
-  color: var(--color-catalog-green);
-  padding: 5px 10px;
-  font-size: 12px;
-}
-
-/* The sheet and drawer sit above everything and trap scrolling to themselves. */
-.sheet {
-  position: fixed;
-  inset: 0;
-  z-index: 50;
-  display: flex;
-  flex-direction: column;
-  background: #fff;
-}
-.sheet-body {
-  flex: 1;
-  overflow-y: auto;
-  overscroll-behavior: contain;
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
 }

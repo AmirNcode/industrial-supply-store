@@ -159,6 +159,49 @@ Verified after seeding: zero duplicate spec combinations, zero rows where
 
 ---
 
+## Look and feel
+
+The rule the whole design follows: **colour is information, never decoration.**
+Buyers scan 1,374-row tables, so anything that draws the eye has to earn it.
+
+- **Pine green** — navigation and actions, i.e. anything clickable
+- **Amber** — money. The two price columns carry a 5% amber wash so the eye finds
+  them without reading headers, and the masthead rule is the same amber
+- **Blue/purple** — part numbers only, so they read as the identifiers they are
+- **Ten hues** — one per top-level category, worn as a 3px spine under its tile.
+  Derived from the root slug, so adding a category needs no colour bookkeeping
+- Status is the only other colour: green for in-stock, amber for lead time
+
+The masthead is near-black pulled toward green (`#101d17`) rather than neutral,
+so it belongs to the palette instead of sitting on top of it. The spec table
+header matches it, with mono uppercase labels that read as column codes on a
+datasheet.
+
+Every contrast pair was measured, not eyeballed — the lowest is 6.29:1 and most
+clear 7:1, so the palette passes AA throughout and AAA nearly everywhere.
+
+### Type
+
+**IBM Plex Sans** and **IBM Plex Mono**, self-hosted, plus **Vazirmatn** for
+Persian. All OFL — licences are in `public/fonts/`.
+
+Plex was drawn for technical documentation: real tabular figures, and
+unambiguous `1/l/I` and `0/O`, which matters when the entire product is part
+numbers and dimensions. Every measured value — dimensions, part numbers, prices,
+counts — is set in the mono. The typeface itself says "this is a specification".
+
+`unicode-range` makes the subsets lazy, so a page only fetches what it renders:
+
+| Locale | Fetched |
+|---|---|
+| English | ~59 KB (Plex Sans + Mono) |
+| Persian | ~104 KB (adds Vazirmatn Arabic) |
+
+Latin-ext stays unfetched unless an accented character appears, and an English
+visitor never downloads the Persian face. Under Persian the mono still leads so
+Latin part numbers look identical across locales, with Vazirmatn behind it to
+catch Persian digits — per-glyph fallback, no per-element classes.
+
 ## Mobile
 
 The phone layout is a different structure, not a narrower desktop one. Squeezing

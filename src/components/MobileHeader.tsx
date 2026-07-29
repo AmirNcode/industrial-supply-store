@@ -27,7 +27,6 @@ export function MobileHeader({ locale }: { locale: Locale }) {
   // over the page the user just asked for.
   useEffect(() => setMenuOpen(false), [pathname]);
 
-  // Lock body scroll behind the drawer.
   useEffect(() => {
     if (!menuOpen) return;
     const prev = document.body.style.overflow;
@@ -47,19 +46,22 @@ export function MobileHeader({ locale }: { locale: Locale }) {
   return (
     <div className="lg:hidden">
       {isHome && (
-        <div className="px-3 pt-2 pb-1 text-center">
+        <div className="px-3 pt-3 pb-1 text-center">
           <Link href={`/${locale}`} className="hover:no-underline">
             <span
-              className="inline-block font-bold text-[var(--color-catalog-green-dark)] leading-none"
+              className="block whitespace-nowrap font-bold leading-none text-white"
               style={{
-                fontSize: locale === "fa" ? 26 : 30,
-                letterSpacing: locale === "fa" ? 0 : "-0.02em",
-                fontFamily:
-                  locale === "fa" ? undefined : "Georgia, 'Times New Roman', serif",
+                fontSize: locale === "fa" ? 23 : 25,
+                letterSpacing: locale === "fa" ? 0 : "0.03em",
               }}
             >
               {t.brand}
-              <sup className="text-[11px] align-super">®</sup>
+              <sup className="ms-0.5 align-super text-[9px] text-[var(--color-chrome-muted)]">
+                ®
+              </sup>
+            </span>
+            <span className="mt-1.5 block text-[9px] uppercase tracking-[0.22em] text-[var(--color-chrome-muted)]">
+              {t.tagline}
             </span>
           </Link>
         </div>
@@ -70,8 +72,7 @@ export function MobileHeader({ locale }: { locale: Locale }) {
           <Link
             href={`/${locale}`}
             aria-label={t.home}
-            className="flex h-9 w-9 shrink-0 items-center justify-center bg-[var(--color-accent-bar)] font-bold text-[var(--color-catalog-green-dark)] hover:no-underline"
-            style={{ fontFamily: "Georgia, serif", fontSize: 22 }}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[3px] bg-[var(--color-amber)] text-[19px] font-bold leading-none text-[var(--color-chrome)] hover:no-underline"
           >
             P
           </Link>
@@ -83,7 +84,7 @@ export function MobileHeader({ locale }: { locale: Locale }) {
 
         <Link
           href={`/${locale}/cart`}
-          className="tap shrink-0 px-1 text-[13px] font-bold uppercase text-[var(--color-catalog-green)]"
+          className="tap shrink-0 px-1 text-[12px] font-semibold uppercase tracking-[0.06em] !text-[var(--color-amber-lift)]"
         >
           {t.order}
           <CartBadge locale={locale} />
@@ -94,41 +95,52 @@ export function MobileHeader({ locale }: { locale: Locale }) {
           onClick={() => setMenuOpen((v) => !v)}
           aria-expanded={menuOpen}
           aria-label={t.browseCatalog}
-          className="tap shrink-0 px-1 text-[22px] leading-none text-[var(--color-catalog-green)]"
+          className="tap shrink-0 px-1 text-[21px] leading-none text-[var(--color-chrome-ink)]"
         >
           {menuOpen ? "✕" : "☰"}
         </button>
       </div>
 
       {menuOpen && (
-        <nav className="border-t-2 border-[var(--color-accent-bar)] bg-white">
+        <nav className="bg-[var(--color-chrome-2)]">
           <ul>
             {menuLinks.map((l) => (
-              <li key={l.href} className="border-b border-[var(--color-rule-light)]">
+              <li
+                key={l.href}
+                className="border-b border-[var(--color-chrome-line)]"
+              >
                 <Link
                   href={l.href}
-                  className="tap px-4 py-3 text-[17px] font-bold text-[var(--color-catalog-green)]"
+                  className="tap px-4 py-3 text-[16px] font-semibold !text-[var(--color-chrome-ink)]"
                 >
                   {l.label}
                 </Link>
               </li>
             ))}
-            <li className="border-b border-[var(--color-rule-light)]">
+            <li className="border-b border-[var(--color-chrome-line)]">
               <Link
                 href={`/${other}`}
                 lang={other}
-                className="tap px-4 py-3 text-[17px] font-bold text-[var(--color-catalog-green)]"
+                className="tap px-4 py-3 text-[16px] font-semibold !text-[var(--color-amber-lift)]"
               >
                 {other === "fa" ? "فارسی" : "English"}
               </Link>
             </li>
           </ul>
-          <div className="px-4 py-3 text-[13px] text-[var(--color-ink-muted)]">
-            <div className="mb-1 font-bold text-[var(--color-ink)]">{t.emailUs}</div>
-            <a href="mailto:sales@parstech.example" className="tech block">
+          <div className="px-4 py-3 text-[12px] text-[var(--color-chrome-muted)]">
+            <div className="mb-1 font-semibold text-[var(--color-chrome-ink)]">
+              {t.emailUs}
+            </div>
+            <a
+              href="mailto:sales@parstech.example"
+              className="tech block !text-[var(--color-chrome-muted)]"
+            >
               sales@parstech.example
             </a>
-            <a href="tel:+982188880000" className="tech block">
+            <a
+              href="tel:+982188880000"
+              className="tech block !text-[var(--color-chrome-muted)]"
+            >
               +98 21 8888 0000
             </a>
           </div>

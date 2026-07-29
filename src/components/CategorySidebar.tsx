@@ -49,8 +49,8 @@ export async function CategorySidebar({
                 prefetch={false}
                 className={`block py-[3px] text-[13px] leading-snug ${
                   active
-                    ? "font-bold text-[var(--color-catalog-green-dark)]"
-                    : "text-[var(--color-catalog-green)]"
+                    ? "font-bold text-[var(--color-pine-deep)]"
+                    : "text-[var(--color-pine)]"
                 }`}
               >
                 {pick(c, "name", locale)}

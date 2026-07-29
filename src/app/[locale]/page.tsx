@@ -4,6 +4,7 @@ import { getCategoriesToDepth, type CategoryRow } from "@/db/queries";
 import { CategorySidebar } from "@/components/CategorySidebar";
 import { ProductIcon } from "@/components/ProductIcon";
 import { isLocale, getDict, pick, type Locale } from "@/lib/i18n";
+import { categorySpine } from "@/lib/categoryColor";
 
 /** Categories change only when the catalog is reseeded, so cache the page. */
 export const revalidate = 3600;
@@ -48,7 +49,7 @@ export default async function HomePage({
               <h2 className="mb-3 border-b border-[var(--color-rule)] pb-1">
                 <Link
                   href={`/${l}/c/${top.path}`}
-                  className="text-[19px] font-bold text-[var(--color-catalog-green)] lg:text-[21px]"
+                  className="text-[19px] font-bold text-[var(--color-pine)] lg:text-[21px]"
                 >
                   {pick(top, "name", l)}
                 </Link>
@@ -87,10 +88,13 @@ function TileGrid({ locale, items }: { locale: Locale; items: CategoryRow[] }) {
             prefetch={false}
             className="group block text-center hover:no-underline"
           >
-            <span className="mx-auto flex aspect-square w-full items-center justify-center border border-[var(--color-rule)] bg-white group-hover:border-[var(--color-catalog-green)] lg:h-[72px] lg:w-[72px]">
+            <span
+              className="tile-face mx-auto flex aspect-square w-full items-center justify-center lg:h-[72px] lg:w-[72px]"
+              style={{ "--spine": categorySpine(c.path) } as React.CSSProperties}
+            >
               <ProductIcon name={c.icon} size={54} className="h-3/5 w-3/5 lg:h-auto lg:w-auto" />
             </span>
-            <span className="mt-1 block text-[11px] leading-tight text-[var(--color-ink)] group-hover:text-[var(--color-catalog-green)] group-hover:underline">
+            <span className="mt-1 block text-[11px] leading-tight text-[var(--color-ink)] group-hover:text-[var(--color-pine)] group-hover:underline">
               {pick(c, "name", locale)}
             </span>
           </Link>

@@ -37,8 +37,10 @@ export function CartBadge({ locale }: { locale: Locale }) {
   }, []);
 
   if (count === null || count <= 0) return null;
+  // Amber fill on the dark masthead — the one place a solid accent block earns
+  // its keep, because the cart count is the only number in the chrome.
   return (
-    <span className="ms-1 inline-block rounded-sm bg-[var(--color-catalog-green)] px-1.5 py-px text-[11px] text-white align-middle tech">
+    <span className="tech ms-1.5 inline-block rounded-[3px] bg-[var(--color-amber)] px-1.5 py-px align-middle text-[10px] font-semibold text-[var(--color-chrome)]">
       {formatInt(count, locale)}
     </span>
   );

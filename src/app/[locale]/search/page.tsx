@@ -101,13 +101,13 @@ export default async function SearchPage({
                   <Link
                     href={`/${l}/f/${f.slug}`}
                     prefetch={false}
-                    className="group flex h-full gap-3 border border-[var(--color-rule)] p-3 hover:border-[var(--color-catalog-green)] hover:no-underline"
+                    className="group flex h-full gap-3 border border-[var(--color-rule)] p-3 hover:border-[var(--color-pine)] hover:no-underline"
                   >
                     <span className="shrink-0">
                       <ProductIcon name={f.icon} size={52} />
                     </span>
                     <span className="min-w-0">
-                      <span className="block text-[14px] font-bold text-[var(--color-catalog-green)] group-hover:underline">
+                      <span className="block text-[14px] font-bold text-[var(--color-pine)] group-hover:underline">
                         {pick(f, "name", l)}
                       </span>
                       <span className="mt-1 block text-[12px] leading-snug text-[var(--color-ink-muted)]">

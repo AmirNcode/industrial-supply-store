@@ -47,7 +47,7 @@ export function ViewAsToggle({
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="tap text-[13px] font-bold uppercase tracking-wide text-[var(--color-catalog-green)]"
+        className="tap text-[13px] font-bold uppercase tracking-wide text-[var(--color-pine)]"
       >
         {t.viewAs} <span aria-hidden="true">{open ? "⌃" : "⌄"}</span>
       </button>
@@ -59,7 +59,7 @@ export function ViewAsToggle({
         onto two lines. `end-0` flips correctly under RTL.
       */}
       {open && (
-        <div className="absolute end-0 top-full z-40 w-[calc(100vw-1.5rem)] border-b-2 border-[var(--color-accent-bar)] bg-white px-3 shadow-lg lg:w-64 lg:border lg:border-[var(--color-rule)]">
+        <div className="absolute end-0 top-full z-40 w-[calc(100vw-1.5rem)] border-b-2 border-[var(--color-amber)] bg-white px-3 shadow-lg lg:w-64 lg:border lg:border-[var(--color-rule)]">
           <ul>
             {options.map((o) => (
               <li key={o.key} className="border-b border-[var(--color-rule-light)] last:border-0">
@@ -72,12 +72,12 @@ export function ViewAsToggle({
                     aria-hidden="true"
                     className={`flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border-2 ${
                       current === o.key
-                        ? "border-[var(--color-catalog-green)]"
+                        ? "border-[var(--color-pine)]"
                         : "border-[var(--color-rule)]"
                     }`}
                   >
                     {current === o.key && (
-                      <span className="h-[9px] w-[9px] rounded-full bg-[var(--color-catalog-green)]" />
+                      <span className="h-[9px] w-[9px] rounded-full bg-[var(--color-pine)]" />
                     )}
                   </span>
                   {o.label}

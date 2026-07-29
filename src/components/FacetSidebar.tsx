@@ -62,16 +62,20 @@ export function FacetSidebar({
         }));
 
         const searchable = items.length > SEARCHABLE_AT;
-        // Short numeric lists read better in columns, as on the reference site.
-        const columns = !searchable && def.kind === "number" && items.length > 6 ? 2 : 1;
+        // A short numeric facet becomes chips — a dimension should be a target,
+        // not a line of text. Longer ones stay lists, and the longest get a
+        // search box above a scroller.
+        const asChips = !searchable && def.kind === "number";
+        const columns = !searchable && !asChips && items.length > 6 ? 2 : 1;
 
         return (
-          <section key={facet.key} className="mb-3 border-b border-[var(--color-rule-light)] pb-2">
-            <h3 className="mb-1 text-[12px] font-bold">{pick(def, "label", locale)}</h3>
+          <section key={facet.key} className="mb-3.5 border-b border-[var(--color-rule-light)] pb-3">
+            <h3 className="mb-1.5 text-[12px] font-semibold text-[var(--color-ink)]">{pick(def, "label", locale)}</h3>
             <FacetList
               items={items}
               searchable={searchable}
               columns={columns}
+              asChips={asChips}
               searchLabel={t.search}
             />
           </section>
