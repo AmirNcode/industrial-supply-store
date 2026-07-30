@@ -89,19 +89,6 @@ export async function getChildren(parentId: number): Promise<CategoryRow[]> {
   `;
 }
 
-/**
- * Every category down to `maxDepth`, in one query, for building the home grid.
- * Cheap enough (under 100 rows) that fetching the whole tree beats N queries.
- */
-export async function getCategoriesToDepth(maxDepth: number): Promise<CategoryRow[]> {
-  return sql<CategoryRow[]>`
-    SELECT id, slug, path, depth, parent_id AS "parentId",
-           name_en AS "nameEn", name_fa AS "nameFa", icon,
-           product_count AS "productCount"
-    FROM categories WHERE depth <= ${maxDepth} ORDER BY depth, sort
-  `;
-}
-
 /** Ancestor chain for breadcrumbs, root first, excluding the category itself. */
 export async function getAncestors(path: string): Promise<CategoryRow[]> {
   const parts = path.split("/");
@@ -136,6 +123,31 @@ export async function getFamiliesInSubtree(path: string): Promise<FamilyRow[]> {
     JOIN categories c ON c.id = f.category_id
     WHERE c.path = ${path} OR c.path LIKE ${path + "/%"}
     ORDER BY c.sort, f.sort
+  `;
+}
+
+/**
+ * The first `perCategory` families under each top-level category, in one query,
+ * for the home page tiles. `rootPath` is the top-level category's path, which
+ * is the first segment of the owning category's path — the caller groups on it
+ * rather than issuing one query per category.
+ */
+export async function getFeaturedFamilies(
+  perCategory: number,
+): Promise<(FamilyRow & { rootPath: string })[]> {
+  return sql<(FamilyRow & { rootPath: string })[]>`
+    SELECT * FROM (
+      SELECT ${FAMILY_COLS},
+             split_part(c.path, '/', 1) AS "rootPath",
+             row_number() OVER (
+               PARTITION BY split_part(c.path, '/', 1)
+               ORDER BY c.sort, f.sort
+             ) AS rn
+      FROM product_families f
+      JOIN categories c ON c.id = f.category_id
+    ) ranked
+    WHERE rn <= ${perCategory}
+    ORDER BY "rootPath", rn
   `;
 }
 

@@ -294,6 +294,7 @@ html[lang="fa"] .spec-table thead th {
 input[type="text"],
 input[type="number"],
 input[type="email"],
+input[type="tel"],
 input[type="password"],
 textarea,
 select {
@@ -402,6 +403,62 @@ html[lang="fa"] .pill {
 .pill-warn {
   background: var(--color-warn-soft);
   color: var(--color-warn);
+}
+
+/* --------------------------------------------------------------------------
+   In-cart quantity — the running total for one row.
+   -------------------------------------------------------------------------- */
+
+/* Pine rather than amber: amber is spent on price and on the masthead badge,
+   and a third amber object on the same row would flatten that hierarchy. */
+.in-cart {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 3px 2px 8px;
+  border-radius: 3px;
+  background: var(--color-pine-tint);
+  color: var(--color-pine-deep);
+  font-size: var(--text-xxs);
+  line-height: 1.4;
+  white-space: nowrap;
+}
+html[dir="rtl"] .in-cart {
+  padding: 2px 8px 2px 3px;
+}
+.in-cart[data-pending] {
+  opacity: 0.5;
+}
+
+.in-cart-label {
+  font-weight: 600;
+  opacity: 0.75;
+}
+
+.in-cart-x {
+  border: none;
+  background: transparent;
+  color: inherit;
+  opacity: 0.55;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 4px;
+  border-radius: 2px;
+  transition: opacity 0.12s, background 0.12s, color 0.12s;
+}
+.in-cart-x:hover {
+  opacity: 1;
+  background: var(--color-pine);
+  color: #fff;
+}
+.in-cart-x:disabled {
+  cursor: default;
+}
+
+/* Keeps the column from collapsing as rows toggle between a dash and a badge. */
+.in-cart-col {
+  min-width: 68px;
 }
 
 /* Result count in the breadcrumb. */

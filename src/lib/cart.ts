@@ -74,17 +74,35 @@ export async function getCartCount(): Promise<number> {
   return rows[0]?.n ?? 0;
 }
 
-export async function addLine(productId: number, qty: number): Promise<void> {
+/**
+ * productId -> qty for the whole cart, which is what the "In Cart" column
+ * needs. Returned as a plain object because it crosses to the client as JSON.
+ */
+export async function getCartQuantities(): Promise<Record<number, number>> {
+  const id = await getCartId();
+  if (!id) return {};
+  const rows = await sql<{ productId: number; qty: number }[]>`
+    SELECT product_id AS "productId", qty FROM cart_items WHERE cart_id = ${id}
+  `;
+  const out: Record<number, number> = {};
+  for (const r of rows) out[r.productId] = r.qty;
+  return out;
+}
+
+/** Returns the line's resulting quantity, which the row then displays. */
+export async function addLine(productId: number, qty: number): Promise<number> {
   const cartId = await ensureCart();
   // Adding an item already in the cart accumulates rather than replaces, which
   // is what happens when a buyer works down a long table and revisits a row.
-  await sql`
+  const [row] = await sql<{ qty: number }[]>`
     INSERT INTO cart_items (cart_id, product_id, qty)
     VALUES (${cartId}, ${productId}, ${qty})
     ON CONFLICT (cart_id, product_id)
     DO UPDATE SET qty = cart_items.qty + ${qty}
+    RETURNING qty
   `;
   await sql`UPDATE carts SET updated_at = now() WHERE id = ${cartId}`;
+  return row?.qty ?? qty;
 }
 
 export async function setLineQty(productId: number, qty: number): Promise<void> {

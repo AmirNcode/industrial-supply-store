@@ -18,6 +18,7 @@ import { ActiveFilterPills } from "@/components/ActiveFilterPills";
 import { ProductCardList } from "@/components/ProductCardList";
 import { Breadcrumb } from "@/components/Breadcrumb";
 import { AddToCartRow } from "@/components/AddToCartRow";
+import { InCartQty } from "@/components/InCartQty";
 import { ProductIcon } from "@/components/ProductIcon";
 import { isLocale, getDict, pick, type Locale } from "@/lib/i18n";
 import { formatInt, formatPriceBare, formatSpecNumber, currencyLabel } from "@/lib/money";
@@ -276,6 +277,7 @@ function SpecTable({
             {t.pkg} — {currencyLabel(locale)}
           </th>
           <th className="!border-b-0" />
+          <th className="!border-b-0" />
         </tr>
         <tr>
           {defs.map((d) => (
@@ -289,6 +291,7 @@ function SpecTable({
           <th className="num tech tech-num price-col">1–9</th>
           {hasBulk && <th className="num tech tech-num price-col">10+</th>}
           <th>{t.qty}</th>
+          <th>{t.inCart}</th>
         </tr>
       </thead>
       <tbody>
@@ -342,6 +345,9 @@ function SpecTable({
               )}
               <td>
                 <AddToCartRow productId={p.id} locale={locale} packQty={p.packQty} />
+              </td>
+              <td className="in-cart-col">
+                <InCartQty productId={p.id} locale={locale} />
               </td>
             </tr>
           );

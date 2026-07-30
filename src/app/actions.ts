@@ -94,7 +94,9 @@ export async function submitQuoteAction(formData: FormData) {
   const lines = await getCartLines();
   if (lines.length === 0) redirect(`/${locale}/cart`);
 
-  const required = ["company", "contactName", "email"];
+  // Phone is required too: sales chases quotes by phone, and the HTML
+  // `required` attribute is trivially bypassed, so the check has to live here.
+  const required = ["company", "contactName", "email", "phone"];
   for (const field of required) {
     if (!String(formData.get(field) ?? "").trim()) {
       redirect(`/${locale}/quote?error=missing`);

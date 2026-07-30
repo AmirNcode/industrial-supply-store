@@ -2,13 +2,14 @@
 
 import { useState, useTransition } from "react";
 import { getDict, type Locale } from "@/lib/i18n";
+import { addToCart } from "@/lib/cartClient";
 
 /**
  * The whole point of the reference site's table: order without leaving the row.
  *
  * This posts to a route handler rather than a Server Action so a single add does
- * not re-render a 200-row table. The header badge is updated by broadcasting an
- * event the badge listens for, which keeps the round trip to one small request.
+ * not re-render a 200-row table. The shared client cart takes the response, so
+ * the header badge and this row's "In Cart" quantity both move on one request.
  */
 export function AddToCartRow({
   productId,
@@ -27,16 +28,7 @@ export function AddToCartRow({
   function add() {
     const n = Math.max(1, Math.min(99999, Number(qty) || 1));
     start(async () => {
-      const res = await fetch("/api/cart", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ productId, qty: n }),
-      });
-      if (!res.ok) return;
-      const data = (await res.json()) as { count: number };
-      window.dispatchEvent(
-        new CustomEvent("cart:updated", { detail: { count: data.count } }),
-      );
+      if (!(await addToCart(productId, n))) return;
       setQty("");
       setDone(true);
       setTimeout(() => setDone(false), 1600);

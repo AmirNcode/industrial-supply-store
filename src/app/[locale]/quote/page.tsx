@@ -51,7 +51,7 @@ export default async function QuotePage({
           <Field name="company" label={t.company} required />
           <Field name="contactName" label={t.contactName} required />
           <Field name="email" label={t.email} type="email" required />
-          <Field name="phone" label={t.phone} optional={t.optional} />
+          <Field name="phone" label={t.phone} type="tel" required />
           <Field name="poNumber" label={t.poNumber} optional={t.optional} />
           <Field name="city" label={t.city} optional={t.optional} />
           <Field name="country" label={t.country} optional={t.optional} />
@@ -135,7 +135,7 @@ function Field({
         name={name}
         required={required}
         // Email and phone are Latin-entry fields even in the Persian UI.
-        dir={type === "email" || name === "phone" ? "ltr" : undefined}
+        dir={type === "email" || type === "tel" ? "ltr" : undefined}
         className="w-full"
       />
     </label>

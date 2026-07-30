@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ProductRow, SpecDefRow } from "@/db/queries";
 import { AddToCartRow } from "./AddToCartRow";
+import { InCartQty } from "./InCartQty";
 import { ProductIcon } from "./ProductIcon";
 import { getDict, pick, type Locale } from "@/lib/i18n";
 import { formatPrice, formatSpecNumber, formatInt } from "@/lib/money";
@@ -184,6 +185,9 @@ export function ProductCardList({
                 {p.packQty > 1 ? `${t.pkg} ${formatInt(p.packQty, locale)}` : t.each}
               </span>
               <AddToCartRow productId={p.id} locale={locale} packQty={p.packQty} />
+              {/* The card has no column headers, so the quantity carries its
+                  own "In Cart" label. */}
+              <InCartQty productId={p.id} locale={locale} showLabel />
             </div>
           </li>
         );
