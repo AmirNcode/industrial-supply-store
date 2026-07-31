@@ -355,13 +355,23 @@ override can be compared against the environment value before it is saved.
 ```
 Exchange rate
   ( ) Automatic — 110,000 Toman / USD   (from USD_TO_TOMAN)
-  (•) Manual    [ 118,500 ] Toman / USD        [ Save ]
+  (•) Manual    [ 118,500 ] Toman / USD        [ Apply ]
 
   Applies to displayed prices. Invoices keep the rate frozen when issued.
+
+  first press →   Apply 118,500 Toman / USD, up from 110,000?
+                  [ Confirm ]  [ Cancel ]
 ```
 
-The note is part of the UI, not decoration: without it, changing the rate looks
-like it might restate every invoice already sent.
+**Nothing takes effect until Apply, and Apply asks once.** Typing in the field
+and moving the toggle change nothing on their own; the first press of Apply
+replaces the button with the old and new rates and a Confirm, and only Confirm
+writes. One field, one keystroke slip, and every Toman price on the site is
+wrong — cheap to guard, expensive to notice afterwards. Confirming is also what
+triggers `revalidatePath`, so the catalog and the stored value move together.
+
+The note about invoices is part of the UI, not decoration: without it, changing
+the rate looks like it might restate every invoice already sent.
 
 ### `/[locale]/admin/import` — catalog loading
 
