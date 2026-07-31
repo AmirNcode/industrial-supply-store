@@ -261,3 +261,20 @@ export const quoteItems = pgTable(
   },
   (t) => [index("quote_items_quote_idx").on(t.quoteId)],
 );
+
+// ---------------------------------------------------------------------------
+// Settings
+// ---------------------------------------------------------------------------
+
+/**
+ * Key/value rather than one row with a column per setting, so the next setting
+ * is an insert instead of a migration. Values are text and parsed at the edge;
+ * there are two of them and both are small.
+ */
+export const appSettings = pgTable("app_settings", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
