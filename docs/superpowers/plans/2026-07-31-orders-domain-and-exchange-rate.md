@@ -773,11 +773,15 @@ git commit -m "Pass the exchange rate explicitly instead of reading it at import
 
 - [ ] **Step 1: Add the write guard**
 
-Append to `src/lib/admin.ts`:
+Add the import to the top of `src/lib/admin.ts`, beside the existing ones:
 
 ```ts
 import { DEMO_MODE } from "./demo";
+```
 
+Then append the function to the end of the file:
+
+```ts
 /**
  * Every admin Server Action calls this first.
  *
@@ -1640,12 +1644,17 @@ In `src/app/globals.css`, immediately after the `.pill-warn` rule:
 
 - [ ] **Step 4: Write the transition action**
 
-Append to `src/app/[locale]/admin/actions.ts`:
+Add these imports to the top of `src/app/[locale]/admin/actions.ts`, with the
+ones already there:
 
 ```ts
 import { sql } from "@/db";
-import { assertTransition, isOrderStatus, type OrderStatus } from "@/lib/orders";
+import { assertTransition, isOrderStatus } from "@/lib/orders";
+```
 
+Then append the action to the end of the file:
+
+```ts
 export async function setOrderStatusAction(formData: FormData): Promise<void> {
   await assertAdminWrite();
 
@@ -1847,11 +1856,15 @@ and to `fa`:
 
 - [ ] **Step 2: Write the action**
 
-Append to `src/app/[locale]/admin/actions.ts`:
+Add the import to the top of `src/app/[locale]/admin/actions.ts`:
 
 ```ts
 import { getFxRate } from "@/lib/fx";
+```
 
+Then append the action to the end of the file:
+
+```ts
 /**
  * Prices the order, assigns an invoice number, and freezes the exchange rate.
  *
