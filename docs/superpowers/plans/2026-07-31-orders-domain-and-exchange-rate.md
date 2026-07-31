@@ -238,7 +238,7 @@ export function assertTransition(from: OrderStatus, to: OrderStatus): void {
 
 Run: `npm test`
 
-Expected: `pass 8`, `fail 0`.
+Expected: `pass 9`, `fail 0`.
 
 - [ ] **Step 6: Commit**
 
@@ -404,7 +404,7 @@ export function parseRate(raw: string): number | null {
 
 Run: `npm test`
 
-Expected: `pass 15`, `fail 0`.
+Expected: `pass 16`, `fail 0`.
 
 - [ ] **Step 5: Commit**
 
@@ -666,7 +666,7 @@ Leave `currencyLabel`, `formatInt` and `formatSpecNumber` untouched.
 
 Run: `npm test`
 
-Expected: `pass 19`, `fail 0` across all three test files.
+Expected: `pass 20`, `fail 0` across all three test files.
 
 - [ ] **Step 5: Find every broken call site**
 
