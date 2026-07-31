@@ -25,6 +25,7 @@ postgres-js with raw SQL for queries, Drizzle only for schema definition and
 - Forward one step only; `cancelled` reachable from any state before `shipped`; `delivered` and `cancelled` are terminal.
 - Every user-visible string goes in **both** dictionaries in `src/lib/i18n.ts` (`en` and `fa`). `fa` is typed as `typeof en`, so a missing key is a compile error.
 - Every admin write action must call `assertAdminWrite()` — it throws when `DEMO_MODE=1`. Demo mode makes `/admin` publicly readable, so a writable action there would be world-writable.
+- Every admin write action takes its redirect locale through `safeLocale(formData)`, never `String(formData.get("locale") || "en")`. An unvalidated value goes straight into `redirect()`, and a posted `locale` of `/evil.com` yields the protocol-relative URL `//evil.com/admin` — an open redirect. `safeLocale` is defined once in `src/app/[locale]/admin/actions.ts` and used by every action in that file.
 - Part numbers, tracking numbers and invoice numbers stay Latin digits in both locales, wrapped in `<bdi>` or `className="tech"` as the existing spec table does.
 - `formatPrice` / `formatPriceBare` take `rate` as a **required** third argument. Never add a default value — a defaulted call site silently renders the environment rate.
 - Invoices freeze `fx_rate_to_toman` at issue. Nothing may recompute an invoiced order's Toman total from the live rate.
@@ -885,11 +886,23 @@ import { redirect } from "next/navigation";
 import { assertAdminWrite } from "@/lib/admin";
 import { saveFxSettings } from "@/lib/fx";
 import { envFxRate, isFxMode, isPlausibleRate, parseRate } from "@/lib/fxRate";
+import { isLocale, type Locale } from "@/lib/i18n";
+
+/**
+ * Every action in this file redirects to `/${locale}/admin`, so the posted
+ * value reaches `redirect()` unchanged. A `locale` of `/evil.com` would make
+ * that `//evil.com/admin` — a protocol-relative URL, and an open redirect.
+ * Anything unrecognised falls back to English.
+ */
+function safeLocale(formData: FormData): Locale {
+  const raw = String(formData.get("locale") ?? "");
+  return isLocale(raw) ? raw : "en";
+}
 
 export async function saveFxAction(formData: FormData): Promise<void> {
   await assertAdminWrite();
 
-  const locale = String(formData.get("locale") || "en");
+  const locale = safeLocale(formData);
   const rawMode = String(formData.get("mode") ?? "auto");
   const mode = isFxMode(rawMode) ? rawMode : "auto";
 
@@ -921,7 +934,7 @@ Create `src/components/FxRatePanel.tsx`:
 import { useState } from "react";
 import { getDict, type Locale } from "@/lib/i18n";
 import { formatInt } from "@/lib/money";
-import type { FxMode } from "@/lib/fxRate";
+import { parseRate, type FxMode } from "@/lib/fxRate";
 
 /**
  * Two-step Apply.
@@ -952,8 +965,16 @@ export function FxRatePanel({
   const [draftRate, setDraftRate] = useState(String(manualRate ?? envRate));
   const [confirming, setConfirming] = useState(false);
 
-  const nextRate = draftMode === "manual" ? Number(draftRate.replace(/[,\s]/g, "")) : envRate;
-  const changed = draftMode !== mode || (draftMode === "manual" && nextRate !== manualRate);
+  // Parsed with the same function the Server Action will use, not a lookalike.
+  // A near-copy that missed the Persian thousands separators would show the
+  // admin "→ NaN" while the server saved a perfectly good number — the one
+  // thing a confirmation dialog must never do is name a different value from
+  // the one about to be applied.
+  const parsedDraft = parseRate(draftRate);
+  const nextRate = draftMode === "manual" ? parsedDraft : envRate;
+  const changed =
+    draftMode !== mode ||
+    (draftMode === "manual" && parsedDraft !== null && parsedDraft !== manualRate);
 
   return (
     <section className="mb-4 border border-[var(--color-rule)] p-3">
@@ -1025,7 +1046,7 @@ export function FxRatePanel({
                 <span>
                   {t.fxConfirmPrompt}{" "}
                   <span className="tech">{formatInt(effectiveRate, locale)}</span> →{" "}
-                  <strong className="tech">{formatInt(nextRate, locale)}</strong>
+                  <strong className="tech">{nextRate === null ? "—" : formatInt(nextRate, locale)}</strong>
                 </span>
                 <button type="submit" form="fx-save" className="btn-small">
                   {t.fxConfirm}
@@ -1704,7 +1725,7 @@ Then append the action to the end of the file:
 export async function setOrderStatusAction(formData: FormData): Promise<void> {
   await assertAdminWrite();
 
-  const locale = String(formData.get("locale") || "en");
+  const locale = safeLocale(formData);
   const id = Number(formData.get("orderId"));
   const to = String(formData.get("status") ?? "");
   if (!Number.isInteger(id) || id <= 0 || !isOrderStatus(to)) {
@@ -1921,7 +1942,7 @@ Then append the action to the end of the file:
 export async function issueInvoiceAction(formData: FormData): Promise<void> {
   await assertAdminWrite();
 
-  const locale = String(formData.get("locale") || "en");
+  const locale = safeLocale(formData);
   const id = Number(formData.get("orderId"));
   if (!Number.isInteger(id) || id <= 0) redirect(`/${locale}/admin?error=bad-request`);
 
