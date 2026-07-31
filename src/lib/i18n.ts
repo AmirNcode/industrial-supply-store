@@ -127,6 +127,21 @@ const en = {
     "Public demo view — no sign-in required. Anyone with this link can read these requests.",
   demoQuoteWarning:
     "This is a public demo. Anything you submit here can be read by anyone — please do not enter real contact details.",
+  // Exchange rate
+  exchangeRate: "Exchange rate",
+  fxAutomatic: "Automatic",
+  fxManual: "Manual",
+  fxPerUsd: "Toman / USD",
+  fxFromEnv: "from USD_TO_TOMAN",
+  fxApply: "Apply",
+  fxConfirm: "Confirm",
+  fxCancel: "Cancel",
+  fxConfirmPrompt: "Apply this rate?",
+  fxAppliesTo:
+    "Applies to displayed prices. Invoices keep the rate frozen when they are issued.",
+  fxOutOfRange:
+    "That rate is more than ten times away from the automatic rate. Check for a stray digit.",
+  fxInvalid: "Enter a whole number of Toman.",
 };
 
 /**
@@ -246,6 +261,20 @@ const fa: typeof en = {
     "نمای عمومی نسخه نمایشی — بدون نیاز به ورود. هر کسی با این لینک می‌تواند این درخواست‌ها را ببیند.",
   demoQuoteWarning:
     "این یک نسخه نمایشی عمومی است. هر آنچه ثبت کنید برای دیگران قابل مشاهده خواهد بود — لطفاً اطلاعات تماس واقعی وارد نکنید.",
+  exchangeRate: "نرخ ارز",
+  fxAutomatic: "خودکار",
+  fxManual: "دستی",
+  fxPerUsd: "تومان به ازای هر دلار",
+  fxFromEnv: "از USD_TO_TOMAN",
+  fxApply: "اعمال",
+  fxConfirm: "تأیید",
+  fxCancel: "انصراف",
+  fxConfirmPrompt: "این نرخ اعمال شود؟",
+  fxAppliesTo:
+    "روی قیمت‌های نمایش‌داده‌شده اعمال می‌شود. نرخ صورتحساب‌ها هنگام صدور ثابت می‌ماند.",
+  fxOutOfRange:
+    "این نرخ بیش از ده برابر با نرخ خودکار فاصله دارد. رقم اضافه را بررسی کنید.",
+  fxInvalid: "یک عدد صحیح به تومان وارد کنید.",
 };
 
 export type Dict = typeof en;

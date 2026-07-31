@@ -1,6 +1,7 @@
 import "server-only";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
+import { DEMO_MODE } from "./demo";
 
 /**
  * Single shared password for the local admin view.
@@ -47,4 +48,17 @@ export async function signInAdmin(password: string): Promise<boolean> {
 export async function signOutAdmin(): Promise<void> {
   const jar = await cookies();
   jar.delete(COOKIE);
+}
+
+/**
+ * Every admin Server Action calls this first.
+ *
+ * `DEMO_MODE` deliberately makes /admin readable with no password so the RFQ
+ * inbox can be shown without handing out a credential. That is only defensible
+ * while the page is read-only: the same flag on a page that can change order
+ * statuses or overwrite the catalog would make those actions world-writable.
+ */
+export async function assertAdminWrite(): Promise<void> {
+  if (DEMO_MODE) throw new Error("Admin is read-only in demo mode");
+  if (!(await isAdmin())) throw new Error("Not signed in as admin");
 }

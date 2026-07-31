@@ -4,7 +4,10 @@ import { isAdmin, signInAdmin, signOutAdmin } from "@/lib/admin";
 import { DEMO_MODE } from "@/lib/demo";
 import { isLocale, getDict, type Locale } from "@/lib/i18n";
 import { formatPrice, formatInt } from "@/lib/money";
-import { getFxRate } from "@/lib/fx";
+import { getFxSettings, getFxRate } from "@/lib/fx";
+import { envFxRate } from "@/lib/fxRate";
+import { FxRatePanel } from "@/components/FxRatePanel";
+import { saveFxAction } from "./actions";
 import type { SpecBag } from "@/db/schema";
 
 type QuoteRow = {
@@ -54,13 +57,13 @@ export default async function AdminPage({
   searchParams,
 }: {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; fx?: string }>;
 }) {
   const { locale } = await params;
   if (!isLocale(locale)) notFound();
   const l = locale as Locale;
   const t = getDict(l);
-  const { error } = await searchParams;
+  const { error, fx } = await searchParams;
 
   // In demo mode the inbox is deliberately open so it can be shown without
   // handing out a credential. Everything that reaches this page is generated
@@ -90,7 +93,7 @@ export default async function AdminPage({
     );
   }
 
-  const rate = await getFxRate();
+  const [fxSettings, rate] = await Promise.all([getFxSettings(), getFxRate()]);
 
   const quotes = await sql<QuoteRow[]>`
     SELECT q.id, q.ref, q.company, q.contact_name AS "contactName", q.email,
@@ -136,6 +139,35 @@ export default async function AdminPage({
           </form>
         )}
       </div>
+
+      <form action={saveFxAction} id="fx-save" className="hidden">
+        <input type="hidden" name="locale" value={l} />
+      </form>
+
+      {fx === "saved" && (
+        <p className="mb-2 border border-[var(--color-ok)] bg-[var(--color-ok-soft)] px-3 py-2 text-[12px] text-[var(--color-ok)]">
+          {t.exchangeRate}: {formatInt(rate, l)} {t.fxPerUsd}
+        </p>
+      )}
+      {fx === "range" && (
+        <p className="mb-2 border border-[#e0b4b0] bg-[#fdf2f1] px-3 py-2 text-[12px] text-[#a3312a]">
+          {t.fxOutOfRange}
+        </p>
+      )}
+      {fx === "invalid" && (
+        <p className="mb-2 border border-[#e0b4b0] bg-[#fdf2f1] px-3 py-2 text-[12px] text-[#a3312a]">
+          {t.fxInvalid}
+        </p>
+      )}
+
+      <FxRatePanel
+        locale={l}
+        mode={fxSettings.mode}
+        manualRate={fxSettings.manualRate}
+        envRate={envFxRate()}
+        effectiveRate={rate}
+        disabled={DEMO_MODE}
+      />
 
       {DEMO_MODE && (
         <p className="mb-3 border border-[var(--color-warn)] bg-[var(--color-warn-soft)] px-3 py-2 text-[12px] text-[var(--color-warn)]">
