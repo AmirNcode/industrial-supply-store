@@ -30,6 +30,22 @@ postgres-js with raw SQL for queries, Drizzle only for schema definition and
 - Invoices freeze `fx_rate_to_toman` at issue. Nothing may recompute an invoiced order's Toman total from the live rate.
 - Money is integer USD cents everywhere. Never floats.
 - Run destructive scripts through `assertSafeTarget()` from `src/db/script-client.ts`.
+- **`drizzle-kit push` drops the indexes in `src/db/extensions.sql` every time.**
+  Eight of them — the full-text and trigram indexes behind search, and two
+  expression indexes — cannot be expressed in Drizzle's schema DSL, so push sees
+  them as drift and removes them. They are not optional: without them, search
+  and autocomplete fall back to sequential scans over 34,000 products. After
+  **every** `npm run db:push`, re-apply them and confirm:
+
+  ```bash
+  docker exec -i isupply-db psql -U isupply -d isupply < src/db/extensions.sql
+  docker exec isupply-db psql -U isupply -d isupply -c "\di" | grep -c "trgm_idx\|fts_idx\|path_prefix_idx\|psv_product_idx"
+  ```
+
+  The count must be 8. Read push's proposed changes before accepting: a dropped
+  index is recoverable, a dropped column is not.
+- Modules importing `server-only` cannot be executed by plain `node`. To run one
+  from the command line for verification, add `--conditions=react-server`.
 
 ## File Structure
 
@@ -1510,9 +1526,19 @@ Rename the local `quotes` variable to `orders` throughout the component, and
 
 Run: `npm run db:push`
 
-Expected: drizzle-kit reports **no changes**. Any proposed change means the
-script in Task 6 and the schema file have diverged — reconcile before going on,
-and never accept a proposed drop.
+Expected: drizzle-kit reports no changes to tables or columns. It will still
+propose dropping the eight `extensions.sql` indexes, which it cannot see in the
+schema DSL — that is the standing behaviour described in Global Constraints, not
+drift. Any proposed change to a **table or column** does mean the Task 6 script
+and the schema file have diverged; reconcile before going on and never accept a
+proposed column drop.
+
+Then re-apply the extension indexes and confirm all eight are back:
+
+```bash
+docker exec -i isupply-db psql -U isupply -d isupply < src/db/extensions.sql
+docker exec isupply-db psql -U isupply -d isupply -c "\di" | grep -c "trgm_idx\|fts_idx\|path_prefix_idx\|psv_product_idx"
+```
 
 - [ ] **Step 6: Verify end to end**
 
