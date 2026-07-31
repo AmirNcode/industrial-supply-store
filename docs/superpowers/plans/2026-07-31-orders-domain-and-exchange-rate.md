@@ -1255,6 +1255,37 @@ async function main() {
       UPDATE orders SET ref = 'ORD-' || substring(ref from 5) WHERE ref LIKE 'RFQ-%';
     `);
 
+    console.log("→ renaming constraints");
+    // `ALTER TABLE ... RENAME` leaves constraint names behind, so the primary
+    // and foreign keys are still called `quotes_pkey` and
+    // `quote_items_quote_id_quotes_id_fk`. drizzle-kit diffs on those names:
+    // left alone, its next push would propose dropping and recreating the
+    // primary key of a table holding live orders. Postgres has no
+    // `RENAME CONSTRAINT ... IF EXISTS`, hence the guards.
+    await tx.unsafe(`
+      DO $$
+      BEGIN
+        IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'quotes_pkey') THEN
+          ALTER TABLE orders RENAME CONSTRAINT quotes_pkey TO orders_pkey;
+        END IF;
+        IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'quote_items_pkey') THEN
+          ALTER TABLE order_items RENAME CONSTRAINT quote_items_pkey TO order_items_pkey;
+        END IF;
+        IF EXISTS (SELECT 1 FROM pg_constraint
+                   WHERE conname = 'quote_items_quote_id_quotes_id_fk') THEN
+          ALTER TABLE order_items
+            RENAME CONSTRAINT quote_items_quote_id_quotes_id_fk
+                           TO order_items_order_id_orders_id_fk;
+        END IF;
+        IF EXISTS (SELECT 1 FROM pg_constraint
+                   WHERE conname = 'quote_items_product_id_products_id_fk') THEN
+          ALTER TABLE order_items
+            RENAME CONSTRAINT quote_items_product_id_products_id_fk
+                           TO order_items_product_id_products_id_fk;
+        END IF;
+      END $$;
+    `);
+
     console.log("→ constraints, indexes and the invoice sequence");
     await tx.unsafe(`
       ALTER TABLE orders DROP CONSTRAINT IF EXISTS orders_status_check;
