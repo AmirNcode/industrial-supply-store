@@ -85,7 +85,18 @@ users
   created_at         timestamptz not null default now()
 ```
 
-One table. Sessions are a signed cookie, not rows (see Authentication).
+Sessions are a signed cookie, not rows (see Authentication).
+
+```
+app_settings
+  key          text pk
+  value        text not null
+  updated_at   timestamptz not null default now()
+```
+
+Two rows in v1: `fx_mode` (`auto` | `manual`) and `fx_manual_rate`. Key/value
+rather than a one-row table with a column per setting, so the next setting is an
+insert instead of a migration.
 
 ### Renamed
 
@@ -127,11 +138,12 @@ whoever can supply the reference *and* the email, may see it.
 
 ### Two columns that exist for correctness, not convenience
 
-**`fx_rate_to_toman`.** `formatPrice` converts USD cents to Toman at render time
-using the `USD_TO_TOMAN` environment variable. An invoice must never do that:
-editing the rate would retroactively change the amount owed on an invoice
-already emailed. The rate in force when the order is invoiced is frozen onto the
-row, and the invoice renders from that number alone.
+**`fx_rate_to_toman`.** Toman prices are converted at render time from a rate
+that staff can change (see Currency). An invoice must never do that: changing
+the rate would retroactively alter the amount owed on an invoice already
+emailed. The rate in force when the order is invoiced is frozen onto the row,
+and the invoice renders from that number alone. This is what makes an editable
+rate safe.
 
 **`requested_unit_price_cents`.** The price the customer saw when they
 submitted, kept beside the price staff finally set. Without it there is no way
@@ -158,6 +170,49 @@ therefore ships as an explicit script run *before* push:
 The script guards its target the way `src/seed/index.ts` does
 (`assertSafeTarget`), so it cannot run against production merely because
 `DATABASE_URL` was still exported. `npm run db:push` then adds the new columns.
+
+## Currency and the exchange rate
+
+Prices are stored once, in USD cents. Persian display converts to Toman. There
+is no live FX feed and v1 does not add one.
+
+**Two modes, switched from the admin page.**
+
+- `auto` — use `USD_TO_TOMAN` from the environment, exactly as today.
+- `manual` — use `fx_manual_rate` from `app_settings`.
+
+The point of the override is speed: changing an environment variable requires a
+redeploy, while the manual rate takes effect on the next render. Auto stays the
+default so a fresh deployment behaves as it does now.
+
+**Resolution.** `lib/fx.ts` exports `getFxRate()`, wrapped in React's `cache()`
+so a page resolves it once per request regardless of how many components ask:
+
+```
+getFxRate()  →  mode === 'manual' ? fx_manual_rate : Number(env.USD_TO_TOMAN)
+```
+
+**The rate becomes an argument, not a module constant.** `formatPrice` and
+`formatPriceBare` currently close over `USD_TO_TOMAN` read at import time, which
+cannot see a database value. Both gain a required `rate` parameter, and each
+page fetches the rate once and passes it down. Six files call them today —
+the family page, category list, search, cart, request form and admin — around
+fifteen call sites; `ProductCardList` takes the rate as a prop from its two
+callers.
+
+The parameter is required rather than defaulted. A default would let a missed
+call site keep rendering the environment rate while staff believe they changed
+it — prices that are wrong and silent, which is the failure mode worth spending
+a compiler error to prevent.
+
+**Cache invalidation.** Catalog pages are statically rendered with
+`revalidate = 3600`, so a rate change would otherwise take up to an hour to
+appear. Saving the setting calls `revalidatePath('/', 'layout')`.
+
+**Validation.** The manual rate must be a positive integer within an order of
+magnitude of the environment value; a fat-fingered rate is otherwise indistinguishable
+from a deliberate one and reprices the entire catalog. Out-of-range input is
+rejected with the current value shown for comparison.
 
 ## Authentication
 
@@ -291,6 +346,23 @@ view, plus one action per transition:
   and displays the plaintext once for staff to pass on. Never stored in
   plaintext, never shown again.
 
+### `/[locale]/admin` — exchange rate
+
+A small panel above the queue: a toggle between automatic and manual, a rate
+field enabled only in manual mode, and both numbers shown side by side so the
+override can be compared against the environment value before it is saved.
+
+```
+Exchange rate
+  ( ) Automatic — 110,000 Toman / USD   (from USD_TO_TOMAN)
+  (•) Manual    [ 118,500 ] Toman / USD        [ Save ]
+
+  Applies to displayed prices. Invoices keep the rate frozen when issued.
+```
+
+The note is part of the UI, not decoration: without it, changing the rate looks
+like it might restate every invoice already sent.
+
 ### `/[locale]/admin/import` — catalog loading
 
 Families listed grouped under their category, each with two links and an upload:
@@ -357,6 +429,9 @@ the pure logic where a bug is silent rather than loud:
 - CSV parse and validate — quoted fields, CRLF, BOM, missing column, unknown
   column, duplicate part number, unparseable number.
 - Invoice money maths — line totals, subtotal, Toman conversion at a fixed rate.
+- Rate resolution — auto returns the environment value, manual returns the
+  stored one, a missing or unparseable stored value falls back to auto rather
+  than to zero, and out-of-range manual input is rejected.
 
 Database-touching paths are verified by hand against the local Docker Postgres
 during each phase, listed as manual checks in the implementation plan. A full
@@ -367,8 +442,11 @@ integration harness is deferred.
 Each phase ends with something usable.
 
 1. **Orders domain** — rename migration, status column and guard, admin queue
-   with pricing, invoicing, payment, shipping, tracking and delivery. The store
-   is fully operable by staff at the end of this, with no accounts at all.
+   with pricing, invoicing, payment, shipping, tracking and delivery, plus the
+   exchange-rate setting and threading the rate through price formatting. The
+   store is fully operable by staff at the end of this, with no accounts at all.
+   The rate work belongs here because invoicing freezes whatever `getFxRate()`
+   returns, so it has to be real before the first invoice is issued.
 2. **Invoices** — invoice route, print stylesheet, both locales, frozen FX rate.
    Staff can now email a real invoice. Depends on phase 1 for the invoice
    number; needs nothing from accounts, since it is staff-readable first.
@@ -402,6 +480,9 @@ Stated so they are choices rather than surprises.
 - **No inventory or stock levels.** `in_stock` stays the manual boolean it is
   today.
 - **No in-app payment.** `payment_url` points wherever staff choose.
+- **No live exchange rate.** Both modes are hand-set; "automatic" means the
+  deployed environment value, not a market feed. Adding a feed later replaces
+  the body of `getFxRate()` and nothing else.
 
 ## i18n
 
