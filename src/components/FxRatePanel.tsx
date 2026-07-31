@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { getDict, type Locale } from "@/lib/i18n";
 import { formatInt } from "@/lib/money";
-import type { FxMode } from "@/lib/fxRate";
+import { parseRate, type FxMode } from "@/lib/fxRate";
 
 /**
  * Two-step Apply.
@@ -34,8 +34,16 @@ export function FxRatePanel({
   const [draftRate, setDraftRate] = useState(String(manualRate ?? envRate));
   const [confirming, setConfirming] = useState(false);
 
-  const nextRate = draftMode === "manual" ? Number(draftRate.replace(/[,\s]/g, "")) : envRate;
-  const changed = draftMode !== mode || (draftMode === "manual" && nextRate !== manualRate);
+  // Parsed with the same function the Server Action will use, not a lookalike.
+  // A near-copy that missed the Persian thousands separators would show the
+  // admin "→ NaN" while the server saved a perfectly good number — the one
+  // thing a confirmation dialog must never do is name a different value from
+  // the one about to be applied.
+  const parsedDraft = parseRate(draftRate);
+  const nextRate = draftMode === "manual" ? parsedDraft : envRate;
+  const changed =
+    draftMode !== mode ||
+    (draftMode === "manual" && parsedDraft !== null && parsedDraft !== manualRate);
 
   return (
     <section className="mb-4 border border-[var(--color-rule)] p-3">
@@ -107,7 +115,7 @@ export function FxRatePanel({
                 <span>
                   {t.fxConfirmPrompt}{" "}
                   <span className="tech">{formatInt(effectiveRate, locale)}</span> →{" "}
-                  <strong className="tech">{formatInt(nextRate, locale)}</strong>
+                  <strong className="tech">{nextRate === null ? "—" : formatInt(nextRate, locale)}</strong>
                 </span>
                 <button type="submit" form="fx-save" className="btn-small">
                   {t.fxConfirm}

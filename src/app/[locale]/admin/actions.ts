@@ -5,11 +5,23 @@ import { redirect } from "next/navigation";
 import { assertAdminWrite } from "@/lib/admin";
 import { saveFxSettings } from "@/lib/fx";
 import { envFxRate, isFxMode, isPlausibleRate, parseRate } from "@/lib/fxRate";
+import { isLocale, type Locale } from "@/lib/i18n";
+
+/**
+ * Every action in this file redirects to `/${locale}/admin`, so the posted
+ * value reaches `redirect()` unchanged. A `locale` of `/evil.com` would make
+ * that `//evil.com/admin` — a protocol-relative URL, and an open redirect.
+ * Anything unrecognised falls back to English.
+ */
+function safeLocale(formData: FormData): Locale {
+  const raw = String(formData.get("locale") ?? "");
+  return isLocale(raw) ? raw : "en";
+}
 
 export async function saveFxAction(formData: FormData): Promise<void> {
   await assertAdminWrite();
 
-  const locale = String(formData.get("locale") || "en");
+  const locale = safeLocale(formData);
   const rawMode = String(formData.get("mode") ?? "auto");
   const mode = isFxMode(rawMode) ? rawMode : "auto";
 
