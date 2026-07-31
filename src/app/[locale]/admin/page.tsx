@@ -4,6 +4,7 @@ import { isAdmin, signInAdmin, signOutAdmin } from "@/lib/admin";
 import { DEMO_MODE } from "@/lib/demo";
 import { isLocale, getDict, type Locale } from "@/lib/i18n";
 import { formatPrice, formatInt } from "@/lib/money";
+import { getFxRate } from "@/lib/fx";
 import type { SpecBag } from "@/db/schema";
 
 type QuoteRow = {
@@ -89,6 +90,8 @@ export default async function AdminPage({
     );
   }
 
+  const rate = await getFxRate();
+
   const quotes = await sql<QuoteRow[]>`
     SELECT q.id, q.ref, q.company, q.contact_name AS "contactName", q.email,
            q.phone, q.po_number AS "poNumber", q.city, q.country, q.notes,
@@ -155,7 +158,7 @@ export default async function AdminPage({
               {new Date(q.createdAt).toISOString().slice(0, 16).replace("T", " ")}
             </span>
             <span className="tech font-bold">
-              {formatPrice(q.totalCents, q.locale === "fa" ? "fa" : "en")}
+              {formatPrice(q.totalCents, q.locale === "fa" ? "fa" : "en", rate)}
             </span>
           </summary>
 
@@ -189,10 +192,10 @@ export default async function AdminPage({
                     <td className="whitespace-normal">{i.familyName}</td>
                     <td className="num tech tech-num">{i.qty}</td>
                     <td className="num tech tech-num">
-                      {formatPrice(i.unitPriceCents, q.locale === "fa" ? "fa" : "en")}
+                      {formatPrice(i.unitPriceCents, q.locale === "fa" ? "fa" : "en", rate)}
                     </td>
                     <td className="num tech tech-num">
-                      {formatPrice(i.unitPriceCents * i.qty, q.locale === "fa" ? "fa" : "en")}
+                      {formatPrice(i.unitPriceCents * i.qty, q.locale === "fa" ? "fa" : "en", rate)}
                     </td>
                   </tr>
                 ))}

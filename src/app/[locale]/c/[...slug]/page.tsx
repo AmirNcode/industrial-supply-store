@@ -17,6 +17,7 @@ import { ProductCardList } from "@/components/ProductCardList";
 import { isLocale, getDict, pick, type Locale } from "@/lib/i18n";
 import { categorySpine } from "@/lib/categoryColor";
 import { formatInt } from "@/lib/money";
+import { getFxRate } from "@/lib/fx";
 
 export const revalidate = 3600;
 
@@ -43,10 +44,11 @@ export default async function CategoryPage({
   const page = Math.max(1, Number(sp.page) || 1);
   const base = `/${l}/c/${path}`;
 
-  const [children, ancestors, families] = await Promise.all([
+  const [children, ancestors, families, rate] = await Promise.all([
     getChildren(category.id),
     getAncestors(category.path),
     getFamiliesInSubtree(category.path),
+    getFxRate(),
   ]);
 
   // Only pay for the SKU list when it is the view actually being rendered.
@@ -109,6 +111,7 @@ export default async function CategoryPage({
               locale={l}
               products={listProducts}
               defsByFamily={listDefs}
+              rate={rate}
             />
             {listPages > 1 && (
               <nav className="mt-4 flex flex-wrap items-center gap-2 text-[13px]">

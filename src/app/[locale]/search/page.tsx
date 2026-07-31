@@ -5,6 +5,7 @@ import { CategorySidebar } from "@/components/CategorySidebar";
 import { ProductIcon } from "@/components/ProductIcon";
 import { isLocale, getDict, pick, type Locale } from "@/lib/i18n";
 import { formatInt, formatPrice } from "@/lib/money";
+import { getFxRate } from "@/lib/fx";
 
 export default async function SearchPage({
   params,
@@ -20,6 +21,7 @@ export default async function SearchPage({
 
   const { q = "" } = await searchParams;
   const results = await search(q);
+  const rate = await getFxRate();
 
   return (
     <div className="flex gap-4 px-3 pt-2">
@@ -74,7 +76,7 @@ export default async function SearchPage({
                         </span>
                       </td>
                       <td>{locale === "fa" ? p.familyFa : p.familyEn}</td>
-                      <td className="num tech tech-num">{formatPrice(p.priceCents, l)}</td>
+                      <td className="num tech tech-num">{formatPrice(p.priceCents, l, rate)}</td>
                       <td>
                         <Link
                           href={`/${l}/f/${p.familySlug}?pn=${encodeURIComponent(p.partNumber)}`}

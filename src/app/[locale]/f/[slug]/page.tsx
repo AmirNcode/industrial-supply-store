@@ -22,6 +22,7 @@ import { InCartQty } from "@/components/InCartQty";
 import { ProductIcon } from "@/components/ProductIcon";
 import { isLocale, getDict, pick, type Locale } from "@/lib/i18n";
 import { formatInt, formatPriceBare, formatSpecNumber, currencyLabel } from "@/lib/money";
+import { getFxRate } from "@/lib/fx";
 import { specValueLabel, isTechnicalValue } from "@/lib/specValues";
 import { parseFilters, pageHref, clearAllHref, type RawSearchParams } from "@/lib/filters";
 
@@ -60,12 +61,13 @@ export default async function FamilyPage({
   const page = Math.max(1, Number(sp.page) || 1);
   const base = `/${l}/f/${slug}`;
 
-  const [defs, total, products, facets, catRow] = await Promise.all([
+  const [defs, total, products, facets, catRow, rate] = await Promise.all([
     getSpecDefs(family.id),
     countProducts(family.id, filters),
     getProducts(family.id, filters, PAGE_SIZE, (page - 1) * PAGE_SIZE),
     getFacets(family.id, filters),
     sql<{ path: string }[]>`SELECT path FROM categories WHERE id = ${family.categoryId}`,
+    getFxRate(),
   ]);
 
   const catPath = catRow[0]?.path ?? "";
@@ -190,6 +192,7 @@ export default async function FamilyPage({
                     defs={defs}
                     products={products}
                     highlighted={highlighted}
+                    rate={rate}
                   />
                 </div>
 
@@ -200,6 +203,7 @@ export default async function FamilyPage({
                     defs={defs}
                     familyName={pick(family, "name", l)}
                     familyIcon={family.icon}
+                    rate={rate}
                   />
                 </div>
 
@@ -252,11 +256,13 @@ function SpecTable({
   defs,
   products,
   highlighted,
+  rate,
 }: {
   locale: Locale;
   defs: SpecDefRow[];
   products: ProductRow[];
   highlighted: string | null;
+  rate: number;
 }) {
   const t = getDict(locale);
   // Two price columns mirror the reference site's 1-9 / 10-Up quantity breaks.
@@ -337,10 +343,10 @@ function SpecTable({
               {/* Bare amounts — the currency is named once in the group header.
                   Repeating "تومان" on 200 rows costs ~40px of table width and
                   tells the buyer nothing they don't already know. */}
-              <td className="num tech tech-num price-col font-semibold">{formatPriceBare(base, locale)}</td>
+              <td className="num tech tech-num price-col font-semibold">{formatPriceBare(base, locale, rate)}</td>
               {hasBulk && (
                 <td className="num tech tech-num price-col text-[var(--color-ink-muted)]">
-                  {bulk !== undefined ? formatPriceBare(bulk, locale) : ""}
+                  {bulk !== undefined ? formatPriceBare(bulk, locale, rate) : ""}
                 </td>
               )}
               <td>

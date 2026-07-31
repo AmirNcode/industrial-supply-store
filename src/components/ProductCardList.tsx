@@ -30,6 +30,7 @@ export function ProductCardList({
   defsByFamily,
   familyName,
   familyIcon,
+  rate,
 }: {
   locale: Locale;
   products: Item[];
@@ -40,6 +41,8 @@ export function ProductCardList({
   /** Set on a family page, where the name is already the page heading. */
   familyName?: string;
   familyIcon?: string;
+  /** Toman per USD, resolved once by the page. */
+  rate: number;
 }) {
   const t = getDict(locale);
   const inFamily = Boolean(familyName);
@@ -179,7 +182,7 @@ export function ProductCardList({
 
             <div className="flex shrink-0 flex-col items-end gap-1">
               <span className="tech whitespace-nowrap text-[14px] font-bold">
-                {formatPrice(base, locale)}
+                {formatPrice(base, locale, rate)}
               </span>
               <span className="whitespace-nowrap text-[10px] text-[var(--color-ink-faint)]">
                 {p.packQty > 1 ? `${t.pkg} ${formatInt(p.packQty, locale)}` : t.each}
