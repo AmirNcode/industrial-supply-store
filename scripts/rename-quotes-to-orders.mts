@@ -36,7 +36,7 @@ async function main() {
         ALTER SEQUENCE IF EXISTS quote_items_id_seq RENAME TO order_items_id_seq;
       `);
     } else {
-      console.log("→ tables already renamed, skipping");
+      console.log("→ tables already renamed, skipping rename and backfill");
     }
 
     console.log("→ adding order columns");
@@ -58,15 +58,30 @@ async function main() {
         ADD COLUMN IF NOT EXISTS requested_unit_price_cents integer NOT NULL DEFAULT 0;
     `);
 
-    console.log("→ backfilling");
-    await tx.unsafe(`
-      UPDATE orders SET requested_total_cents = total_cents
-        WHERE requested_total_cents = 0;
-      UPDATE order_items SET requested_unit_price_cents = unit_price_cents
-        WHERE requested_unit_price_cents = 0;
-      UPDATE orders SET status = 'received' WHERE status = 'submitted';
-      UPDATE orders SET ref = 'ORD-' || substring(ref from 5) WHERE ref LIKE 'RFQ-%';
-    `);
+    /*
+     * The backfill is gated on `hasQuotes` — the same one-shot condition as the
+     * rename — and runs after the columns exist.
+     *
+     * `requested_total_cents` is seeded from `total_cents` because at the
+     * moment of migration nobody has repriced anything: the two are
+     * necessarily equal. That stops being true the first time staff invoice an
+     * order, which is the entire reason the columns are separate.
+     *
+     * A `WHERE requested_total_cents = 0` guard would look idempotent and
+     * would not be. Zero is both the column default and a legitimate value for
+     * a free line, so re-running this script after an order had been repriced
+     * would overwrite the historical requested amount with the current one —
+     * silently, and destroying the record these columns exist to keep.
+     */
+    if (hasQuotes) {
+      console.log("→ backfilling");
+      await tx.unsafe(`
+        UPDATE orders SET requested_total_cents = total_cents;
+        UPDATE order_items SET requested_unit_price_cents = unit_price_cents;
+        UPDATE orders SET status = 'received' WHERE status = 'submitted';
+        UPDATE orders SET ref = 'ORD-' || substring(ref from 5) WHERE ref LIKE 'RFQ-%';
+      `);
+    }
 
     console.log("→ renaming constraints");
     // `ALTER TABLE ... RENAME` leaves constraint names behind, so the primary
