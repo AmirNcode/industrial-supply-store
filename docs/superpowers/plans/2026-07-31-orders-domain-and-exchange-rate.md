@@ -1882,8 +1882,12 @@ at the top of the file, plus the label map — export it from
 5. In each expanded body, render one form per legal next status from
    `nextStatuses(q.status)`:
 
+`invoiced` is a legal next status from `received`, but it is not a button here —
+issuing an invoice needs prices and a payment link, which is Task 9. Filter it
+out rather than rendering a control with no label and nowhere to go.
+
 ```tsx
-              {nextStatuses(q.status).map((next) => (
+              {nextStatuses(q.status).filter((s) => s !== "invoiced").map((next) => (
                 <form key={next} action={setOrderStatusAction} className="inline-flex items-center gap-1.5">
                   <input type="hidden" name="locale" value={l} />
                   <input type="hidden" name="orderId" value={q.id} />
