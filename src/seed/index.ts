@@ -50,7 +50,7 @@ async function main() {
   // RESTART IDENTITY so part numbers and ids are identical on every reseed.
   await sql.unsafe(`
     TRUNCATE product_spec_values, products, spec_defs, product_families,
-             cart_items, carts, quote_items, quotes, categories
+             cart_items, carts, order_items, orders, categories
     RESTART IDENTITY CASCADE
   `);
 

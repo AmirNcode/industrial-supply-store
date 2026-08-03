@@ -86,7 +86,7 @@ function quoteRef(): string {
   for (let i = 0; i < 6; i++) {
     out += alphabet[Math.floor(Math.random() * alphabet.length)];
   }
-  return `RFQ-${out}`;
+  return `ORD-${out}`;
 }
 
 export async function submitQuoteAction(formData: FormData) {
@@ -111,9 +111,10 @@ export async function submitQuoteAction(formData: FormData) {
   // full — the buyer resubmits and sales receives two conflicting requests for
   // the same order.
   await sql.begin(async (tx) => {
-    const [quote] = await tx<{ id: number }[]>`
-      INSERT INTO quotes (ref, company, contact_name, email, phone, po_number,
-                          address, city, country, notes, locale, currency, total_cents)
+    const [order] = await tx<{ id: number }[]>`
+      INSERT INTO orders (ref, company, contact_name, email, phone, po_number,
+                          address, city, country, notes, locale, currency,
+                          total_cents, requested_total_cents, status)
       VALUES (
         ${ref},
         ${String(formData.get("company") ?? "")},
@@ -127,23 +128,26 @@ export async function submitQuoteAction(formData: FormData) {
         ${String(formData.get("notes") ?? "")},
         ${locale},
         ${locale === "fa" ? "IRT" : "USD"},
-        ${totalCents}
+        ${totalCents},
+        ${totalCents},
+        'received'
       )
       RETURNING id
     `;
 
-    // Snapshot names, specs and prices so a later catalog edit cannot rewrite a
-    // quote that has already been sent to the buyer.
+    // Snapshot names, specs and prices so a later catalog edit cannot rewrite an
+    // order that has already been sent to the buyer.
     for (const l of lines) {
       await tx`
-        INSERT INTO quote_items (quote_id, product_id, part_number, family_name,
-                                 specs_snapshot, qty, unit_price_cents)
-        VALUES (${quote.id}, ${l.productId}, ${l.partNumber},
+        INSERT INTO order_items (order_id, product_id, part_number, family_name,
+                                 specs_snapshot, qty, unit_price_cents,
+                                 requested_unit_price_cents)
+        VALUES (${order.id}, ${l.productId}, ${l.partNumber},
                 ${locale === "fa" ? l.familyFa : l.familyEn},
                 -- Serialise explicitly and cast: passing the object straight
                 -- through leaves postgres-js guessing at the parameter type.
                 ${JSON.stringify(l.specs)}::jsonb,
-                ${l.qty}, ${unitPriceAt(l, l.qty)})
+                ${l.qty}, ${unitPriceAt(l, l.qty)}, ${unitPriceAt(l, l.qty)})
       `;
     }
   });

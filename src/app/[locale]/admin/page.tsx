@@ -9,8 +9,9 @@ import { envFxRate } from "@/lib/fxRate";
 import { FxRatePanel } from "@/components/FxRatePanel";
 import { saveFxAction } from "./actions";
 import type { SpecBag } from "@/db/schema";
+import type { OrderStatus } from "@/lib/orders";
 
-type QuoteRow = {
+type OrderRow = {
   id: number;
   ref: string;
   company: string;
@@ -21,7 +22,7 @@ type QuoteRow = {
   city: string;
   country: string;
   notes: string;
-  status: string;
+  status: OrderStatus;
   locale: string;
   currency: string;
   totalCents: number;
@@ -29,12 +30,14 @@ type QuoteRow = {
   itemCount: number;
 };
 
-type QuoteItemRow = {
-  quoteId: number;
+type OrderItemRow = {
+  id: number;
+  orderId: number;
   partNumber: string;
   familyName: string;
   qty: number;
   unitPriceCents: number;
+  requestedUnitPriceCents: number;
   specsSnapshot: SpecBag;
 };
 
@@ -95,30 +98,31 @@ export default async function AdminPage({
 
   const [fxSettings, rate] = await Promise.all([getFxSettings(), getFxRate()]);
 
-  const quotes = await sql<QuoteRow[]>`
+  const orders = await sql<OrderRow[]>`
     SELECT q.id, q.ref, q.company, q.contact_name AS "contactName", q.email,
            q.phone, q.po_number AS "poNumber", q.city, q.country, q.notes,
            q.status, q.locale, q.currency, q.total_cents AS "totalCents",
            q.created_at AS "createdAt",
-           (SELECT count(*)::int FROM quote_items i WHERE i.quote_id = q.id) AS "itemCount"
-    FROM quotes q ORDER BY q.created_at DESC LIMIT 200
+           (SELECT count(*)::int FROM order_items i WHERE i.order_id = q.id) AS "itemCount"
+    FROM orders q ORDER BY q.created_at DESC LIMIT 200
   `;
 
-  const items = quotes.length
-    ? await sql<QuoteItemRow[]>`
-        SELECT quote_id AS "quoteId", part_number AS "partNumber",
+  const items = orders.length
+    ? await sql<OrderItemRow[]>`
+        SELECT id, order_id AS "orderId", part_number AS "partNumber",
                family_name AS "familyName", qty,
                unit_price_cents AS "unitPriceCents",
+               requested_unit_price_cents AS "requestedUnitPriceCents",
                specs_snapshot AS "specsSnapshot"
-        FROM quote_items WHERE quote_id = ANY(${quotes.map((q) => q.id)})
+        FROM order_items WHERE order_id = ANY(${orders.map((q) => q.id)})
         ORDER BY id
       `
     : [];
 
-  const byQuote = new Map<number, QuoteItemRow[]>();
+  const byOrder = new Map<number, OrderItemRow[]>();
   for (const i of items) {
-    if (!byQuote.has(i.quoteId)) byQuote.set(i.quoteId, []);
-    byQuote.get(i.quoteId)!.push(i);
+    if (!byOrder.has(i.orderId)) byOrder.set(i.orderId, []);
+    byOrder.get(i.orderId)!.push(i);
   }
 
   return (
@@ -127,7 +131,7 @@ export default async function AdminPage({
         <h1 className="text-[17px] font-bold">
           {t.quoteRequests}{" "}
           <span className="text-[12px] font-normal text-[var(--color-ink-muted)] tech">
-            {formatInt(quotes.length, l)}
+            {formatInt(orders.length, l)}
           </span>
         </h1>
         {!DEMO_MODE && (
@@ -175,11 +179,11 @@ export default async function AdminPage({
         </p>
       )}
 
-      {quotes.length === 0 && (
+      {orders.length === 0 && (
         <p className="py-8 text-[13px] text-[var(--color-ink-muted)]">{t.noQuotes}</p>
       )}
 
-      {quotes.map((q) => (
+      {orders.map((q) => (
         <details key={q.id} className="mb-2 border border-[var(--color-rule)]">
           <summary className="flex flex-wrap items-baseline gap-x-4 gap-y-1 bg-[var(--color-panel-alt)] px-3 py-2 text-[12px] cursor-pointer">
             <strong className="tech">{q.ref}</strong>
@@ -218,7 +222,7 @@ export default async function AdminPage({
                 </tr>
               </thead>
               <tbody>
-                {(byQuote.get(q.id) ?? []).map((i, idx) => (
+                {(byOrder.get(q.id) ?? []).map((i, idx) => (
                   <tr key={`${i.partNumber}-${idx}`}>
                     <td className="tech font-bold">{i.partNumber}</td>
                     <td className="whitespace-normal">{i.familyName}</td>

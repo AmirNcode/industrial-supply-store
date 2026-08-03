@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   pgTable,
   serial,
@@ -11,6 +12,7 @@ import {
   index,
   uniqueIndex,
   primaryKey,
+  check,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 
@@ -208,15 +210,19 @@ export const cartItems = pgTable(
 );
 
 // ---------------------------------------------------------------------------
-// Quotes (RFQ) — stands in for checkout while payment is out of scope
+// Orders — one row per customer request, from arrival through to delivery
 // ---------------------------------------------------------------------------
 
-export const quotes = pgTable(
-  "quotes",
+export const orders = pgTable(
+  "orders",
   {
     id: serial("id").primaryKey(),
-    /** Human-facing reference shown on the confirmation screen, e.g. RFQ-7Q4M2X. */
+    /** Human-facing reference, e.g. ORD-7Q4M2X. Read aloud on the phone. */
     ref: text("ref").notNull(),
+    /** Null for a guest checkout, which stays supported. */
+    userId: uuid("user_id"),
+    /** See lib/orders.ts. A CHECK constraint mirrors this in the database. */
+    status: text("status").notNull().default("received"),
     company: text("company").notNull(),
     contactName: text("contact_name").notNull(),
     email: text("email").notNull(),
@@ -226,30 +232,55 @@ export const quotes = pgTable(
     city: text("city").notNull().default(""),
     country: text("country").notNull().default(""),
     notes: text("notes").notNull().default(""),
-    status: text("status").notNull().default("submitted"),
     locale: text("locale").notNull().default("en"),
-    /** Currency the buyer was shown when they submitted. */
     currency: text("currency").notNull().default("USD"),
+    /** Total at the catalog prices the customer saw when they submitted. */
+    requestedTotalCents: integer("requested_total_cents").notNull().default(0),
+    /** Total at the prices staff finally set. Equal until the order is priced. */
     totalCents: integer("total_cents").notNull().default(0),
+    paymentUrl: text("payment_url").notNull().default(""),
+    courier: text("courier").notNull().default(""),
+    trackingNumber: text("tracking_number").notNull().default(""),
+    invoiceNumber: text("invoice_number"),
+    /**
+     * Toman per USD, frozen when the invoice is issued. Without this, editing
+     * the rate would restate the amount owed on invoices already emailed.
+     */
+    fxRateToToman: integer("fx_rate_to_toman"),
+    invoicedAt: timestamp("invoiced_at", { withTimezone: true }),
+    paidAt: timestamp("paid_at", { withTimezone: true }),
+    shippedAt: timestamp("shipped_at", { withTimezone: true }),
+    deliveredAt: timestamp("delivered_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    uniqueIndex("quotes_ref_key").on(t.ref),
-    index("quotes_created_idx").on(t.createdAt),
+    uniqueIndex("orders_ref_key").on(t.ref),
+    index("orders_created_idx").on(t.createdAt),
+    index("orders_status_idx").on(t.status, t.createdAt),
+    index("orders_user_idx").on(t.userId, t.createdAt),
+    // Mirrors ORDER_STATUSES in lib/orders.ts. Declared here (rather than left
+    // implicit) so `db:push` cannot silently drop it — status is otherwise a
+    // free-text column, and this is the only thing stopping a bad write from
+    // putting an order in a state `nextStatuses()`/`assertTransition` don't
+    // recognise.
+    check(
+      "orders_status_check",
+      sql`${t.status} IN ('received','invoiced','preparing','shipped','delivered','cancelled')`,
+    ),
   ],
 );
 
 /**
  * Line items snapshot part number, name and specs at submission time so a later
- * catalog edit cannot silently rewrite a quote that was already sent.
+ * catalog edit cannot silently rewrite an order that was already invoiced.
  */
-export const quoteItems = pgTable(
-  "quote_items",
+export const orderItems = pgTable(
+  "order_items",
   {
     id: serial("id").primaryKey(),
-    quoteId: integer("quote_id")
+    orderId: integer("order_id")
       .notNull()
-      .references(() => quotes.id, { onDelete: "cascade" }),
+      .references(() => orders.id, { onDelete: "cascade" }),
     productId: integer("product_id").references(() => products.id, {
       onDelete: "set null",
     }),
@@ -257,9 +288,12 @@ export const quoteItems = pgTable(
     familyName: text("family_name").notNull().default(""),
     specsSnapshot: jsonb("specs_snapshot").$type<SpecBag>().notNull().default({}),
     qty: integer("qty").notNull(),
+    /** What the catalog charged at submission. Never edited. */
+    requestedUnitPriceCents: integer("requested_unit_price_cents").notNull().default(0),
+    /** What staff finally quoted. */
     unitPriceCents: integer("unit_price_cents").notNull(),
   },
-  (t) => [index("quote_items_quote_idx").on(t.quoteId)],
+  (t) => [index("order_items_order_idx").on(t.orderId)],
 );
 
 // ---------------------------------------------------------------------------
