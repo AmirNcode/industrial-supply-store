@@ -45,6 +45,15 @@ postgres-js with raw SQL for queries, Drizzle only for schema definition and
 
   The count must be 8. Read push's proposed changes before accepting: a dropped
   index is recoverable, a dropped column is not.
+
+  `extensions.sql` also carries three order objects push cannot express — the
+  partial unique index on `invoice_number`, the `lower(email)` expression index,
+  and `invoice_seq`. Losing the sequence breaks invoice numbering outright
+  rather than merely slowing something down, so re-applying the file after a
+  push is not optional. Push applies constraint, index and sequence drops
+  **without prompting** — only table and column changes are confirmed — so the
+  re-apply is the only thing standing between a routine push and a broken
+  invoice counter.
 - Modules importing `server-only` cannot be executed by plain `node`. To run one
   from the command line for verification, add `--conditions=react-server`.
 

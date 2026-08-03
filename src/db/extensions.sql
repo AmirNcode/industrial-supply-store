@@ -33,3 +33,22 @@ CREATE INDEX IF NOT EXISTS categories_path_prefix_idx
 -- grouping pass without touching the heap.
 CREATE INDEX IF NOT EXISTS psv_product_idx
   ON product_spec_values (product_id);
+
+-- ---------------------------------------------------------------------------
+-- Order objects drizzle-kit cannot see
+-- ---------------------------------------------------------------------------
+-- A partial unique index, an expression index and a sequence. None of the
+-- three is expressible in Drizzle's schema DSL, so `drizzle-kit push` treats
+-- them as drift and drops them on every run — the same way it drops the
+-- indexes above. They live here so re-applying this file after a push restores
+-- them. invoice_seq in particular is what issues invoice numbers: losing it
+-- silently breaks invoicing rather than slowing it down.
+
+-- Invoice numbers are unique, but only once assigned; most orders have none.
+CREATE UNIQUE INDEX IF NOT EXISTS orders_invoice_number_key
+  ON orders (invoice_number) WHERE invoice_number IS NOT NULL;
+
+-- Guest order tracking looks up by reference plus the email it was placed with.
+CREATE INDEX IF NOT EXISTS orders_email_ref_idx ON orders (lower(email), ref);
+
+CREATE SEQUENCE IF NOT EXISTS invoice_seq;
