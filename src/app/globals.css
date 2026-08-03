@@ -404,6 +404,10 @@ html[lang="fa"] .pill {
   background: var(--color-warn-soft);
   color: var(--color-warn);
 }
+.pill-muted {
+  background: var(--color-panel);
+  color: var(--color-ink-faint);
+}
 
 /* --------------------------------------------------------------------------
    In-cart quantity — the running total for one row.

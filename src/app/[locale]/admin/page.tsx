@@ -1,15 +1,17 @@
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
+import Link from "next/link";
 import { sql } from "@/db";
-import { isAdmin, signInAdmin, signOutAdmin } from "@/lib/admin";
+import { isAdmin } from "@/lib/admin";
 import { DEMO_MODE } from "@/lib/demo";
 import { isLocale, getDict, type Locale } from "@/lib/i18n";
 import { formatPrice, formatInt } from "@/lib/money";
 import { getFxSettings, getFxRate } from "@/lib/fx";
 import { envFxRate } from "@/lib/fxRate";
 import { FxRatePanel } from "@/components/FxRatePanel";
-import { saveFxAction } from "./actions";
+import { OrderStatusPill, STATUS_LABEL_KEY } from "@/components/OrderStatusPill";
+import { loginAction, logoutAction, saveFxAction, setOrderStatusAction } from "./actions";
 import type { SpecBag } from "@/db/schema";
-import type { OrderStatus } from "@/lib/orders";
+import { ORDER_STATUSES, isOrderStatus, nextStatuses, type OrderStatus } from "@/lib/orders";
 
 type OrderRow = {
   id: number;
@@ -28,6 +30,9 @@ type OrderRow = {
   totalCents: number;
   createdAt: string;
   itemCount: number;
+  courier: string;
+  trackingNumber: string;
+  invoiceNumber: string | null;
 };
 
 type OrderItemRow = {
@@ -41,32 +46,22 @@ type OrderItemRow = {
   specsSnapshot: SpecBag;
 };
 
-async function loginAction(formData: FormData) {
-  "use server";
-  const locale = String(formData.get("locale") || "en");
-  const ok = await signInAdmin(String(formData.get("password") ?? ""));
-  redirect(`/${locale}/admin${ok ? "" : "?error=1"}`);
-}
-
-async function logoutAction(formData: FormData) {
-  "use server";
-  const locale = String(formData.get("locale") || "en");
-  await signOutAdmin();
-  redirect(`/${locale}/admin`);
-}
-
 export default async function AdminPage({
   params,
   searchParams,
 }: {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{ error?: string; fx?: string }>;
+  searchParams: Promise<{ error?: string; fx?: string; ok?: string; status?: string }>;
 }) {
   const { locale } = await params;
   if (!isLocale(locale)) notFound();
   const l = locale as Locale;
   const t = getDict(l);
-  const { error, fx } = await searchParams;
+  const sp = await searchParams;
+  const { error, fx } = sp;
+  const statusFilter = typeof sp.status === "string" && isOrderStatus(sp.status)
+    ? sp.status
+    : null;
 
   // In demo mode the inbox is deliberately open so it can be shown without
   // handing out a credential. Everything that reaches this page is generated
@@ -102,9 +97,13 @@ export default async function AdminPage({
     SELECT q.id, q.ref, q.company, q.contact_name AS "contactName", q.email,
            q.phone, q.po_number AS "poNumber", q.city, q.country, q.notes,
            q.status, q.locale, q.currency, q.total_cents AS "totalCents",
-           q.created_at AS "createdAt",
+           q.created_at AS "createdAt", q.courier,
+           q.tracking_number AS "trackingNumber",
+           q.invoice_number AS "invoiceNumber",
            (SELECT count(*)::int FROM order_items i WHERE i.order_id = q.id) AS "itemCount"
-    FROM orders q ORDER BY q.created_at DESC LIMIT 200
+    FROM orders q
+    ${statusFilter ? sql`WHERE q.status = ${statusFilter}` : sql`WHERE q.status <> 'delivered' AND q.status <> 'cancelled'`}
+    ORDER BY q.created_at DESC LIMIT 200
   `;
 
   const items = orders.length
@@ -179,6 +178,24 @@ export default async function AdminPage({
         </p>
       )}
 
+      <nav className="mb-3 flex flex-wrap gap-x-4 gap-y-1 text-[12px]">
+        <Link
+          href={`/${l}/admin`}
+          className={statusFilter === null ? "font-bold !text-[var(--color-ink)]" : undefined}
+        >
+          {t.needsAction}
+        </Link>
+        {ORDER_STATUSES.map((s) => (
+          <Link
+            key={s}
+            href={`/${l}/admin?status=${s}`}
+            className={statusFilter === s ? "font-bold !text-[var(--color-ink)]" : undefined}
+          >
+            {t[STATUS_LABEL_KEY[s]]}
+          </Link>
+        ))}
+      </nav>
+
       {orders.length === 0 && (
         <p className="py-8 text-[13px] text-[var(--color-ink-muted)]">{t.noQuotes}</p>
       )}
@@ -187,6 +204,7 @@ export default async function AdminPage({
         <details key={q.id} className="mb-2 border border-[var(--color-rule)]">
           <summary className="flex flex-wrap items-baseline gap-x-4 gap-y-1 bg-[var(--color-panel-alt)] px-3 py-2 text-[12px] cursor-pointer">
             <strong className="tech">{q.ref}</strong>
+            <OrderStatusPill locale={l} status={q.status} />
             <span>{q.company}</span>
             <span className="text-[var(--color-ink-muted)]">{q.contactName}</span>
             <span className="tech text-[var(--color-ink-muted)]">{q.email}</span>
@@ -205,11 +223,40 @@ export default async function AdminPage({
               {q.city && <Row label={t.city} value={q.city} />}
               {q.country && <Row label={t.country} value={q.country} />}
               <Row label={t.status} value={q.status} />
+              {q.courier && <Row label={t.courier} value={q.courier} />}
+              {q.trackingNumber && <Row label={t.trackingNumber} value={q.trackingNumber} tech />}
             </dl>
             {q.notes && (
               <p className="mb-2 whitespace-pre-wrap border-s-2 border-[var(--color-rule)] ps-2 text-[11px] text-[var(--color-ink-muted)]">
                 {q.notes}
               </p>
+            )}
+            {/* 'invoiced' is a legal next status from 'received', but no button
+                renders for it here: issuing an invoice needs prices and a
+                payment link, which only issueInvoiceAction (Task 9) has. */}
+            {nextStatuses(q.status).filter((s) => s !== "invoiced").length > 0 && (
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                {nextStatuses(q.status).filter((s) => s !== "invoiced").map((next) => (
+                  <form key={next} action={setOrderStatusAction} className="inline-flex items-center gap-1.5">
+                    <input type="hidden" name="locale" value={l} />
+                    <input type="hidden" name="orderId" value={q.id} />
+                    <input type="hidden" name="status" value={next} />
+                    {next === "shipped" && (
+                      <>
+                        <input name="courier" placeholder={t.courier} className="w-28 text-[11px]" required />
+                        <input name="trackingNumber" dir="ltr" placeholder={t.trackingNumber} className="tech w-36 text-[11px]" required />
+                      </>
+                    )}
+                    <button type="submit" className="btn-small" disabled={DEMO_MODE}>
+                      {next === "preparing" ? t.markPaid
+                        : next === "shipped" ? t.markShipped
+                        : next === "delivered" ? t.markDelivered
+                        : next === "cancelled" ? t.cancelOrder
+                        : next}
+                    </button>
+                  </form>
+                ))}
+              </div>
             )}
             <table className="spec-table">
               <thead>
