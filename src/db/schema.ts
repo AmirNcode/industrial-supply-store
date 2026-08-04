@@ -312,3 +312,33 @@ export const appSettings = pgTable("app_settings", {
     .notNull()
     .defaultNow(),
 });
+
+// ---------------------------------------------------------------------------
+// Customer accounts
+// ---------------------------------------------------------------------------
+
+/**
+ * One table. Sessions are a signed cookie (see lib/sessionToken.ts), so there
+ * is no companion sessions table to sweep.
+ *
+ * Email uniqueness is enforced by a `lower(email)` index in extensions.sql
+ * rather than a plain unique constraint: addresses are case-insensitive in
+ * practice, and two rows differing only in capitalisation are two people who
+ * both believe they own the account.
+ */
+export const users = pgTable(
+  "users",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    email: text("email").notNull(),
+    passwordHash: text("password_hash").notNull(),
+    company: text("company").notNull().default(""),
+    contactName: text("contact_name").notNull().default(""),
+    phone: text("phone").notNull().default(""),
+    defaultPoNumber: text("default_po_number").notNull().default(""),
+    locale: text("locale").notNull().default("en"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
+  },
+  (t) => [index("users_created_idx").on(t.createdAt)],
+);

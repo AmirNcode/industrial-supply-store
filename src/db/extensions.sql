@@ -52,3 +52,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS orders_invoice_number_key
 CREATE INDEX IF NOT EXISTS orders_email_ref_idx ON orders (lower(email), ref);
 
 CREATE SEQUENCE IF NOT EXISTS invoice_seq;
+
+-- Email is case-insensitive in practice; two rows differing only in
+-- capitalisation are two people who both believe they own the account.
+-- An expression index is not expressible in Drizzle's DSL, hence its home here.
+CREATE UNIQUE INDEX IF NOT EXISTS users_email_lower_key ON users (lower(email));
