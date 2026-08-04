@@ -9,7 +9,13 @@ import { getFxSettings, getFxRate } from "@/lib/fx";
 import { envFxRate } from "@/lib/fxRate";
 import { FxRatePanel } from "@/components/FxRatePanel";
 import { OrderStatusPill, STATUS_LABEL_KEY } from "@/components/OrderStatusPill";
-import { loginAction, logoutAction, saveFxAction, setOrderStatusAction } from "./actions";
+import {
+  issueInvoiceAction,
+  loginAction,
+  logoutAction,
+  saveFxAction,
+  setOrderStatusAction,
+} from "./actions";
 import type { SpecBag } from "@/db/schema";
 import { ORDER_STATUSES, isOrderStatus, nextStatuses, type OrderStatus } from "@/lib/orders";
 
@@ -33,6 +39,7 @@ type OrderRow = {
   courier: string;
   trackingNumber: string;
   invoiceNumber: string | null;
+  paymentUrl: string;
 };
 
 type OrderItemRow = {
@@ -100,6 +107,7 @@ export default async function AdminPage({
            q.created_at AS "createdAt", q.courier,
            q.tracking_number AS "trackingNumber",
            q.invoice_number AS "invoiceNumber",
+           q.payment_url AS "paymentUrl",
            (SELECT count(*)::int FROM order_items i WHERE i.order_id = q.id) AS "itemCount"
     FROM orders q
     ${statusFilter ? sql`WHERE q.status = ${statusFilter}` : sql`WHERE q.status <> 'delivered' AND q.status <> 'cancelled'`}
@@ -152,16 +160,8 @@ export default async function AdminPage({
           {t.exchangeRate}: {formatInt(rate, l)} {t.fxPerUsd}
         </p>
       )}
-      {fx === "range" && (
-        <p className="mb-2 border border-[#e0b4b0] bg-[#fdf2f1] px-3 py-2 text-[12px] text-[#a3312a]">
-          {t.fxOutOfRange}
-        </p>
-      )}
-      {fx === "invalid" && (
-        <p className="mb-2 border border-[#e0b4b0] bg-[#fdf2f1] px-3 py-2 text-[12px] text-[#a3312a]">
-          {t.fxInvalid}
-        </p>
-      )}
+      {fx === "range" && <ErrorBanner>{t.fxOutOfRange}</ErrorBanner>}
+      {fx === "invalid" && <ErrorBanner>{t.fxInvalid}</ErrorBanner>}
 
       <FxRatePanel
         locale={l}
@@ -196,6 +196,11 @@ export default async function AdminPage({
         ))}
       </nav>
 
+      {error === "payment-link" && <ErrorBanner>{t.paymentLinkRequired}</ErrorBanner>}
+      {error === "prices" && <ErrorBanner>{t.pricesRequired}</ErrorBanner>}
+      {error === "tracking" && <ErrorBanner>{t.trackingRequired}</ErrorBanner>}
+      {error === "not-found" && <ErrorBanner>{t.noResults}</ErrorBanner>}
+
       {orders.length === 0 && (
         <p className="py-8 text-[13px] text-[var(--color-ink-muted)]">{t.noQuotes}</p>
       )}
@@ -225,6 +230,8 @@ export default async function AdminPage({
               <Row label={t.status} value={q.status} />
               {q.courier && <Row label={t.courier} value={q.courier} />}
               {q.trackingNumber && <Row label={t.trackingNumber} value={q.trackingNumber} tech />}
+              {q.invoiceNumber && <Row label={t.invoiceNumber} value={q.invoiceNumber} tech />}
+              {q.paymentUrl && <Row label={t.paymentLink} value={q.paymentUrl} tech />}
             </dl>
             {q.notes && (
               <p className="mb-2 whitespace-pre-wrap border-s-2 border-[var(--color-rule)] ps-2 text-[11px] text-[var(--color-ink-muted)]">
@@ -258,32 +265,88 @@ export default async function AdminPage({
                 ))}
               </div>
             )}
-            <table className="spec-table">
-              <thead>
-                <tr>
-                  <th>{t.partNumber}</th>
-                  <th>{t.products}</th>
-                  <th className="num">{t.qty}</th>
-                  <th className="num">{t.unitPrice}</th>
-                  <th className="num">{t.lineTotal}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(byOrder.get(q.id) ?? []).map((i, idx) => (
-                  <tr key={`${i.partNumber}-${idx}`}>
-                    <td className="tech font-bold">{i.partNumber}</td>
-                    <td className="whitespace-normal">{i.familyName}</td>
-                    <td className="num tech tech-num">{i.qty}</td>
-                    <td className="num tech tech-num">
-                      {formatPrice(i.unitPriceCents, q.locale === "fa" ? "fa" : "en", rate)}
-                    </td>
-                    <td className="num tech tech-num">
-                      {formatPrice(i.unitPriceCents * i.qty, q.locale === "fa" ? "fa" : "en", rate)}
-                    </td>
+            {q.status === "received" ? (
+              <form action={issueInvoiceAction}>
+                <input type="hidden" name="locale" value={l} />
+                <input type="hidden" name="orderId" value={q.id} />
+                <table className="spec-table">
+                  <thead>
+                    <tr>
+                      <th>{t.partNumber}</th>
+                      <th>{t.products}</th>
+                      <th className="num">{t.qty}</th>
+                      <th className="num">{t.unitPrice}</th>
+                      <th className="num">{t.finalUnitPrice}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(byOrder.get(q.id) ?? []).map((i) => (
+                      <tr key={i.id}>
+                        <td className="tech font-bold">{i.partNumber}</td>
+                        <td className="whitespace-normal">{i.familyName}</td>
+                        <td className="num tech tech-num">{i.qty}</td>
+                        <td className="num tech tech-num text-[var(--color-ink-muted)]">
+                          {(i.requestedUnitPriceCents / 100).toFixed(2)}
+                        </td>
+                        <td className="num">
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            dir="ltr"
+                            name={`price_${i.id}`}
+                            defaultValue={(i.unitPriceCents / 100).toFixed(2)}
+                            className="tech w-20 text-end"
+                            required
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <input
+                    type="url"
+                    name="paymentUrl"
+                    dir="ltr"
+                    placeholder={t.paymentLink}
+                    className="w-72 text-[11px]"
+                    required
+                  />
+                  <button type="submit" className="btn-primary" disabled={DEMO_MODE}>
+                    {t.issueInvoice}
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <table className="spec-table">
+                <thead>
+                  <tr>
+                    <th>{t.partNumber}</th>
+                    <th>{t.products}</th>
+                    <th className="num">{t.qty}</th>
+                    <th className="num">{t.unitPrice}</th>
+                    <th className="num">{t.lineTotal}</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {(byOrder.get(q.id) ?? []).map((i) => (
+                    <tr key={i.id}>
+                      <td className="tech font-bold">{i.partNumber}</td>
+                      <td className="whitespace-normal">{i.familyName}</td>
+                      <td className="num tech tech-num">{i.qty}</td>
+                      <td className="num tech tech-num">
+                        {formatPrice(i.unitPriceCents, q.locale === "fa" ? "fa" : "en", rate)}
+                      </td>
+                      <td className="num tech tech-num">
+                        {formatPrice(i.unitPriceCents * i.qty, q.locale === "fa" ? "fa" : "en", rate)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
         </details>
       ))}
@@ -297,5 +360,13 @@ function Row({ label, value, tech }: { label: string; value: string; tech?: bool
       <dt className="font-bold">{label}:</dt>
       <dd className={tech ? "tech" : undefined}>{value}</dd>
     </div>
+  );
+}
+
+function ErrorBanner({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="mb-2 border border-[#e0b4b0] bg-[#fdf2f1] px-3 py-2 text-[12px] text-[#a3312a]">
+      {children}
+    </p>
   );
 }

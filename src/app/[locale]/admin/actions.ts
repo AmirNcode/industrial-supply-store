@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { sql } from "@/db";
 import { assertAdminWrite, signInAdmin, signOutAdmin } from "@/lib/admin";
-import { saveFxSettings } from "@/lib/fx";
+import { getFxRate, saveFxSettings } from "@/lib/fx";
 import { envFxRate, isFxMode, isPlausibleRate, parseRate } from "@/lib/fxRate";
 import { isLocale, type Locale } from "@/lib/i18n";
 import { assertTransition, isOrderStatus } from "@/lib/orders";
@@ -116,4 +116,69 @@ export async function setOrderStatusAction(formData: FormData): Promise<void> {
 
   revalidatePath("/", "layout");
   redirect(`/${locale}/admin?ok=status`);
+}
+
+/**
+ * Prices the order, assigns an invoice number, and freezes the exchange rate.
+ *
+ * All three happen in one transaction. An order carrying an invoice number but
+ * no frozen rate would render a Persian invoice at whatever the rate happened
+ * to be when someone opened it — a different amount owed on every viewing.
+ */
+export async function issueInvoiceAction(formData: FormData): Promise<void> {
+  await assertAdminWrite();
+
+  const locale = safeLocale(formData);
+  const id = Number(formData.get("orderId"));
+  if (!Number.isInteger(id) || id <= 0) redirect(`/${locale}/admin?error=bad-request`);
+
+  const paymentUrl = String(formData.get("paymentUrl") ?? "").trim();
+  if (!paymentUrl) redirect(`/${locale}/admin?error=payment-link`);
+
+  const [order] = await sql<{ status: string }[]>`
+    SELECT status FROM orders WHERE id = ${id}
+  `;
+  if (!order || !isOrderStatus(order.status)) redirect(`/${locale}/admin?error=not-found`);
+  assertTransition(order.status, "invoiced");
+
+  const itemRows = await sql<{ id: number }[]>`
+    SELECT id FROM order_items WHERE order_id = ${id} ORDER BY id
+  `;
+
+  // Parse every price before writing anything, so a bad value on the last line
+  // cannot leave the order half-priced.
+  const priced: { id: number; cents: number }[] = [];
+  for (const row of itemRows) {
+    const raw = String(formData.get(`price_${row.id}`) ?? "").trim();
+    const dollars = Number(raw);
+    if (raw === "" || !Number.isFinite(dollars) || dollars < 0) {
+      redirect(`/${locale}/admin?error=prices`);
+    }
+    priced.push({ id: row.id, cents: Math.round(dollars * 100) });
+  }
+
+  const rate = await getFxRate();
+
+  await sql.begin(async (tx) => {
+    for (const p of priced) {
+      await tx`UPDATE order_items SET unit_price_cents = ${p.cents} WHERE id = ${p.id}`;
+    }
+    await tx`
+      UPDATE orders o
+      SET status = 'invoiced',
+          invoiced_at = now(),
+          payment_url = ${paymentUrl},
+          fx_rate_to_toman = ${rate},
+          invoice_number = 'INV-' || to_char(now(), 'YYYY') || '-' ||
+                           lpad(nextval('invoice_seq')::text, 4, '0'),
+          total_cents = (
+            SELECT COALESCE(SUM(i.unit_price_cents * i.qty), 0)
+            FROM order_items i WHERE i.order_id = o.id
+          )
+      WHERE o.id = ${id}
+    `;
+  });
+
+  revalidatePath("/", "layout");
+  redirect(`/${locale}/admin?ok=invoiced`);
 }
