@@ -243,7 +243,16 @@ export default async function AdminPage({
               <Row label={t.status} value={q.status} />
               {q.courier && <Row label={t.courier} value={q.courier} />}
               {q.trackingNumber && <Row label={t.trackingNumber} value={q.trackingNumber} tech />}
-              {q.invoiceNumber && <Row label={t.invoiceNumber} value={q.invoiceNumber} tech />}
+              {q.invoiceNumber && (
+                <div className="flex gap-1.5">
+                  <dt className="font-bold">{t.invoiceNumber}:</dt>
+                  <dd>
+                    <Link href={`/${l}/invoice/${q.ref}`} className="tech" prefetch={false}>
+                      {q.invoiceNumber}
+                    </Link>
+                  </dd>
+                </div>
+              )}
               {q.paymentUrl && <Row label={t.paymentLink} value={q.paymentUrl} tech />}
             </dl>
             {q.notes && (

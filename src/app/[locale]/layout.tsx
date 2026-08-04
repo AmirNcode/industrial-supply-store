@@ -36,7 +36,7 @@ export default async function LocaleLayout({
             have to tab through the whole category rail to reach them. */}
         <a
           href="#main"
-          className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:bg-white focus:p-2"
+          className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:bg-white focus:p-2 no-print"
         >
           {t.products}
         </a>

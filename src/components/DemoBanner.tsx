@@ -10,7 +10,7 @@ export function DemoBanner({ locale }: { locale: Locale }) {
   if (!DEMO_MODE) return null;
   const t = getDict(locale);
   return (
-    <div className="bg-[var(--color-warn)] px-4 py-1.5 text-center text-[12px] font-semibold text-white">
+    <div className="no-print bg-[var(--color-warn)] px-4 py-1.5 text-center text-[12px] font-semibold text-white">
       {t.demoBanner}
     </div>
   );
