@@ -183,6 +183,22 @@ const en = {
   fxOutOfRange:
     "That rate is more than ten times away from the automatic rate. Check for a stray digit.",
   fxInvalid: "Enter a whole number of Toman.",
+  // Invoice
+  invoice: "Invoice",
+  invoiceTo: "Bill to",
+  invoiceFrom: "From",
+  invoiceDate: "Date",
+  invoiceOrderRef: "Order reference",
+  invoiceDescription: "Description",
+  invoiceLineTotal: "Amount",
+  invoiceSubtotal: "Subtotal",
+  invoiceTotal: "Total due",
+  invoicePay: "Pay online",
+  invoiceDownload: "Download PDF",
+  invoiceTaxId: "Tax ID",
+  invoiceFxNote:
+    "Converted from US dollars at the rate in force when this invoice was issued.",
+  invoiceThanks: "Thank you for your business.",
 };
 
 /**
@@ -342,6 +358,21 @@ const fa: typeof en = {
   fxOutOfRange:
     "این نرخ بیش از ده برابر با نرخ خودکار فاصله دارد. رقم اضافه را بررسی کنید.",
   fxInvalid: "یک عدد صحیح به تومان وارد کنید.",
+  invoice: "صورتحساب",
+  invoiceTo: "صورتحساب برای",
+  invoiceFrom: "از طرف",
+  invoiceDate: "تاریخ",
+  invoiceOrderRef: "شماره سفارش",
+  invoiceDescription: "شرح کالا",
+  invoiceLineTotal: "مبلغ",
+  invoiceSubtotal: "جمع جزء",
+  invoiceTotal: "مبلغ قابل پرداخت",
+  invoicePay: "پرداخت آنلاین",
+  invoiceDownload: "دریافت PDF",
+  invoiceTaxId: "شناسه مالیاتی",
+  invoiceFxNote:
+    "مبالغ از دلار آمریکا و با نرخ زمان صدور این صورتحساب تبدیل شده است.",
+  invoiceThanks: "از خرید شما سپاسگزاریم.",
 };
 
 export type Dict = typeof en;
