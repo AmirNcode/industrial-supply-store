@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { sql } from "@/db";
 import { addLine, setLineQty, removeLine, clearCart, getCartLines, unitPriceAt } from "@/lib/cart";
 import { findByPartNumbers } from "@/db/queries";
-import type { Locale } from "@/lib/i18n";
+import { safeLocale } from "@/lib/i18n";
 
 export async function addToCartAction(formData: FormData) {
   const productId = Number(formData.get("productId"));
@@ -90,7 +90,7 @@ function quoteRef(): string {
 }
 
 export async function submitQuoteAction(formData: FormData) {
-  const locale = (String(formData.get("locale") || "en") as Locale) ?? "en";
+  const locale = safeLocale(formData);
   const lines = await getCartLines();
   if (lines.length === 0) redirect(`/${locale}/cart`);
 

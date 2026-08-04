@@ -39,6 +39,7 @@ type OrderRow = {
   courier: string;
   trackingNumber: string;
   invoiceNumber: string | null;
+  fxRateToToman: number | null;
   paymentUrl: string;
 };
 
@@ -65,7 +66,7 @@ export default async function AdminPage({
   const l = locale as Locale;
   const t = getDict(l);
   const sp = await searchParams;
-  const { error, fx } = sp;
+  const { error, fx, ok } = sp;
   const statusFilter = typeof sp.status === "string" && isOrderStatus(sp.status)
     ? sp.status
     : null;
@@ -107,6 +108,7 @@ export default async function AdminPage({
            q.created_at AS "createdAt", q.courier,
            q.tracking_number AS "trackingNumber",
            q.invoice_number AS "invoiceNumber",
+           q.fx_rate_to_toman AS "fxRateToToman",
            q.payment_url AS "paymentUrl",
            (SELECT count(*)::int FROM order_items i WHERE i.order_id = q.id) AS "itemCount"
     FROM orders q
@@ -196,10 +198,14 @@ export default async function AdminPage({
         ))}
       </nav>
 
+      {ok === "status" && <SuccessBanner>{t.orderUpdated}</SuccessBanner>}
+      {ok === "invoiced" && <SuccessBanner>{t.invoiceIssued}</SuccessBanner>}
       {error === "payment-link" && <ErrorBanner>{t.paymentLinkRequired}</ErrorBanner>}
       {error === "prices" && <ErrorBanner>{t.pricesRequired}</ErrorBanner>}
       {error === "tracking" && <ErrorBanner>{t.trackingRequired}</ErrorBanner>}
-      {error === "not-found" && <ErrorBanner>{t.noResults}</ErrorBanner>}
+      {error === "not-found" && <ErrorBanner>{t.orderNotFound}</ErrorBanner>}
+      {error === "conflict" && <ErrorBanner>{t.orderConflict}</ErrorBanner>}
+      {error === "bad-request" && <ErrorBanner>{t.badRequest}</ErrorBanner>}
 
       {orders.length === 0 && (
         <p className="py-8 text-[13px] text-[var(--color-ink-muted)]">{t.noQuotes}</p>
@@ -216,8 +222,15 @@ export default async function AdminPage({
             <span className="ms-auto tech text-[var(--color-ink-faint)]">
               {new Date(q.createdAt).toISOString().slice(0, 16).replace("T", " ")}
             </span>
+            {/* An invoiced order renders at the rate it was invoiced at, not
+                the live rate on this page load: the alternative is the amount
+                a customer owes changing every time someone edits the
+                exchange rate after their invoice has already gone out. The
+                live rate is only correct for an order that has not been
+                priced yet, which is exactly when fxRateToToman is still
+                null. */}
             <span className="tech font-bold">
-              {formatPrice(q.totalCents, q.locale === "fa" ? "fa" : "en", rate)}
+              {formatPrice(q.totalCents, q.locale === "fa" ? "fa" : "en", q.fxRateToToman ?? rate)}
             </span>
           </summary>
 
@@ -248,6 +261,11 @@ export default async function AdminPage({
                     <input type="hidden" name="locale" value={l} />
                     <input type="hidden" name="orderId" value={q.id} />
                     <input type="hidden" name="status" value={next} />
+                    {/* Named separately from "status" above, which already
+                        carries the transition's target status — the queue
+                        filter being carried back to after the redirect is a
+                        different value entirely. */}
+                    <input type="hidden" name="statusFilter" value={statusFilter ?? ""} />
                     {next === "shipped" && (
                       <>
                         <input name="courier" placeholder={t.courier} className="w-28 text-[11px]" required />
@@ -269,6 +287,7 @@ export default async function AdminPage({
               <form action={issueInvoiceAction}>
                 <input type="hidden" name="locale" value={l} />
                 <input type="hidden" name="orderId" value={q.id} />
+                <input type="hidden" name="statusFilter" value={statusFilter ?? ""} />
                 <table className="spec-table">
                   <thead>
                     <tr>
@@ -337,10 +356,10 @@ export default async function AdminPage({
                       <td className="whitespace-normal">{i.familyName}</td>
                       <td className="num tech tech-num">{i.qty}</td>
                       <td className="num tech tech-num">
-                        {formatPrice(i.unitPriceCents, q.locale === "fa" ? "fa" : "en", rate)}
+                        {formatPrice(i.unitPriceCents, q.locale === "fa" ? "fa" : "en", q.fxRateToToman ?? rate)}
                       </td>
                       <td className="num tech tech-num">
-                        {formatPrice(i.unitPriceCents * i.qty, q.locale === "fa" ? "fa" : "en", rate)}
+                        {formatPrice(i.unitPriceCents * i.qty, q.locale === "fa" ? "fa" : "en", q.fxRateToToman ?? rate)}
                       </td>
                     </tr>
                   ))}
@@ -366,6 +385,14 @@ function Row({ label, value, tech }: { label: string; value: string; tech?: bool
 function ErrorBanner({ children }: { children: React.ReactNode }) {
   return (
     <p className="mb-2 border border-[#e0b4b0] bg-[#fdf2f1] px-3 py-2 text-[12px] text-[#a3312a]">
+      {children}
+    </p>
+  );
+}
+
+function SuccessBanner({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="mb-2 border border-[var(--color-ok)] bg-[var(--color-ok-soft)] px-3 py-2 text-[12px] text-[var(--color-ok)]">
       {children}
     </p>
   );

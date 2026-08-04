@@ -6,19 +6,8 @@ import { sql } from "@/db";
 import { assertAdminWrite, signInAdmin, signOutAdmin } from "@/lib/admin";
 import { getFxRate, saveFxSettings } from "@/lib/fx";
 import { envFxRate, isFxMode, isPlausibleRate, parseRate } from "@/lib/fxRate";
-import { isLocale, type Locale } from "@/lib/i18n";
+import { safeLocale } from "@/lib/i18n";
 import { assertTransition, isOrderStatus } from "@/lib/orders";
-
-/**
- * Every action in this file redirects to `/${locale}/admin`, so the posted
- * value reaches `redirect()` unchanged. A `locale` of `/evil.com` would make
- * that `//evil.com/admin` — a protocol-relative URL, and an open redirect.
- * Anything unrecognised falls back to English.
- */
-function safeLocale(formData: FormData): Locale {
-  const raw = String(formData.get("locale") ?? "");
-  return isLocale(raw) ? raw : "en";
-}
 
 /**
  * Signing in and out live here, alongside every other admin action, so
@@ -68,20 +57,35 @@ export async function saveFxAction(formData: FormData): Promise<void> {
   redirect(`/${locale}/admin?fx=saved`);
 }
 
+/**
+ * Appends the queue filter the staff member was viewing (e.g.
+ * `?status=preparing`) to a redirect target, so acting on an order from a
+ * filtered view returns them to that same view instead of bouncing them to
+ * the default "needs action" queue. A blank or otherwise invalid value —
+ * including the empty string a form posts when no filter was active — is
+ * dropped rather than forwarded.
+ */
+function withFilter(url: string, statusFilter: string): string {
+  return isOrderStatus(statusFilter) ? `${url}&status=${statusFilter}` : url;
+}
+
 export async function setOrderStatusAction(formData: FormData): Promise<void> {
   await assertAdminWrite();
 
   const locale = safeLocale(formData);
+  const statusFilter = String(formData.get("statusFilter") ?? "");
   const id = Number(formData.get("orderId"));
   const to = String(formData.get("status") ?? "");
   if (!Number.isInteger(id) || id <= 0 || !isOrderStatus(to)) {
-    redirect(`/${locale}/admin?error=bad-request`);
+    redirect(withFilter(`/${locale}/admin?error=bad-request`, statusFilter));
   }
 
   const [row] = await sql<{ status: string }[]>`
     SELECT status FROM orders WHERE id = ${id}
   `;
-  if (!row || !isOrderStatus(row.status)) redirect(`/${locale}/admin?error=not-found`);
+  if (!row || !isOrderStatus(row.status)) {
+    redirect(withFilter(`/${locale}/admin?error=not-found`, statusFilter));
+  }
 
   // Throws rather than redirecting: reaching here with an illegal pair means a
   // hand-crafted post or a bug, not a mistake a form can make.
@@ -90,33 +94,86 @@ export async function setOrderStatusAction(formData: FormData): Promise<void> {
   // One explicit statement per destination. A single query with an
   // interpolated column name would be shorter and much harder to read at the
   // one place in this codebase that decides whether goods have shipped.
+  //
+  // Each UPDATE below also repeats `AND status = ${row.status}` rather than
+  // trusting the SELECT above. Between that read and this write, a concurrent
+  // submission — a double-click, or two staff on the same order — can change
+  // the row. The predicate, not the earlier read, is what makes the guard
+  // atomic: the read only established what the status *was*, and can be stale
+  // by the time this statement runs. `result.count === 0` then means this
+  // statement lost that race, and the order is left exactly as whoever won it
+  // left it.
   if (to === "shipped") {
     const courier = String(formData.get("courier") ?? "").trim();
     const tracking = String(formData.get("trackingNumber") ?? "").trim();
     // The whole point of this state is showing the customer a tracking number.
-    if (!courier || !tracking) redirect(`/${locale}/admin?error=tracking`);
-    await sql`
+    if (!courier || !tracking) {
+      redirect(withFilter(`/${locale}/admin?error=tracking`, statusFilter));
+    }
+    const result = await sql`
       UPDATE orders
       SET status = 'shipped', courier = ${courier},
           tracking_number = ${tracking}, shipped_at = now()
-      WHERE id = ${id}
+      WHERE id = ${id} AND status = ${row.status}
     `;
+    if (result.count === 0) {
+      redirect(withFilter(`/${locale}/admin?error=conflict`, statusFilter));
+    }
   } else if (to === "preparing") {
-    await sql`UPDATE orders SET status = 'preparing', paid_at = now() WHERE id = ${id}`;
+    const result = await sql`
+      UPDATE orders SET status = 'preparing', paid_at = now()
+      WHERE id = ${id} AND status = ${row.status}
+    `;
+    if (result.count === 0) {
+      redirect(withFilter(`/${locale}/admin?error=conflict`, statusFilter));
+    }
   } else if (to === "delivered") {
-    await sql`UPDATE orders SET status = 'delivered', delivered_at = now() WHERE id = ${id}`;
+    const result = await sql`
+      UPDATE orders SET status = 'delivered', delivered_at = now()
+      WHERE id = ${id} AND status = ${row.status}
+    `;
+    if (result.count === 0) {
+      redirect(withFilter(`/${locale}/admin?error=conflict`, statusFilter));
+    }
   } else if (to === "cancelled") {
-    await sql`UPDATE orders SET status = 'cancelled' WHERE id = ${id}`;
+    const result = await sql`
+      UPDATE orders SET status = 'cancelled'
+      WHERE id = ${id} AND status = ${row.status}
+    `;
+    if (result.count === 0) {
+      redirect(withFilter(`/${locale}/admin?error=conflict`, statusFilter));
+    }
   } else {
     // 'received' and 'invoiced' are not reachable here: nothing transitions to
     // 'received', and 'invoiced' belongs to issueInvoiceAction, which has the
     // prices and the payment link this action does not.
-    redirect(`/${locale}/admin?error=bad-request`);
+    redirect(withFilter(`/${locale}/admin?error=bad-request`, statusFilter));
   }
 
   revalidatePath("/", "layout");
-  redirect(`/${locale}/admin?ok=status`);
+  redirect(withFilter(`/${locale}/admin?ok=status`, statusFilter));
 }
+
+/** True for a string that parses as an absolute `http:`/`https:` URL. */
+function isHttpUrl(value: string): boolean {
+  try {
+    const { protocol } = new URL(value);
+    return protocol === "http:" || protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Thrown inside `issueInvoiceAction`'s transaction when the order UPDATE
+ * matches no row, and caught outside it once the transaction has settled.
+ * `redirect()` throws its own control-flow error to unwind, so it cannot be
+ * called from inside a `sql.begin()` callback: the transaction machinery
+ * would catch that throw like any other query failure instead of letting it
+ * propagate. A plain error here, redirected on from the `catch` below, keeps
+ * the two unrelated kinds of "throw" from colliding.
+ */
+class OrderConflict extends Error {}
 
 /**
  * Prices the order, assigns an invoice number, and freezes the exchange rate.
@@ -129,16 +186,31 @@ export async function issueInvoiceAction(formData: FormData): Promise<void> {
   await assertAdminWrite();
 
   const locale = safeLocale(formData);
+  const statusFilter = String(formData.get("statusFilter") ?? "");
   const id = Number(formData.get("orderId"));
-  if (!Number.isInteger(id) || id <= 0) redirect(`/${locale}/admin?error=bad-request`);
+  if (!Number.isInteger(id) || id <= 0) {
+    redirect(withFilter(`/${locale}/admin?error=bad-request`, statusFilter));
+  }
 
   const paymentUrl = String(formData.get("paymentUrl") ?? "").trim();
-  if (!paymentUrl) redirect(`/${locale}/admin?error=payment-link`);
+  if (!paymentUrl) redirect(withFilter(`/${locale}/admin?error=payment-link`, statusFilter));
+
+  // The `type="url"` input is a client-side check only, trivially bypassed by
+  // posting the form directly. This renders as plain text today, but a later
+  // phase turns it into a link a customer clicks — at that point a
+  // `javascript:` value stops being an inert string and becomes live code, so
+  // the scheme is validated here, at write time, rather than trusted from the
+  // browser.
+  if (!isHttpUrl(paymentUrl)) {
+    redirect(withFilter(`/${locale}/admin?error=payment-link`, statusFilter));
+  }
 
   const [order] = await sql<{ status: string }[]>`
     SELECT status FROM orders WHERE id = ${id}
   `;
-  if (!order || !isOrderStatus(order.status)) redirect(`/${locale}/admin?error=not-found`);
+  if (!order || !isOrderStatus(order.status)) {
+    redirect(withFilter(`/${locale}/admin?error=not-found`, statusFilter));
+  }
   assertTransition(order.status, "invoiced");
 
   const itemRows = await sql<{ id: number }[]>`
@@ -152,33 +224,52 @@ export async function issueInvoiceAction(formData: FormData): Promise<void> {
     const raw = String(formData.get(`price_${row.id}`) ?? "").trim();
     const dollars = Number(raw);
     if (raw === "" || !Number.isFinite(dollars) || dollars < 0) {
-      redirect(`/${locale}/admin?error=prices`);
+      redirect(withFilter(`/${locale}/admin?error=prices`, statusFilter));
     }
     priced.push({ id: row.id, cents: Math.round(dollars * 100) });
   }
 
   const rate = await getFxRate();
 
-  await sql.begin(async (tx) => {
-    for (const p of priced) {
-      await tx`UPDATE order_items SET unit_price_cents = ${p.cents} WHERE id = ${p.id}`;
+  // The order UPDATE repeats `AND o.status = 'received'` rather than trusting
+  // the SELECT above, for the same reason setOrderStatusAction's UPDATEs do:
+  // the read can go stale before the write lands. Without the predicate, two
+  // concurrent invoice submissions could both pass `assertTransition` and
+  // both reach this UPDATE — each consuming a `nextval('invoice_seq')` — and
+  // the second write would overwrite the first, leaving an invoice number
+  // that may already be in a customer's inbox attached to no row. The line
+  // item price updates run first, inside the same transaction, so if the
+  // order UPDATE matches no row the whole transaction must not commit either —
+  // hence the throw below, rather than a `count` check that lets the
+  // function carry on and commit a half-applied invoice.
+  try {
+    await sql.begin(async (tx) => {
+      for (const p of priced) {
+        await tx`UPDATE order_items SET unit_price_cents = ${p.cents} WHERE id = ${p.id}`;
+      }
+      const result = await tx`
+        UPDATE orders o
+        SET status = 'invoiced',
+            invoiced_at = now(),
+            payment_url = ${paymentUrl},
+            fx_rate_to_toman = ${rate},
+            invoice_number = 'INV-' || to_char(now(), 'YYYY') || '-' ||
+                             lpad(nextval('invoice_seq')::text, 4, '0'),
+            total_cents = (
+              SELECT COALESCE(SUM(i.unit_price_cents * i.qty), 0)
+              FROM order_items i WHERE i.order_id = o.id
+            )
+        WHERE o.id = ${id} AND o.status = 'received'
+      `;
+      if (result.count === 0) throw new OrderConflict();
+    });
+  } catch (err) {
+    if (err instanceof OrderConflict) {
+      redirect(withFilter(`/${locale}/admin?error=conflict`, statusFilter));
     }
-    await tx`
-      UPDATE orders o
-      SET status = 'invoiced',
-          invoiced_at = now(),
-          payment_url = ${paymentUrl},
-          fx_rate_to_toman = ${rate},
-          invoice_number = 'INV-' || to_char(now(), 'YYYY') || '-' ||
-                           lpad(nextval('invoice_seq')::text, 4, '0'),
-          total_cents = (
-            SELECT COALESCE(SUM(i.unit_price_cents * i.qty), 0)
-            FROM order_items i WHERE i.order_id = o.id
-          )
-      WHERE o.id = ${id}
-    `;
-  });
+    throw err;
+  }
 
   revalidatePath("/", "layout");
-  redirect(`/${locale}/admin?ok=invoiced`);
+  redirect(withFilter(`/${locale}/admin?ok=invoiced`, statusFilter));
 }

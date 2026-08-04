@@ -120,6 +120,10 @@ async function main() {
       ALTER TABLE orders ADD CONSTRAINT orders_status_check
         CHECK (status IN ('received','invoiced','preparing','shipped',
                           'delivered','cancelled'));
+      -- Carried over from quotes, this was still 'submitted' — a default the
+      -- constraint above rejects. Nothing inserts without an explicit status
+      -- today, so it was inert, but a landmine for the first thing that does.
+      ALTER TABLE orders ALTER COLUMN status SET DEFAULT 'received';
 
       CREATE UNIQUE INDEX IF NOT EXISTS orders_invoice_number_key
         ON orders (invoice_number) WHERE invoice_number IS NOT NULL;

@@ -6,6 +6,17 @@ export function isLocale(v: string): v is Locale {
   return (locales as readonly string[]).includes(v);
 }
 
+/**
+ * Used by every action that redirects to a locale-prefixed path: the posted
+ * `locale` value reaches `redirect()` unchanged, so a `locale` of `/evil.com`
+ * would make that `//evil.com/admin` — a protocol-relative URL, and an open
+ * redirect. Anything unrecognised falls back to English.
+ */
+export function safeLocale(formData: FormData): Locale {
+  const raw = String(formData.get("locale") ?? "");
+  return isLocale(raw) ? raw : "en";
+}
+
 export function dir(locale: Locale): "ltr" | "rtl" {
   return locale === "fa" ? "rtl" : "ltr";
 }
@@ -101,12 +112,12 @@ const en = {
   required: "This field is required",
   // Admin
   admin: "Admin",
-  quoteRequests: "Quote Requests",
+  quoteRequests: "Orders",
   password: "Password",
   signIn: "Sign in",
   signOut: "Sign out",
   wrongPassword: "Incorrect password",
-  noQuotes: "No quote requests yet.",
+  noQuotes: "No orders yet.",
   date: "Date",
   reference: "Reference",
   items: "Items",
@@ -136,6 +147,12 @@ const en = {
   finalUnitPrice: "Final price",
   paymentLinkRequired: "A payment link is required to issue an invoice.",
   pricesRequired: "Every line needs a price of at least zero.",
+  // Action feedback
+  orderUpdated: "Order updated.",
+  invoiceIssued: "Invoice issued.",
+  orderNotFound: "That order no longer exists.",
+  orderConflict: "That order changed while you were working on it. Check its current status and try again.",
+  badRequest: "That request could not be understood.",
   // Footer
   locations: "Locations",
   returns: "Returns",
@@ -261,12 +278,12 @@ const fa: typeof en = {
   backToCatalog: "بازگشت به کاتالوگ",
   required: "تکمیل این فیلد الزامی است",
   admin: "مدیریت",
-  quoteRequests: "درخواست‌های استعلام",
+  quoteRequests: "سفارش‌ها",
   password: "گذرواژه",
   signIn: "ورود",
   signOut: "خروج",
   wrongPassword: "گذرواژه نادرست است",
-  noQuotes: "هنوز درخواستی ثبت نشده است.",
+  noQuotes: "هنوز سفارشی ثبت نشده است.",
   date: "تاریخ",
   reference: "شماره پیگیری",
   items: "اقلام",
@@ -293,6 +310,11 @@ const fa: typeof en = {
   finalUnitPrice: "قیمت نهایی",
   paymentLinkRequired: "برای صدور صورتحساب، لینک پرداخت الزامی است.",
   pricesRequired: "برای همه ردیف‌ها باید قیمت وارد شود.",
+  orderUpdated: "سفارش به‌روزرسانی شد.",
+  invoiceIssued: "صورتحساب صادر شد.",
+  orderNotFound: "این سفارش دیگر وجود ندارد.",
+  orderConflict: "وضعیت این سفارش در حین کار شما تغییر کرد. وضعیت فعلی را بررسی و دوباره تلاش کنید.",
+  badRequest: "این درخواست قابل پردازش نبود.",
   locations: "شعب",
   returns: "مرجوعی",
   help: "راهنما",
