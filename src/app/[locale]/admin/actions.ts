@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { randomBytes } from "node:crypto";
+import { cookies } from "next/headers";
 import { sql } from "@/db";
 import { findUserIdByEmail, setPassword } from "@/db/userQueries";
 import { hashPassword } from "@/lib/password";
@@ -295,5 +296,24 @@ export async function resetCustomerPasswordAction(formData: FormData): Promise<v
 
   const generated = randomBytes(9).toString("base64url");
   await setPassword(userId, await hashPassword(generated));
-  redirect(`/${locale}/admin?newPassword=${encodeURIComponent(generated)}`);
+
+  /*
+   * Handed back in a short-lived cookie, not in the query string.
+   *
+   * A redirect puts the value in the Location header, the address bar, browser
+   * history and the access log of every proxy in front of this app — request
+   * query strings are logged by default nearly everywhere, and those logs
+   * outlive the "shown exactly once" intent by whatever the retention is.
+   * httpOnly is deliberately off: nothing reads it from script, but it is a
+   * credential, and a 30-second life is the actual protection.
+   */
+  const jar = await cookies();
+  jar.set("isupply_new_password", generated, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 30,
+  });
+  redirect(`/${locale}/admin?ok=password`);
 }

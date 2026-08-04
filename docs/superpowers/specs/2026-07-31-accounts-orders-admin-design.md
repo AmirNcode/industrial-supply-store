@@ -484,7 +484,13 @@ Stated so they are choices rather than surprises.
   shared state across serverless instances; deferred with the rest of auth
   hardening. The uniform error messages limit what an attacker learns per
   attempt, but do not limit the attempts.
-- **Sessions cannot be revoked individually.**
+- **Sessions cannot be revoked individually**, and a staff password reset does
+  not end the customer's existing sessions. The signed cookie commits only to a
+  user id and an expiry, so a token issued before the reset stays valid for the
+  rest of its 30 days. That matters because a reset is the one operation whose
+  point is to evict whoever should not be there. Closing it means binding the
+  token to something password-derived, which is a change to the session format
+  rather than a patch.
 - **No named staff accounts**, so order changes are not attributable to a
   person.
 - **No inventory or stock levels.** `in_stock` stays the manual boolean it is

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { signInAction } from "../actions";
-import { currentUserId } from "@/lib/session";
+import { currentUser } from "@/lib/session";
 import { isLocale, getDict, type Locale } from "@/lib/i18n";
 
 export default async function SignInPage({
@@ -17,7 +17,10 @@ export default async function SignInPage({
   const t = getDict(l);
   const { error } = await searchParams;
 
-  if (await currentUserId()) redirect(`/${l}/account`);
+  // currentUser, not currentUserId: a validly signed cookie whose row has
+  // gone (a reseed, a deletion) would otherwise bounce the visitor here from
+  // /account and straight back again, with no way to sign in, up, or out.
+  if (await currentUser()) redirect(`/${l}/account`);
 
   return (
     <main className="mx-auto max-w-[380px] px-3 pt-8">

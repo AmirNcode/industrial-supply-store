@@ -55,5 +55,6 @@ CREATE SEQUENCE IF NOT EXISTS invoice_seq;
 
 -- Email is case-insensitive in practice; two rows differing only in
 -- capitalisation are two people who both believe they own the account.
--- An expression index is not expressible in Drizzle's DSL, hence its home here.
+-- createUser relies on this index alone to detect a duplicate, which is why
+-- db:push re-applies this file rather than trusting anyone to remember.
 CREATE UNIQUE INDEX IF NOT EXISTS users_email_lower_key ON users (lower(email));

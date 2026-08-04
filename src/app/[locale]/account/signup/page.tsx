@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { signUpAction } from "../actions";
-import { currentUserId } from "@/lib/session";
+import { currentUser } from "@/lib/session";
 import { MIN_PASSWORD_LENGTH } from "@/lib/password";
 import { isLocale, getDict, type Locale } from "@/lib/i18n";
 
@@ -25,7 +25,10 @@ export default async function SignUpPage({
   const t = getDict(l);
   const { error } = await searchParams;
 
-  if (await currentUserId()) redirect(`/${l}/account`);
+  // currentUser, not currentUserId: a validly signed cookie whose row has
+  // gone (a reseed, a deletion) would otherwise bounce the visitor here from
+  // /account and straight back again, with no way to sign in, up, or out.
+  if (await currentUser()) redirect(`/${l}/account`);
 
   const messageKey = error && error in MESSAGE ? MESSAGE[error as keyof typeof MESSAGE] : null;
 

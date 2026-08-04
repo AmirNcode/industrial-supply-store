@@ -10,7 +10,7 @@ const COOKIE = "isupply_session";
  * production refuses to start without one rather than falling back to a value
  * that is in the repository.
  */
-function secret(): string {
+function resolveSecret(): string {
   const s = process.env.AUTH_SECRET;
   if (s && s.length >= 16) return s;
   if (process.env.NODE_ENV === "production") {
@@ -20,9 +20,17 @@ function secret(): string {
   return "development-only-insecure-key";
 }
 
+/**
+ * Resolved once, at import, so a production deploy without AUTH_SECRET fails
+ * when this module is first loaded rather than the first time a customer opens
+ * their account. The safety property is the same either way; the difference is
+ * whether the deploy breaks or a customer does.
+ */
+const SECRET = resolveSecret();
+
 export async function setSessionCookie(userId: string): Promise<void> {
   const jar = await cookies();
-  jar.set(COOKIE, signSessionToken(userId, Date.now() + SESSION_TTL_MS, secret()), {
+  jar.set(COOKIE, signSessionToken(userId, Date.now() + SESSION_TTL_MS, SECRET), {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
@@ -40,7 +48,7 @@ export async function currentUserId(): Promise<string | null> {
   const jar = await cookies();
   const token = jar.get(COOKIE)?.value;
   if (!token) return null;
-  return verifySessionToken(token, secret());
+  return verifySessionToken(token, SECRET);
 }
 
 export async function currentUser(): Promise<UserRow | null> {

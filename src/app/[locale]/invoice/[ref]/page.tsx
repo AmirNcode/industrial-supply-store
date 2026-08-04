@@ -45,10 +45,6 @@ export default async function InvoicePage({
   const l = locale as Locale;
   const t = getDict(l);
 
-  const found = await getInvoiceByRef(ref);
-  if (!found) notFound();
-  const { order, items } = found;
-
   /*
    * Staff may read any invoice; a customer may read one that is theirs.
    *
@@ -60,8 +56,20 @@ export default async function InvoicePage({
    * 404 rather than 403: a 403 would confirm the reference exists.
    */
   const staff = DEMO_MODE || (await isAdmin());
-  const owner = order.userId !== null && order.userId === (await currentUserId());
-  if (!staff && !owner) notFound();
+  const uid = await currentUserId();
+
+  // Refused before any query, so an anonymous request costs the same whether
+  // the reference exists or not. Checking after the fetch would make the 404
+  // latency an existence oracle over a six-character reference — exactly the
+  // confirmation "404, not 403" exists to withhold, and it would let
+  // unauthenticated traffic drive unbounded database load.
+  if (!staff && !uid) notFound();
+
+  const found = await getInvoiceByRef(ref);
+  if (!found) notFound();
+  const { order, items } = found;
+
+  if (!staff && (order.userId === null || order.userId !== uid)) notFound();
 
   const rate = order.fxRateToToman;
   const seller = getSeller(l);

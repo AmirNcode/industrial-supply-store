@@ -6,6 +6,7 @@ import { DEMO_MODE } from "@/lib/demo";
 import { isLocale, getDict, type Locale } from "@/lib/i18n";
 import { formatPrice, formatInt } from "@/lib/money";
 import { getFxSettings, getFxRate } from "@/lib/fx";
+import { cookies } from "next/headers";
 import { emailsWithAccounts } from "@/db/userQueries";
 import { envFxRate } from "@/lib/fxRate";
 import { FxRatePanel } from "@/components/FxRatePanel";
@@ -61,14 +62,18 @@ export default async function AdminPage({
   searchParams,
 }: {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{ error?: string; fx?: string; ok?: string; status?: string; newPassword?: string }>;
+  searchParams: Promise<{ error?: string; fx?: string; ok?: string; status?: string }>;
 }) {
   const { locale } = await params;
   if (!isLocale(locale)) notFound();
   const l = locale as Locale;
   const t = getDict(l);
   const sp = await searchParams;
-  const { error, fx, ok, newPassword } = sp;
+  const { error, fx, ok } = sp;
+  // Read from a 30-second cookie the reset action set, so the credential never
+  // travels in a URL or reaches an access log.
+  const newPassword =
+    ok === "password" ? (await cookies()).get("isupply_new_password")?.value : undefined;
   const statusFilter = typeof sp.status === "string" && isOrderStatus(sp.status)
     ? sp.status
     : null;

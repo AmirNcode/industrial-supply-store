@@ -321,10 +321,15 @@ export const appSettings = pgTable("app_settings", {
  * One table. Sessions are a signed cookie (see lib/sessionToken.ts), so there
  * is no companion sessions table to sweep.
  *
- * Email uniqueness is enforced by a `lower(email)` index in extensions.sql
- * rather than a plain unique constraint: addresses are case-insensitive in
- * practice, and two rows differing only in capitalisation are two people who
- * both believe they own the account.
+ * Email uniqueness is a `lower(email)` unique index, and it lives in
+ * `extensions.sql` because drizzle-kit does not emit an expression index —
+ * asked to, it silently produces a table with only `users_created_idx`.
+ *
+ * That matters more here than for the search indexes beside it: `createUser`
+ * decides "email-taken" solely by catching the unique violation, so without
+ * the index duplicate accounts are created silently and which one a person
+ * signs into becomes arbitrary. `npm run db:push` therefore re-applies
+ * extensions.sql itself rather than leaving it to whoever ran the command.
  */
 export const users = pgTable(
   "users",
