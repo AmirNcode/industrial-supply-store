@@ -80,6 +80,15 @@ export function Header({ locale }: { locale: Locale }) {
               >
                 {t.quickOrder}
               </Link>
+              {/* Unconditional: reading the session here would make every
+                  cached catalog page dynamic. /account decides for itself
+                  whether to show orders or a sign-in prompt. */}
+              <Link
+                href={`/${locale}/account`}
+                className="text-[12px] font-semibold uppercase tracking-[0.08em] !text-[var(--color-amber-lift)] hover:!text-white"
+              >
+                {t.account}
+              </Link>
             </div>
           </div>
         </div>
