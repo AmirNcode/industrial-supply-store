@@ -41,6 +41,24 @@ export function formatPrice(cents: number, locale: Locale, rate: number): string
   return usdFmt.format(cents / 100);
 }
 
+/**
+ * Exact conversion, no rounding to the nearest 100.
+ *
+ * `formatPrice` rounds Toman to the nearest hundred because a catalog column
+ * of seven-digit numbers is unreadable otherwise. An invoice cannot afford
+ * that: rounding each line independently and the total once lets the column
+ * disagree with its own sum. At a rate of 145,000, three lines of 33 cents
+ * each print 47,900 — 143,700 together — against a total of 143,600. A
+ * hundred-Toman gap between a column and its own total is the first thing a
+ * reader checks. Here the arithmetic has to close.
+ */
+export function formatPriceExact(cents: number, locale: Locale, rate: number): string {
+  if (locale === "fa") {
+    return `${tomanFmt.format(Math.round((cents / 100) * rate))} تومان`;
+  }
+  return usdFmt.format(cents / 100);
+}
+
 /** Bare number, no currency word — for dense table columns with a unit header. */
 export function formatPriceBare(cents: number, locale: Locale, rate: number): string {
   if (locale === "fa") return tomanFmt.format(toToman(cents, rate));

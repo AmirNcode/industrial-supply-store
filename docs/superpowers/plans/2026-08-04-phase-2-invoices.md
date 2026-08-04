@@ -23,6 +23,9 @@
 - Invoice numbers, part numbers and order references stay Latin digits in both locales — `class="tech"`, which already sets `direction: ltr; unicode-bidi: isolate`.
 - Locale comes from `safeLocale`/`isLocale` in `src/lib/i18n.ts`. Never interpolate an unvalidated path segment into a redirect.
 - TypeScript strict mode, ES modules, `@/*` aliased to `src/*`.
+- `npm test` runs under `--conditions=react-server`, so a module carrying
+  `import "server-only"` can still be unit tested. Without it, `server-only`
+  throws the moment a test imports the module.
 - Postgres runs in Docker as container `isupply-db` on host port **5434**. Do not run `npm run db:push` — this phase needs no schema change, and push silently drops everything in `src/db/extensions.sql`, including `invoice_seq`.
 
 ## File Structure
@@ -780,3 +783,10 @@ read as well as written.
 
 Not built here: customer access to their own invoice, which needs an account
 and lands in Phase 3.
+
+Known gap: `order_items.family_name` stores one language, captured when the
+order was submitted, so an order placed in English prints an English product
+description even on the Persian invoice. Everything around it translates. The
+fix is a second column — `family_name_en` / `family_name_fa` — snapshotted at
+submission, which is a schema change and belongs with the next one rather than
+here.

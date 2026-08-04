@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { lineTotalCents, subtotalCents } from "./invoice";
+import { formatPriceExact } from "./money";
 
 test("a line total is unit price times quantity, in cents", () => {
   assert.equal(lineTotalCents({ qty: 5, unitPriceCents: 50 }), 250);
@@ -30,4 +31,34 @@ test("totals stay integers — no floating point creeps in", () => {
   const total = subtotalCents([{ qty: 3, unitPriceCents: 33 }]);
   assert.equal(total, 99);
   assert.equal(Number.isInteger(total), true);
+});
+
+/** Persian digits back to a plain number, so two rendered figures can be compared. */
+function digits(s: string): number {
+  const FA = "۰۱۲۳۴۵۶۷۸۹";
+  let out = "";
+  for (const ch of s) {
+    const i = FA.indexOf(ch);
+    if (i !== -1) out += String(i);
+    else if (ch >= "0" && ch <= "9") out += ch;
+  }
+  return Number(out);
+}
+
+test("on an invoice, the Persian line totals add up to the printed total", () => {
+  // formatPrice rounds Toman to the nearest hundred, so rounding each line
+  // and the total separately lets the column disagree with its own sum. At
+  // 145,000 three lines of 33 cents print 47,900 each -- 143,700 -- against a
+  // total of 143,600. formatPriceExact must not do that.
+  const rate = 145000;
+  const lines = [
+    { qty: 1, unitPriceCents: 33 },
+    { qty: 1, unitPriceCents: 33 },
+    { qty: 1, unitPriceCents: 33 },
+  ];
+  const lineSum = lines.reduce(
+    (n, l) => n + digits(formatPriceExact(lineTotalCents(l), "fa", rate)),
+    0,
+  );
+  assert.equal(digits(formatPriceExact(subtotalCents(lines), "fa", rate)), lineSum);
 });

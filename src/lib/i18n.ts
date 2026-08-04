@@ -199,6 +199,8 @@ const en = {
   invoiceFxNote:
     "Converted from US dollars at the rate in force when this invoice was issued.",
   invoiceThanks: "Thank you for your business.",
+  invoiceCancelled: "CANCELLED — this invoice is void and must not be paid.",
+  invoiceVoid: "Not payable",
 };
 
 /**
@@ -373,6 +375,8 @@ const fa: typeof en = {
   invoiceFxNote:
     "مبالغ از دلار آمریکا و با نرخ زمان صدور این صورتحساب تبدیل شده است.",
   invoiceThanks: "از خرید شما سپاسگزاریم.",
+  invoiceCancelled: "لغو شده — این صورتحساب باطل است و نباید پرداخت شود.",
+  invoiceVoid: "قابل پرداخت نیست",
 };
 
 export type Dict = typeof en;

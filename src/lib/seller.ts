@@ -1,3 +1,4 @@
+import "server-only";
 import type { Locale } from "./i18n";
 
 /**
@@ -20,8 +21,16 @@ export type Seller = {
 
 export function getSeller(locale: Locale): Seller {
   const suffix = locale === "fa" ? "_FA" : "";
-  const pick = (key: string, fallback: string) =>
-    process.env[`SELLER_${key}${suffix}`] ?? process.env[`SELLER_${key}`] ?? fallback;
+  // An empty value counts as unset, not as an answer. `.env.example` ships
+  // `SELLER_TAX_ID=` and so teaches the blank-assignment habit; a deployment
+  // that blanks SELLER_NAME= the same way would otherwise get an empty seller
+  // name instead of the loud placeholder, which is the only thing standing
+  // between an unconfigured install and an emailed invoice that looks real.
+  const pick = (key: string, fallback: string) => {
+    const candidates = [process.env[`SELLER_${key}${suffix}`], process.env[`SELLER_${key}`]];
+    for (const c of candidates) if (c !== undefined && c.trim() !== "") return c;
+    return fallback;
+  };
 
   return {
     name: pick("NAME", "Parstech Supply — set SELLER_NAME"),

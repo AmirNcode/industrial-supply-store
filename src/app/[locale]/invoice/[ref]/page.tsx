@@ -6,7 +6,7 @@ import { isAdmin } from "@/lib/admin";
 import { DEMO_MODE } from "@/lib/demo";
 import { PrintButton } from "@/components/PrintButton";
 import { isLocale, getDict, type Locale } from "@/lib/i18n";
-import { formatPrice, formatInt } from "@/lib/money";
+import { formatPriceExact, formatInt } from "@/lib/money";
 
 /**
  * The invoice document.
@@ -22,6 +22,18 @@ import { formatPrice, formatInt } from "@/lib/money";
  * whichever version the customer reads, and the same order can legitimately be
  * printed in both.
  */
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ ref: string }>;
+}) {
+  // Derived from the path alone — no query, so nothing about the order is
+  // reachable before the access check in the page itself. Chrome names a
+  // saved PDF from this, and the whole phase exists so staff save PDFs.
+  const { ref } = await params;
+  return { title: `Invoice ${ref}` };
+}
+
 export default async function InvoicePage({
   params,
 }: {
@@ -46,6 +58,10 @@ export default async function InvoicePage({
   const seller = getSeller(l);
   const subtotal = subtotalCents(items);
   const issued = new Date(order.invoicedAt).toISOString().slice(0, 10);
+  // `invoiced → cancelled` is one click in the admin queue, and the emailed
+  // link keeps working afterwards. A voided invoice that still shows a total
+  // and a live payment link is how someone pays for a cancelled order.
+  const cancelled = order.status === "cancelled";
 
   return (
     <main className="invoice-sheet mx-auto max-w-[820px] px-6 py-8">
@@ -53,11 +69,16 @@ export default async function InvoicePage({
         <div>
           <h1 className="text-[26px] font-bold text-[var(--color-pine)]">{t.invoice}</h1>
           <p className="tech mt-1 text-[15px] font-bold">{order.invoiceNumber}</p>
+          {cancelled && (
+            <p className="mt-1 text-[15px] font-bold text-[var(--color-danger)]">
+              {t.invoiceCancelled}
+            </p>
+          )}
         </div>
         <div className="text-end text-[12px] leading-relaxed">
           <p className="font-bold">{seller.name}</p>
-          {seller.addressLines.map((line) => (
-            <p key={line} className="text-[var(--color-ink-muted)]">{line}</p>
+          {seller.addressLines.map((line, i) => (
+            <p key={i} className="text-[var(--color-ink-muted)]">{line}</p>
           ))}
           <p className="tech text-[var(--color-ink-muted)]">{seller.email}</p>
           <p className="tech text-[var(--color-ink-muted)]">{seller.phone}</p>
@@ -116,9 +137,9 @@ export default async function InvoicePage({
               <td className="tech font-semibold">{i.partNumber}</td>
               <td>{i.familyName}</td>
               <td className="num tech tech-num">{formatInt(i.qty, l)}</td>
-              <td className="num tech tech-num">{formatPrice(i.unitPriceCents, l, rate)}</td>
+              <td className="num tech tech-num">{formatPriceExact(i.unitPriceCents, l, rate)}</td>
               <td className="num tech tech-num">
-                {formatPrice(lineTotalCents(i), l, rate)}
+                {formatPriceExact(lineTotalCents(i), l, rate)}
               </td>
             </tr>
           ))}
@@ -128,17 +149,17 @@ export default async function InvoicePage({
       <section className="mt-4 flex justify-end">
         <dl className="grid w-full max-w-[280px] grid-cols-[1fr_auto] gap-x-6 gap-y-1 text-[13px]">
           <dt>{t.invoiceSubtotal}</dt>
-          <dd className="num tech tech-num">{formatPrice(subtotal, l, rate)}</dd>
+          <dd className="num tech tech-num">{formatPriceExact(subtotal, l, rate)}</dd>
           <dt className="border-t border-[var(--color-ink)] pt-1.5 font-bold">
-            {t.invoiceTotal}
+            {cancelled ? t.invoiceVoid : t.invoiceTotal}
           </dt>
           <dd className="num tech tech-num border-t border-[var(--color-ink)] pt-1.5 text-[15px] font-bold">
-            {formatPrice(order.totalCents, l, rate)}
+            {formatPriceExact(order.totalCents, l, rate)}
           </dd>
         </dl>
       </section>
 
-      {order.paymentUrl && (
+      {order.paymentUrl && !cancelled && (
         <p className="mt-6 text-[12px]">
           <a href={order.paymentUrl} className="font-bold" rel="noopener noreferrer">
             {t.invoicePay}
@@ -152,14 +173,12 @@ export default async function InvoicePage({
         {l === "fa" && (
           <p className="mt-1">
             {t.invoiceFxNote}{" "}
-            <span className="tech">
-              1 USD = {formatInt(rate, l)}
-            </span>
+            <span className="tech">{formatInt(rate, l)}</span> {t.fxPerUsd}
           </p>
         )}
       </footer>
 
-      <div className="mt-6 flex justify-end">
+      <div className="mt-6 flex justify-end no-print">
         <PrintButton locale={l} />
       </div>
     </main>
