@@ -1,0 +1,8 @@
+services:
+  db:
+    ports: !override
+      # Host port 5433 is held by an unrelated project's container on this
+      # machine (bj-erp-db-1). Rebind isupply-db's publish to 5434 locally so
+      # the app can reach it. Not committed; see docker-compose.yml for the
+      # documented default.
+      - "5434:5432"

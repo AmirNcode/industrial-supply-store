@@ -65,7 +65,7 @@ Pure logic and configuration. No database, no rendering.
   `lineTotalCents(line: InvoiceLine): number`,
   `subtotalCents(lines: readonly InvoiceLine[]): number`;
   `type Seller = { name: string; addressLines: string[]; email: string; phone: string; taxId: string }`,
-  `getSeller(): Seller`.
+  `getSeller(locale: Locale): Seller`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -147,7 +147,7 @@ export function subtotalCents(lines: readonly InvoiceLine[]): number {
 
 Run: `npm test`
 
-Expected: `pass 29`, `fail 0` (24 existing plus 5 new).
+Expected: `pass 29`, `fail 0` (24 existing plus 5 new). Task 1 also adds `seller.test.ts`, taking the total to 36.
 
 - [ ] **Step 5: Write the seller block**
 

@@ -9,6 +9,17 @@
  * should be visible rather than rounded away.
  */
 
+/**
+ * Both fields are integers by construction, not by assertion: they come from
+ * `order_items.qty` and `order_items.unit_price_cents`, which are `integer`
+ * columns. Multiplying two integers cannot produce a fraction, so there is
+ * nothing here to round and no failure mode to handle.
+ *
+ * A runtime guard was considered and rejected — it would give a function that
+ * currently cannot fail a way to fail, in exchange for defending against a
+ * caller the schema does not permit. If either column ever becomes numeric,
+ * this comment is the thing that has to change with it.
+ */
 export type InvoiceLine = {
   qty: number;
   unitPriceCents: number;
