@@ -6,6 +6,7 @@ import { sql } from "@/db";
 import { addLine, setLineQty, removeLine, clearCart, getCartLines, unitPriceAt } from "@/lib/cart";
 import { findByPartNumbers } from "@/db/queries";
 import { safeLocale } from "@/lib/i18n";
+import { currentUserId } from "@/lib/session";
 
 export async function addToCartAction(formData: FormData) {
   const productId = Number(formData.get("productId"));
@@ -105,6 +106,11 @@ export async function submitQuoteAction(formData: FormData) {
 
   const totalCents = lines.reduce((sum, l) => sum + unitPriceAt(l, l.qty) * l.qty, 0);
   const ref = quoteRef();
+  // Guest checkout stays supported, so this is nullable. A guest's typed
+  // address is deliberately NOT matched against an existing account: without
+  // email verification that would let anyone attach a stranger's order to
+  // themselves by typing their address.
+  const userId = await currentUserId();
 
   // Header and line items go in one transaction. Without it, a failure partway
   // through leaves a quote whose line items are missing while the cart is still
@@ -114,7 +120,7 @@ export async function submitQuoteAction(formData: FormData) {
     const [order] = await tx<{ id: number }[]>`
       INSERT INTO orders (ref, company, contact_name, email, phone, po_number,
                           address, city, country, notes, locale, currency,
-                          total_cents, requested_total_cents, status)
+                          total_cents, requested_total_cents, status, user_id)
       VALUES (
         ${ref},
         ${String(formData.get("company") ?? "")},
@@ -130,7 +136,8 @@ export async function submitQuoteAction(formData: FormData) {
         ${locale === "fa" ? "IRT" : "USD"},
         ${totalCents},
         ${totalCents},
-        'received'
+        'received',
+        ${userId}
       )
       RETURNING id
     `;

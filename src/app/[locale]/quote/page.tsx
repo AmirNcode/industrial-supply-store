@@ -6,6 +6,7 @@ import { isLocale, getDict, type Locale } from "@/lib/i18n";
 import { DEMO_MODE } from "@/lib/demo";
 import { formatPrice, formatInt } from "@/lib/money";
 import { getFxRate } from "@/lib/fx";
+import { currentUser } from "@/lib/session";
 
 export default async function QuotePage({
   params,
@@ -22,7 +23,7 @@ export default async function QuotePage({
 
   const lines = await getCartLines();
   if (lines.length === 0) redirect(`/${l}/cart`);
-  const rate = await getFxRate();
+  const [rate, user] = await Promise.all([getFxRate(), currentUser()]);
   const subtotal = lines.reduce((sum, x) => sum + unitPriceAt(x, x.qty) * x.qty, 0);
 
   return (
@@ -50,11 +51,11 @@ export default async function QuotePage({
         <input type="hidden" name="locale" value={l} />
 
         <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))] self-start">
-          <Field name="company" label={t.company} required />
-          <Field name="contactName" label={t.contactName} required />
-          <Field name="email" label={t.email} type="email" required />
-          <Field name="phone" label={t.phone} type="tel" required />
-          <Field name="poNumber" label={t.poNumber} optional={t.optional} />
+          <Field name="company" label={t.company} required defaultValue={user?.company} />
+          <Field name="contactName" label={t.contactName} required defaultValue={user?.contactName} />
+          <Field name="email" label={t.email} type="email" required defaultValue={user?.email} />
+          <Field name="phone" label={t.phone} type="tel" required defaultValue={user?.phone} />
+          <Field name="poNumber" label={t.poNumber} optional={t.optional} defaultValue={user?.defaultPoNumber} />
           <Field name="city" label={t.city} optional={t.optional} />
           <Field name="country" label={t.country} optional={t.optional} />
           <label className="col-span-full block text-[12px]">
@@ -115,12 +116,14 @@ function Field({
   type = "text",
   required,
   optional,
+  defaultValue,
 }: {
   name: string;
   label: string;
   type?: string;
   required?: boolean;
   optional?: string;
+  defaultValue?: string;
 }) {
   return (
     <label className="block text-[12px]">
@@ -136,6 +139,7 @@ function Field({
         type={type}
         name={name}
         required={required}
+        defaultValue={defaultValue}
         // Email and phone are Latin-entry fields even in the Persian UI.
         dir={type === "email" || type === "tel" ? "ltr" : undefined}
         className="w-full"

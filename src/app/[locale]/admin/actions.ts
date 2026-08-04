@@ -2,7 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { randomBytes } from "node:crypto";
 import { sql } from "@/db";
+import { findUserIdByEmail, setPassword } from "@/db/userQueries";
+import { hashPassword } from "@/lib/password";
 import { assertAdminWrite, signInAdmin, signOutAdmin } from "@/lib/admin";
 import { getFxRate, saveFxSettings } from "@/lib/fx";
 import { envFxRate, isFxMode, isPlausibleRate, parseRate } from "@/lib/fxRate";
@@ -272,4 +275,25 @@ export async function issueInvoiceAction(formData: FormData): Promise<void> {
 
   revalidatePath("/", "layout");
   redirect(withFilter(`/${locale}/admin?ok=invoiced`, statusFilter));
+}
+
+/**
+ * Generates a password, stores its hash, and hands the plaintext back exactly
+ * once through the redirect so staff can read it out.
+ *
+ * There is no reset email in this version, so this is the only way back in for
+ * a customer who has forgotten theirs. The plaintext is never stored and never
+ * shown again — reloading the page loses it, which is the intended behaviour.
+ */
+export async function resetCustomerPasswordAction(formData: FormData): Promise<void> {
+  await assertAdminWrite();
+  const locale = safeLocale(formData);
+  const email = String(formData.get("email") ?? "").trim();
+
+  const userId = await findUserIdByEmail(email);
+  if (!userId) redirect(`/${locale}/admin?error=no-account`);
+
+  const generated = randomBytes(9).toString("base64url");
+  await setPassword(userId, await hashPassword(generated));
+  redirect(`/${locale}/admin?newPassword=${encodeURIComponent(generated)}`);
 }

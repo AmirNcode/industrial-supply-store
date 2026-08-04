@@ -6,6 +6,7 @@ import { DEMO_MODE } from "@/lib/demo";
 import { isLocale, getDict, type Locale } from "@/lib/i18n";
 import { formatPrice, formatInt } from "@/lib/money";
 import { getFxSettings, getFxRate } from "@/lib/fx";
+import { emailsWithAccounts } from "@/db/userQueries";
 import { envFxRate } from "@/lib/fxRate";
 import { FxRatePanel } from "@/components/FxRatePanel";
 import { OrderStatusPill, STATUS_LABEL_KEY } from "@/components/OrderStatusPill";
@@ -15,6 +16,7 @@ import {
   logoutAction,
   saveFxAction,
   setOrderStatusAction,
+  resetCustomerPasswordAction,
 } from "./actions";
 import type { SpecBag } from "@/db/schema";
 import { ORDER_STATUSES, isOrderStatus, nextStatuses, type OrderStatus } from "@/lib/orders";
@@ -59,14 +61,14 @@ export default async function AdminPage({
   searchParams,
 }: {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{ error?: string; fx?: string; ok?: string; status?: string }>;
+  searchParams: Promise<{ error?: string; fx?: string; ok?: string; status?: string; newPassword?: string }>;
 }) {
   const { locale } = await params;
   if (!isLocale(locale)) notFound();
   const l = locale as Locale;
   const t = getDict(l);
   const sp = await searchParams;
-  const { error, fx, ok } = sp;
+  const { error, fx, ok, newPassword } = sp;
   const statusFilter = typeof sp.status === "string" && isOrderStatus(sp.status)
     ? sp.status
     : null;
@@ -127,6 +129,10 @@ export default async function AdminPage({
         ORDER BY id
       `
     : [];
+
+  // One query for the whole page rather than a lookup per row: staff can only
+  // reset a password for an address that actually has an account.
+  const withAccounts = await emailsWithAccounts(orders.map((o) => o.email));
 
   const byOrder = new Map<number, OrderItemRow[]>();
   for (const i of items) {
@@ -204,6 +210,13 @@ export default async function AdminPage({
       {error === "prices" && <ErrorBanner>{t.pricesRequired}</ErrorBanner>}
       {error === "tracking" && <ErrorBanner>{t.trackingRequired}</ErrorBanner>}
       {error === "not-found" && <ErrorBanner>{t.orderNotFound}</ErrorBanner>}
+      {error === "no-account" && <ErrorBanner>{t.noAccountForEmail}</ErrorBanner>}
+      {newPassword && (
+        <p className="mb-2 border-2 border-[var(--color-warn)] bg-[var(--color-warn-soft)] px-3 py-2 text-[12px]">
+          <strong>{t.newPasswordOnce}</strong>{" "}
+          <span className="tech select-all text-[14px] font-bold">{newPassword}</span>
+        </p>
+      )}
       {error === "conflict" && <ErrorBanner>{t.orderConflict}</ErrorBanner>}
       {error === "bad-request" && <ErrorBanner>{t.badRequest}</ErrorBanner>}
 
@@ -238,6 +251,24 @@ export default async function AdminPage({
             <dl className="mb-2 grid gap-x-6 gap-y-0.5 text-[11px] [grid-template-columns:repeat(auto-fit,minmax(180px,1fr))]">
               {q.phone && <Row label={t.phone} value={q.phone} tech />}
               {q.poNumber && <Row label={t.poNumber} value={q.poNumber} tech />}
+              {withAccounts.has(q.email.toLowerCase()) && (
+                <div className="flex items-baseline gap-1.5">
+                  <dt className="font-bold">{t.account}:</dt>
+                  <dd>
+                    <form action={resetCustomerPasswordAction} className="inline">
+                      <input type="hidden" name="locale" value={l} />
+                      <input type="hidden" name="email" value={q.email} />
+                      <button
+                        type="submit"
+                        className="underline disabled:no-underline disabled:opacity-50"
+                        disabled={DEMO_MODE}
+                      >
+                        {t.resetPassword}
+                      </button>
+                    </form>
+                  </dd>
+                </div>
+              )}
               {q.city && <Row label={t.city} value={q.city} />}
               {q.country && <Row label={t.country} value={q.country} />}
               <Row label={t.status} value={q.status} />

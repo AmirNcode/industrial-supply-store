@@ -4,6 +4,7 @@ import { lineTotalCents, subtotalCents } from "@/lib/invoice";
 import { getSeller } from "@/lib/seller";
 import { isAdmin } from "@/lib/admin";
 import { DEMO_MODE } from "@/lib/demo";
+import { currentUserId } from "@/lib/session";
 import { PrintButton } from "@/components/PrintButton";
 import { isLocale, getDict, type Locale } from "@/lib/i18n";
 import { formatPriceExact, formatInt } from "@/lib/money";
@@ -44,15 +45,23 @@ export default async function InvoicePage({
   const l = locale as Locale;
   const t = getDict(l);
 
-  // Staff-only in this phase. A customer reading their own invoice needs an
-  // account, which is Phase 3; until then the only route to a customer is a
-  // PDF a human attached to an email. DEMO_MODE matches /admin, where the
-  // whole inbox is already public and the RFQ form says so before anyone types.
-  if (!DEMO_MODE && !(await isAdmin())) notFound();
-
   const found = await getInvoiceByRef(ref);
   if (!found) notFound();
   const { order, items } = found;
+
+  /*
+   * Staff may read any invoice; a customer may read one that is theirs.
+   *
+   * A guest order has no owner, so its invoice stays staff-only and reaches
+   * the customer as a PDF a human attached to an email. DEMO_MODE matches
+   * /admin, where the whole inbox is already public and the RFQ form says so
+   * before anyone types.
+   *
+   * 404 rather than 403: a 403 would confirm the reference exists.
+   */
+  const staff = DEMO_MODE || (await isAdmin());
+  const owner = order.userId !== null && order.userId === (await currentUserId());
+  if (!staff && !owner) notFound();
 
   const rate = order.fxRateToToman;
   const seller = getSeller(l);

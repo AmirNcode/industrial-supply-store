@@ -19,6 +19,8 @@ export type InvoiceOrder = {
   totalCents: number;
   status: string;
   invoicedAt: string;
+  /** Null for a guest order — nobody but staff may read that invoice. */
+  userId: string | null;
 };
 
 export type InvoiceItem = {
@@ -48,7 +50,7 @@ export async function getInvoiceByRef(
            company, contact_name AS "contactName", email, phone,
            po_number AS "poNumber", address, city, country,
            payment_url AS "paymentUrl", total_cents AS "totalCents",
-           status, invoiced_at AS "invoicedAt"
+           status, invoiced_at AS "invoicedAt", user_id AS "userId"
     FROM orders
     WHERE ref = ${ref}
       AND invoice_number IS NOT NULL
