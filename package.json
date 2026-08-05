@@ -22,6 +22,7 @@
     "db:verify:remote": "dotenv -e .env.production.local -- tsx scripts/verify-remote.mts"
   },
   "dependencies": {
+    "csv-parse": "^7.0.2",
     "dotenv": "^17.4.2",
     "drizzle-orm": "^0.44.6",
     "next": "^16.2.9",
