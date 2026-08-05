@@ -398,6 +398,11 @@ store, the seeder gets replaced by an importer against supplier data.
 
 ## Before this is production
 
+> **Deploying?** Read [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) first. It has the
+> environment variables, the database command order, and six traps that have
+> already cost this project real incidents — `drizzle-kit push` silently dropping
+> indexes, the invoice sequence and row-level security among them.
+
 Known gaps, stated plainly:
 
 - **`/admin` is not authentication.** One shared password from `.env`, no
