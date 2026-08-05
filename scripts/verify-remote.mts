@@ -19,6 +19,71 @@ if (!url) {
 
 const sql = postgres(url, { prepare: false, max: 2 });
 
+/**
+ * Schema first, and it has to come first.
+ *
+ * This script used to check only the catalog, so a database carrying products
+ * but none of the accounts, orders or invoicing schema printed "✓ database
+ * looks correct" — the most misleading moment possible, since it is read right
+ * before a deploy.
+ */
+const TABLES = [
+  "categories", "product_families", "products", "product_spec_values",
+  "spec_defs", "carts", "cart_items", "orders", "order_items", "users",
+  "app_settings",
+] as const;
+
+const present = await sql<{ name: string }[]>`
+  SELECT tablename AS name FROM pg_tables WHERE schemaname = 'public'
+`;
+const have = new Set(present.map((r) => r.name));
+const missingTables = TABLES.filter((t) => !have.has(t));
+console.log(
+  `tables      ${TABLES.length - missingTables.length}/${TABLES.length} ${
+    missingTables.length === 0 ? "✓" : `✗ MISSING ${missingTables.join(", ")}`
+  }`,
+);
+
+// `quotes` still existing means the rename has not been run. Pushing the schema
+// over the top of it would create an empty `orders` and drop the real data.
+if (have.has("quotes")) {
+  console.log("            ✗ `quotes` still exists — run db:rename-orders:remote FIRST");
+}
+
+/** The objects `drizzle-kit push` drops on every run and cannot re-create. */
+const EXTENSION_OBJECTS = [
+  "products_fts_idx", "products_part_number_trgm_idx",
+  "families_name_en_trgm_idx", "families_name_fa_trgm_idx",
+  "categories_name_en_trgm_idx", "categories_name_fa_trgm_idx",
+  "categories_path_prefix_idx", "psv_product_idx",
+  "orders_invoice_number_key", "orders_email_ref_idx",
+  "users_email_lower_key",
+] as const;
+
+const objs = await sql<{ indexname: string }[]>`
+  SELECT indexname FROM pg_indexes WHERE schemaname = 'public'
+`;
+const haveObjs = new Set(objs.map((r) => r.indexname));
+const missingObjs = EXTENSION_OBJECTS.filter((o) => !haveObjs.has(o));
+console.log(
+  `extensions.sql ${EXTENSION_OBJECTS.length - missingObjs.length}/${
+    EXTENSION_OBJECTS.length
+  } ${missingObjs.length === 0 ? "✓" : `✗ MISSING ${missingObjs.join(", ")}`}`,
+);
+
+const [{ hasSeq }] = await sql<{ hasSeq: boolean }[]>`
+  SELECT to_regclass('public.invoice_seq') IS NOT NULL AS "hasSeq"
+`;
+console.log(`invoice_seq ${hasSeq ? "✓" : "✗ MISSING — invoice numbers will restart at 1"}`);
+
+// Everything below reads the catalog tables, which is only meaningful once
+// they exist.
+if (missingTables.length > 0) {
+  console.log("\n✗ schema incomplete — run db:push:remote before anything else");
+  await sql.end();
+  process.exit(1);
+}
+
 const [counts] = await sql<
   { c: number; f: number; p: number; v: number }[]
 >`
@@ -70,7 +135,13 @@ console.log(
 );
 
 const ok =
-  counts.c > 0 && counts.p > 0 && idx.length >= expected && parts.length > 0;
+  counts.c > 0 &&
+  counts.p > 0 &&
+  idx.length >= expected &&
+  parts.length > 0 &&
+  missingObjs.length === 0 &&
+  hasSeq &&
+  !have.has("quotes");
 console.log(ok ? "\n✓ database looks correct" : "\n✗ something is wrong above");
 
 await sql.end();
