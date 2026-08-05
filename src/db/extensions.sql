@@ -58,3 +58,30 @@ CREATE SEQUENCE IF NOT EXISTS invoice_seq;
 -- createUser relies on this index alone to detect a duplicate, which is why
 -- db:push re-applies this file rather than trusting anyone to remember.
 CREATE UNIQUE INDEX IF NOT EXISTS users_email_lower_key ON users (lower(email));
+
+-- ---------------------------------------------------------------------------
+-- Row-level security
+-- ---------------------------------------------------------------------------
+-- Managed Postgres providers expose a REST API over these same tables, reached
+-- with a publishable key that ships in browser code. Without RLS, that key
+-- reads every order, every customer and every cart directly, bypassing this
+-- application entirely.
+--
+-- The app is unaffected: it connects over raw Postgres as the role that owns
+-- these tables, and an owner bypasses RLS. Enabling it with no policies is
+-- therefore exactly the intent — deny the REST roles everything, change
+-- nothing for the app. Verified by enabling it on a full local copy and
+-- exercising reads, writes, search, cart and admin.
+--
+-- It lives here because `drizzle-kit push` does not model RLS, reads it as
+-- drift, and emits `DISABLE ROW LEVEL SECURITY` for every table on every run.
+-- Re-applying this file after a push puts it back.
+DO $$
+DECLARE t text;
+BEGIN
+  FOR t IN
+    SELECT tablename FROM pg_tables WHERE schemaname = 'public'
+  LOOP
+    EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', t);
+  END LOOP;
+END $$;

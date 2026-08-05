@@ -43,10 +43,25 @@ async function main() {
     )
   `;
   console.log(`✓ ${n}/11 extension indexes present, invoice_seq at ${next}`);
+
+  // `drizzle-kit push` emits DISABLE ROW LEVEL SECURITY for every table on
+  // every run, so this is checked rather than assumed.
+  const unprotected = await sql<{ tablename: string }[]>`
+    SELECT tablename FROM pg_tables
+    WHERE schemaname = 'public' AND NOT rowsecurity
+    ORDER BY tablename
+  `;
+  console.log(
+    unprotected.length === 0
+      ? "✓ row-level security enabled on every table"
+      : `✗ RLS OFF on: ${unprotected.map((r) => r.tablename).join(", ")}`,
+  );
+
   if (n !== 11) {
     console.error("✗ an extension index is missing — search or account uniqueness is broken");
     process.exit(1);
   }
+  if (unprotected.length > 0) process.exit(1);
   await sql.end();
 }
 

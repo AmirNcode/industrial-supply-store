@@ -76,6 +76,19 @@ const [{ hasSeq }] = await sql<{ hasSeq: boolean }[]>`
 `;
 console.log(`invoice_seq ${hasSeq ? "✓" : "✗ MISSING — invoice numbers will restart at 1"}`);
 
+// A managed provider's REST API reads these tables with a key that ships in
+// browser code. `drizzle-kit push` turns RLS off on every run, so it is worth
+// checking every time rather than once.
+const rlsOff = await sql<{ tablename: string }[]>`
+  SELECT tablename FROM pg_tables
+  WHERE schemaname = 'public' AND NOT rowsecurity ORDER BY tablename
+`;
+console.log(
+  rlsOff.length === 0
+    ? "row-level security ✓ on every table"
+    : `row-level security ✗ OFF on ${rlsOff.map((r) => r.tablename).join(", ")} — run db:extensions:remote`,
+);
+
 // Everything below reads the catalog tables, which is only meaningful once
 // they exist.
 if (missingTables.length > 0) {
@@ -141,6 +154,7 @@ const ok =
   parts.length > 0 &&
   missingObjs.length === 0 &&
   hasSeq &&
+  rlsOff.length === 0 &&
   !have.has("quotes");
 console.log(ok ? "\n✓ database looks correct" : "\n✗ something is wrong above");
 
