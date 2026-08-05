@@ -1,6 +1,6 @@
 import "server-only";
 import { sql } from "./index";
-import type { ImportSpecDef } from "@/lib/importCsv";
+import type { ImportSpecDef, ImportRow } from "@/lib/importCsv";
 
 /**
  * `filterable` rides along because the write half needs it: only a filterable
@@ -108,4 +108,221 @@ export function exportRow(p: ExportProduct, defs: readonly FamilySpecDef[]): str
     String(p.leadDays),
     p.inStock ? "yes" : "no",
   ];
+}
+
+/**
+ * Search text, matching `buildSearchText` in `src/seed/index.ts`.
+ *
+ * Kept identical on purpose: a product written here and a product written by
+ * the seeder have to be findable by the same query, and two conventions for
+ * one column is how that stops being true.
+ */
+function buildSearchText(
+  partNumber: string,
+  family: FamilyForImport,
+  specs: Record<string, string | number>,
+): string {
+  const specText = Object.values(specs)
+    .filter((v) => v !== null && v !== "")
+    .map((v) => String(v))
+    .join(" ");
+  return [
+    partNumber,
+    family.nameEn,
+    family.nameFa,
+    family.categoryNameEn,
+    family.categoryNameFa,
+    specText,
+  ]
+    .join(" ")
+    .slice(0, 2000);
+}
+
+export type ImportResult = {
+  inserted: number;
+  updated: number;
+  /** Part numbers that already exist in a different family. Non-empty means
+   *  nothing was written at all. */
+  conflicts: string[];
+};
+
+/** Thrown to roll the transaction back; never escapes this module. */
+class FamilyConflict extends Error {
+  constructor(readonly parts: string[]) {
+    super("part numbers belong to another family");
+  }
+}
+
+/** Postgres caps a statement's size, and the seeder already settled on this. */
+const CHUNK = 800;
+
+/**
+ * Write an import in one transaction.
+ *
+ * Five things move together, and dropping any one leaves the catalog wrong in
+ * a way that still renders:
+ *
+ *   1. `products` — the row itself.
+ *   2. `products.search_text` — the full-text column; stale text means the
+ *      product cannot be found by its own new specs.
+ *   3. `product_spec_values` — the facet index. Filters read this, not
+ *      `products.specs`, so skipping it makes filtered results silently wrong
+ *      while every page still looks fine.
+ *   4. `product_families.product_count` — shown on every family tile.
+ *   5. `categories.product_count` — rolled up to every ancestor.
+ *
+ * All-or-nothing, like the parse: a part number already owned by a different
+ * family aborts the whole import rather than being moved, because silently
+ * relocating a SKU between families is worse than refusing the file.
+ */
+export async function writeImport(
+  familyId: number,
+  rows: readonly ImportRow[],
+): Promise<ImportResult> {
+  const family = await getFamilyForImport(familyId);
+  if (!family) throw new Error(`No family ${familyId}`);
+  if (rows.length === 0) return { inserted: 0, updated: 0, conflicts: [] };
+
+  const filterable = new Set(family.defs.filter((d) => d.filterable).map((d) => d.key));
+  const numeric = new Set(family.defs.filter((d) => d.kind === "number").map((d) => d.key));
+
+  try {
+    return await sql.begin(async (tx) => {
+      const parts = rows.map((r) => r.partNumber);
+
+      // Checked inside the transaction so the rest of it sees the same
+      // snapshot, and so an abort here rolls back rather than half-writes.
+      const stolen = await tx<{ partNumber: string }[]>`
+        SELECT part_number AS "partNumber" FROM products
+        WHERE part_number = ANY(${parts}::text[]) AND family_id <> ${familyId}
+      `;
+      if (stolen.length > 0) throw new FamilyConflict(stolen.map((r) => r.partNumber));
+
+      // New products land after whatever is already in the family, so a
+      // partial file cannot reshuffle the products it does not mention.
+      const [{ maxSort }] = await tx<{ maxSort: number }[]>`
+        SELECT COALESCE(MAX(sort), 0)::int AS "maxSort"
+        FROM products WHERE family_id = ${familyId}
+      `;
+
+      let inserted = 0;
+      let updated = 0;
+      const touched: number[] = [];
+
+      for (let i = 0; i < rows.length; i += CHUNK) {
+        const chunk = rows.slice(i, i + CHUNK);
+        const result = await tx<{ id: number; inserted: boolean }[]>`
+          INSERT INTO products (part_number, family_id, specs, price_cents,
+                                pack_qty, lead_days, in_stock, search_text, sort)
+          SELECT u.part_number, ${familyId}, u.specs, u.price_cents, u.pack_qty,
+                 u.lead_days, u.in_stock::boolean, u.search_text,
+                 ${maxSort + i} + u.ord
+          FROM unnest(
+            ${chunk.map((r) => r.partNumber)}::text[],
+            ${chunk.map((r) => JSON.stringify(r.specs))}::jsonb[],
+            ${chunk.map((r) => r.priceCents)}::int[],
+            ${chunk.map((r) => r.packQty)}::int[],
+            ${chunk.map((r) => r.leadDays)}::int[],
+            -- Sent as text and cast here: postgres-js has no boolean-array
+            -- type to infer, so a boolean[] parameter arrives as a scalar
+            -- boolean and Postgres refuses the cast.
+            ${chunk.map((r) => (r.inStock ? "t" : "f"))}::text[],
+            ${chunk.map((r) => buildSearchText(r.partNumber, family, r.specs))}::text[]
+          ) WITH ORDINALITY AS u(part_number, specs, price_cents, pack_qty,
+                                 lead_days, in_stock, search_text, ord)
+          -- family_id is deliberately absent from the update list: a part
+          -- number that already exists elsewhere was refused above, so
+          -- reaching here means the family already matches.
+          ON CONFLICT (part_number) DO UPDATE SET
+            specs = EXCLUDED.specs,
+            price_cents = EXCLUDED.price_cents,
+            pack_qty = EXCLUDED.pack_qty,
+            lead_days = EXCLUDED.lead_days,
+            in_stock = EXCLUDED.in_stock,
+            search_text = EXCLUDED.search_text
+          -- xmax is 0 on a fresh insert and the updating transaction's id
+          -- otherwise; it is the only way to tell the two apart from one
+          -- statement.
+          RETURNING id, (xmax = 0) AS inserted
+        `;
+        for (const r of result) {
+          touched.push(r.id);
+          if (r.inserted) inserted++;
+          else updated++;
+        }
+      }
+
+      // Replace rather than merge: a spec that lost its value in the file must
+      // lose its facet row too, or the product stays filterable under a value
+      // it no longer has.
+      await tx`DELETE FROM product_spec_values WHERE product_id = ANY(${touched}::int[])`;
+
+      const byPart = new Map(rows.map((r) => [r.partNumber, r]));
+      const idRows = await tx<{ id: number; partNumber: string }[]>`
+        SELECT id, part_number AS "partNumber" FROM products
+        WHERE id = ANY(${touched}::int[])
+      `;
+
+      const psv: { productId: number; key: string; text: string; num: number | null }[] = [];
+      for (const { id, partNumber } of idRows) {
+        const row = byPart.get(partNumber);
+        if (!row) continue;
+        for (const [key, value] of Object.entries(row.specs)) {
+          if (!filterable.has(key)) continue;
+          if (value === "" || value === null || value === undefined) continue;
+          psv.push({
+            productId: id,
+            key,
+            text: specCell(value),
+            num: numeric.has(key) && typeof value === "number" ? value : null,
+          });
+        }
+      }
+
+      for (let i = 0; i < psv.length; i += CHUNK) {
+        const chunk = psv.slice(i, i + CHUNK);
+        await tx`
+          INSERT INTO product_spec_values (product_id, family_id, spec_key, val_text, val_num)
+          SELECT u.product_id, ${familyId}, u.spec_key, u.val_text,
+                 NULLIF(u.val_num, '')::double precision
+          FROM unnest(
+            ${chunk.map((r) => r.productId)}::int[],
+            ${chunk.map((r) => r.key)}::text[],
+            ${chunk.map((r) => r.text)}::text[],
+            -- Also text: an all-null numeric array gives postgres-js nothing
+            -- to infer an element type from.
+            ${chunk.map((r) => (r.num === null ? "" : String(r.num)))}::text[]
+          ) AS u(product_id, spec_key, val_text, val_num)
+        `;
+      }
+
+      await tx`
+        UPDATE product_families SET product_count =
+          (SELECT count(*)::int FROM products WHERE family_id = ${familyId})
+        WHERE id = ${familyId}
+      `;
+
+      // The seeder's roll-up, unchanged. Every ancestor of the family's
+      // category has to move, not just the leaf.
+      await tx`
+        UPDATE categories c SET product_count = COALESCE(sub.n, 0)
+        FROM (
+          SELECT anc.id, SUM(f.product_count) AS n
+          FROM categories anc
+          JOIN categories desc_c
+            ON desc_c.path = anc.path OR desc_c.path LIKE anc.path || '/%'
+          JOIN product_families f ON f.category_id = desc_c.id
+          GROUP BY anc.id
+        ) sub
+        WHERE c.id = sub.id
+      `;
+
+      return { inserted, updated, conflicts: [] };
+    });
+  } catch (e) {
+    if (e instanceof FamilyConflict) {
+      return { inserted: 0, updated: 0, conflicts: e.parts };
+    }
+    throw e;
+  }
 }
