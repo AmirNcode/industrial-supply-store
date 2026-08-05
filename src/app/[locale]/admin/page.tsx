@@ -154,14 +154,19 @@ export default async function AdminPage({
             {formatInt(orders.length, l)}
           </span>
         </h1>
-        {!DEMO_MODE && (
-          <form action={logoutAction}>
-            <input type="hidden" name="locale" value={l} />
-            <button type="submit" className="text-[11px] underline">
-              {t.signOut}
-            </button>
-          </form>
-        )}
+        <div className="flex items-baseline gap-3">
+          <Link href={`/${l}/admin/import`} className="text-[11px]">
+            {t.importProducts}
+          </Link>
+          {!DEMO_MODE && (
+            <form action={logoutAction}>
+              <input type="hidden" name="locale" value={l} />
+              <button type="submit" className="text-[11px] underline">
+                {t.signOut}
+              </button>
+            </form>
+          )}
+        </div>
       </div>
 
       <form action={saveFxAction} id="fx-save" className="hidden">

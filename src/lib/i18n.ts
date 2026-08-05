@@ -242,6 +242,25 @@ const en = {
   trackHaveAccount:
     "With an account you can see prices, invoices and every order in one place.",
   trackFromSubmitted: "You can check on it any time from the tracking page.",
+  // Import
+  importProducts: "Import products",
+  importIntro:
+    "Download a family's template or its current products, edit in Excel, and upload the same file back. Nothing is written unless every row is valid.",
+  downloadTemplate: "Template",
+  exportProducts: "Export",
+  uploadCsv: "Upload CSV",
+  importSummary: "Imported: {inserted} new, {updated} updated.",
+  importNothingWritten: "Nothing was imported. Fix these and upload again:",
+  importRow: "Row",
+  importColumn: "Column",
+  importProblem: "Problem",
+  importTooLarge: "That file is too large. The limit is 2 MB and 5,000 rows.",
+  importNoFile: "Choose a CSV file first.",
+  importFamilyGone: "That family no longer exists.",
+  importWrongFamily:
+    "These part numbers already belong to a different family, so nothing was imported:",
+  importSignInFirst: "Sign in on the admin page first.",
+  importReadOnly: "Importing is disabled in demo mode.",
 };
 
 /**
@@ -458,6 +477,25 @@ const fa: typeof en = {
   trackHaveAccount:
     "با ساخت حساب کاربری می‌توانید قیمت‌ها، صورتحساب‌ها و همه سفارش‌ها را یکجا ببینید.",
   trackFromSubmitted: "هر زمان می‌توانید از صفحه پیگیری وضعیت آن را ببینید.",
+  // Import
+  importProducts: "بارگذاری گروهی کالا",
+  importIntro:
+    "قالب یک خانواده یا کالاهای فعلی آن را دریافت کنید، در اکسل ویرایش کنید و همان فایل را بارگذاری کنید. تا وقتی همه سطرها معتبر نباشند چیزی ثبت نمی‌شود.",
+  downloadTemplate: "قالب",
+  exportProducts: "خروجی",
+  uploadCsv: "بارگذاری فایل CSV",
+  importSummary: "بارگذاری شد: {inserted} کالای جدید، {updated} به‌روزرسانی.",
+  importNothingWritten: "هیچ داده‌ای ثبت نشد. موارد زیر را اصلاح و دوباره بارگذاری کنید:",
+  importRow: "سطر",
+  importColumn: "ستون",
+  importProblem: "اشکال",
+  importTooLarge: "حجم فایل بیش از حد مجاز است. حداکثر ۲ مگابایت و ۵٬۰۰۰ سطر.",
+  importNoFile: "ابتدا یک فایل CSV انتخاب کنید.",
+  importFamilyGone: "این خانواده دیگر وجود ندارد.",
+  importWrongFamily:
+    "این شماره فنی‌ها به خانواده دیگری تعلق دارند، بنابراین چیزی ثبت نشد:",
+  importSignInFirst: "ابتدا در صفحه مدیریت وارد شوید.",
+  importReadOnly: "بارگذاری در حالت نمایشی غیرفعال است.",
 };
 
 export type Dict = typeof en;
