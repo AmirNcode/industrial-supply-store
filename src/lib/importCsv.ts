@@ -228,3 +228,21 @@ export function toCsv(
   for (const record of records) lines.push(record.map(quote).join(","));
   return lines.join("\n") + "\n";
 }
+
+/**
+ * A CSV download Excel will open correctly.
+ *
+ * The byte-order mark is the point: Excel on Windows reads a UTF-8 CSV without
+ * one as Windows-1252, which turns every Persian name into mojibake. The
+ * parser above sets `bom: true` for exactly this reason, so a file downloaded
+ * here still uploads.
+ */
+export function csvAttachment(csv: string, filename: string): Response {
+  return new Response("﻿" + csv, {
+    headers: {
+      "content-type": "text/csv; charset=utf-8",
+      "content-disposition": `attachment; filename="${filename}"`,
+      "cache-control": "no-store",
+    },
+  });
+}
