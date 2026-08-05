@@ -230,6 +230,18 @@ const en = {
   noAccountForEmail: "No account exists for that email address.",
   invoiceCancelled: "CANCELLED — this invoice is void and must not be paid.",
   invoiceVoid: "Not payable",
+  // Guest tracking
+  trackOrder: "Track an order",
+  trackIntro:
+    "Enter your order reference and the email address you used. Both must match.",
+  trackRefLabel: "Order reference",
+  trackSubmit: "Find order",
+  trackNotFound: "No order found with that reference and email address.",
+  trackCourier: "Courier",
+  trackNoTracking: "No tracking number yet.",
+  trackHaveAccount:
+    "With an account you can see prices, invoices and every order in one place.",
+  trackFromSubmitted: "You can check on it any time from the tracking page.",
 };
 
 /**
@@ -434,6 +446,18 @@ const fa: typeof en = {
   noAccountForEmail: "حسابی با این ایمیل وجود ندارد.",
   invoiceCancelled: "لغو شده — این صورتحساب باطل است و نباید پرداخت شود.",
   invoiceVoid: "قابل پرداخت نیست",
+  // Guest tracking
+  trackOrder: "پیگیری سفارش",
+  trackIntro:
+    "شماره سفارش و ایمیلی که با آن ثبت کرده‌اید را وارد کنید. هر دو باید مطابقت داشته باشند.",
+  trackRefLabel: "شماره سفارش",
+  trackSubmit: "جستجوی سفارش",
+  trackNotFound: "سفارشی با این شماره و ایمیل یافت نشد.",
+  trackCourier: "شرکت حمل",
+  trackNoTracking: "هنوز کد رهگیری ثبت نشده است.",
+  trackHaveAccount:
+    "با ساخت حساب کاربری می‌توانید قیمت‌ها، صورتحساب‌ها و همه سفارش‌ها را یکجا ببینید.",
+  trackFromSubmitted: "هر زمان می‌توانید از صفحه پیگیری وضعیت آن را ببینید.",
 };
 
 export type Dict = typeof en;

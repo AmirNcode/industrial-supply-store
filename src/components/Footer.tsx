@@ -7,6 +7,7 @@ export function Footer({ locale }: { locale: Locale }) {
     { href: `/${locale}`, label: t.home },
     { href: `/${locale}/quick-order`, label: t.quickOrder },
     { href: `/${locale}/cart`, label: t.cart },
+    { href: `/${locale}/track`, label: t.trackOrder },
     { href: `/${locale}/admin`, label: t.admin },
   ];
   return (

@@ -27,6 +27,14 @@ export default async function QuoteSubmittedPage({
         </p>
       )}
       <p className="mt-4 text-[13px] text-[var(--color-ink-muted)]">{t.quoteNext}</p>
+      <p className="mt-2 text-[13px] text-[var(--color-ink-muted)]">
+        {t.trackFromSubmitted}{" "}
+        {/* The reference is carried across so only the email is left to type.
+            No result is shown until both are given. */}
+        <Link href={ref ? `/${l}/track?ref=${encodeURIComponent(ref)}` : `/${l}/track`}>
+          {t.trackOrder}
+        </Link>
+      </p>
       <p className="mt-6">
         <Link href={`/${l}`} className="btn-primary inline-block hover:no-underline">
           {t.backToCatalog}

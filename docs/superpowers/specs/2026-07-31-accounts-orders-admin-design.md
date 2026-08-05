@@ -484,6 +484,13 @@ Stated so they are choices rather than surprises.
   shared state across serverless instances; deferred with the rest of auth
   hardening. The uniform error messages limit what an attacker learns per
   attempt, but do not limit the attempts.
+- **The tracking form submits by GET**, so the customer's email appears in the
+  URL, and therefore in their browser history and our access logs. That buys a
+  result that survives a reload and can be bookmarked. The route is `noindex`
+  so a result URL cannot be picked up by a search engine, and the browser's
+  default referrer policy keeps the query string from leaking cross-origin.
+  Moving to POST would close the log exposure at the cost of both those
+  properties.
 - **Sessions cannot be revoked individually**, and a staff password reset does
   not end the customer's existing sessions. The signed cookie commits only to a
   user id and an expiry, so a token issued before the reset stays valid for the
