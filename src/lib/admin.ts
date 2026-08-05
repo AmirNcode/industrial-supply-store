@@ -13,9 +13,34 @@ import { DEMO_MODE } from "./demo";
  */
 const COOKIE = "isupply_admin";
 
+/** The value `.env.example` ships, so it is the one people forget to change. */
+const DEV_DEFAULT = "changeme";
+
+/**
+ * Production refuses the default rather than falling back to it.
+ *
+ * This page is the order inbox: every customer's company, contact name, email,
+ * phone and delivery address, plus invoice issuance, customer password resets,
+ * a full price-list export and a bulk overwrite of the catalog. A shipped
+ * default password makes all of that world-accessible to anyone who reads the
+ * repository, and nothing about the running site looks wrong.
+ *
+ * Resolved per call rather than at import so this throws when someone opens
+ * /admin, not while the site is being built — the build has no business
+ * needing the admin credential.
+ */
+function adminPassword(): string {
+  const p = process.env.ADMIN_PASSWORD;
+  if (process.env.NODE_ENV === "production" && (!p || p === DEV_DEFAULT)) {
+    throw new Error(
+      "ADMIN_PASSWORD must be set to something other than the example value in production",
+    );
+  }
+  return p || DEV_DEFAULT;
+}
+
 function expectedToken(): string {
-  const secret = process.env.ADMIN_PASSWORD ?? "changeme";
-  return createHmac("sha256", secret).update("isupply-admin-v1").digest("hex");
+  return createHmac("sha256", adminPassword()).update("isupply-admin-v1").digest("hex");
 }
 
 function safeEqual(a: string, b: string): boolean {
@@ -33,8 +58,7 @@ export async function isAdmin(): Promise<boolean> {
 }
 
 export async function signInAdmin(password: string): Promise<boolean> {
-  const expected = process.env.ADMIN_PASSWORD ?? "changeme";
-  if (!safeEqual(password, expected)) return false;
+  if (!safeEqual(password, adminPassword())) return false;
   const jar = await cookies();
   jar.set(COOKIE, expectedToken(), {
     httpOnly: true,

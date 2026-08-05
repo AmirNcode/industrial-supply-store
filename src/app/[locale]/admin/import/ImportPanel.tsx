@@ -129,10 +129,10 @@ function Result({ state, locale }: { state: ImportState; locale: Locale }) {
     return <Problem>{text}</Problem>;
   }
 
-  if (state.kind === "conflicts") {
+  if (state.kind === "conflicts" || state.kind === "case-variants") {
     return (
       <Problem>
-        {t.importWrongFamily}{" "}
+        {state.kind === "conflicts" ? t.importWrongFamily : t.importCaseVariant}{" "}
         <span className="tech">{state.parts.slice(0, MAX_SHOWN).join(", ")}</span>
       </Problem>
     );

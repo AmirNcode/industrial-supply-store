@@ -141,15 +141,22 @@ function buildSearchText(
 export type ImportResult = {
   inserted: number;
   updated: number;
-  /** Part numbers that already exist in a different family. Non-empty means
-   *  nothing was written at all. */
+  /** Part numbers that already exist in a different family. */
   conflicts: string[];
+  /** Part numbers that exist already but spelled with different case, which
+   *  the upsert would duplicate rather than update. Each entry is the
+   *  catalog's spelling, so the fix is to copy it. */
+  caseVariants: string[];
+  /** Either list being non-empty means nothing at all was written. */
 };
 
 /** Thrown to roll the transaction back; never escapes this module. */
-class FamilyConflict extends Error {
-  constructor(readonly parts: string[]) {
-    super("part numbers belong to another family");
+class ImportRefused extends Error {
+  constructor(
+    readonly conflicts: string[],
+    readonly caseVariants: string[],
+  ) {
+    super("import refused");
   }
 }
 
@@ -181,7 +188,9 @@ export async function writeImport(
 ): Promise<ImportResult> {
   const family = await getFamilyForImport(familyId);
   if (!family) throw new Error(`No family ${familyId}`);
-  if (rows.length === 0) return { inserted: 0, updated: 0, conflicts: [] };
+  if (rows.length === 0) {
+    return { inserted: 0, updated: 0, conflicts: [], caseVariants: [] };
+  }
 
   const filterable = new Set(family.defs.filter((d) => d.filterable).map((d) => d.key));
   const numeric = new Set(family.defs.filter((d) => d.kind === "number").map((d) => d.key));
@@ -190,13 +199,34 @@ export async function writeImport(
     return await sql.begin(async (tx) => {
       const parts = rows.map((r) => r.partNumber);
 
+      // Matched case-insensitively, because ON CONFLICT below is not.
+      //
+      // The unique index is on the raw column, so uploading "abc-100" where
+      // the catalog holds "ABC-100" does not conflict — it inserts a second
+      // product with the same part number in a different case, which every
+      // lookup in the app (all of which upper-case first) would then find
+      // twice. Refusing is the only outcome here that is not a guess about
+      // which spelling was meant.
+      //
       // Checked inside the transaction so the rest of it sees the same
       // snapshot, and so an abort here rolls back rather than half-writes.
-      const stolen = await tx<{ partNumber: string }[]>`
-        SELECT part_number AS "partNumber" FROM products
-        WHERE part_number = ANY(${parts}::text[]) AND family_id <> ${familyId}
+      const existing = await tx<{ partNumber: string; familyId: number }[]>`
+        SELECT part_number AS "partNumber", family_id AS "familyId"
+        FROM products
+        WHERE upper(part_number) = ANY(${parts.map((p) => p.toUpperCase())}::text[])
       `;
-      if (stolen.length > 0) throw new FamilyConflict(stolen.map((r) => r.partNumber));
+      const typedAs = new Map(rows.map((r) => [r.partNumber.toUpperCase(), r.partNumber]));
+      const conflicts: string[] = [];
+      const caseVariants: string[] = [];
+      for (const e of existing) {
+        if (e.familyId !== familyId) conflicts.push(e.partNumber);
+        else if (typedAs.get(e.partNumber.toUpperCase()) !== e.partNumber) {
+          caseVariants.push(e.partNumber);
+        }
+      }
+      if (conflicts.length > 0 || caseVariants.length > 0) {
+        throw new ImportRefused(conflicts, caseVariants);
+      }
 
       // New products land after whatever is already in the family, so a
       // partial file cannot reshuffle the products it does not mention.
@@ -317,11 +347,16 @@ export async function writeImport(
         WHERE c.id = sub.id
       `;
 
-      return { inserted, updated, conflicts: [] };
+      return { inserted, updated, conflicts: [], caseVariants: [] };
     });
   } catch (e) {
-    if (e instanceof FamilyConflict) {
-      return { inserted: 0, updated: 0, conflicts: e.parts };
+    if (e instanceof ImportRefused) {
+      return {
+        inserted: 0,
+        updated: 0,
+        conflicts: e.conflicts,
+        caseVariants: e.caseVariants,
+      };
     }
     throw e;
   }

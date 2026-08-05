@@ -16,6 +16,7 @@ export type ImportState =
   | { kind: "ok"; familyId: number; inserted: number; updated: number }
   | { kind: "errors"; familyId: number; errors: ImportError[] }
   | { kind: "conflicts"; familyId: number; parts: string[] }
+  | { kind: "case-variants"; familyId: number; parts: string[] }
   | { kind: "message"; familyId: number; message: "no-file" | "too-large" | "not-found" };
 
 const MAX_BYTES = 2_000_000;
@@ -57,6 +58,9 @@ export async function importCsvAction(
   const result = await writeImport(familyId, rows);
   if (result.conflicts.length > 0) {
     return { kind: "conflicts", familyId, parts: result.conflicts };
+  }
+  if (result.caseVariants.length > 0) {
+    return { kind: "case-variants", familyId, parts: result.caseVariants };
   }
 
   // Product counts and facets have changed, and every category page is

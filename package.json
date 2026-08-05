@@ -16,7 +16,8 @@
     "db:reset": "tsx src/seed/reset.ts && drizzle-kit push && tsx src/seed/index.ts",
     "db:rename-orders": "tsx scripts/rename-quotes-to-orders.mts",
     "i18n:missing": "tsx scripts/find-untranslated.mjs",
-    "db:push:remote": "dotenv -e .env.production.local -- drizzle-kit push",
+    "db:push:remote": "dotenv -e .env.production.local -- drizzle-kit push && npm run db:extensions:remote",
+    "db:extensions:remote": "dotenv -e .env.production.local -- tsx scripts/apply-extensions.mts",
     "db:seed:remote": "dotenv -e .env.production.local -v ALLOW_REMOTE_SEED=1 -- tsx src/seed/index.ts",
     "db:setup:remote": "npm run db:push:remote && npm run db:seed:remote",
     "db:verify:remote": "dotenv -e .env.production.local -- tsx scripts/verify-remote.mts"
