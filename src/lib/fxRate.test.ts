@@ -53,3 +53,13 @@ test("parseRate accepts whole numbers and rejects everything else", () => {
   assert.equal(parseRate("abc"), null);
   assert.equal(parseRate(""), null);
 });
+
+test("parseRate accepts Persian and Arabic-Indic digits", () => {
+  // The admin panel runs in Persian, so a Persian keyboard produces these by
+  // default. Number() reads them as NaN, so a correctly typed rate was being
+  // rejected as unparseable.
+  assert.equal(parseRate("۱۱۸۵۰۰"), 118500);
+  assert.equal(parseRate("١١٨٥٠٠"), 118500);
+  assert.equal(parseRate("۱۱۸٬۵۰۰"), 118500);
+  assert.equal(parseRate("۱۱۸,۵۰۰"), 118500);
+});

@@ -50,9 +50,25 @@ export function isPlausibleRate(rate: number, envRate: number): boolean {
   return rate >= env / 10 && rate <= env * 10;
 }
 
+/**
+ * Persian (۰-۹) and Arabic-Indic (٠-٩) digits map to their Latin equivalents.
+ *
+ * The admin panel is available in Persian, so a Persian keyboard produces
+ * these by default. `Number("۱۴۵۰۰۰")` is NaN, which made a correctly typed
+ * rate read as unparseable — and the rejection message says nothing about
+ * which digits are acceptable.
+ */
+function latinDigits(s: string): string {
+  return s.replace(/[۰-۹٠-٩]/g, (d) => {
+    const code = d.charCodeAt(0);
+    const base = code >= 0x06f0 ? 0x06f0 : 0x0660;
+    return String(code - base);
+  });
+}
+
 /** Accepts what someone actually types, including thousands separators. */
 export function parseRate(raw: string): number | null {
-  const cleaned = raw.trim().replace(/[,\s٬،]/g, "");
+  const cleaned = latinDigits(raw.trim()).replace(/[,\s٬،]/g, "");
   if (cleaned === "") return null;
   const n = Number(cleaned);
   return Number.isInteger(n) && n > 0 ? n : null;

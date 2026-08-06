@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { isAdmin } from "@/lib/admin";
 import { DEMO_MODE } from "@/lib/demo";
 import { getFamiliesGrouped } from "@/db/importQueries";
@@ -26,18 +26,7 @@ export default async function ImportPage({
   const signedIn = await isAdmin();
   const authorised = DEMO_MODE || signedIn;
 
-  if (!authorised) {
-    return (
-      <main className="mx-auto max-w-[520px] px-3 pt-8">
-        <h1 className="mb-2 border-b border-[var(--color-ink)] pb-1 text-[17px] font-bold">
-          {t.importProducts}
-        </h1>
-        <p className="text-[12px]">
-          <Link href={`/${l}/admin`}>{t.importSignInFirst}</Link>
-        </p>
-      </main>
-    );
-  }
+  if (!authorised) redirect(`/${l}/admin/login`);
 
   const families = await getFamiliesGrouped();
 

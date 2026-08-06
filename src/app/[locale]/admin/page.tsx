@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { sql } from "@/db";
 import { isAdmin } from "@/lib/admin";
@@ -13,7 +13,6 @@ import { FxRatePanel } from "@/components/FxRatePanel";
 import { OrderStatusPill, STATUS_LABEL_KEY } from "@/components/OrderStatusPill";
 import {
   issueInvoiceAction,
-  loginAction,
   logoutAction,
   saveFxAction,
   setOrderStatusAction,
@@ -83,28 +82,9 @@ export default async function AdminPage({
   // demo data, and the RFQ form warns before anything is submitted.
   const authorised = DEMO_MODE || (await isAdmin());
 
-  if (!authorised) {
-    return (
-      <main className="mx-auto max-w-[360px] px-3 pt-16">
-        <h1 className="mb-3 border-b border-[var(--color-ink)] pb-1 text-[15px] font-bold">
-          {t.admin}
-        </h1>
-        {error && (
-          <p className="mb-2 text-[12px] text-[#a3312a]">{t.wrongPassword}</p>
-        )}
-        <form action={loginAction}>
-          <input type="hidden" name="locale" value={l} />
-          <label className="block text-[12px]">
-            <span className="mb-0.5 block font-bold">{t.password}</span>
-            <input type="password" name="password" className="w-full" autoFocus />
-          </label>
-          <button type="submit" className="btn-primary mt-3 w-full">
-            {t.signIn}
-          </button>
-        </form>
-      </main>
-    );
-  }
+  // The password form lives at /admin/login and nowhere else, so there is no
+  // second copy of it to drift out of step with this one.
+  if (!authorised) redirect(`/${l}/admin/login`);
 
   const [fxSettings, rate] = await Promise.all([getFxSettings(), getFxRate()]);
 

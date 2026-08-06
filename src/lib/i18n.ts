@@ -261,7 +261,6 @@ const en = {
     "These part numbers already belong to a different family, so nothing was imported:",
   importCaseVariant:
     "These part numbers already exist with different capitalisation. Use the catalog's spelling exactly, or nothing will match:",
-  importSignInFirst: "Sign in on the admin page first.",
   importReadOnly: "Importing is disabled in demo mode.",
 };
 
@@ -498,7 +497,6 @@ const fa: typeof en = {
     "این شماره فنی‌ها به خانواده دیگری تعلق دارند، بنابراین چیزی ثبت نشد:",
   importCaseVariant:
     "این شماره فنی‌ها با حروف بزرگ و کوچک متفاوت از قبل وجود دارند. دقیقاً از املای موجود در کاتالوگ استفاده کنید:",
-  importSignInFirst: "ابتدا در صفحه مدیریت وارد شوید.",
   importReadOnly: "بارگذاری در حالت نمایشی غیرفعال است.",
 };
 

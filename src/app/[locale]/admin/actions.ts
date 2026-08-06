@@ -28,7 +28,9 @@ import { assertTransition, isOrderStatus } from "@/lib/orders";
 export async function loginAction(formData: FormData): Promise<void> {
   const locale = safeLocale(formData);
   const ok = await signInAdmin(String(formData.get("password") ?? ""));
-  redirect(`/${locale}/admin${ok ? "" : "?error=1"}`);
+  // A failure returns to the form rather than to /admin, which would only
+  // bounce straight back here and lose the error message on the way.
+  redirect(ok ? `/${locale}/admin` : `/${locale}/admin/login?error=1`);
 }
 
 export async function logoutAction(formData: FormData): Promise<void> {
