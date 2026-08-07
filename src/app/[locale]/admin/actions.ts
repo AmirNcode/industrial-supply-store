@@ -36,7 +36,10 @@ export async function loginAction(formData: FormData): Promise<void> {
 export async function logoutAction(formData: FormData): Promise<void> {
   const locale = safeLocale(formData);
   await signOutAdmin();
-  redirect(`/${locale}/admin`);
+  // Straight to the form. /admin would redirect to /admin/orders, which would
+  // redirect back here anyway now the cookie is gone — three hops to land in
+  // the same place.
+  redirect(`/${locale}/admin/login`);
 }
 
 export async function saveFxAction(formData: FormData): Promise<void> {
@@ -49,9 +52,9 @@ export async function saveFxAction(formData: FormData): Promise<void> {
   let manualRate: number | null = null;
   if (mode === "manual") {
     const parsed = parseRate(String(formData.get("rate") ?? ""));
-    if (parsed === null) redirect(`/${locale}/admin?fx=invalid`);
+    if (parsed === null) redirect(`/${locale}/admin/settings?fx=invalid`);
     if (!isPlausibleRate(parsed, envFxRate())) {
-      redirect(`/${locale}/admin?fx=range`);
+      redirect(`/${locale}/admin/settings?fx=range`);
     }
     manualRate = parsed;
   }
@@ -60,7 +63,7 @@ export async function saveFxAction(formData: FormData): Promise<void> {
   // The catalog is statically rendered with revalidate = 3600, so without this
   // a rate change would take up to an hour to reach the pages that show it.
   revalidatePath("/", "layout");
-  redirect(`/${locale}/admin?fx=saved`);
+  redirect(`/${locale}/admin/settings?fx=saved`);
 }
 
 /**
@@ -83,14 +86,14 @@ export async function setOrderStatusAction(formData: FormData): Promise<void> {
   const id = Number(formData.get("orderId"));
   const to = String(formData.get("status") ?? "");
   if (!Number.isInteger(id) || id <= 0 || !isOrderStatus(to)) {
-    redirect(withFilter(`/${locale}/admin?error=bad-request`, statusFilter));
+    redirect(withFilter(`/${locale}/admin/orders?error=bad-request`, statusFilter));
   }
 
   const [row] = await sql<{ status: string }[]>`
     SELECT status FROM orders WHERE id = ${id}
   `;
   if (!row || !isOrderStatus(row.status)) {
-    redirect(withFilter(`/${locale}/admin?error=not-found`, statusFilter));
+    redirect(withFilter(`/${locale}/admin/orders?error=not-found`, statusFilter));
   }
 
   // Throws rather than redirecting: reaching here with an illegal pair means a
@@ -114,7 +117,7 @@ export async function setOrderStatusAction(formData: FormData): Promise<void> {
     const tracking = String(formData.get("trackingNumber") ?? "").trim();
     // The whole point of this state is showing the customer a tracking number.
     if (!courier || !tracking) {
-      redirect(withFilter(`/${locale}/admin?error=tracking`, statusFilter));
+      redirect(withFilter(`/${locale}/admin/orders?error=tracking`, statusFilter));
     }
     const result = await sql`
       UPDATE orders
@@ -123,7 +126,7 @@ export async function setOrderStatusAction(formData: FormData): Promise<void> {
       WHERE id = ${id} AND status = ${row.status}
     `;
     if (result.count === 0) {
-      redirect(withFilter(`/${locale}/admin?error=conflict`, statusFilter));
+      redirect(withFilter(`/${locale}/admin/orders?error=conflict`, statusFilter));
     }
   } else if (to === "preparing") {
     const result = await sql`
@@ -131,7 +134,7 @@ export async function setOrderStatusAction(formData: FormData): Promise<void> {
       WHERE id = ${id} AND status = ${row.status}
     `;
     if (result.count === 0) {
-      redirect(withFilter(`/${locale}/admin?error=conflict`, statusFilter));
+      redirect(withFilter(`/${locale}/admin/orders?error=conflict`, statusFilter));
     }
   } else if (to === "delivered") {
     const result = await sql`
@@ -139,7 +142,7 @@ export async function setOrderStatusAction(formData: FormData): Promise<void> {
       WHERE id = ${id} AND status = ${row.status}
     `;
     if (result.count === 0) {
-      redirect(withFilter(`/${locale}/admin?error=conflict`, statusFilter));
+      redirect(withFilter(`/${locale}/admin/orders?error=conflict`, statusFilter));
     }
   } else if (to === "cancelled") {
     const result = await sql`
@@ -147,17 +150,17 @@ export async function setOrderStatusAction(formData: FormData): Promise<void> {
       WHERE id = ${id} AND status = ${row.status}
     `;
     if (result.count === 0) {
-      redirect(withFilter(`/${locale}/admin?error=conflict`, statusFilter));
+      redirect(withFilter(`/${locale}/admin/orders?error=conflict`, statusFilter));
     }
   } else {
     // 'received' and 'invoiced' are not reachable here: nothing transitions to
     // 'received', and 'invoiced' belongs to issueInvoiceAction, which has the
     // prices and the payment link this action does not.
-    redirect(withFilter(`/${locale}/admin?error=bad-request`, statusFilter));
+    redirect(withFilter(`/${locale}/admin/orders?error=bad-request`, statusFilter));
   }
 
   revalidatePath("/", "layout");
-  redirect(withFilter(`/${locale}/admin?ok=status`, statusFilter));
+  redirect(withFilter(`/${locale}/admin/orders?ok=status`, statusFilter));
 }
 
 /** True for a string that parses as an absolute `http:`/`https:` URL. */
@@ -195,11 +198,11 @@ export async function issueInvoiceAction(formData: FormData): Promise<void> {
   const statusFilter = String(formData.get("statusFilter") ?? "");
   const id = Number(formData.get("orderId"));
   if (!Number.isInteger(id) || id <= 0) {
-    redirect(withFilter(`/${locale}/admin?error=bad-request`, statusFilter));
+    redirect(withFilter(`/${locale}/admin/orders?error=bad-request`, statusFilter));
   }
 
   const paymentUrl = String(formData.get("paymentUrl") ?? "").trim();
-  if (!paymentUrl) redirect(withFilter(`/${locale}/admin?error=payment-link`, statusFilter));
+  if (!paymentUrl) redirect(withFilter(`/${locale}/admin/orders?error=payment-link`, statusFilter));
 
   // The `type="url"` input is a client-side check only, trivially bypassed by
   // posting the form directly. This renders as plain text today, but a later
@@ -208,14 +211,14 @@ export async function issueInvoiceAction(formData: FormData): Promise<void> {
   // the scheme is validated here, at write time, rather than trusted from the
   // browser.
   if (!isHttpUrl(paymentUrl)) {
-    redirect(withFilter(`/${locale}/admin?error=payment-link`, statusFilter));
+    redirect(withFilter(`/${locale}/admin/orders?error=payment-link`, statusFilter));
   }
 
   const [order] = await sql<{ status: string }[]>`
     SELECT status FROM orders WHERE id = ${id}
   `;
   if (!order || !isOrderStatus(order.status)) {
-    redirect(withFilter(`/${locale}/admin?error=not-found`, statusFilter));
+    redirect(withFilter(`/${locale}/admin/orders?error=not-found`, statusFilter));
   }
   assertTransition(order.status, "invoiced");
 
@@ -230,7 +233,7 @@ export async function issueInvoiceAction(formData: FormData): Promise<void> {
     const raw = String(formData.get(`price_${row.id}`) ?? "").trim();
     const dollars = Number(raw);
     if (raw === "" || !Number.isFinite(dollars) || dollars < 0) {
-      redirect(withFilter(`/${locale}/admin?error=prices`, statusFilter));
+      redirect(withFilter(`/${locale}/admin/orders?error=prices`, statusFilter));
     }
     priced.push({ id: row.id, cents: Math.round(dollars * 100) });
   }
@@ -271,13 +274,13 @@ export async function issueInvoiceAction(formData: FormData): Promise<void> {
     });
   } catch (err) {
     if (err instanceof OrderConflict) {
-      redirect(withFilter(`/${locale}/admin?error=conflict`, statusFilter));
+      redirect(withFilter(`/${locale}/admin/orders?error=conflict`, statusFilter));
     }
     throw err;
   }
 
   revalidatePath("/", "layout");
-  redirect(withFilter(`/${locale}/admin?ok=invoiced`, statusFilter));
+  redirect(withFilter(`/${locale}/admin/orders?ok=invoiced`, statusFilter));
 }
 
 /**
@@ -294,7 +297,7 @@ export async function resetCustomerPasswordAction(formData: FormData): Promise<v
   const email = String(formData.get("email") ?? "").trim();
 
   const userId = await findUserIdByEmail(email);
-  if (!userId) redirect(`/${locale}/admin?error=no-account`);
+  if (!userId) redirect(`/${locale}/admin/orders?error=no-account`);
 
   const generated = randomBytes(9).toString("base64url");
   await setPassword(userId, await hashPassword(generated));
@@ -317,5 +320,5 @@ export async function resetCustomerPasswordAction(formData: FormData): Promise<v
     path: "/",
     maxAge: 30,
   });
-  redirect(`/${locale}/admin?ok=password`);
+  redirect(`/${locale}/admin/orders?ok=password`);
 }
