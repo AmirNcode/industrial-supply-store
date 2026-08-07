@@ -117,6 +117,28 @@ export default async function AccountPage({
                   <strong className="tech ms-auto text-[13px]">
                     {formatPrice(o.totalCents, l, o.fxRateToToman ?? rate)}
                   </strong>
+
+                  {/* The action comes to the customer rather than waiting to be
+                      found. An order sitting at `invoiced` is waiting on them,
+                      and that was previously only discoverable by opening it. */}
+                  {o.status === "invoiced" && o.paymentUrl && (
+                    <a
+                      href={o.paymentUrl}
+                      className="btn-primary shrink-0 text-[11px] hover:no-underline"
+                      rel="noopener noreferrer"
+                    >
+                      {t.payNow}
+                    </a>
+                  )}
+                  {o.invoiceNumber && (
+                    <Link
+                      href={`/${l}/invoice/${o.ref}`}
+                      className="shrink-0 text-[11px]"
+                      prefetch={false}
+                    >
+                      {t.viewInvoice}
+                    </Link>
+                  )}
                 </li>
               ))}
             </ul>

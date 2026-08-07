@@ -12,6 +12,9 @@ export type AccountOrderRow = {
   fxRateToToman: number | null;
   invoiceNumber: string | null;
   itemCount: number;
+  /** Selected here so the list can offer Pay directly, without the customer
+   *  having to open an order to discover it is waiting on them. */
+  paymentUrl: string;
 };
 
 export async function listOrdersForUser(userId: string): Promise<AccountOrderRow[]> {
@@ -20,6 +23,7 @@ export async function listOrdersForUser(userId: string): Promise<AccountOrderRow
            o.total_cents AS "totalCents",
            o.fx_rate_to_toman AS "fxRateToToman",
            o.invoice_number AS "invoiceNumber",
+           o.payment_url AS "paymentUrl",
            (SELECT count(*)::int FROM order_items i WHERE i.order_id = o.id) AS "itemCount"
     FROM orders o
     WHERE o.user_id::text = ${userId}
