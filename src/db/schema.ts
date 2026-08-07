@@ -145,6 +145,21 @@ export const products = pgTable(
     packQty: integer("pack_qty").notNull().default(1),
     leadDays: integer("lead_days").notNull().default(0),
     inStock: boolean("in_stock").notNull().default(true),
+    /**
+     * Stock counts, in packs — the same unit as `packQty` and every order line.
+     *
+     * Deliberately advisory: nothing blocks an order that exceeds
+     * `inventoryAvailable`. Pricing and confirmation happen off-platform by
+     * phone, so a shortfall is something staff resolve in that conversation;
+     * the admin queue flags it rather than refusing the customer.
+     *
+     * `onHold` rises when an order is received and becomes `sold` when that
+     * order is marked paid. Both are therefore derived from the order flow,
+     * which is why the importer warns before overwriting them.
+     */
+    inventoryAvailable: integer("inventory_available").notNull().default(0),
+    inventoryOnHold: integer("inventory_on_hold").notNull().default(0),
+    inventorySold: integer("inventory_sold").notNull().default(0),
     /** Flattened part number + family + spec values, fed to the FTS index. */
     searchText: text("search_text").notNull().default(""),
     sort: integer("sort").notNull().default(0),
@@ -294,6 +309,33 @@ export const orderItems = pgTable(
     unitPriceCents: integer("unit_price_cents").notNull(),
   },
   (t) => [index("order_items_order_idx").on(t.orderId)],
+);
+
+/**
+ * Internal staff notes on an order. **Never shown to the customer** — not on
+ * the account order page, not on the invoice, not in the guest tracking
+ * payload. Every query that reads these must be behind the admin gate.
+ *
+ * Append-only and timestamped rather than one editable notes column: the point
+ * of a note is what was known when, and an editable field loses that the first
+ * time someone tidies it. It also means two staff writing at once cannot
+ * silently overwrite each other.
+ *
+ * There is no author column because there are no named staff accounts yet —
+ * `/admin` is a single shared password. When accounts arrive this table gains
+ * an author, and existing rows stay honest by having none.
+ */
+export const orderComments = pgTable(
+  "order_comments",
+  {
+    id: serial("id").primaryKey(),
+    orderId: integer("order_id")
+      .notNull()
+      .references(() => orders.id, { onDelete: "cascade" }),
+    body: text("body").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("order_comments_order_idx").on(t.orderId, t.createdAt)],
 );
 
 // ---------------------------------------------------------------------------
