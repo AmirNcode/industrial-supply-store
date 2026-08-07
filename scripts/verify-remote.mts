@@ -30,8 +30,25 @@ const sql = postgres(url, { prepare: false, max: 2 });
 const TABLES = [
   "categories", "product_families", "products", "product_spec_values",
   "spec_defs", "carts", "cart_items", "orders", "order_items", "users",
-  "app_settings",
+  "app_settings", "order_comments",
 ] as const;
+
+/**
+ * Columns added after their table existed.
+ *
+ * A table-presence check cannot see these: `products` has been there since the
+ * first seed, so a database missing the inventory columns still counts as
+ * present and the script would report success while every admin products page
+ * errored. Anything added by a later `ADD COLUMN` needs listing here.
+ */
+const COLUMNS: readonly (readonly [string, string])[] = [
+  ["products", "inventory_available"],
+  ["products", "inventory_on_hold"],
+  ["products", "inventory_sold"],
+  ["orders", "fx_rate_to_toman"],
+  ["orders", "invoice_number"],
+  ["orders", "user_id"],
+];
 
 const present = await sql<{ name: string }[]>`
   SELECT tablename AS name FROM pg_tables WHERE schemaname = 'public'
@@ -49,6 +66,20 @@ console.log(
 if (have.has("quotes")) {
   console.log("            ✗ `quotes` still exists — run db:rename-orders:remote FIRST");
 }
+
+const cols = await sql<{ table_name: string; column_name: string }[]>`
+  SELECT table_name, column_name FROM information_schema.columns
+  WHERE table_schema = 'public'
+`;
+const haveCols = new Set(cols.map((r) => `${r.table_name}.${r.column_name}`));
+const missingCols = COLUMNS.filter(([t, c]) => !haveCols.has(`${t}.${c}`));
+console.log(
+  `columns     ${COLUMNS.length - missingCols.length}/${COLUMNS.length} ${
+    missingCols.length === 0
+      ? "✓"
+      : `✗ MISSING ${missingCols.map(([t, c]) => `${t}.${c}`).join(", ")}`
+  }`,
+);
 
 /** The objects `drizzle-kit push` drops on every run and cannot re-create. */
 const EXTENSION_OBJECTS = [
@@ -153,6 +184,7 @@ const ok =
   idx.length >= expected &&
   parts.length > 0 &&
   missingObjs.length === 0 &&
+  missingCols.length === 0 &&
   hasSeq &&
   rlsOff.length === 0 &&
   !have.has("quotes");
