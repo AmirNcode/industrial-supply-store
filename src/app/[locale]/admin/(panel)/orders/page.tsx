@@ -8,10 +8,13 @@ import { getFxRate } from "@/lib/fx";
 import { cookies } from "next/headers";
 import { emailsWithAccounts } from "@/db/userQueries";
 import { OrderStatusPill, STATUS_LABEL_KEY } from "@/components/OrderStatusPill";
+import { ConfirmSubmit } from "@/components/ConfirmSubmit";
+import { listCommentsForOrders, type OrderComment } from "@/db/commentQueries";
 import {
   issueInvoiceAction,
   setOrderStatusAction,
   resetCustomerPasswordAction,
+  addCommentAction,
 } from "../../actions";
 import type { SpecBag } from "@/db/schema";
 import { ORDER_STATUSES, isOrderStatus, nextStatuses, type OrderStatus } from "@/lib/orders";
@@ -105,6 +108,7 @@ export default async function AdminPage({
   // One query for the whole page rather than a lookup per row: staff can only
   // reset a password for an address that actually has an account.
   const withAccounts = await emailsWithAccounts(orders.map((o) => o.email));
+  const commentsByOrder = await listCommentsForOrders(orders.map((o) => o.id));
 
   const byOrder = new Map<number, OrderItemRow[]>();
   for (const i of items) {
@@ -140,6 +144,7 @@ export default async function AdminPage({
       </nav>
 
       {ok === "status" && <SuccessBanner>{t.orderUpdated}</SuccessBanner>}
+      {ok === "comment" && <SuccessBanner>{t.noteAdded}</SuccessBanner>}
       {ok === "invoiced" && <SuccessBanner>{t.invoiceIssued}</SuccessBanner>}
       {error === "payment-link" && <ErrorBanner>{t.paymentLinkRequired}</ErrorBanner>}
       {error === "prices" && <ErrorBanner>{t.pricesRequired}</ErrorBanner>}
@@ -247,13 +252,41 @@ export default async function AdminPage({
                         <input name="trackingNumber" dir="ltr" placeholder={t.trackingNumber} className="tech w-36 text-[11px]" required />
                       </>
                     )}
-                    <button type="submit" className="btn-small" disabled={DEMO_MODE}>
-                      {next === "preparing" ? t.markPaid
-                        : next === "shipped" ? t.markShipped
-                        : next === "delivered" ? t.markDelivered
-                        : next === "cancelled" ? t.cancelOrder
-                        : next}
-                    </button>
+                    <ConfirmSubmit
+                      label={
+                        next === "preparing" ? t.markPaid
+                          : next === "shipped" ? t.markShipped
+                          : next === "delivered" ? t.markDelivered
+                          : next === "cancelled" ? t.cancelOrder
+                          : next
+                      }
+                      title={
+                        next === "preparing" ? t.confirmMarkPaid
+                          : next === "shipped" ? t.confirmMarkShipped
+                          : next === "delivered" ? t.confirmMarkDelivered
+                          : next === "cancelled" ? t.confirmCancelOrder
+                          : next
+                      }
+                      continueLabel={t.confirmContinue}
+                      discardLabel={t.confirmDiscard}
+                      disabled={DEMO_MODE}
+                      details={[
+                        { label: t.confirmSendingTo, value: `${q.company} — ${q.email}`, tech: false },
+                        { label: t.confirmOrder, value: q.ref, tech: true },
+                        { label: t.confirmNewStatus, value: t[STATUS_LABEL_KEY[next]] },
+                      ]}
+                      // Courier and tracking are read off the form, so the
+                      // summary shows what was actually typed rather than a
+                      // promise that something was.
+                      echo={
+                        next === "shipped"
+                          ? [
+                              { name: "courier", label: t.courier },
+                              { name: "trackingNumber", label: t.trackingNumber, tech: true },
+                            ]
+                          : []
+                      }
+                    />
                   </form>
                 ))}
               </div>
@@ -308,9 +341,25 @@ export default async function AdminPage({
                     className="w-72 text-[11px]"
                     required
                   />
-                  <button type="submit" className="btn-primary" disabled={DEMO_MODE}>
-                    {t.issueInvoice}
-                  </button>
+                  <ConfirmSubmit
+                    label={t.issueInvoice}
+                    title={t.confirmIssueInvoice}
+                    continueLabel={t.confirmContinue}
+                    discardLabel={t.confirmDiscard}
+                    disabled={DEMO_MODE}
+                    className="btn-primary"
+                    details={[
+                      { label: t.confirmSendingTo, value: `${q.company} — ${q.contactName}` },
+                      { label: t.email, value: q.email, tech: true },
+                      { label: t.confirmOrder, value: q.ref, tech: true },
+                    ]}
+                    echo={[{ name: "paymentUrl", label: t.paymentLink, tech: true }]}
+                    // Totalled from the price inputs as they stand, so the
+                    // figure confirmed is the figure the customer will be
+                    // billed — not the one the order arrived with.
+                    lines={(byOrder.get(q.id) ?? []).map((i) => ({ id: i.id, qty: i.qty }))}
+                    totalLabel={t.confirmInvoiceTotal}
+                  />
                 </div>
               </form>
             ) : (
@@ -341,10 +390,80 @@ export default async function AdminPage({
                 </tbody>
               </table>
             )}
+
+            {/* Every order, not only the ones awaiting an invoice. */}
+            <NoteLog
+              locale={l}
+              orderId={q.id}
+              statusFilter={statusFilter}
+              comments={commentsByOrder.get(q.id) ?? []}
+            />
           </div>
         </details>
       ))}
     </>
+  );
+}
+
+/**
+ * The internal note log for one order.
+ *
+ * Append-only: newest first, nothing editable, no delete. The hint under the
+ * heading is load-bearing — someone typing here has to know it never reaches
+ * the customer, because the same box on most systems does.
+ */
+function NoteLog({
+  locale,
+  orderId,
+  statusFilter,
+  comments,
+}: {
+  locale: Locale;
+  orderId: number;
+  statusFilter: OrderStatus | null;
+  comments: OrderComment[];
+}) {
+  const t = getDict(locale);
+  return (
+    <section className="mt-3 border-t border-[var(--color-rule)] pt-2">
+      <h3 className="text-[11px] font-bold">
+        {t.internalNotes}{" "}
+        <span className="font-normal text-[var(--color-ink-faint)]">
+          — {t.internalNotesHint}
+        </span>
+      </h3>
+
+      {comments.length === 0 ? (
+        <p className="mt-1 text-[11px] text-[var(--color-ink-faint)]">{t.noNotesYet}</p>
+      ) : (
+        <ul className="mt-1 grid gap-1">
+          {comments.map((c) => (
+            <li key={c.id} className="flex gap-2 text-[11px]">
+              <span className="tech shrink-0 text-[var(--color-ink-faint)]">
+                {new Date(c.createdAt).toISOString().slice(0, 16).replace("T", " ")}
+              </span>
+              <span className="whitespace-pre-wrap">{c.body}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <form action={addCommentAction} className="mt-2 flex flex-wrap items-start gap-2">
+        <input type="hidden" name="locale" value={locale} />
+        <input type="hidden" name="orderId" value={orderId} />
+        <input type="hidden" name="statusFilter" value={statusFilter ?? ""} />
+        <textarea
+          name="body"
+          rows={2}
+          required
+          className="min-w-[240px] flex-1 text-[11px]"
+          placeholder={t.internalNotes}
+        />
+        <button type="submit" className="btn-small" disabled={DEMO_MODE}>
+          {t.addNote}
+        </button>
+      </form>
+    </section>
   );
 }
 

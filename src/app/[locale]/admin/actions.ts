@@ -12,6 +12,7 @@ import { getFxRate, saveFxSettings } from "@/lib/fx";
 import { envFxRate, isFxMode, isPlausibleRate, parseRate } from "@/lib/fxRate";
 import { safeLocale } from "@/lib/i18n";
 import { assertTransition, isOrderStatus } from "@/lib/orders";
+import { addComment } from "@/db/commentQueries";
 
 /**
  * Signing in and out live here, alongside every other admin action, so
@@ -321,4 +322,32 @@ export async function resetCustomerPasswordAction(formData: FormData): Promise<v
     maxAge: 30,
   });
   redirect(`/${locale}/admin/orders?ok=password`);
+}
+
+/**
+ * Append an internal note to an order.
+ *
+ * Staff-only in the strong sense: nothing customer-facing reads
+ * `order_comments`, so this is the only way text gets in and there is no way
+ * for it to reach the buyer. Append-only, so there is deliberately no edit or
+ * delete action to go with it.
+ */
+export async function addCommentAction(formData: FormData): Promise<void> {
+  await assertAdminWrite();
+
+  const locale = safeLocale(formData);
+  const statusFilter = String(formData.get("statusFilter") ?? "");
+  const id = Number(formData.get("orderId"));
+  const body = String(formData.get("body") ?? "").trim();
+
+  if (!Number.isInteger(id) || id <= 0) {
+    redirect(withFilter(`/${locale}/admin/orders?error=bad-request`, statusFilter));
+  }
+  // An empty note is a mis-click, not something to record.
+  if (!body) {
+    redirect(withFilter(`/${locale}/admin/orders?ok=status`, statusFilter));
+  }
+
+  await addComment(id, body.slice(0, 4000));
+  redirect(withFilter(`/${locale}/admin/orders?ok=comment`, statusFilter));
 }
