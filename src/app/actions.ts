@@ -7,6 +7,7 @@ import { addLine, setLineQty, removeLine, clearCart, getCartLines, unitPriceAt }
 import { findByPartNumbers } from "@/db/queries";
 import { safeLocale } from "@/lib/i18n";
 import { currentUserId } from "@/lib/session";
+import { holdStockForOrder } from "@/db/inventoryQueries";
 
 export async function addToCartAction(formData: FormData) {
   const productId = Number(formData.get("productId"));
@@ -157,6 +158,11 @@ export async function submitQuoteAction(formData: FormData) {
                 ${l.qty}, ${unitPriceAt(l, l.qty)}, ${unitPriceAt(l, l.qty)})
       `;
     }
+
+    // Inside the same transaction as the lines it reserves against. A hold
+    // recorded without its order, or an order without its hold, is worse than
+    // either failing outright.
+    await holdStockForOrder(tx, order.id);
   });
 
   await clearCart();

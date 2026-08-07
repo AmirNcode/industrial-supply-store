@@ -60,6 +60,29 @@ export function ImportPanel({
                   <span className="tech text-[11px] text-[var(--color-ink-muted)]">
                     {formatInt(f.productCount, locale)}
                   </span>
+                  {/* Stock at a glance, in the same packs as every order line.
+                      On-hold and sold are only shown when non-zero so a family
+                      nobody has ordered stays quiet. */}
+                  <span className="text-[11px] text-[var(--color-ink-muted)]">
+                    {t.stockAvailable}:{" "}
+                    <span className="tech font-semibold">
+                      {formatInt(f.inventoryAvailable, locale)}
+                    </span>
+                    {f.inventoryOnHold > 0 && (
+                      <>
+                        {" · "}
+                        {t.stockOnHold}:{" "}
+                        <span className="tech">{formatInt(f.inventoryOnHold, locale)}</span>
+                      </>
+                    )}
+                    {f.inventorySold > 0 && (
+                      <>
+                        {" · "}
+                        {t.stockSold}:{" "}
+                        <span className="tech">{formatInt(f.inventorySold, locale)}</span>
+                      </>
+                    )}
+                  </span>
                   <a
                     className="text-[11px]"
                     href={`/api/admin/family/${f.id}/template`}
@@ -111,11 +134,34 @@ function Result({ state, locale }: { state: ImportState; locale: Locale }) {
 
   if (state.kind === "ok") {
     return (
-      <p className="mt-1.5 border border-[#b6d7bb] bg-[#f0f8f1] px-2.5 py-1.5 text-[12px]">
-        {t.importSummary
-          .replace("{inserted}", formatInt(state.inserted, locale))
-          .replace("{updated}", formatInt(state.updated, locale))}
-      </p>
+      <>
+        <p className="mt-1.5 border border-[#b6d7bb] bg-[#f0f8f1] px-2.5 py-1.5 text-[12px]">
+          {t.importSummary
+            .replace("{inserted}", formatInt(state.inserted, locale))
+            .replace("{updated}", formatInt(state.updated, locale))}
+        </p>
+        {state.mismatches.length > 0 && (
+          <div className="mt-1.5 border border-[var(--color-amber-line)] bg-[var(--color-amber-soft)] px-2.5 py-1.5">
+            {/* The upload was applied — it is the operator's stated intent, and
+                refusing it would make a stale export impossible to correct.
+                This is so the disagreement is noticed rather than absorbed. */}
+            <p className="mb-1 text-[12px] font-bold">{t.importInventoryMismatch}</p>
+            <ul className="grid gap-0.5 text-[11px]">
+              {state.mismatches.slice(0, MAX_SHOWN).map((m, i) => (
+                <li key={i}>
+                  <span className="tech font-semibold">{m.partNumber}</span>{" "}
+                  <span className="tech">{m.column}</span>:{" "}
+                  <span className="tech">{formatInt(m.uploaded, locale)}</span> →{" "}
+                  <span className="tech">{formatInt(m.computed, locale)}</span>{" "}
+                  <span className="text-[var(--color-ink-muted)]">
+                    ({t.importFromOrders})
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </>
     );
   }
 

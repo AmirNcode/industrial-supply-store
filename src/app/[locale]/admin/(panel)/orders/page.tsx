@@ -10,6 +10,7 @@ import { emailsWithAccounts } from "@/db/userQueries";
 import { OrderStatusPill, STATUS_LABEL_KEY } from "@/components/OrderStatusPill";
 import { ConfirmSubmit } from "@/components/ConfirmSubmit";
 import { listCommentsForOrders, type OrderComment } from "@/db/commentQueries";
+import { findShortfalls } from "@/db/inventoryQueries";
 import {
   issueInvoiceAction,
   setOrderStatusAction,
@@ -109,6 +110,9 @@ export default async function AdminPage({
   // reset a password for an address that actually has an account.
   const withAccounts = await emailsWithAccounts(orders.map((o) => o.email));
   const commentsByOrder = await listCommentsForOrders(orders.map((o) => o.id));
+  // Advisory, not blocking: the order already exists. This is so staff see the
+  // shortfall before they price it on the phone, not after.
+  const shortfalls = await findShortfalls(orders.map((o) => o.id));
 
   const byOrder = new Map<number, OrderItemRow[]>();
   for (const i of items) {
@@ -226,6 +230,20 @@ export default async function AdminPage({
               )}
               {q.paymentUrl && <Row label={t.paymentLink} value={q.paymentUrl} tech />}
             </dl>
+            {(shortfalls.get(q.id) ?? []).length > 0 && (
+              <p className="mb-2 border border-[var(--color-warn)] bg-[var(--color-warn-soft)] px-2.5 py-1.5 text-[11px]">
+                <strong>{t.stockShortfall}</strong>{" "}
+                {(shortfalls.get(q.id) ?? []).map((s, i) => (
+                  <span key={s.partNumber}>
+                    {i > 0 && ", "}
+                    <span className="tech font-semibold">{s.partNumber}</span>{" "}
+                    <span className="tech">
+                      {formatInt(s.qty, l)}/{formatInt(s.available, l)}
+                    </span>
+                  </span>
+                ))}
+              </p>
+            )}
             {q.notes && (
               <p className="mb-2 whitespace-pre-wrap border-s-2 border-[var(--color-rule)] ps-2 text-[11px] text-[var(--color-ink-muted)]">
                 {q.notes}

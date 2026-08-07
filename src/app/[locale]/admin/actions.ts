@@ -13,6 +13,7 @@ import { envFxRate, isFxMode, isPlausibleRate, parseRate } from "@/lib/fxRate";
 import { safeLocale } from "@/lib/i18n";
 import { assertTransition, isOrderStatus } from "@/lib/orders";
 import { addComment } from "@/db/commentQueries";
+import { sellHeldStock, releaseHeldStock } from "@/db/inventoryQueries";
 
 /**
  * Signing in and out live here, alongside every other admin action, so
@@ -130,11 +131,19 @@ export async function setOrderStatusAction(formData: FormData): Promise<void> {
       redirect(withFilter(`/${locale}/admin/orders?error=conflict`, statusFilter));
     }
   } else if (to === "preparing") {
-    const result = await sql`
-      UPDATE orders SET status = 'preparing', paid_at = now()
-      WHERE id = ${id} AND status = ${row.status}
-    `;
-    if (result.count === 0) {
+    // Payment turns the reservation into a sale, so the count move and the
+    // status move go together or neither happens. `count === 0` inside the
+    // transaction means this lost the race and the stock must not move.
+    const moved = await sql.begin(async (tx) => {
+      const result = await tx`
+        UPDATE orders SET status = 'preparing', paid_at = now()
+        WHERE id = ${id} AND status = ${row.status}
+      `;
+      if (result.count === 0) return false;
+      await sellHeldStock(tx, id);
+      return true;
+    });
+    if (!moved) {
       redirect(withFilter(`/${locale}/admin/orders?error=conflict`, statusFilter));
     }
   } else if (to === "delivered") {
@@ -146,11 +155,21 @@ export async function setOrderStatusAction(formData: FormData): Promise<void> {
       redirect(withFilter(`/${locale}/admin/orders?error=conflict`, statusFilter));
     }
   } else if (to === "cancelled") {
-    const result = await sql`
-      UPDATE orders SET status = 'cancelled'
-      WHERE id = ${id} AND status = ${row.status}
-    `;
-    if (result.count === 0) {
+    // Only an order still holding stock puts any back. Cancelling something
+    // already paid for would need a refund path, which does not exist yet, so
+    // the released quantity is decided by the status being left, not the one
+    // being entered.
+    const stillHeld = row.status === "received" || row.status === "invoiced";
+    const moved = await sql.begin(async (tx) => {
+      const result = await tx`
+        UPDATE orders SET status = 'cancelled'
+        WHERE id = ${id} AND status = ${row.status}
+      `;
+      if (result.count === 0) return false;
+      if (stillHeld) await releaseHeldStock(tx, id);
+      return true;
+    });
+    if (!moved) {
       redirect(withFilter(`/${locale}/admin/orders?error=conflict`, statusFilter));
     }
   } else {

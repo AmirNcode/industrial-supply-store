@@ -290,6 +290,13 @@ const en = {
     "These part numbers already belong to a different family, so nothing was imported:",
   importCaseVariant:
     "These part numbers already exist with different capitalisation. Use the catalog's spelling exactly, or nothing will match:",
+  importInventoryMismatch:
+    "Imported, but these on-hold or sold counts disagree with what the orders say:",
+  importFromOrders: "from orders",
+  stockAvailable: "Available",
+  stockOnHold: "On hold",
+  stockSold: "Sold",
+  stockShortfall: "Not enough stock for:",
   importReadOnly: "Importing is disabled in demo mode.",
 };
 
@@ -555,6 +562,13 @@ const fa: typeof en = {
     "این شماره فنی‌ها به خانواده دیگری تعلق دارند، بنابراین چیزی ثبت نشد:",
   importCaseVariant:
     "این شماره فنی‌ها با حروف بزرگ و کوچک متفاوت از قبل وجود دارند. دقیقاً از املای موجود در کاتالوگ استفاده کنید:",
+  importInventoryMismatch:
+    "ثبت شد، اما این مقادیر رزرو یا فروش با سفارش‌ها همخوانی ندارد:",
+  importFromOrders: "طبق سفارش‌ها",
+  stockAvailable: "موجودی",
+  stockOnHold: "رزرو شده",
+  stockSold: "فروخته شده",
+  stockShortfall: "موجودی کافی نیست برای:",
   importReadOnly: "بارگذاری در حالت نمایشی غیرفعال است.",
 };
 

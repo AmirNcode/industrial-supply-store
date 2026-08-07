@@ -49,6 +49,9 @@ export type FamilyListRow = {
   categoryId: number;
   categoryNameEn: string;
   categoryNameFa: string;
+  inventoryAvailable: number;
+  inventoryOnHold: number;
+  inventorySold: number;
 };
 
 export async function getFamiliesGrouped(): Promise<FamilyListRow[]> {
@@ -56,9 +59,21 @@ export async function getFamiliesGrouped(): Promise<FamilyListRow[]> {
     SELECT f.id, f.slug, f.name_en AS "nameEn", f.name_fa AS "nameFa",
            f.product_count AS "productCount",
            c.id AS "categoryId", c.name_en AS "categoryNameEn",
-           c.name_fa AS "categoryNameFa"
+           c.name_fa AS "categoryNameFa",
+           COALESCE(s.available, 0)::int AS "inventoryAvailable",
+           COALESCE(s.on_hold, 0)::int   AS "inventoryOnHold",
+           COALESCE(s.sold, 0)::int      AS "inventorySold"
     FROM product_families f
     JOIN categories c ON c.id = f.category_id
+    -- Aggregated once per family rather than per product: this page lists
+    -- every family, and a per-row subquery would be one scan each.
+    LEFT JOIN (
+      SELECT family_id,
+             SUM(inventory_available) AS available,
+             SUM(inventory_on_hold)   AS on_hold,
+             SUM(inventory_sold)      AS sold
+      FROM products GROUP BY family_id
+    ) s ON s.family_id = f.id
     ORDER BY c.sort, c.id, f.sort, f.id
   `;
 }
@@ -70,12 +85,18 @@ export type ExportProduct = {
   packQty: number;
   leadDays: number;
   inStock: boolean;
+  inventoryAvailable: number;
+  inventoryOnHold: number;
+  inventorySold: number;
 };
 
 export async function getProductsForExport(familyId: number): Promise<ExportProduct[]> {
   return sql<ExportProduct[]>`
     SELECT part_number AS "partNumber", specs, price_cents AS "priceCents",
-           pack_qty AS "packQty", lead_days AS "leadDays", in_stock AS "inStock"
+           pack_qty AS "packQty", lead_days AS "leadDays", in_stock AS "inStock",
+           inventory_available AS "inventoryAvailable",
+           inventory_on_hold AS "inventoryOnHold",
+           inventory_sold AS "inventorySold"
     FROM products WHERE family_id = ${familyId} ORDER BY sort, id
   `;
 }
@@ -107,6 +128,9 @@ export function exportRow(p: ExportProduct, defs: readonly FamilySpecDef[]): str
     String(p.packQty),
     String(p.leadDays),
     p.inStock ? "yes" : "no",
+    String(p.inventoryAvailable),
+    String(p.inventoryOnHold),
+    String(p.inventorySold),
   ];
 }
 
@@ -147,7 +171,22 @@ export type ImportResult = {
    *  the upsert would duplicate rather than update. Each entry is the
    *  catalog's spelling, so the fix is to copy it. */
   caseVariants: string[];
-  /** Either list being non-empty means nothing at all was written. */
+  /** Either of the two lists above being non-empty means nothing was written. */
+  /**
+   * Rows whose uploaded on_hold/sold disagree with what the order flow says
+   * they should be. Reported *after* a successful write, not instead of one:
+   * the file is the operator's stated intent, and refusing it would make a
+   * stale export impossible to correct. The warning is so a disagreement is
+   * noticed rather than absorbed.
+   */
+  mismatches: InventoryMismatch[];
+};
+
+export type InventoryMismatch = {
+  partNumber: string;
+  column: "inventory_on_hold" | "inventory_sold";
+  uploaded: number;
+  computed: number;
 };
 
 /** Thrown to roll the transaction back; never escapes this module. */
@@ -189,7 +228,7 @@ export async function writeImport(
   const family = await getFamilyForImport(familyId);
   if (!family) throw new Error(`No family ${familyId}`);
   if (rows.length === 0) {
-    return { inserted: 0, updated: 0, conflicts: [], caseVariants: [] };
+    return { inserted: 0, updated: 0, conflicts: [], caseVariants: [], mismatches: [] };
   }
 
   const filterable = new Set(family.defs.filter((d) => d.filterable).map((d) => d.key));
@@ -243,9 +282,12 @@ export async function writeImport(
         const chunk = rows.slice(i, i + CHUNK);
         const result = await tx<{ id: number; inserted: boolean }[]>`
           INSERT INTO products (part_number, family_id, specs, price_cents,
-                                pack_qty, lead_days, in_stock, search_text, sort)
+                                pack_qty, lead_days, in_stock, search_text,
+                                inventory_available, inventory_on_hold,
+                                inventory_sold, sort)
           SELECT u.part_number, ${familyId}, u.specs, u.price_cents, u.pack_qty,
                  u.lead_days, u.in_stock::boolean, u.search_text,
+                 u.inv_available, u.inv_on_hold, u.inv_sold,
                  ${maxSort + i} + u.ord
           FROM unnest(
             ${chunk.map((r) => r.partNumber)}::text[],
@@ -257,9 +299,13 @@ export async function writeImport(
             -- type to infer, so a boolean[] parameter arrives as a scalar
             -- boolean and Postgres refuses the cast.
             ${chunk.map((r) => (r.inStock ? "t" : "f"))}::text[],
-            ${chunk.map((r) => buildSearchText(r.partNumber, family, r.specs))}::text[]
+            ${chunk.map((r) => buildSearchText(r.partNumber, family, r.specs))}::text[],
+            ${chunk.map((r) => r.inventoryAvailable)}::int[],
+            ${chunk.map((r) => r.inventoryOnHold)}::int[],
+            ${chunk.map((r) => r.inventorySold)}::int[]
           ) WITH ORDINALITY AS u(part_number, specs, price_cents, pack_qty,
-                                 lead_days, in_stock, search_text, ord)
+                                 lead_days, in_stock, search_text,
+                                 inv_available, inv_on_hold, inv_sold, ord)
           -- family_id is deliberately absent from the update list: a part
           -- number that already exists elsewhere was refused above, so
           -- reaching here means the family already matches.
@@ -269,7 +315,10 @@ export async function writeImport(
             pack_qty = EXCLUDED.pack_qty,
             lead_days = EXCLUDED.lead_days,
             in_stock = EXCLUDED.in_stock,
-            search_text = EXCLUDED.search_text
+            search_text = EXCLUDED.search_text,
+            inventory_available = EXCLUDED.inventory_available,
+            inventory_on_hold = EXCLUDED.inventory_on_hold,
+            inventory_sold = EXCLUDED.inventory_sold
           -- xmax is 0 on a fresh insert and the updating transaction's id
           -- otherwise; it is the only way to tell the two apart from one
           -- statement.
@@ -347,7 +396,53 @@ export async function writeImport(
         WHERE c.id = sub.id
       `;
 
-      return { inserted, updated, conflicts: [], caseVariants: [] };
+      /*
+       * What the order flow says on_hold and sold should be.
+       *
+       * `on_hold` is everything ordered but not yet paid for; `sold` is
+       * everything paid. Cancelled orders count as neither — the goods were
+       * never taken and never shipped. This is the same split the status
+       * lifecycle already encodes, read back out of it.
+       */
+      const computed = await tx<
+        { partNumber: string; onHold: number; sold: number }[]
+      >`
+        SELECT p.part_number AS "partNumber",
+               COALESCE(SUM(i.qty) FILTER (
+                 WHERE o.status IN ('received', 'invoiced')), 0)::int AS "onHold",
+               COALESCE(SUM(i.qty) FILTER (
+                 WHERE o.status IN ('preparing', 'shipped', 'delivered')), 0)::int AS "sold"
+        FROM products p
+        LEFT JOIN order_items i ON i.product_id = p.id
+        LEFT JOIN orders o ON o.id = i.order_id
+        WHERE p.id = ANY(${touched}::int[])
+        GROUP BY p.part_number
+      `;
+
+      const mismatches: InventoryMismatch[] = [];
+      const uploaded = new Map(rows.map((r) => [r.partNumber, r]));
+      for (const c of computed) {
+        const row = uploaded.get(c.partNumber);
+        if (!row) continue;
+        if (row.inventoryOnHold !== c.onHold) {
+          mismatches.push({
+            partNumber: c.partNumber,
+            column: "inventory_on_hold",
+            uploaded: row.inventoryOnHold,
+            computed: c.onHold,
+          });
+        }
+        if (row.inventorySold !== c.sold) {
+          mismatches.push({
+            partNumber: c.partNumber,
+            column: "inventory_sold",
+            uploaded: row.inventorySold,
+            computed: c.sold,
+          });
+        }
+      }
+
+      return { inserted, updated, conflicts: [], caseVariants: [], mismatches };
     });
   } catch (e) {
     if (e instanceof ImportRefused) {
@@ -356,6 +451,7 @@ export async function writeImport(
         updated: 0,
         conflicts: e.conflicts,
         caseVariants: e.caseVariants,
+        mismatches: [],
       };
     }
     throw e;

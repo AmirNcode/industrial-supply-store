@@ -13,7 +13,14 @@ import { getFamilyForImport, writeImport } from "@/db/importQueries";
  * exactly the rows someone needs to fix.
  */
 export type ImportState =
-  | { kind: "ok"; familyId: number; inserted: number; updated: number }
+  | {
+      kind: "ok";
+      familyId: number;
+      inserted: number;
+      updated: number;
+      /** Written, but on_hold/sold disagreed with what the orders imply. */
+      mismatches: { partNumber: string; column: string; uploaded: number; computed: number }[];
+    }
   | { kind: "errors"; familyId: number; errors: ImportError[] }
   | { kind: "conflicts"; familyId: number; parts: string[] }
   | { kind: "case-variants"; familyId: number; parts: string[] }
@@ -71,5 +78,6 @@ export async function importCsvAction(
     familyId,
     inserted: result.inserted,
     updated: result.updated,
+    mismatches: result.mismatches,
   };
 }

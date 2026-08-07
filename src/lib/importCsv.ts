@@ -14,8 +14,30 @@ import { parse } from "csv-parse/sync";
 
 export type ImportSpecDef = { key: string; kind: "number" | "text" };
 
-/** The columns every family has, after its own spec columns. */
-export const FIXED_COLUMNS = ["price_usd", "pack_qty", "lead_days", "in_stock"] as const;
+/**
+ * The columns every family has, after its own spec columns.
+ *
+ * All three inventory counts are writable, not just `available`. `on_hold` and
+ * `sold` are also maintained by the order flow, so an upload built from a stale
+ * export can disagree with what orders have since moved — `writeImport` reports
+ * that disagreement rather than applying it silently.
+ */
+export const FIXED_COLUMNS = [
+  "price_usd",
+  "pack_qty",
+  "lead_days",
+  "in_stock",
+  "inventory_available",
+  "inventory_on_hold",
+  "inventory_sold",
+] as const;
+
+/** The inventory columns, which share one validation rule and one warning. */
+export const INVENTORY_COLUMNS = [
+  "inventory_available",
+  "inventory_on_hold",
+  "inventory_sold",
+] as const;
 
 export function columnsFor(defs: readonly ImportSpecDef[]): string[] {
   return ["part_number", ...defs.map((d) => d.key), ...FIXED_COLUMNS];
@@ -28,6 +50,9 @@ export type ImportRow = {
   packQty: number;
   leadDays: number;
   inStock: boolean;
+  inventoryAvailable: number;
+  inventoryOnHold: number;
+  inventorySold: number;
 };
 
 /** `row` is 1-based and counts the header, so the first data row is 2 — the
@@ -172,7 +197,7 @@ export function parseImport(
     }
 
     const counts: Record<string, number> = {};
-    for (const name of ["pack_qty", "lead_days"] as const) {
+    for (const name of ["pack_qty", "lead_days", ...INVENTORY_COLUMNS] as const) {
       const raw = cell(name);
       const n = Number(raw);
       if (raw === "" || !Number.isInteger(n) || n < 0) {
@@ -208,6 +233,9 @@ export function parseImport(
       packQty: counts.pack_qty,
       leadDays: counts.lead_days,
       inStock,
+      inventoryAvailable: counts.inventory_available,
+      inventoryOnHold: counts.inventory_on_hold,
+      inventorySold: counts.inventory_sold,
     });
   });
 
