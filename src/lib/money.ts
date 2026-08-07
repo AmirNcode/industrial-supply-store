@@ -69,6 +69,52 @@ export function currencyLabel(locale: Locale): string {
   return locale === "fa" ? "تومان" : "USD";
 }
 
+// ---------------------------------------------------------------------------
+// Explicit currency
+// ---------------------------------------------------------------------------
+
+/**
+ * Everywhere else in the app, currency follows locale: a Persian page shows
+ * Toman, an English page shows dollars. That is right for the catalog, where
+ * the reader and the price belong to the same context.
+ *
+ * An invoice is the exception. A buyer in Tehran may want the document in
+ * Persian to read and forward internally, but priced in dollars because that is
+ * what the contract says — or the reverse, an English document a foreign
+ * office can read priced in the Toman the customer will actually pay. So the
+ * invoice picks the two independently and calls these.
+ *
+ * Currency chooses the unit; locale still chooses the script. Toman on an
+ * English invoice prints in Latin digits, because Persian digits in an
+ * otherwise-English document are unreadable to the person it was made for.
+ */
+export type Currency = "USD" | "IRT";
+
+export function isCurrency(v: string): v is Currency {
+  return v === "USD" || v === "IRT";
+}
+
+const tomanFmtLatin = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
+
+/** Exact, unrounded — see `formatPriceExact` for why an invoice cannot round. */
+export function formatMoneyExact(
+  cents: number,
+  currency: Currency,
+  locale: Locale,
+  rate: number,
+): string {
+  if (currency === "USD") return usdFmt.format(cents / 100);
+  const toman = Math.round((cents / 100) * rate);
+  return locale === "fa"
+    ? `${tomanFmt.format(toman)} تومان`
+    : `${tomanFmtLatin.format(toman)} Toman`;
+}
+
+export function currencyLabelFor(currency: Currency, locale: Locale): string {
+  if (currency === "USD") return "USD";
+  return locale === "fa" ? "تومان" : "Toman";
+}
+
 const intFmtFa = new Intl.NumberFormat("fa-IR");
 const intFmtEn = new Intl.NumberFormat("en-US");
 

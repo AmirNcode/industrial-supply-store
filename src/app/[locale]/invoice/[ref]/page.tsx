@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getInvoiceByRef } from "@/db/invoiceQueries";
 import { lineTotalCents, subtotalCents } from "@/lib/invoice";
@@ -7,7 +8,13 @@ import { DEMO_MODE } from "@/lib/demo";
 import { currentUserId } from "@/lib/session";
 import { PrintButton } from "@/components/PrintButton";
 import { isLocale, getDict, type Locale } from "@/lib/i18n";
-import { formatPriceExact, formatInt } from "@/lib/money";
+import {
+  formatMoneyExact,
+  formatInt,
+  currencyFor,
+  isCurrency,
+  type Currency,
+} from "@/lib/money";
 
 /**
  * The invoice document.
@@ -22,28 +29,50 @@ import { formatPriceExact, formatInt } from "@/lib/money";
  * The language comes from the path segment, not from the order. Staff email
  * whichever version the customer reads, and the same order can legitimately be
  * printed in both.
+ *
+ * Language and currency are chosen separately. Language stays in the path so
+ * the document's direction and the layout's `dir` follow it for free; currency
+ * is a query parameter on top. A Tehran buyer may want Persian text priced in
+ * dollars because that is what the contract says, or an English document
+ * priced in the Toman they will actually pay.
  */
 export async function generateMetadata({
   params,
+  searchParams,
 }: {
   params: Promise<{ ref: string }>;
+  searchParams: Promise<{ cur?: string }>;
 }) {
-  // Derived from the path alone — no query, so nothing about the order is
-  // reachable before the access check in the page itself. Chrome names a
-  // saved PDF from this, and the whole phase exists so staff save PDFs.
+  // Derived from the path and the reader's own toggle — nothing about the
+  // order is reachable before the access check in the page itself. Chrome
+  // names a saved PDF from this, and the whole phase exists so staff save
+  // PDFs; the currency is in the name so the dollar and Toman copies of one
+  // invoice do not overwrite each other in a downloads folder.
   const { ref } = await params;
-  return { title: `Invoice ${ref}` };
+  const { cur } = await searchParams;
+  const currency = isCurrency(String(cur ?? "").toUpperCase()) ? String(cur).toUpperCase() : null;
+  return { title: currency ? `Invoice ${ref} ${currency}` : `Invoice ${ref}` };
 }
 
 export default async function InvoicePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ locale: string; ref: string }>;
+  searchParams: Promise<{ cur?: string }>;
 }) {
   const { locale, ref } = await params;
   if (!isLocale(locale)) notFound();
   const l = locale as Locale;
   const t = getDict(l);
+
+  const { cur } = await searchParams;
+  const asked = String(cur ?? "").toUpperCase();
+  // Absent or unrecognised falls back to the locale's own currency, which is
+  // what this page did before the toggle existed.
+  const currency: Currency = isCurrency(asked) ? asked : currencyFor(l);
+  const other: Locale = l === "fa" ? "en" : "fa";
+  const otherCurrency: Currency = currency === "USD" ? "IRT" : "USD";
 
   /*
    * Staff may read any invoice; a customer may read one that is theirs.
@@ -82,6 +111,31 @@ export default async function InvoicePage({
 
   return (
     <main className="invoice-sheet mx-auto max-w-[820px] px-6 py-8">
+      {/* Plain links, not a form: each combination is its own URL, so a staff
+          member can bookmark or paste "the Persian one priced in dollars" and
+          the printed PDF matches what the link says. `no-print` keeps the
+          controls off the document itself. */}
+      <div className="no-print mb-6 flex flex-wrap items-center gap-x-6 gap-y-2 border border-[var(--color-rule)] bg-[var(--color-panel-alt)] px-3 py-2 text-[12px]">
+        <span className="flex items-center gap-2">
+          <span className="font-bold">{t.languagePreference}:</span>
+          <span>{l === "fa" ? t.persian : t.english}</span>
+          <Link href={`/${other}/invoice/${order.ref}?cur=${currency}`} prefetch={false}>
+            {other === "fa" ? t.persian : t.english}
+          </Link>
+        </span>
+        <span className="flex items-center gap-2">
+          <span className="font-bold">{t.invoiceCurrency}:</span>
+          <span className="tech">{currency === "USD" ? "USD" : "IRT"}</span>
+          <Link
+            href={`/${l}/invoice/${order.ref}?cur=${otherCurrency}`}
+            prefetch={false}
+            className="tech"
+          >
+            {otherCurrency === "USD" ? "USD" : "IRT"}
+          </Link>
+        </span>
+      </div>
+
       <header className="mb-8 flex items-start justify-between gap-6 border-b-2 border-[var(--color-ink)] pb-4">
         <div>
           <h1 className="text-[26px] font-bold text-[var(--color-pine)]">{t.invoice}</h1>
@@ -154,9 +208,9 @@ export default async function InvoicePage({
               <td className="tech font-semibold">{i.partNumber}</td>
               <td>{i.familyName}</td>
               <td className="num tech tech-num">{formatInt(i.qty, l)}</td>
-              <td className="num tech tech-num">{formatPriceExact(i.unitPriceCents, l, rate)}</td>
+              <td className="num tech tech-num">{formatMoneyExact(i.unitPriceCents, currency, l, rate)}</td>
               <td className="num tech tech-num">
-                {formatPriceExact(lineTotalCents(i), l, rate)}
+                {formatMoneyExact(lineTotalCents(i), currency, l, rate)}
               </td>
             </tr>
           ))}
@@ -166,12 +220,12 @@ export default async function InvoicePage({
       <section className="mt-4 flex justify-end">
         <dl className="grid w-full max-w-[280px] grid-cols-[1fr_auto] gap-x-6 gap-y-1 text-[13px]">
           <dt>{t.invoiceSubtotal}</dt>
-          <dd className="num tech tech-num">{formatPriceExact(subtotal, l, rate)}</dd>
+          <dd className="num tech tech-num">{formatMoneyExact(subtotal, currency, l, rate)}</dd>
           <dt className="border-t border-[var(--color-ink)] pt-1.5 font-bold">
             {cancelled ? t.invoiceVoid : t.invoiceTotal}
           </dt>
           <dd className="num tech tech-num border-t border-[var(--color-ink)] pt-1.5 text-[15px] font-bold">
-            {formatPriceExact(order.totalCents, l, rate)}
+            {formatMoneyExact(order.totalCents, currency, l, rate)}
           </dd>
         </dl>
       </section>
@@ -187,7 +241,10 @@ export default async function InvoicePage({
 
       <footer className="mt-8 border-t border-[var(--color-rule)] pt-3 text-[11px] text-[var(--color-ink-muted)]">
         <p>{t.invoiceThanks}</p>
-        {l === "fa" && (
+        {/* Keyed on the currency shown, not the language. An English invoice
+            priced in Toman is converted and must say so; a Persian invoice
+            priced in dollars is not, and the note would be a lie. */}
+        {currency === "IRT" && (
           <p className="mt-1">
             {t.invoiceFxNote}{" "}
             <span className="tech">{formatInt(rate, l)}</span> {t.fxPerUsd}
