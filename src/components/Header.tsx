@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getDict, type Locale } from "@/lib/i18n";
 import { SearchBar } from "./SearchBar";
+import { LocaleSwitch } from "./LocaleSwitch";
 import { CartLink } from "./CartLink";
 import { MobileHeader } from "./MobileHeader";
 
@@ -64,13 +65,10 @@ export function Header({ locale }: { locale: Locale }) {
                 {t.emailUs}
               </a>
               <span className="text-[var(--color-chrome-line)]">|</span>
-              <Link
-                href={`/${other}`}
-                lang={other}
+              <LocaleSwitch
+                other={other}
                 className="font-bold !text-[var(--color-chrome-ink)] hover:!text-white"
-              >
-                {other === "fa" ? "فارسی" : "English"}
-              </Link>
+              />
             </div>
             <div className="mt-1.5 flex items-center justify-end gap-4">
               <CartLink locale={locale} />

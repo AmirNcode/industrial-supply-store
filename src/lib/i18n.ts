@@ -21,6 +21,27 @@ export function dir(locale: Locale): "ltr" | "rtl" {
   return locale === "fa" ? "rtl" : "ltr";
 }
 
+/**
+ * The same page in the other language.
+ *
+ * Every route is `/[locale]/…`, so switching language is swapping one segment.
+ * The header used to link at `/fa` outright, which threw away whatever the
+ * reader was looking at and dropped them back on the catalog — worst on the
+ * pages where the switch is most useful, like a filtered family listing or an
+ * invoice.
+ *
+ * A path with no recognised locale segment has nowhere better to go than that
+ * language's home.
+ */
+export function swapLocale(pathname: string, to: Locale): string {
+  const segments = pathname.split("/");
+  if (segments.length > 1 && isLocale(segments[1])) {
+    segments[1] = to;
+    return segments.join("/");
+  }
+  return `/${to}`;
+}
+
 const en = {
   brand: "PARSTECH SUPPLY",
   tagline: "Industrial Parts",

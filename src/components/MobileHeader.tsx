@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { getDict, type Locale } from "@/lib/i18n";
 import { SearchBar } from "./SearchBar";
+import { LocaleSwitch } from "./LocaleSwitch";
 import { CartBadge } from "./CartBadge";
 
 /**
@@ -120,13 +121,10 @@ export function MobileHeader({ locale }: { locale: Locale }) {
               </li>
             ))}
             <li className="border-b border-[var(--color-chrome-line)]">
-              <Link
-                href={`/${other}`}
-                lang={other}
-                className="tap px-4 py-3 text-[16px] font-semibold !text-[var(--color-amber-lift)]"
-              >
-                {other === "fa" ? "فارسی" : "English"}
-              </Link>
+              <LocaleSwitch
+                other={other}
+                className="tap block px-4 py-3 text-[16px] font-semibold !text-[var(--color-amber-lift)]"
+              />
             </li>
           </ul>
           <div className="px-4 py-3 text-[12px] text-[var(--color-chrome-muted)]">
