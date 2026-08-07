@@ -80,6 +80,18 @@ row-level security ✓ on every table
 
 ## Traps
 
+### 0. A schema change is pending for the live demo
+
+The 2026-08-06 work added `products.inventory_available` / `_on_hold` / `_sold`
+and the `order_comments` table. The live demo does not have them yet. Before
+that release is deployed:
+
+```bash
+npm run db:push:remote && npm run db:verify:remote
+```
+
+Until then the deployed build will error on any admin order or products page.
+
 ### 1. `drizzle-kit push` destroys things it cannot express
 
 This has bitten the project three separate times. Push reconciles by diffing the

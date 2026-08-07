@@ -398,6 +398,10 @@ store, the seeder gets replaced by an importer against supplier data.
 
 ## Before this is production
 
+> **New to this codebase?** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) is the
+> orientation: routes, the two auth systems, the invariants that will bite you,
+> and where everything lives.
+>
 > **Deploying?** Read [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) first. It has the
 > environment variables, the database command order, and six traps that have
 > already cost this project real incidents — `drizzle-kit push` silently dropping
