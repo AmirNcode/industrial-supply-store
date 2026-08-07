@@ -40,7 +40,9 @@ export function MobileHeader({ locale }: { locale: Locale }) {
     { href: `/${locale}/cart`, label: t.yourOrder },
     { href: `/${locale}/quick-order`, label: t.quickOrder },
     { href: `/${locale}`, label: t.allCategories },
-    { href: `/${locale}/admin`, label: t.admin },
+    // Account, not Admin. This menu is what a customer on a phone sees, and
+    // /admin is staff-only — it stays reachable from the footer.
+    { href: `/${locale}/account`, label: t.account },
   ];
 
   return (

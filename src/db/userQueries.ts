@@ -105,6 +105,21 @@ export async function setPassword(userId: string, passwordHash: string): Promise
   await sql`UPDATE users SET password_hash = ${passwordHash} WHERE id::text = ${userId}`;
 }
 
+/**
+ * Its own query rather than a field on `UserRow`.
+ *
+ * `UserRow` is passed straight into Server Components, so the hash is left out
+ * of it deliberately — a field that exists is a field that eventually gets
+ * rendered or serialised into an RSC payload. Only the one caller that has to
+ * compare a password reaches for this.
+ */
+export async function getPasswordHash(userId: string): Promise<string | null> {
+  const [row] = await sql<{ passwordHash: string }[]>`
+    SELECT password_hash AS "passwordHash" FROM users WHERE id::text = ${userId}
+  `;
+  return row?.passwordHash ?? null;
+}
+
 export async function touchLastLogin(userId: string): Promise<void> {
   await sql`UPDATE users SET last_login_at = now() WHERE id::text = ${userId}`;
 }

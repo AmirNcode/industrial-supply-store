@@ -230,6 +230,17 @@ const en = {
   noAccountForEmail: "No account exists for that email address.",
   invoiceCancelled: "CANCELLED — this invoice is void and must not be paid.",
   invoiceVoid: "Not payable",
+  profileSettings: "Profile settings",
+  changePassword: "Change password",
+  currentPassword: "Current password",
+  newPassword: "New password",
+  passwordChanged: "Password changed.",
+  currentPasswordWrong: "Current password is incorrect.",
+  languagePreference: "Language",
+  languageHint:
+    "Where you land after signing in. You can still switch language on any page.",
+  english: "English",
+  persian: "Persian",
   // Guest tracking
   trackOrder: "Track an order",
   trackIntro:
@@ -466,6 +477,17 @@ const fa: typeof en = {
   noAccountForEmail: "حسابی با این ایمیل وجود ندارد.",
   invoiceCancelled: "لغو شده — این صورتحساب باطل است و نباید پرداخت شود.",
   invoiceVoid: "قابل پرداخت نیست",
+  profileSettings: "تنظیمات حساب",
+  changePassword: "تغییر گذرواژه",
+  currentPassword: "گذرواژه فعلی",
+  newPassword: "گذرواژه جدید",
+  passwordChanged: "گذرواژه تغییر کرد.",
+  currentPasswordWrong: "گذرواژه فعلی نادرست است.",
+  languagePreference: "زبان",
+  languageHint:
+    "زبانی که پس از ورود به آن هدایت می‌شوید. در هر صفحه می‌توانید زبان را تغییر دهید.",
+  english: "انگلیسی",
+  persian: "فارسی",
   // Guest tracking
   trackOrder: "پیگیری سفارش",
   trackIntro:
