@@ -12,16 +12,16 @@ afterEach(() => {
 });
 
 test("Persian prefers the _FA variant when it is set", () => {
-  process.env.SELLER_NAME = "Parstech Supply Co.";
+  process.env.SELLER_NAME = "TEMEX Co.";
   process.env.SELLER_NAME_FA = "پارس‌تک ساپلای";
   assert.equal(getSeller("fa").name, "پارس‌تک ساپلای");
-  assert.equal(getSeller("en").name, "Parstech Supply Co.");
+  assert.equal(getSeller("en").name, "TEMEX Co.");
 });
 
 test("Persian falls back to the Latin value when no _FA variant is set", () => {
   // A deployment that has not translated its address should still print one.
-  process.env.SELLER_NAME = "Parstech Supply Co.";
-  assert.equal(getSeller("fa").name, "Parstech Supply Co.");
+  process.env.SELLER_NAME = "TEMEX Co.";
+  assert.equal(getSeller("fa").name, "TEMEX Co.");
 });
 
 test("an unconfigured deployment prints an obviously unfinished name", () => {

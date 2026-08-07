@@ -102,7 +102,12 @@ export function SearchBar({ locale }: { locale: Locale }) {
           placeholder={t.searchPlaceholder}
           autoComplete="off"
           aria-label={t.search}
-          className="flex-1 border-0 bg-transparent px-3 py-1.5 text-[14px] outline-none focus:shadow-none focus:ring-0"
+          // `min-w-0` is load-bearing: a flex item defaults to `min-width:
+          // auto`, so without it this input refuses to shrink below the
+          // intrinsic width of its placeholder and pushes the submit button
+          // out past the form's right edge — on a 375px screen that put the
+          // magnifier on top of the ORDER link.
+          className="min-w-0 flex-1 border-0 bg-transparent px-3 py-1.5 text-[14px] outline-none focus:shadow-none focus:ring-0"
         />
         <button
           type="submit"

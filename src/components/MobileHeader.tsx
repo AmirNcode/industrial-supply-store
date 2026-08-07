@@ -11,17 +11,21 @@ import { CartBadge } from "./CartBadge";
 /**
  * The phone masthead.
  *
- * The reference site shows the full wordmark only on the home screen and swaps
- * to a small square tile everywhere else, which buys back a whole row of
- * vertical space on the pages where content matters most. Reproducing that
- * needs the current route, hence the client component.
+ * The wordmark stays on every screen. It used to appear only on the home page,
+ * with a small amber tile carrying the brand's initial standing in for it
+ * elsewhere — which saved a row of vertical space and cost people the obvious
+ * way back to the catalog, because a monogram only reads as "home" to someone
+ * who already knows it is the logo. Setting the mark and its tagline on one
+ * line buys most of that space back without hiding anything.
+ *
+ * Still a client component: the drawer needs state, and closing it on
+ * navigation needs the current route.
  */
 export function MobileHeader({ locale }: { locale: Locale }) {
   const t = getDict(locale);
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
 
-  const isHome = pathname === `/${locale}` || pathname === `/${locale}/`;
   const other: Locale = locale === "fa" ? "en" : "fa";
 
   // Close the drawer on navigation — otherwise tapping a link leaves it open
@@ -37,8 +41,9 @@ export function MobileHeader({ locale }: { locale: Locale }) {
     };
   }, [menuOpen]);
 
+  // No "Your Order" here: the ORDER control sits in the bar above with its own
+  // count badge, and two routes to the same page in one header is noise.
   const menuLinks = [
-    { href: `/${locale}/cart`, label: t.yourOrder },
     { href: `/${locale}/quick-order`, label: t.quickOrder },
     { href: `/${locale}`, label: t.allCategories },
     // Account, not Admin. This menu is what a customer on a phone sees, and
@@ -48,38 +53,36 @@ export function MobileHeader({ locale }: { locale: Locale }) {
 
   return (
     <div className="lg:hidden">
-      {isHome && (
-        <div className="px-3 pt-3 pb-1 text-center">
-          <Link href={`/${locale}`} className="hover:no-underline">
-            <span
-              className="block whitespace-nowrap font-bold leading-none text-white"
-              style={{
-                fontSize: locale === "fa" ? 23 : 25,
-                letterSpacing: locale === "fa" ? 0 : "0.03em",
-              }}
-            >
+      {/* On every page, not just the home page. The masthead disappearing
+          elsewhere was what left people without an obvious way back, and a
+          single line costs little enough vertical space to keep everywhere. */}
+      <div className="px-3 pt-2 pb-1">
+        <Link href={`/${locale}`} className="hover:no-underline">
+          <span className="flex flex-wrap items-baseline gap-x-2 leading-none">
+            <span className="font-bold tracking-[0.04em] text-white text-[15px]">
               {t.brand}
-              <sup className="ms-0.5 align-super text-[9px] text-[var(--color-chrome-muted)]">
+              <sup className="ms-0.5 align-super text-[8px] text-[var(--color-chrome-muted)]">
                 ®
               </sup>
             </span>
-            <span className="mt-1.5 block text-[9px] uppercase tracking-[0.22em] text-[var(--color-chrome-muted)]">
+            {/* Same size as the mark, separated by colour alone. */}
+            <span className="text-[15px] text-[var(--color-chrome-muted)]">
               {t.tagline}
             </span>
-          </Link>
-        </div>
-      )}
+          </span>
+        </Link>
+      </div>
 
-      <div className="flex items-center gap-2 px-3 py-2">
-        {!isHome && (
-          <Link
-            href={`/${locale}`}
-            aria-label={t.home}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[3px] bg-[var(--color-amber)] text-[19px] font-bold leading-none text-[var(--color-chrome)] hover:no-underline"
-          >
-            P
-          </Link>
-        )}
+      <div className="flex items-center gap-2 px-3 pb-2">
+        {/* A word, not a monogram. The amber square with a letter in it did
+            not read as "go back to the catalog" to anyone who had not already
+            worked out that it was the logo. */}
+        <Link
+          href={`/${locale}`}
+          className="tap shrink-0 rounded-[3px] bg-[var(--color-amber)] px-2.5 py-1.5 text-[12px] font-semibold uppercase tracking-[0.06em] !text-[var(--color-chrome)] hover:no-underline"
+        >
+          {t.catalogButton}
+        </Link>
 
         <div className="min-w-0 flex-1">
           <SearchBar locale={locale} />
@@ -132,10 +135,10 @@ export function MobileHeader({ locale }: { locale: Locale }) {
               {t.emailUs}
             </div>
             <a
-              href="mailto:sales@parstech.example"
+              href="mailto:sales@temex.example"
               className="tech block !text-[var(--color-chrome-muted)]"
             >
-              sales@parstech.example
+              sales@temex.example
             </a>
             <a
               href="tel:+982188880000"

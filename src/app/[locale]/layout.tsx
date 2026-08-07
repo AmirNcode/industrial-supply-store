@@ -8,7 +8,7 @@ import { CartSync } from "@/components/CartSync";
 import { isLocale, dir, locales, getDict, type Locale } from "@/lib/i18n";
 
 export const metadata: Metadata = {
-  title: "Parstech Supply — Industrial Parts",
+  title: "TEMEX — Tools, Equipment & Materials Express",
   description:
     "Industrial parts catalog: fasteners, sealing, bearings, pipe fittings and more.",
 };

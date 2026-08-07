@@ -8,11 +8,11 @@ import { MobileHeader } from "./MobileHeader";
 /**
  * Two distinct mastheads rather than one that reflows.
  *
- * The desktop bar is a three-column layout with the wordmark, a centred search
- * and the order links. Squeezing that into 375px is what made the first mobile
- * pass unusable — at phone width the search needs the full row and the nav has
- * to collapse behind a drawer, which is a different structure, not a narrower
- * version of the same one.
+ * The desktop masthead is a branding line above a control row — Catalog,
+ * search, then the order and account links. Squeezing that into 375px is what
+ * made the first mobile pass unusable — at phone width the search needs the
+ * full row and the nav has to collapse behind a drawer, which is a different
+ * structure, not a narrower version of the same one.
  *
  * The chrome is near-black pulled toward green so it reads as part of the
  * palette rather than neutral furniture sitting on top of it. The amber rule
@@ -27,39 +27,46 @@ export function Header({ locale }: { locale: Locale }) {
       <div className="bg-[var(--color-chrome)]">
         <MobileHeader locale={locale} />
 
-        <div className="hidden items-center gap-5 px-4 py-2.5 lg:flex">
-          <Link
-            href={`/${locale}`}
-            className="shrink-0 hover:no-underline"
-            style={{ width: 236 }}
-          >
-            <span
-              className="block whitespace-nowrap font-bold leading-none text-white"
-              style={{
-                fontSize: locale === "fa" ? 19 : 20,
-                letterSpacing: locale === "fa" ? 0 : "0.02em",
-              }}
-            >
-              {t.brand}
-              <sup className="ms-0.5 align-super text-[8px] text-[var(--color-chrome-muted)]">
-                ®
-              </sup>
-            </span>
-            <span className="mt-1 block text-[9px] uppercase tracking-[0.22em] text-[var(--color-chrome-muted)]">
-              {t.tagline}
+        {/* Branding on its own line, above the controls, so it is present on
+            every page rather than only where there was room for it beside the
+            search. One line keeps that cheap in vertical space. */}
+        <div className="hidden px-4 pt-2 lg:block">
+          <Link href={`/${locale}`} className="hover:no-underline">
+            <span className="flex items-baseline gap-x-2 leading-none">
+              <span className="font-bold tracking-[0.04em] text-white text-[17px]">
+                {t.brand}
+                <sup className="ms-0.5 align-super text-[8px] text-[var(--color-chrome-muted)]">
+                  ®
+                </sup>
+              </span>
+              {/* Same size as the mark; only colour separates them. */}
+              <span className="text-[17px] text-[var(--color-chrome-muted)]">
+                {t.tagline}
+              </span>
             </span>
           </Link>
+        </div>
 
-          <div className="min-w-0 flex-1">
+        <div className="hidden items-center gap-5 px-4 pt-2 pb-2.5 lg:flex">
+          <Link
+            href={`/${locale}`}
+            className="shrink-0 rounded-[3px] bg-[var(--color-amber)] px-3 py-1.5 text-[12px] font-semibold uppercase tracking-[0.06em] !text-[var(--color-chrome)] hover:no-underline"
+          >
+            {t.catalogButton}
+          </Link>
+
+          {/* Capped rather than filling the bar: a search field the width of a
+              desktop window is harder to aim at, not easier. */}
+          <div className="min-w-0 max-w-[560px] flex-1">
             <SearchBar locale={locale} />
           </div>
 
-          <div className="shrink-0 text-end">
+          <div className="ms-auto shrink-0 text-end">
             <div className="flex items-center justify-end gap-3 text-[11px] text-[var(--color-chrome-muted)]">
               <span className="tech">+98 21 8888 0000</span>
               <span className="text-[var(--color-chrome-line)]">|</span>
               <a
-                href="mailto:sales@parstech.example"
+                href="mailto:sales@temex.example"
                 className="!text-[var(--color-chrome-ink)] hover:!text-white"
               >
                 {t.emailUs}

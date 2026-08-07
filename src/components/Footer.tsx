@@ -12,6 +12,12 @@ export function Footer({ locale }: { locale: Locale }) {
   ];
   return (
     <footer className="mt-8 border-t border-[var(--color-rule)] bg-white">
+      {/* The promise the brand is built on — fast delivery and a money-back
+          guarantee — stated once, where it is on every page without competing
+          with the catalog for attention. */}
+      <div className="border-b border-[var(--color-rule-light)] px-3 py-2 text-[12px] font-semibold text-[var(--color-pine)]">
+        {t.brandPromise}
+      </div>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-[11px] text-[var(--color-ink-muted)]">
         {links.map((l, i) => (
           <span key={l.href} className="flex items-center gap-3">

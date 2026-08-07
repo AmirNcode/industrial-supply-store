@@ -1,4 +1,4 @@
-# Parstech Supply
+# TEMEX — Tools, Equipment & Materials Express
 
 A McMaster-Carr–style industrial parts catalog for the Iranian market.
 English (USD) and Persian (Toman), RTL throughout. No payment processing — the

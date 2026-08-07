@@ -33,12 +33,12 @@ export function getSeller(locale: Locale): Seller {
   };
 
   return {
-    name: pick("NAME", "Parstech Supply — set SELLER_NAME"),
+    name: pick("NAME", "TEMEX — set SELLER_NAME"),
     addressLines: pick("ADDRESS", "")
       .split("|")
       .map((s) => s.trim())
       .filter(Boolean),
-    email: pick("EMAIL", "sales@parstech.example"),
+    email: pick("EMAIL", "sales@temex.example"),
     phone: pick("PHONE", "+98 21 8888 0000"),
     taxId: pick("TAX_ID", ""),
   };
