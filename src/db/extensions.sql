@@ -5,9 +5,122 @@
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 CREATE EXTENSION IF NOT EXISTS unaccent;
 
+-- Search text is compared in two forms:
+--
+--   words:   "Oil-Resistant O-Rings" -> "oilresistant orings"
+--   compact: "Oil-Resistant O-Rings" -> "oilresistantorings"
+--
+-- Punctuation disappears instead of becoming a word boundary so a buyer does
+-- not have to know whether the catalog spells a term as "O-ring", "O ring" or
+-- "oring". Spaces remain in the words form so a match at the start of a real
+-- word can outrank an incidental substring such as "oring" in "flooring".
+--
+-- The normalizer uses only immutable built-ins so PostgreSQL can safely use it
+-- in the normalized product expression index below. Persian letters are left
+-- intact; only punctuation and spacing are changed.
+CREATE OR REPLACE FUNCTION catalog_search_words(input text)
+RETURNS text
+LANGUAGE sql
+IMMUTABLE
+PARALLEL SAFE
+AS $function$
+  SELECT trim(
+    regexp_replace(
+      regexp_replace(
+        lower(coalesce(input, '')),
+        '[[:punct:]®™©]+',
+        '',
+        'g'
+      ),
+      '[[:space:]]+',
+      ' ',
+      'g'
+    )
+  )
+$function$;
+
+CREATE OR REPLACE FUNCTION catalog_search_compact(input text)
+RETURNS text
+LANGUAGE sql
+IMMUTABLE
+PARALLEL SAFE
+AS $function$
+  SELECT replace(catalog_search_words(input), ' ', '')
+$function$;
+
+-- Prefix each parsed lexeme so "oring" finds the indexed "orings" token. The
+-- input has already had punctuation collapsed, which is what makes the same
+-- index bridge "o-ring", "o ring" and "oring" without scanning every SKU.
+CREATE OR REPLACE FUNCTION catalog_prefix_tsquery(input text)
+RETURNS tsquery
+LANGUAGE sql
+IMMUTABLE
+PARALLEL SAFE
+AS $function$
+  SELECT to_tsquery(
+    'simple',
+    string_agg(quote_literal(lexeme) || ':*', ' & ')
+  )
+  FROM unnest(
+    tsvector_to_array(to_tsvector('simple', catalog_search_words(input)))
+  ) AS parsed(lexeme)
+$function$;
+
+-- One relevance score shared by autocomplete and the full results page.
+-- Numeric gaps between tiers are intentional: product count and catalog sort
+-- only break ties inside a relevance tier; they can never make a popular but
+-- weak substring beat a punctuation-insensitive or typo-tolerant match.
+CREATE OR REPLACE FUNCTION catalog_search_rank(needle text, candidate text)
+RETURNS real
+LANGUAGE sql
+IMMUTABLE
+PARALLEL SAFE
+AS $function$
+  WITH normalized AS (
+    SELECT catalog_search_words(needle) AS needle_words,
+           catalog_search_compact(needle) AS needle_compact,
+           catalog_search_words(candidate) AS candidate_words,
+           catalog_search_compact(candidate) AS candidate_compact
+  ), similarity_score AS (
+    SELECT normalized.*,
+           greatest(
+             strict_word_similarity(needle_words, candidate_words),
+             similarity(needle_compact, candidate_compact)
+           ) AS fuzzy
+    FROM normalized
+  )
+  SELECT CASE
+    WHEN needle_compact = '' OR candidate_compact = '' THEN 0
+    WHEN candidate_compact = needle_compact THEN 1
+    WHEN candidate_compact = needle_compact || 's'
+      OR needle_compact = candidate_compact || 's' THEN 0.98
+    WHEN candidate_words LIKE needle_compact || '%'
+      OR candidate_words LIKE '% ' || needle_compact || '%' THEN 0.92
+    WHEN candidate_compact LIKE needle_compact || '%' THEN 0.86
+    ELSE greatest(
+      CASE
+        WHEN char_length(needle_compact) >= 3
+          AND fuzzy >= CASE WHEN char_length(needle_compact) = 3 THEN 0.4 ELSE 0.3 END
+        THEN 0.60 + fuzzy * 0.25
+        ELSE 0
+      END,
+      CASE
+        WHEN candidate_compact LIKE '%' || needle_compact || '%' THEN 0.55
+        ELSE 0
+      END
+    )
+  END::real
+  FROM similarity_score
+$function$;
+
 -- Full-text search over the flattened product text.
 CREATE INDEX IF NOT EXISTS products_fts_idx
   ON products USING GIN (to_tsvector('simple', search_text));
+
+-- Same document, punctuation-normalized and queried with prefix lexemes. The
+-- original index remains useful for exact FTS; this one powers smart search.
+CREATE INDEX IF NOT EXISTS products_normalized_fts_idx
+  ON products USING GIN (to_tsvector('simple', catalog_search_words(search_text)));
 
 -- Prefix / fuzzy matching for part-number autocomplete.
 CREATE INDEX IF NOT EXISTS products_part_number_trgm_idx

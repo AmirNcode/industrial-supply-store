@@ -260,31 +260,61 @@ export type Suggestion =
 export async function suggest(q: string, limit = 8): Promise<Suggestion[]> {
   const term = q.trim();
   if (term.length < 2) return [];
-  const like = `%${term}%`;
 
   const [cats, fams, prods] = await Promise.all([
     sql<{ path: string; nameEn: string; nameFa: string; count: number }[]>`
-      SELECT path, name_en AS "nameEn", name_fa AS "nameFa",
-             product_count AS count
-      FROM categories
-      WHERE name_en ILIKE ${like} OR name_fa ILIKE ${like}
-      ORDER BY product_count DESC LIMIT ${limit}
+      WITH ranked AS (
+        SELECT path, name_en AS "nameEn", name_fa AS "nameFa",
+               product_count AS count,
+               greatest(
+                 catalog_search_rank(${term}, name_en),
+                 catalog_search_rank(${term}, name_fa)
+               ) AS relevance
+        FROM categories
+      )
+      SELECT path, "nameEn", "nameFa", count
+      FROM ranked
+      WHERE relevance > 0
+      ORDER BY relevance DESC, count DESC
+      LIMIT ${limit}
     `,
     sql<{ slug: string; nameEn: string; nameFa: string; count: number }[]>`
-      SELECT slug, name_en AS "nameEn", name_fa AS "nameFa",
-             product_count AS count
-      FROM product_families
-      WHERE name_en ILIKE ${like} OR name_fa ILIKE ${like}
-      ORDER BY product_count DESC LIMIT ${limit}
+      WITH ranked AS (
+        SELECT slug, name_en AS "nameEn", name_fa AS "nameFa",
+               product_count AS count,
+               greatest(
+                 catalog_search_rank(${term}, name_en),
+                 catalog_search_rank(${term}, name_fa)
+               ) AS relevance
+        FROM product_families
+      )
+      SELECT slug, "nameEn", "nameFa", count
+      FROM ranked
+      WHERE relevance > 0
+      ORDER BY relevance DESC, count DESC
+      LIMIT ${limit}
     `,
-    // Part-number lookups are the highest-intent query a procurement buyer makes,
-    // so they are matched by prefix and surfaced separately.
+    // Part-number lookups are the highest-intent query a procurement buyer
+    // makes. Exact and normalized prefixes still lead, but a transposed or
+    // missing character can now recover a nearby part number too.
     sql<{ partNumber: string; slug: string; nameEn: string; nameFa: string }[]>`
-      SELECT p.part_number AS "partNumber", f.slug,
-             f.name_en AS "nameEn", f.name_fa AS "nameFa"
-      FROM products p JOIN product_families f ON f.id = p.family_id
-      WHERE p.part_number ILIKE ${term + "%"}
-      ORDER BY p.part_number LIMIT 5
+      WITH candidates AS MATERIALIZED (
+        SELECT p.part_number AS "partNumber", f.slug,
+               f.name_en AS "nameEn", f.name_fa AS "nameFa"
+        FROM products p
+        JOIN product_families f ON f.id = p.family_id
+        WHERE p.part_number ILIKE ${term + "%"}
+           OR p.part_number % ${term}
+      ), ranked AS (
+        SELECT candidates.*,
+               catalog_search_rank(${term}, "partNumber") AS relevance
+        FROM candidates
+      )
+      SELECT "partNumber", slug, "nameEn", "nameFa"
+      FROM ranked
+      WHERE relevance > 0
+      ORDER BY relevance DESC, "partNumber"
+      LIMIT 5
     `,
   ]);
 
@@ -305,35 +335,110 @@ export type SearchResults = {
 export async function search(q: string): Promise<SearchResults> {
   const term = q.trim();
   if (!term) return { families: [], categories: [], products: [], total: 0 };
-  const like = `%${term}%`;
 
   const [families, categories, products] = await Promise.all([
     sql<(FamilyRow & { categoryPath: string })[]>`
-      SELECT ${FAMILY_COLS}, c.path AS "categoryPath"
-      FROM product_families f
-      JOIN categories c ON c.id = f.category_id
-      WHERE f.name_en ILIKE ${like} OR f.name_fa ILIKE ${like}
-         OR f.desc_en ILIKE ${like} OR f.desc_fa ILIKE ${like}
-      ORDER BY f.product_count DESC LIMIT 40
+      WITH ranked AS (
+        SELECT ${FAMILY_COLS}, c.path AS "categoryPath",
+               greatest(
+                 catalog_search_rank(${term}, f.name_en),
+                 catalog_search_rank(${term}, f.name_fa),
+                 catalog_search_rank(${term}, f.desc_en) * 0.8,
+                 catalog_search_rank(${term}, f.desc_fa) * 0.8
+               ) AS relevance
+        FROM product_families f
+        JOIN categories c ON c.id = f.category_id
+      )
+      SELECT id, slug, "categoryId", "nameEn", "nameFa", "descEn", "descFa",
+             "aboutEn", "aboutFa", "groupEn", "groupFa", icon,
+             "productCount", "categoryPath"
+      FROM ranked
+      WHERE relevance > 0
+      ORDER BY relevance DESC, "productCount" DESC
+      LIMIT 40
     `,
     sql<CategoryRow[]>`
-      SELECT id, slug, path, depth, parent_id AS "parentId",
-             name_en AS "nameEn", name_fa AS "nameFa", icon,
-             product_count AS "productCount"
-      FROM categories
-      WHERE name_en ILIKE ${like} OR name_fa ILIKE ${like}
-      ORDER BY product_count DESC LIMIT 12
+      WITH ranked AS (
+        SELECT id, slug, path, depth, parent_id AS "parentId",
+               name_en AS "nameEn", name_fa AS "nameFa", icon,
+               product_count AS "productCount",
+               greatest(
+                 catalog_search_rank(${term}, name_en),
+                 catalog_search_rank(${term}, name_fa)
+               ) AS relevance
+        FROM categories
+      )
+      SELECT id, slug, path, depth, "parentId", "nameEn", "nameFa", icon,
+             "productCount"
+      FROM ranked
+      WHERE relevance > 0
+      ORDER BY relevance DESC, "productCount" DESC
+      LIMIT 12
     `,
     sql<(ProductRow & { familySlug: string; familyEn: string; familyFa: string })[]>`
+      WITH family_matches AS MATERIALIZED (
+        SELECT id, relevance
+        FROM (
+          SELECT f.id,
+                 greatest(
+                   catalog_search_rank(${term}, f.name_en),
+                   catalog_search_rank(${term}, f.name_fa),
+                   catalog_search_rank(${term}, f.desc_en) * 0.8,
+                   catalog_search_rank(${term}, f.desc_fa) * 0.8
+                 ) AS relevance
+          FROM product_families f
+        ) scored
+        WHERE relevance > 0
+      ), candidate_scores AS MATERIALIZED (
+        -- Each branch has its own usable index. Keeping these as a UNION is
+        -- much faster than one large OR, which makes PostgreSQL scan and
+        -- normalize all 34k product documents before it can rank any of them.
+        SELECT p.id, fm.relevance, 0::real AS part_relevance
+        FROM family_matches fm
+        JOIN products p ON p.family_id = fm.id
+
+        UNION ALL
+
+        SELECT p.id,
+               catalog_search_rank(${term}, p.part_number) AS relevance,
+               catalog_search_rank(${term}, p.part_number) AS part_relevance
+        FROM products p
+        WHERE p.part_number ILIKE ${term + "%"}
+           OR p.part_number % ${term}
+
+        UNION ALL
+
+        SELECT p.id, 0.82::real AS relevance, 0::real AS part_relevance
+        FROM products p
+        WHERE to_tsvector('simple', catalog_search_words(p.search_text))
+                @@ catalog_prefix_tsquery(${term})
+
+        UNION ALL
+
+        -- Keep the original token boundaries as a complementary path. The
+        -- normalized index finds "oilresistant"; this one finds a buyer who
+        -- types the same phrase as two words, "oil resistant".
+        SELECT p.id, 0.82::real AS relevance, 0::real AS part_relevance
+        FROM products p
+        WHERE to_tsvector('simple', p.search_text)
+                @@ catalog_prefix_tsquery(${term})
+      ), ranked AS (
+        SELECT id, max(relevance) AS relevance,
+               max(part_relevance) AS part_relevance
+        FROM candidate_scores
+        GROUP BY id
+        HAVING max(relevance) > 0
+      )
       SELECT p.id, p.part_number AS "partNumber", p.specs,
              p.price_tiers AS "priceTiers", p.price_cents AS "priceCents",
              p.pack_qty AS "packQty", p.lead_days AS "leadDays",
-             p.in_stock AS "inStock",
-             f.slug AS "familySlug", f.name_en AS "familyEn", f.name_fa AS "familyFa"
-      FROM products p JOIN product_families f ON f.id = p.family_id
-      WHERE p.part_number ILIKE ${term + "%"}
-         OR to_tsvector('simple', p.search_text) @@ plainto_tsquery('simple', ${term})
-      ORDER BY (p.part_number ILIKE ${term + "%"}) DESC, p.sort
+             p.in_stock AS "inStock", f.slug AS "familySlug",
+             f.name_en AS "familyEn", f.name_fa AS "familyFa"
+      FROM ranked r
+      JOIN products p ON p.id = r.id
+      JOIN product_families f ON f.id = p.family_id
+      ORDER BY r.relevance DESC, r.part_relevance DESC,
+               f.product_count DESC, p.sort
       LIMIT 60
     `,
   ]);

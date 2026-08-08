@@ -1,24 +1,87 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { getDict, type Locale } from "@/lib/i18n";
 import type { Suggestion } from "@/db/queries";
+
+/* Shared so the boundary's fallback is the same field, pixel for pixel, as the
+   one that hydrates over it. */
+const FORM_CLASS =
+  "flex items-center rounded-[3px] border border-[var(--color-navy-deep)] bg-white focus-within:border-white focus-within:ring-[3px] focus-within:ring-[rgba(255,255,255,0.35)]";
+const INPUT_CLASS =
+  "min-w-0 flex-1 border-0 bg-transparent px-3 py-1.5 text-[14px] outline-none focus:shadow-none focus:ring-0";
+const SUBMIT_CLASS =
+  "px-3 py-1 text-[var(--color-ink-muted)] hover:text-[var(--color-navy)]";
+
+function Magnifier() {
+  return (
+    <svg width="17" height="17" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+      <circle cx="8.5" cy="8.5" r="6" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M13 13l5 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/**
+ * `useSearchParams` opts its subtree out of static rendering, and this field is
+ * in the masthead — which is to say on every page — so without a boundary here
+ * `next build` fails on every route it tries to prerender.
+ *
+ * The fallback is not a spinner: it is the same form, posting to the same
+ * route. Before hydration the search still works as a plain GET, and the markup
+ * React swaps in is identical, so nothing moves when it arrives.
+ */
+export function SearchBar({ locale }: { locale: Locale }) {
+  return (
+    <Suspense fallback={<SearchField locale={locale} />}>
+      <LiveSearchBar locale={locale} />
+    </Suspense>
+  );
+}
+
+function SearchField({ locale }: { locale: Locale }) {
+  const t = getDict(locale);
+  return (
+    <div className="relative">
+      <form action={`/${locale}/search`} className={FORM_CLASS}>
+        <input
+          name="q"
+          placeholder={t.searchPlaceholder}
+          aria-label={t.search}
+          autoComplete="off"
+          className={INPUT_CLASS}
+        />
+        <button type="submit" aria-label={t.search} className={SUBMIT_CLASS}>
+          <Magnifier />
+        </button>
+      </form>
+    </div>
+  );
+}
 
 /**
  * One of only four client islands in the app. Suggestions are fetched from a
  * route handler rather than a server action so the request can be aborted when
  * the buyer keeps typing — abandoned keystrokes should not queue up work.
  */
-export function SearchBar({ locale }: { locale: Locale }) {
+function LiveSearchBar({ locale }: { locale: Locale }) {
   const t = getDict(locale);
   const router = useRouter();
-  const [q, setQ] = useState("");
+  const searchParams = useSearchParams();
+  const submittedQuery = searchParams.get("q") ?? "";
+  const [q, setQ] = useState(submittedQuery);
   const [items, setItems] = useState<Suggestion[]>([]);
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
   const boxRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+
+  // The header layout persists across client-side navigation, so local state
+  // alone can drift from the URL. Treat the submitted query as the source of
+  // truth after navigation while still keeping keystrokes local before submit.
+  useEffect(() => setQ(submittedQuery), [submittedQuery]);
 
   useEffect(() => {
     if (q.trim().length < 2) {
@@ -36,7 +99,10 @@ export function SearchBar({ locale }: { locale: Locale }) {
         if (!res.ok) return;
         const data = (await res.json()) as Suggestion[];
         setItems(data);
-        setOpen(true);
+        // A submitted query initializes `q` on the results page, which also
+        // triggers this fetch. Keep the suggestions warm, but do not cover the
+        // results unless the buyer is actively editing the field.
+        setOpen(document.activeElement === inputRef.current);
         setActive(-1);
       } catch {
         /* aborted or offline — leave the previous list in place */
@@ -93,9 +159,10 @@ export function SearchBar({ locale }: { locale: Locale }) {
       <form
         action={`/${locale}/search`}
         onSubmit={() => setOpen(false)}
-        className="flex items-center rounded-[3px] border border-[var(--color-navy-deep)] bg-white focus-within:border-white focus-within:ring-[3px] focus-within:ring-[rgba(255,255,255,0.35)]"
+        className={FORM_CLASS}
       >
         <input
+          ref={inputRef}
           name="q"
           value={q}
           onChange={(e) => setQ(e.target.value)}
@@ -109,17 +176,10 @@ export function SearchBar({ locale }: { locale: Locale }) {
           // intrinsic width of its placeholder and pushes the submit button
           // out past the form's right edge — on a 375px screen that put the
           // magnifier on top of the ORDER link.
-          className="min-w-0 flex-1 border-0 bg-transparent px-3 py-1.5 text-[14px] outline-none focus:shadow-none focus:ring-0"
+          className={INPUT_CLASS}
         />
-        <button
-          type="submit"
-          aria-label={t.search}
-          className="px-3 py-1 text-[var(--color-ink-muted)] hover:text-[var(--color-navy)]"
-        >
-          <svg width="17" height="17" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-            <circle cx="8.5" cy="8.5" r="6" stroke="currentColor" strokeWidth="1.8" />
-            <path d="M13 13l5 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-          </svg>
+        <button type="submit" aria-label={t.search} className={SUBMIT_CLASS}>
+          <Magnifier />
         </button>
       </form>
 
