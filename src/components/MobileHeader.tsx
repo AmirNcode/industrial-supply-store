@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { getDict, type Locale } from "@/lib/i18n";
@@ -30,6 +30,7 @@ export function MobileHeader({ locale }: { locale: Locale }) {
   const t = getDict(locale);
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
 
   const other: Locale = locale === "fa" ? "en" : "fa";
 
@@ -37,13 +38,38 @@ export function MobileHeader({ locale }: { locale: Locale }) {
   // over the page the user just asked for.
   useEffect(() => setMenuOpen(false), [pathname]);
 
+  /*
+   * Flags the masthead while the drawer is open, which does two jobs.
+   *
+   * `MastheadReveal` reads it and stops tucking the bar away — otherwise a
+   * stray wheel notch would slide the open drawer off the top of the screen.
+   * It also guarantees the header keeps `transform: none`, and a transformed
+   * ancestor would become the containing block for the fixed backdrop below,
+   * which would then cover the header instead of the page.
+   *
+   * This replaced an `overflow: hidden` scroll lock on `<body>`. That lock made
+   * the body a scroll container, which destroys `position: sticky` on the
+   * header: the bar dropped back to its static position at the top of the
+   * document, out of sight whenever the drawer was opened part-way down a page.
+   * The backdrop's `touch-action` holds the page still instead.
+   */
+  useEffect(() => {
+    const header = rootRef.current?.closest("header");
+    if (!header) return;
+    if (!menuOpen) {
+      header.removeAttribute("data-menu-open");
+      return;
+    }
+    header.setAttribute("data-menu-open", "true");
+    return () => header.removeAttribute("data-menu-open");
+  }, [menuOpen]);
+
+  // Escape is the keyboard equivalent of tapping the backdrop.
   useEffect(() => {
     if (!menuOpen) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prev;
-    };
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setMenuOpen(false);
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
   }, [menuOpen]);
 
   // No "Your Order" here: the ORDER control sits in the bar above with its own
@@ -57,12 +83,33 @@ export function MobileHeader({ locale }: { locale: Locale }) {
   ];
 
   return (
-    <div className="lg:hidden">
+    <div ref={rootRef} className="lg:hidden">
+      {/*
+        Dismisses the drawer on a tap anywhere off it, and holds the page still
+        while it is open.
+
+        `touch-action: none` is the whole scroll lock: it stops a gesture that
+        starts on the backdrop from scrolling the page, without making `<body>`
+        a scroll container the way `overflow: hidden` did — which is what broke
+        the sticky header. Sits at the default z-index so the bar and drawer,
+        both lifted to z-10 below, stay above it and stay tappable.
+
+        Presentational: a keyboard user gets Escape rather than a focusable
+        blank rectangle in the tab order.
+      */}
+      {menuOpen && (
+        <div
+          aria-hidden="true"
+          onClick={() => setMenuOpen(false)}
+          className="fixed inset-0 touch-none bg-[rgba(11,34,73,0.5)]"
+        />
+      )}
+
       {/* The wordmark shares the top line with the tagline here, unlike the
           desktop masthead where it sits beside the search. At phone width it
           was the widest fixed item in the control row, and the search — already
           down to 134px — is what needed that space back. */}
-      <div className="px-3 pt-2 pb-1">
+      <div className="relative z-10 bg-[var(--color-navy)] px-3 pt-2 pb-1">
         <Link href={`/${locale}`} className="flex items-center gap-2 hover:no-underline">
           {/* alt carries the brand name, and the attributes carry the display
               size rather than the file's 1908×543 — see the note in Header.tsx
@@ -90,7 +137,7 @@ export function MobileHeader({ locale }: { locale: Locale }) {
         items in the row share one height and one centre line in either pointer
         mode; `.tap` still raises both to 44px on real touch hardware.
       */}
-      <div className="flex items-center gap-2 px-3 pb-2">
+      <div className="relative z-10 flex items-center gap-2 bg-[var(--color-navy)] px-3 pb-2">
         <div className="min-w-0 flex-1">
           <SearchBar locale={locale} />
         </div>
@@ -138,7 +185,7 @@ export function MobileHeader({ locale }: { locale: Locale }) {
           value the two would read as one block and the menu would look like
           part of the header rather than a layer over the catalog. */}
       {menuOpen && (
-        <nav className="bg-[var(--color-navy-deep)]">
+        <nav className="relative z-10 bg-[var(--color-navy-deep)]">
           <ul>
             {menuLinks.map((l) => (
               <li

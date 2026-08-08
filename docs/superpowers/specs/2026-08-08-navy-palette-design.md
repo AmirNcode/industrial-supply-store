@@ -150,6 +150,27 @@ broke `next build`: the masthead contains `SearchBar`, which calls
 bailout up to the page root. Keeping the boundary below the markup leaves the
 whole masthead server-rendered, and means scrolling never re-renders it.
 
+### The drawer and the sticky bar
+
+The drawer used to lock scrolling with `overflow: hidden` on `<body>`. That
+makes the body a scroll container, which destroys `position: sticky` on the
+header — so opening the menu part-way down a page dropped the bar back to its
+static position at the top of the document, out of sight, and froze the page
+with it. The lock is gone.
+
+Holding the page still is now the backdrop's job, via `touch-action: none`: a
+gesture starting on it cannot scroll, and nothing about the body changes. The
+backdrop also dismisses the drawer on a tap, with Escape as the keyboard
+equivalent — it is `aria-hidden`, so a keyboard user gets the key rather than a
+blank rectangle in the tab order.
+
+While the drawer is open the header carries `data-menu-open`. `MastheadReveal`
+reads it and stops hiding the bar, since tucking it away would take the open
+drawer with it. That also keeps the header free of a `transform`, which would
+otherwise become the containing block for the fixed backdrop and leave it
+covering the header instead of the page. The bar rows and the drawer sit at
+`z-10` so they stay above the backdrop and stay tappable.
+
 `SearchBar` itself is wrapped in a `Suspense` boundary for the same reason —
 `useSearchParams` in a component that appears on every page fails every
 prerendered route without one. The fallback is the same form posting to the

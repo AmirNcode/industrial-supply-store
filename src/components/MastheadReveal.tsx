@@ -37,6 +37,13 @@ export function MastheadReveal() {
 
     const read = () => {
       ticking = false;
+
+      // An open drawer hangs off the bottom of this bar. Tucking the bar away
+      // would take the drawer with it, so while the menu is up the header stays
+      // put — and stays free of a `transform`, which would otherwise become the
+      // containing block for the drawer's fixed backdrop.
+      if (header.hasAttribute("data-menu-open")) return;
+
       const y = window.scrollY;
 
       // iOS rubber-banding runs scrollY past both ends of the document. The
