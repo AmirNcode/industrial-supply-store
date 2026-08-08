@@ -147,6 +147,19 @@ export default async function InvoicePage({
           )}
         </div>
         <div className="text-end text-[12px] leading-relaxed">
+          {/* The full lockup earns its place here: white paper, printed at a
+              size where the wordmark actually reads. `print-color-adjust`
+              keeps the yellow when the browser would otherwise drop
+              backgrounds from a print. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/temex-logo.svg"
+            alt={seller.name}
+            width={132}
+            height={132}
+            className="mb-2 ms-auto block h-[52px] w-[52px]"
+            style={{ printColorAdjust: "exact", WebkitPrintColorAdjust: "exact" }}
+          />
           <p className="font-bold">{seller.name}</p>
           {seller.addressLines.map((line, i) => (
             <p key={i} className="text-[var(--color-ink-muted)]">{line}</p>

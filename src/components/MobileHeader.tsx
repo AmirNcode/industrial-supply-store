@@ -57,18 +57,20 @@ export function MobileHeader({ locale }: { locale: Locale }) {
           elsewhere was what left people without an obvious way back, and a
           single line costs little enough vertical space to keep everywhere. */}
       <div className="px-3 pt-2 pb-1">
-        <Link href={`/${locale}`} className="hover:no-underline">
-          <span className="flex flex-wrap items-baseline gap-x-2 leading-none">
-            <span className="font-bold tracking-[0.04em] text-white text-[15px]">
-              {t.brand}
-              <sup className="ms-0.5 align-super text-[8px] text-[var(--color-chrome-muted)]">
-                ®
-              </sup>
-            </span>
-            {/* Same size as the mark, separated by colour alone. */}
-            <span className="text-[15px] text-[var(--color-chrome-muted)]">
-              {t.tagline}
-            </span>
+        <Link href={`/${locale}`} className="flex items-center gap-2 hover:no-underline">
+          {/* alt carries the brand name — see the note in Header.tsx. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/temex-logo-cropped.jpg"
+            alt={t.brand}
+            width={1908}
+            height={543}
+            className="block h-[22px] w-auto shrink-0"
+          />
+          {/* Wraps rather than shrinks: at 320px the tagline needs a second
+              line, and squeezing it instead would shrink the wordmark. */}
+          <span className="min-w-0 text-[13px] leading-tight text-[var(--color-chrome-muted)]">
+            {t.tagline}
           </span>
         </Link>
       </div>

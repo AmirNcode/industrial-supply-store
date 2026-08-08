@@ -31,18 +31,21 @@ export function Header({ locale }: { locale: Locale }) {
             every page rather than only where there was room for it beside the
             search. One line keeps that cheap in vertical space. */}
         <div className="hidden px-4 pt-2 lg:block">
-          <Link href={`/${locale}`} className="hover:no-underline">
-            <span className="flex items-baseline gap-x-2 leading-none">
-              <span className="font-bold tracking-[0.04em] text-white text-[17px]">
-                {t.brand}
-                <sup className="ms-0.5 align-super text-[8px] text-[var(--color-chrome-muted)]">
-                  ®
-                </sup>
-              </span>
-              {/* Same size as the mark; only colour separates them. */}
-              <span className="text-[17px] text-[var(--color-chrome-muted)]">
-                {t.tagline}
-              </span>
+          <Link href={`/${locale}`} className="flex items-center gap-3 hover:no-underline">
+            {/* The wordmark is the image now, so `alt` carries the brand name.
+                With the text gone this is the only place "TEMEX" exists on the
+                page — an empty alt here would erase it for screen readers and
+                for anything reading the markup. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/temex-logo-cropped.jpg"
+              alt={t.brand}
+              width={1908}
+              height={543}
+              className="block h-[26px] w-auto shrink-0"
+            />
+            <span className="text-[17px] text-[var(--color-chrome-muted)]">
+              {t.tagline}
             </span>
           </Link>
         </div>
