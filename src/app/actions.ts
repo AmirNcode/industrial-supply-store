@@ -1,6 +1,5 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { sql } from "@/db";
 import { addLine, setLineQty, removeLine, clearCart, getCartLines, unitPriceAt } from "@/lib/cart";
@@ -9,12 +8,25 @@ import { safeLocale } from "@/lib/i18n";
 import { currentUserId } from "@/lib/session";
 import { holdStockForOrder } from "@/db/inventoryQueries";
 
+/**
+ * Deliberately no `revalidatePath`.
+ *
+ * The cart is read on the client: `CartBadge` and `InCartQty` render from the
+ * shared copy `CartSync` pulls from /api/cart on each navigation, precisely so
+ * the surrounding page can stay cached. No cached page renders cart contents,
+ * and none renders inventory either, so there is nothing for a cart mutation
+ * to invalidate.
+ *
+ * `revalidatePath("/", "layout")` used to sit at the end of each of these. It
+ * purged every prerendered page in the app — both home pages and every
+ * category page — on every single add to cart. The next visitor then paid for
+ * the regeneration, which is what made the site feel like it was hanging.
+ */
 export async function addToCartAction(formData: FormData) {
   const productId = Number(formData.get("productId"));
   const qty = Math.max(1, Math.min(99999, Number(formData.get("qty")) || 1));
   if (!Number.isFinite(productId) || productId <= 0) return;
   await addLine(productId, qty);
-  revalidatePath("/", "layout");
 }
 
 export async function updateQtyAction(formData: FormData) {
@@ -22,14 +34,12 @@ export async function updateQtyAction(formData: FormData) {
   const qty = Number(formData.get("qty"));
   if (!Number.isFinite(productId)) return;
   await setLineQty(productId, Math.min(99999, qty));
-  revalidatePath("/", "layout");
 }
 
 export async function removeLineAction(formData: FormData) {
   const productId = Number(formData.get("productId"));
   if (!Number.isFinite(productId)) return;
   await removeLine(productId);
-  revalidatePath("/", "layout");
 }
 
 export type QuickOrderResult = {
@@ -77,7 +87,6 @@ export async function quickOrderAction(
     added.push({ partNumber: hit.partNumber, qty });
   }
 
-  revalidatePath("/", "layout");
   return { added, notFound };
 }
 
@@ -166,7 +175,8 @@ export async function submitQuoteAction(formData: FormData) {
   });
 
   await clearCart();
-  revalidatePath("/", "layout");
+  // No revalidation here either: the hold this places changes inventory, and
+  // inventory appears only on /admin/products, which is rendered on demand.
   // redirect() throws to unwind, so it must sit outside the transaction.
   redirect(`/${locale}/quote/submitted?ref=${ref}`);
 }

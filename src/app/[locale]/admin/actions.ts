@@ -179,7 +179,8 @@ export async function setOrderStatusAction(formData: FormData): Promise<void> {
     redirect(withFilter(`/${locale}/admin/orders?error=bad-request`, statusFilter));
   }
 
-  revalidatePath("/", "layout");
+  // No revalidation: an order's status appears only on /admin/orders, /track,
+  // /account and the invoice, none of which are cached.
   redirect(withFilter(`/${locale}/admin/orders?ok=status`, statusFilter));
 }
 
@@ -299,7 +300,7 @@ export async function issueInvoiceAction(formData: FormData): Promise<void> {
     throw err;
   }
 
-  revalidatePath("/", "layout");
+  // As above: invoicing changes an order, and no cached page renders orders.
   redirect(withFilter(`/${locale}/admin/orders?ok=invoiced`, statusFilter));
 }
 

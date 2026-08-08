@@ -1,7 +1,6 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { revalidatePath } from "next/cache";
 import { safeLocale, isLocale, type Locale } from "@/lib/i18n";
 import { hashPassword, verifyPassword, MIN_PASSWORD_LENGTH } from "@/lib/password";
 import {
@@ -19,6 +18,20 @@ import {
   getPasswordHash,
 } from "@/db/userQueries";
 
+/**
+ * None of these actions revalidate, deliberately.
+ *
+ * Nothing that is cached renders who you are: the masthead links to /account
+ * unconditionally rather than reading the session, so that catalog pages can
+ * stay static, and /account and its children are rendered on demand. Signing
+ * in changes only the cookie, and the cookie is read per request.
+ *
+ * These each ended in `revalidatePath("/", "layout")`, which threw away every
+ * prerendered page in the app on each sign-in, sign-out and profile save. The
+ * request that followed had to rebuild them, and that was the hang: /admin was
+ * unaffected only because admin sign-in touches neither the cache nor the
+ * database.
+ */
 export async function signUpAction(formData: FormData): Promise<void> {
   const locale = safeLocale(formData);
   const email = String(formData.get("email") ?? "").trim();
@@ -51,7 +64,6 @@ export async function signUpAction(formData: FormData): Promise<void> {
   }
 
   await setSessionCookie(created.id);
-  revalidatePath("/", "layout");
   redirect(`/${locale}/account`);
 }
 
@@ -83,7 +95,6 @@ export async function signInAction(formData: FormData): Promise<void> {
 
   await setSessionCookie(user.id);
   await touchLastLogin(user.id);
-  revalidatePath("/", "layout");
   // The stored preference decides where you land, and only that. Every page
   // still reads its language from the URL, so a link someone shares opens in
   // the language they meant rather than the language the recipient prefers.
@@ -93,7 +104,6 @@ export async function signInAction(formData: FormData): Promise<void> {
 export async function signOutAction(formData: FormData): Promise<void> {
   const locale = safeLocale(formData);
   await clearSessionCookie();
-  revalidatePath("/", "layout");
   redirect(`/${locale}`);
 }
 
@@ -115,7 +125,6 @@ export async function updateProfileAction(formData: FormData): Promise<void> {
     defaultPoNumber: String(formData.get("defaultPoNumber") ?? "").trim(),
     locale: isLocale(preferred) ? (preferred as Locale) : locale,
   });
-  revalidatePath("/", "layout");
   redirect(`/${locale}/account?ok=profile#profile`);
 }
 

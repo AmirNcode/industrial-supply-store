@@ -22,7 +22,18 @@ const connectionString =
  * `sql.begin()` in the RFQ submission is still fine — transaction mode is
  * precisely what pgBouncer supports.
  */
-const isServerless = Boolean(process.env.VERCEL || process.env.NETLIFY);
+/**
+ * The build is not serverless, even though it runs on Vercel.
+ *
+ * `VERCEL` is set during `next build` as well as at request time, so the build
+ * used to take the two-connection request-time pool. It is the opposite case:
+ * one long-lived process prerendering every page in the app, each needing
+ * several queries, all funnelled through two connections. That is what made
+ * the home pages time out during prerender — `/fa` exceeded the 60s budget and
+ * had to be retried — and a build that slow is also a build that can fail.
+ */
+const isBuild = process.env.NEXT_PHASE === "phase-production-build";
+const isServerless = Boolean(process.env.VERCEL || process.env.NETLIFY) && !isBuild;
 
 /**
  * Next dev reloads modules on every edit; without a global the pool would leak
