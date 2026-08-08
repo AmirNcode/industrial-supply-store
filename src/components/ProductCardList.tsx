@@ -161,7 +161,8 @@ export function ProductCardList({
         );
 
         return (
-          <li key={p.id} className="flex gap-3 py-3">
+          // `product-card` is the hook the in-cart wash in globals.css keys on.
+          <li key={p.id} className="product-card flex gap-3 px-2 py-3">
             <span className="shrink-0 pt-0.5">
               <ProductIcon name={p.icon ?? familyIcon ?? "box"} size={44} />
             </span>

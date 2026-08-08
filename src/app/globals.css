@@ -116,6 +116,10 @@
   --color-amber-soft: #fdf7e6;
   --color-amber-line: #e8dcae;
   --color-amber-wash: rgba(200, 134, 13, 0.05);
+  /* Rows already on the order. Stronger than `amber-wash`, which at 5% is a
+     column hint rather than a state — this has to be legible at a glance while
+     scrolling, without competing with the pine hover. */
+  --color-in-cart-row: rgba(200, 134, 13, 0.13);
 
   --color-part-link: #2f4fbf;
   --color-part-visited: #7a3f9d;
@@ -263,6 +267,29 @@ html[lang="fa"] .spec-table thead th {
 }
 .spec-table tbody tr:last-child td {
   border-bottom: 0;
+}
+
+/* A row already on the order carries a wash, so a buyer working down a
+   hundred rows can see what they have taken without reading every quantity.
+   `:has()` is what makes this possible without touching the row markup: the
+   cart lives in client state and only `InCartQty` knows it, but that element
+   renders `.in-cart` inside the row exactly when the quantity is above zero.
+   Placed after the zebra rule so it wins on even rows, and before `:hover`
+   below so pointing at a row still highlights it. */
+.spec-table tbody tr:has(.in-cart),
+.spec-table tbody tr:nth-child(even):has(.in-cart) {
+  background: var(--color-in-cart-row);
+}
+.spec-table tbody tr:has(.in-cart) .price-col {
+  background: transparent;
+}
+.spec-table tbody tr:has(.in-cart):hover {
+  background: var(--color-pine-tint);
+}
+
+/* Same signal on the card list, which is what phones get instead of a table. */
+.product-card:has(.in-cart) {
+  background: var(--color-in-cart-row);
 }
 
 /* Money gets a faint amber wash so it is findable without scanning headers. */
@@ -683,4 +710,18 @@ html[lang="fa"] .invoice-table thead th {
     size: A4;
     margin: 16mm;
   }
+}
+
+/* Mobile filter groups. The native marker is gone with Tailwind's preflight,
+   so the chevron is explicit and rotates to show state. */
+.filter-summary::-webkit-details-marker,
+.filter-summary::marker {
+  display: none;
+  content: "";
+}
+.filter-chevron {
+  transition: transform 0.12s;
+}
+details[open] > .filter-summary .filter-chevron {
+  transform: rotate(180deg);
 }

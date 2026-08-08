@@ -135,14 +135,36 @@ export function MobileFilterBar({
               const def = defByKey.get(facet.key)!;
               const selected = new Set(filters[facet.key] ?? []);
               return (
-                <section
+                // Collapsed by default so the whole list of facets fits on one
+                // phone screen — before this, a family with a dozen facets
+                // buried the later ones under hundreds of chips. A facet with
+                // an active selection opens itself: a filter you cannot see is
+                // a filter you cannot tell is on.
+                <details
                   key={facet.key}
-                  className="border-b border-[var(--color-rule-light)] py-4"
+                  open={selected.size > 0}
+                  className="border-b border-[var(--color-rule-light)] py-3"
                 >
-                  <h3 className="mb-2 text-[15px] font-bold">
-                    {pick(def, "label", locale)}
-                  </h3>
-                  <ul className="grid grid-cols-3 gap-2">
+                  {/* An explicit chevron, because Tailwind's preflight removes
+                      the native disclosure marker — without one these read as
+                      inert headings and nobody thinks to tap them. */}
+                  <summary className="filter-summary flex cursor-pointer items-center justify-between gap-2 text-[15px] font-bold">
+                    <span>
+                      {pick(def, "label", locale)}
+                      {selected.size > 0 && (
+                        <span className="tech ms-2 font-normal text-[var(--color-pine)]">
+                          {formatInt(selected.size, locale)}
+                        </span>
+                      )}
+                    </span>
+                    <span
+                      aria-hidden="true"
+                      className="filter-chevron shrink-0 text-[13px] font-normal text-[var(--color-ink-muted)]"
+                    >
+                      ▾
+                    </span>
+                  </summary>
+                  <ul className="mt-2 grid grid-cols-3 gap-2">
                     {facet.values.map((v) => {
                       const label =
                         def.kind === "number"
@@ -164,7 +186,7 @@ export function MobileFilterBar({
                       );
                     })}
                   </ul>
-                </section>
+                </details>
               );
             })}
             {ordered.length === 0 && (

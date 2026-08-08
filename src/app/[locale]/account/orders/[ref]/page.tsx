@@ -66,8 +66,14 @@ export default async function AccountOrderPage({
 
       {(order.paymentUrl || invoiced) && order.status !== "cancelled" && (
         <div className="mb-4 flex flex-wrap items-center gap-3">
+          {/* New tab, matching the Pay control on the order list. */}
           {order.status === "invoiced" && order.paymentUrl && (
-            <a href={order.paymentUrl} className="btn-primary" rel="noopener noreferrer">
+            <a
+              href={order.paymentUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn-primary"
+            >
               {t.payNow}
             </a>
           )}

@@ -122,10 +122,16 @@ export default async function AccountPage({
                       found. An order sitting at `invoiced` is waiting on them,
                       and that was previously only discoverable by opening it. */}
                   {o.status === "invoiced" && o.paymentUrl && (
+                    // New tab: paying leaves the site for a bank's gateway, and
+                    // losing the order list behind it means coming back is a
+                    // navigation rather than closing a tab. `noopener` is what
+                    // stops the payment page reaching back through
+                    // `window.opener`, and is required once `target` is set.
                     <a
                       href={o.paymentUrl}
-                      className="btn-primary shrink-0 text-[11px] hover:no-underline"
+                      target="_blank"
                       rel="noopener noreferrer"
+                      className="btn-primary shrink-0 text-[11px] hover:no-underline"
                     >
                       {t.payNow}
                     </a>
