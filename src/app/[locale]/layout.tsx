@@ -5,6 +5,7 @@ import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { DemoBanner } from "@/components/DemoBanner";
 import { CartSync } from "@/components/CartSync";
+import { Analytics } from "@vercel/analytics/next";
 import { isLocale, dir, locales, getDict, type Locale } from "@/lib/i18n";
 
 export const metadata: Metadata = {
@@ -45,6 +46,12 @@ export default async function LocaleLayout({
         <Header locale={l} />
         <div id="main">{children}</div>
         <Footer locale={l} />
+        {/* Renders no markup — injects the script that reports page views. The
+            `/next` entry point rather than `/react` so routes are reported as
+            `/[locale]/f/[slug]` rather than one row per part family. This is
+            the layout that owns <html>/<body>, so it is the root layout in the
+            sense the docs mean. */}
+        <Analytics />
       </body>
     </html>
   );
