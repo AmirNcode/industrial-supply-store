@@ -93,7 +93,7 @@ export function FacetList({
                 prefetch={false}
                 scroll={false}
                 className={`block py-[1px] text-[12px] leading-snug ${
-                  i.selected ? "font-semibold text-[var(--color-pine-deep)]" : ""
+                  i.selected ? "font-semibold text-[var(--color-navy-deep)]" : ""
                 }`}
               >
                 <span className="tech">{i.label}</span>

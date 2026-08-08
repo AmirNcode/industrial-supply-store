@@ -144,7 +144,7 @@ export function ProductCardList({
               className={`block leading-snug ${
                 inFamily && hasSummary
                   ? "text-[13px] font-bold text-[var(--color-ink)]"
-                  : "text-[14px] font-bold text-[var(--color-pine)]"
+                  : "text-[14px] font-bold text-[var(--color-navy)]"
               }`}
             >
               {inFamily && hasSummary ? renderSummary(parts) : name}
@@ -154,7 +154,7 @@ export function ProductCardList({
                 {renderSummary(parts)}
               </span>
             )}
-            <span className="tech mt-0.5 block text-[12px] font-bold text-[var(--color-part-link)]">
+            <span className="tech mt-0.5 block text-[12px] font-bold text-[var(--color-ink)]">
               {p.partNumber}
             </span>
           </>

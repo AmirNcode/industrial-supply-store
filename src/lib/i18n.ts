@@ -47,7 +47,6 @@ const en = {
   tagline: "Tools, Equipment & Materials Express",
   brandPromise:
     "Quality tools, equipment and materials, delivered fast — with a money-back guarantee on everything we sell.",
-  catalogButton: "Catalog",
   browseCatalog: "BROWSE CATALOG",
   search: "Search",
   searchPlaceholder: "Search",
@@ -334,7 +333,6 @@ const fa: typeof en = {
   tagline: "ابزار، تجهیزات و مواد اکسپرس",
   brandPromise:
     "ابزار، تجهیزات و مواد باکیفیت، با ارسال سریع — و ضمانت بازگشت وجه روی تمام کالاها.",
-  catalogButton: "کاتالوگ",
   browseCatalog: "مرور کاتالوگ",
   search: "جستجو",
   searchPlaceholder: "جستجو",

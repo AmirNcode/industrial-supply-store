@@ -114,12 +114,12 @@ export default async function FamilyPage({
         />
 
         {(family.aboutEn || family.aboutFa) && (
-          <div className="mb-4 flex items-start gap-3 rounded-[4px] border border-[var(--color-amber-line)] border-s-[3px] border-s-[var(--color-amber)] bg-[var(--color-amber-soft)] p-3.5">
+          <div className="mb-4 flex items-start gap-3 rounded-[4px] border border-[var(--color-rule)] border-s-[3px] border-s-[var(--color-navy)] bg-[var(--color-navy-tint)] p-3.5">
             <span className="shrink-0">
               <ProductIcon name={family.icon} size={46} />
             </span>
             <div className="min-w-0">
-              <h2 className="text-[15px] font-bold text-[var(--color-pine)]">
+              <h2 className="text-[15px] font-bold text-[var(--color-navy)]">
                 {t.aboutPrefix} {pick(family, "name", l)}
               </h2>
               <p className="mt-0.5 text-[12px] leading-snug text-[var(--color-ink)]">
@@ -147,7 +147,7 @@ export default async function FamilyPage({
             <div className="mb-2 flex items-start gap-3">
               <ProductIcon name={family.icon} size={64} className="hidden sm:block" />
               <div className="min-w-0">
-                <h1 className="text-[19px] font-bold text-[var(--color-pine)]">
+                <h1 className="text-[19px] font-bold text-[var(--color-navy)]">
                   {pick(family, "name", l)}
                 </h1>
                 <p className="text-[12px] text-[var(--color-ink-muted)]">
@@ -308,7 +308,10 @@ function SpecTable({
           return (
             <tr
               key={p.id}
-              className={isHit ? "bg-[var(--color-amber-soft)]" : undefined}
+              // A wash alone no longer separates this from a hovered row now
+              // that both are navy; `.row-hit` adds an outline that survives
+              // the pointer passing over it.
+              className={isHit ? "row-hit" : undefined}
             >
               {defs.map((d) => {
                 const raw = p.specs[d.key];

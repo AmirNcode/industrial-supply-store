@@ -32,7 +32,7 @@ export default async function AdminProductsPage({
       <p className="mb-4 text-[12px] text-[var(--color-ink-muted)]">{t.importIntro}</p>
 
       {DEMO_MODE && (
-        <p className="mb-4 border border-[var(--color-amber-line)] bg-[var(--color-amber-soft)] px-3 py-2 text-[12px]">
+        <p className="mb-4 border border-[var(--color-warn-line)] bg-[var(--color-warn-soft)] px-3 py-2 text-[12px]">
           {t.importReadOnly}
         </p>
       )}

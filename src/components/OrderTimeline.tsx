@@ -53,7 +53,7 @@ export function OrderTimeline({
             <span
               aria-hidden="true"
               className={`mt-1 h-2 w-2 shrink-0 rounded-full ${
-                reached ? "bg-[var(--color-pine)]" : "bg-[var(--color-rule)]"
+                reached ? "bg-[var(--color-navy)]" : "bg-[var(--color-rule)]"
               }`}
             />
             <span className={reached ? "font-semibold" : "text-[var(--color-ink-faint)]"}>

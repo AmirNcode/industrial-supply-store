@@ -60,14 +60,14 @@ export default async function HomePage({
               <h2 className="mb-3 flex items-baseline justify-between gap-3 border-b border-[var(--color-rule)] pb-1">
                 <Link
                   href={`/${l}/c/${top.path}`}
-                  className="text-[19px] font-bold text-[var(--color-pine)] lg:text-[21px]"
+                  className="text-[19px] font-bold text-[var(--color-navy)] lg:text-[21px]"
                 >
                   {pick(top, "name", l)}
                 </Link>
                 <Link
                   href={`/${l}/c/${top.path}`}
                   prefetch={false}
-                  className="shrink-0 text-[12px] font-bold uppercase tracking-[0.06em] text-[var(--color-pine)]"
+                  className="shrink-0 text-[12px] font-bold uppercase tracking-[0.06em] text-[var(--color-navy)]"
                 >
                   {t.viewAll}
                   {/* The chevron points the way the page reads. */}
@@ -117,7 +117,7 @@ function FamilyTiles({
             >
               <ProductIcon name={f.icon} size={66} className="h-3/5 w-3/5 lg:h-auto lg:w-auto" />
             </span>
-            <span className="mt-1 block text-[11.5px] font-semibold leading-tight text-[var(--color-ink)] group-hover:text-[var(--color-pine)] group-hover:underline">
+            <span className="mt-1 block text-[11.5px] font-semibold leading-tight text-[var(--color-ink)] group-hover:text-[var(--color-navy)] group-hover:underline">
               {pick(f, "name", locale)}
             </span>
             <span className="mt-0.5 block text-[10.5px] leading-tight text-[var(--color-ink-faint)]">

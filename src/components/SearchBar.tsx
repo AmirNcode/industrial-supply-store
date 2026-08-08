@@ -86,12 +86,14 @@ export function SearchBar({ locale }: { locale: Locale }) {
 
   return (
     <div ref={boxRef} className="relative">
-      {/* Sits on the dark masthead, so the field is a light well rather than a
-          bordered box — the contrast does the work the border used to. */}
+      {/* A light well on the navy bar: the contrast draws the edge, so the
+          border only has to stop the white from bleeding into the band. Focus
+          goes to white rather than a brighter blue — on navy there is nowhere
+          bluer to go. */}
       <form
         action={`/${locale}/search`}
         onSubmit={() => setOpen(false)}
-        className="flex items-center rounded-[3px] border border-[var(--color-chrome-line)] bg-white focus-within:border-[var(--color-amber)] focus-within:ring-[3px] focus-within:ring-[rgba(200,134,13,0.25)]"
+        className="flex items-center rounded-[3px] border border-[var(--color-navy-deep)] bg-white focus-within:border-white focus-within:ring-[3px] focus-within:ring-[rgba(255,255,255,0.35)]"
       >
         <input
           name="q"
@@ -112,7 +114,7 @@ export function SearchBar({ locale }: { locale: Locale }) {
         <button
           type="submit"
           aria-label={t.search}
-          className="px-3 py-1 text-[var(--color-ink-muted)] hover:text-[var(--color-pine)]"
+          className="px-3 py-1 text-[var(--color-ink-muted)] hover:text-[var(--color-navy)]"
         >
           <svg width="17" height="17" viewBox="0 0 20 20" fill="none" aria-hidden="true">
             <circle cx="8.5" cy="8.5" r="6" stroke="currentColor" strokeWidth="1.8" />
@@ -135,7 +137,7 @@ export function SearchBar({ locale }: { locale: Locale }) {
               >
                 {s.type === "product" ? (
                   <>
-                    <span className="tech font-bold text-[var(--color-part-link)]">
+                    <span className="tech font-bold text-[var(--color-ink)]">
                       {s.partNumber}
                     </span>
                     <span className="text-[var(--color-ink-muted)] truncate">

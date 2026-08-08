@@ -16,7 +16,7 @@ export function CartLink({ locale }: { locale: Locale }) {
   return (
     <Link
       href={`/${locale}/cart`}
-      className="text-[12px] font-semibold uppercase tracking-[0.08em] !text-[var(--color-amber-lift)] hover:!text-white"
+      className="text-[14px] font-semibold uppercase tracking-[0.08em] !text-white"
     >
       {t.order}
       <CartBadge locale={locale} />

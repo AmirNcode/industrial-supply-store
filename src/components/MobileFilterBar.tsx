@@ -80,7 +80,7 @@ export function MobileFilterBar({
           className="flex w-full items-center justify-between gap-3 text-start"
         >
           <span>
-            <span className="block text-[15px] font-bold uppercase tracking-wide text-[var(--color-pine)]">
+            <span className="block text-[15px] font-bold uppercase tracking-wide text-[var(--color-navy)]">
               {t.filterBy}
             </span>
             <span className="block text-[12px] text-[var(--color-ink-muted)]">
@@ -89,7 +89,7 @@ export function MobileFilterBar({
                 : t.noFiltersApplied}
             </span>
           </span>
-          <span className="text-[15px] font-bold text-[var(--color-pine)]">
+          <span className="text-[15px] font-bold text-[var(--color-navy)]">
             <span className="tech">{formatInt(total, locale)}</span> {t.products}
           </span>
         </button>
@@ -99,7 +99,7 @@ export function MobileFilterBar({
         <div className="sheet" role="dialog" aria-modal="true" aria-label={t.filterBy}>
           <div className="flex items-start justify-between border-b border-[var(--color-rule)] px-4 py-3">
             <div>
-              <h2 className="text-[17px] font-bold uppercase tracking-wide text-[var(--color-pine)]">
+              <h2 className="text-[17px] font-bold uppercase tracking-wide text-[var(--color-navy)]">
                 {t.filterBy}
               </h2>
               <p className="text-[12px] text-[var(--color-ink-muted)]">
@@ -152,7 +152,7 @@ export function MobileFilterBar({
                     <span>
                       {pick(def, "label", locale)}
                       {selected.size > 0 && (
-                        <span className="tech ms-2 font-normal text-[var(--color-pine)]">
+                        <span className="tech ms-2 font-normal text-[var(--color-navy)]">
                           {formatInt(selected.size, locale)}
                         </span>
                       )}

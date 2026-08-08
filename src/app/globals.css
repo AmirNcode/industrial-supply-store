@@ -92,51 +92,60 @@
  * Design tokens.
  *
  * Colour is information, never decoration:
- *   pine   — navigation, actions, anything clickable
- *   amber  — money, and the masthead rule it descends from
- *   link   — part numbers only, so they read as the identifiers they are
+ *   navy   — navigation, actions, anything clickable, and nothing else
+ *   amber  — money: the price column, invoice totals, the cart count
+ *   warn   — notices that have to be read but are not prices
  *   hues   — one per top-level category, worn as a 3px spine on its tile
+ *
+ * Part numbers are deliberately not on that list. They used to wear a link
+ * blue, which was a lie: outside the two cart tables every one of them is a
+ * `<span>`. They are ink now, and only the real links underline.
  */
 @theme {
-  --color-pine: #14603d;
-  --color-pine-deep: #0d4128;
-  --color-pine-lift: #1f8055;
-  --color-pine-tint: #e8f2ec;
+  --color-navy: #12356b;
+  --color-navy-deep: #0b2249;
+  --color-navy-lift: #2a5db0;
+  --color-navy-tint: #e8eef7;
 
-  /* Masthead: near-black, but pulled toward green so it belongs to the palette
-     rather than sitting on top of it as neutral chrome. */
-  --color-chrome: #101d17;
-  --color-chrome-2: #1a2c23;
-  --color-chrome-line: #2c453a;
-  --color-chrome-ink: #e6ede9;
-  --color-chrome-muted: #8ba396;
+  /* Dark bands — the spec-table header and the mobile drawer. Near-black, but
+     pulled toward blue so they belong to the palette rather than sitting on top
+     of it as neutral chrome. The masthead is white and no longer uses these. */
+  --color-chrome: #0d1b33;
+  --color-chrome-2: #16274a;
+  --color-chrome-line: #2b3f66;
+  --color-chrome-ink: #e6ebf3;
+  --color-chrome-muted: #93a3c0;
 
   --color-amber: #c8860d;
-  --color-amber-lift: #e8b84b;
   --color-amber-soft: #fdf7e6;
-  --color-amber-line: #e8dcae;
   --color-amber-wash: rgba(200, 134, 13, 0.05);
-  /* Rows already on the order. Stronger than `amber-wash`, which at 5% is a
-     column hint rather than a state — this has to be legible at a glance while
-     scrolling, without competing with the pine hover. */
-  --color-in-cart-row: rgba(200, 134, 13, 0.13);
 
-  --color-part-link: #2f4fbf;
-  --color-part-visited: #7a3f9d;
+  /* Rows already on the order. Amber used to carry this, which put a second
+     meaning on the money colour; navy at 13% is a state, well clear of the 5%
+     price wash. Hovering deepens the same hue rather than switching to another,
+     so an ordered row under the pointer still reads as ordered. */
+  --color-in-cart-row: rgba(18, 53, 107, 0.13);
+  --color-in-cart-row-hover: rgba(18, 53, 107, 0.2);
 
-  --color-ink: #161a18;
-  --color-ink-muted: #5a625c;
-  --color-ink-faint: #8d958f;
+  --color-ink: #14181f;
+  --color-ink-muted: #57606f;
+  --color-ink-faint: #8b93a1;
 
-  --color-rule: #dbe1dc;
-  --color-rule-light: #edf0ee;
-  --color-panel: #f4f7f5;
-  --color-panel-alt: #fafbfa;
+  --color-rule: #d8dde5;
+  --color-rule-light: #eceff4;
+  --color-panel: #f3f5f9;
+  --color-panel-alt: #fafbfd;
 
+  /* The one green left in the palette, and it stays because it is semantic
+     rather than brand: green-means-available is close to universal, and a navy
+     in-stock pill would read as a category tag instead of a stock level. */
   --color-ok: #1c7a52;
   --color-ok-soft: #e4f3ea;
+  /* `warn-line` was `amber-line`. Every place it was used turned out to be a
+     notice, not money, so it moved here rather than keeping the money name. */
   --color-warn: #b4690e;
   --color-warn-soft: #fbf0dc;
+  --color-warn-line: #e8dcae;
   --color-danger: #a3312a;
 
   --font-sans: "Plex Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
@@ -168,7 +177,7 @@ html[lang="fa"] body {
 }
 
 a {
-  color: var(--color-pine);
+  color: var(--color-navy);
   text-decoration: none;
 }
 a:hover {
@@ -222,8 +231,9 @@ html[dir="rtl"] th.tech-num {
   font-size: var(--text-xxs);
 }
 
-/* Header band matches the masthead. Uppercase mono labels read as column codes
-   on a datasheet rather than sentence-case prose. */
+/* The masthead is white now, so this band is the last dark surface on a catalog
+   page — which is what keeps a fourteen-column table reading as a datasheet.
+   Uppercase mono labels read as column codes rather than sentence-case prose. */
 .spec-table thead th {
   background: var(--color-chrome-2);
   color: var(--color-chrome-ink);
@@ -243,10 +253,12 @@ html[lang="fa"] .spec-table thead th {
   text-transform: none;
   font-size: 11px;
 }
+/* A column-group label is structure, not money, so it takes the band's own
+   muted blue rather than the gold it used to borrow. */
 .spec-table thead th.group {
   text-align: center;
   font-weight: 400;
-  color: var(--color-amber-lift);
+  color: var(--color-chrome-muted);
   padding-bottom: 0;
 }
 
@@ -260,10 +272,10 @@ html[lang="fa"] .spec-table thead th {
 /* 2% zebra — enough to carry the eye across fourteen columns, not enough to
    register as stripes. */
 .spec-table tbody tr:nth-child(even) {
-  background: #fafbfa;
+  background: var(--color-panel-alt);
 }
 .spec-table tbody tr:hover {
-  background: var(--color-pine-tint);
+  background: var(--color-navy-tint);
 }
 .spec-table tbody tr:last-child td {
   border-bottom: 0;
@@ -283,13 +295,36 @@ html[lang="fa"] .spec-table thead th {
 .spec-table tbody tr:has(.in-cart) .price-col {
   background: transparent;
 }
+/* Deepens rather than switching hue. When the wash was gold and the hover was
+   green, swapping colours still said "ordered, and you are pointing at it";
+   now that both are navy, a swap would just look like the row stopped being
+   ordered. */
 .spec-table tbody tr:has(.in-cart):hover {
-  background: var(--color-pine-tint);
+  background: var(--color-in-cart-row-hover);
 }
 
 /* Same signal on the card list, which is what phones get instead of a table. */
 .product-card:has(.in-cart) {
   background: var(--color-in-cart-row);
+}
+
+/*
+ * The row a `?pn=` link was aimed at.
+ *
+ * A wash alone cannot carry this any more: tinting it navy would make it
+ * identical to a hovered row. The outline is what separates the two, and it
+ * survives `:hover` — the buyer can run the pointer down the table without
+ * losing the row they came for. Inset so it does not add to the row's box and
+ * shift the table.
+ *
+ * Spelled out at table depth as well as bare, because the zebra and hover rules
+ * above are two classes deep and a lone `.row-hit` loses to both.
+ */
+.row-hit,
+.spec-table tbody tr.row-hit {
+  background: var(--color-navy-tint);
+  outline: 2px solid var(--color-navy);
+  outline-offset: -2px;
 }
 
 /* Money gets a faint amber wash so it is findable without scanning headers. */
@@ -305,13 +340,14 @@ html[lang="fa"] .spec-table thead th {
   font-variant-numeric: tabular-nums;
 }
 
+/* Ink, not a link colour, and no `:visited` — this is a `<span>`, so the blue it
+   used to wear dressed a dead identifier up as something clickable. The two
+   cart tables are the only place a part number is a real anchor, and those get
+   the ordinary hover underline. */
 .part-no {
   font-family: var(--font-mono);
   font-weight: 600;
-  color: var(--color-part-link);
-}
-.part-no:visited {
-  color: var(--color-part-visited);
+  color: var(--color-ink);
 }
 
 /* --------------------------------------------------------------------------
@@ -338,8 +374,8 @@ input:focus,
 textarea:focus,
 select:focus {
   outline: none;
-  border-color: var(--color-pine-lift);
-  box-shadow: 0 0 0 3px var(--color-pine-tint);
+  border-color: var(--color-navy-lift);
+  box-shadow: 0 0 0 3px var(--color-navy-tint);
 }
 
 input[type="number"]::-webkit-outer-spin-button,
@@ -353,7 +389,7 @@ input[type="number"] {
 }
 
 .btn-primary {
-  background: var(--color-pine);
+  background: var(--color-navy);
   color: #fff;
   font-weight: 600;
   font-size: var(--text-xs);
@@ -366,19 +402,19 @@ input[type="number"] {
   transition: background 0.12s, transform 0.12s;
 }
 .btn-primary:hover {
-  background: var(--color-pine-deep);
+  background: var(--color-navy-deep);
 }
 .btn-primary:active {
   transform: translateY(1px);
 }
 .btn-primary:disabled {
-  background: #9bb3a4;
+  background: #a3aec2;
   cursor: default;
   transform: none;
 }
 
 .btn-small {
-  background: var(--color-pine);
+  background: var(--color-navy);
   color: #fff;
   font-size: var(--text-xxs);
   font-weight: 600;
@@ -390,11 +426,11 @@ input[type="number"] {
   transition: background 0.12s, transform 0.12s;
 }
 .btn-small:hover {
-  background: var(--color-pine-deep);
+  background: var(--color-navy-deep);
   transform: translateY(-1px);
 }
 .btn-small:disabled {
-  background: #b7c7bd;
+  background: #bcc5d4;
   cursor: default;
   transform: none;
 }
@@ -414,8 +450,8 @@ input[type="number"] {
   text-transform: uppercase;
   padding: 4px 8px;
   border-radius: 3px;
-  background: var(--color-pine-tint);
-  color: var(--color-pine-deep);
+  background: var(--color-navy-tint);
+  color: var(--color-navy-deep);
   white-space: nowrap;
 }
 html[lang="fa"] .pill {
@@ -440,16 +476,17 @@ html[lang="fa"] .pill {
    In-cart quantity — the running total for one row.
    -------------------------------------------------------------------------- */
 
-/* Pine rather than amber: amber is spent on price and on the masthead badge,
-   and a third amber object on the same row would flatten that hierarchy. */
+/* Navy rather than gold: gold is spent on the price in the same row and on the
+   cart count, and a third gold object alongside them would flatten that
+   hierarchy. */
 .in-cart {
   display: inline-flex;
   align-items: center;
   gap: 5px;
   padding: 2px 3px 2px 8px;
   border-radius: 3px;
-  background: var(--color-pine-tint);
-  color: var(--color-pine-deep);
+  background: var(--color-navy-tint);
+  color: var(--color-navy-deep);
   font-size: var(--text-xxs);
   line-height: 1.4;
   white-space: nowrap;
@@ -480,7 +517,7 @@ html[dir="rtl"] .in-cart {
 }
 .in-cart-x:hover {
   opacity: 1;
-  background: var(--color-pine);
+  background: var(--color-navy);
   color: #fff;
 }
 .in-cart-x:disabled {
@@ -521,10 +558,10 @@ html[lang="fa"] .count-pill {
   transition: border-color 0.12s, background 0.12s;
 }
 .chip[data-selected="true"] {
-  border-color: var(--color-pine);
-  background: var(--color-pine-tint);
+  border-color: var(--color-navy);
+  background: var(--color-navy-tint);
   font-weight: 600;
-  color: var(--color-pine-deep);
+  color: var(--color-navy-deep);
 }
 
 /* Compact facet values on the desktop rail. */
@@ -539,13 +576,13 @@ html[lang="fa"] .count-pill {
   transition: border-color 0.12s, background 0.12s;
 }
 .facet-chip:hover {
-  border-color: var(--color-pine-lift);
+  border-color: var(--color-navy-lift);
   text-decoration: none;
 }
 .facet-chip[data-selected="true"] {
-  border-color: var(--color-pine);
-  background: var(--color-pine-tint);
-  color: var(--color-pine-deep);
+  border-color: var(--color-navy);
+  background: var(--color-navy-tint);
+  color: var(--color-navy-deep);
   font-weight: 600;
 }
 
@@ -554,9 +591,9 @@ html[lang="fa"] .count-pill {
   align-items: center;
   gap: 6px;
   white-space: nowrap;
-  border: 1px solid var(--color-pine);
+  border: 1px solid var(--color-navy);
   border-radius: 3px;
-  color: var(--color-pine);
+  color: var(--color-navy);
   padding: 5px 10px;
   font-size: 12px;
 }
@@ -575,9 +612,9 @@ html[lang="fa"] .count-pill {
   transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
 }
 a:hover > .tile-face {
-  border-color: var(--color-pine-lift);
-  border-bottom-color: var(--spine, var(--color-pine-lift));
-  box-shadow: 0 2px 10px rgba(20, 96, 61, 0.13);
+  border-color: var(--color-navy-lift);
+  border-bottom-color: var(--spine, var(--color-navy-lift));
+  box-shadow: 0 2px 10px rgba(18, 53, 107, 0.13);
   transform: translateY(-2px);
 }
 

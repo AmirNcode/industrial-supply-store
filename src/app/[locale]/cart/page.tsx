@@ -59,7 +59,7 @@ export default async function CartPage({
                       <Link
                         href={`/${l}/f/${line.familySlug}?pn=${encodeURIComponent(line.partNumber)}`}
                         prefetch={false}
-                        className="tech block text-[13px] font-bold !text-[var(--color-part-link)]"
+                        className="tech block text-[13px] font-bold !text-[var(--color-ink)]"
                       >
                         {line.partNumber}
                       </Link>
@@ -140,7 +140,7 @@ export default async function CartPage({
                         <Link
                           href={`/${l}/f/${line.familySlug}?pn=${encodeURIComponent(line.partNumber)}`}
                           prefetch={false}
-                          className="tech font-bold !text-[var(--color-part-link)]"
+                          className="tech font-bold !text-[var(--color-ink)]"
                         >
                           {line.partNumber}
                         </Link>

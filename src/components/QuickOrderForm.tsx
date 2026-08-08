@@ -44,7 +44,7 @@ export function QuickOrderForm({ locale }: { locale: Locale }) {
         <div className="mt-4 border-t border-[var(--color-rule)] pt-3">
           {state.added.length > 0 && (
             <div className="mb-3">
-              <h2 className="mb-1 text-[13px] font-bold text-[var(--color-pine)]">
+              <h2 className="mb-1 text-[13px] font-bold text-[var(--color-navy)]">
                 {t.added} — <span className="tech">{formatInt(state.added.length, locale)}</span>
               </h2>
               <ul className="text-[12px]">

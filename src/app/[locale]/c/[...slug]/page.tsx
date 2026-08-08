@@ -92,7 +92,7 @@ export default async function CategoryPage({
         />
 
         <div className="mb-4 flex items-baseline justify-between gap-3 border-b border-[var(--color-rule)] pb-1">
-          <h1 className="text-[19px] font-bold text-[var(--color-pine)] lg:text-[21px]">
+          <h1 className="text-[19px] font-bold text-[var(--color-navy)] lg:text-[21px]">
             {pick(category, "name", l)}
           </h1>
           {category.productCount > 0 && (
@@ -155,7 +155,7 @@ export default async function CategoryPage({
                   >
                     <ProductIcon name={c.icon} size={62} className="h-3/5 w-3/5 lg:h-auto lg:w-auto" />
                   </span>
-                  <span className="mt-1 block text-[11px] leading-tight group-hover:text-[var(--color-pine)] group-hover:underline">
+                  <span className="mt-1 block text-[11px] leading-tight group-hover:text-[var(--color-navy)] group-hover:underline">
                     {pick(c, "name", l)}
                   </span>
                 </Link>
@@ -177,13 +177,13 @@ export default async function CategoryPage({
                   <Link
                     href={`/${l}/f/${f.slug}`}
                     prefetch={false}
-                    className="group flex h-full gap-3 border border-[var(--color-rule)] p-3 hover:border-[var(--color-pine)] hover:no-underline"
+                    className="group flex h-full gap-3 border border-[var(--color-rule)] p-3 hover:border-[var(--color-navy)] hover:no-underline"
                   >
                     <span className="shrink-0 pt-0.5">
                       <ProductIcon name={f.icon} size={58} />
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="block text-[14px] font-bold leading-snug text-[var(--color-pine)] group-hover:underline">
+                      <span className="block text-[14px] font-bold leading-snug text-[var(--color-navy)] group-hover:underline">
                         {pick(f, "name", l)}
                       </span>
                       <span className="mt-1 block text-[12px] leading-snug text-[var(--color-ink-muted)]">

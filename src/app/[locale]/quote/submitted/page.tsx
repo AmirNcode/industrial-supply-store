@@ -17,11 +17,11 @@ export default async function QuoteSubmittedPage({
 
   return (
     <main className="mx-auto max-w-[620px] px-3 pt-10 pb-16 text-center">
-      <h1 className="text-[21px] font-bold text-[var(--color-pine)]">
+      <h1 className="text-[21px] font-bold text-[var(--color-navy)]">
         {t.quoteSubmitted}
       </h1>
       {ref && (
-        <p className="mt-4 border border-[var(--color-amber-line)] bg-[var(--color-amber-soft)] px-4 py-3 text-[13px]">
+        <p className="mt-4 border border-[var(--color-rule)] bg-[var(--color-navy-tint)] px-4 py-3 text-[13px]">
           {t.quoteRef}:{" "}
           <strong className="tech text-[17px] tracking-wide">{ref}</strong>
         </p>

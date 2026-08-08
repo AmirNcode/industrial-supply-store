@@ -13,8 +13,9 @@ export function CartBadge({ locale }: { locale: Locale }) {
   const count = useCartCount();
 
   if (count === null || count <= 0) return null;
-  // Amber fill on the dark masthead — the one place a solid accent block earns
-  // its keep, because the cart count is the only number in the chrome.
+  // The one gold object left in the masthead, and it keeps its place because
+  // the cart count is the only number up there — gold means money, and this is
+  // how much of it is in the order.
   return (
     <span className="tech ms-1.5 inline-block rounded-[3px] bg-[var(--color-amber)] px-1.5 py-px align-middle text-[10px] font-semibold text-[var(--color-chrome)]">
       {formatInt(count, locale)}

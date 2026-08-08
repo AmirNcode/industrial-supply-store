@@ -138,7 +138,7 @@ export default async function InvoicePage({
 
       <header className="mb-8 flex items-start justify-between gap-6 border-b-2 border-[var(--color-ink)] pb-4">
         <div>
-          <h1 className="text-[26px] font-bold text-[var(--color-pine)]">{t.invoice}</h1>
+          <h1 className="text-[26px] font-bold text-[var(--color-navy)]">{t.invoice}</h1>
           <p className="tech mt-1 text-[15px] font-bold">{order.invoiceNumber}</p>
           {cancelled && (
             <p className="mt-1 text-[15px] font-bold text-[var(--color-danger)]">

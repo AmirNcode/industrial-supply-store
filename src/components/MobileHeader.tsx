@@ -18,6 +18,11 @@ import { CartBadge } from "./CartBadge";
  * who already knows it is the logo. Setting the mark and its tagline on one
  * line buys most of that space back without hiding anything.
  *
+ * With the wordmark present everywhere, the Catalog button below it was a
+ * second control pointing at the same route, and dropping it hands roughly
+ * 70px back to the search field — which is the control that actually needed
+ * the width at 375px.
+ *
  * Still a client component: the drawer needs state, and closing it on
  * navigation needs the current route.
  */
@@ -53,64 +58,87 @@ export function MobileHeader({ locale }: { locale: Locale }) {
 
   return (
     <div className="lg:hidden">
-      {/* On every page, not just the home page. The masthead disappearing
-          elsewhere was what left people without an obvious way back, and a
-          single line costs little enough vertical space to keep everywhere. */}
+      {/* The wordmark shares the top line with the tagline here, unlike the
+          desktop masthead where it sits beside the search. At phone width it
+          was the widest fixed item in the control row, and the search — already
+          down to 134px — is what needed that space back. */}
       <div className="px-3 pt-2 pb-1">
         <Link href={`/${locale}`} className="flex items-center gap-2 hover:no-underline">
-          {/* alt carries the brand name — see the note in Header.tsx. */}
+          {/* alt carries the brand name, and the attributes carry the display
+              size rather than the file's 1908×543 — see the note in Header.tsx
+              for why that matters on a phone. */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="/temex-logo-cropped.jpg"
             alt={t.brand}
-            width={1908}
-            height={543}
+            width={77}
+            height={22}
             className="block h-[22px] w-auto shrink-0"
           />
-          {/* Wraps rather than shrinks: at 320px the tagline needs a second
-              line, and squeezing it instead would shrink the wordmark. */}
-          <span className="min-w-0 text-[13px] leading-tight text-[var(--color-chrome-muted)]">
+          <span className="min-w-0 text-[10px] leading-tight text-[var(--color-chrome-ink)]">
             {t.tagline}
           </span>
         </Link>
       </div>
 
+      {/*
+        Both controls carry an explicit height rather than leaning on `.tap`.
+        `.tap` only exists under `(pointer: coarse)`, so on a laptop narrowed to
+        phone width it never applies — which left the order link sitting at its
+        text height and the burger at its own, misaligned by whatever the glyph
+        metrics happened to give. 35px matches the search field, so all three
+        items in the row share one height and one centre line in either pointer
+        mode; `.tap` still raises both to 44px on real touch hardware.
+      */}
       <div className="flex items-center gap-2 px-3 pb-2">
-        {/* A word, not a monogram. The amber square with a letter in it did
-            not read as "go back to the catalog" to anyone who had not already
-            worked out that it was the logo. */}
-        <Link
-          href={`/${locale}`}
-          className="tap shrink-0 rounded-[3px] bg-[var(--color-amber)] px-2.5 py-1.5 text-[12px] font-semibold uppercase tracking-[0.06em] !text-[var(--color-chrome)] hover:no-underline"
-        >
-          {t.catalogButton}
-        </Link>
-
         <div className="min-w-0 flex-1">
           <SearchBar locale={locale} />
         </div>
 
         <Link
           href={`/${locale}/cart`}
-          className="tap shrink-0 px-1 text-[12px] font-semibold uppercase tracking-[0.06em] !text-[var(--color-amber-lift)]"
+          className="tap flex h-[35px] shrink-0 items-center px-1 text-[12px] font-semibold uppercase tracking-[0.06em] !text-white"
         >
           {t.order}
           <CartBadge locale={locale} />
         </Link>
 
+        {/* Drawn rather than typed. `☰` and `✕` sit wherever the font puts them
+            inside the line box, which is what made the burger look low against
+            the order link; a path is positioned by geometry instead. */}
         <button
           type="button"
           onClick={() => setMenuOpen((v) => !v)}
           aria-expanded={menuOpen}
           aria-label={t.browseCatalog}
-          className="tap shrink-0 px-1 text-[21px] leading-none text-[var(--color-chrome-ink)]"
+          className="tap flex h-[35px] w-[35px] shrink-0 items-center justify-center text-white"
         >
-          {menuOpen ? "✕" : "☰"}
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            {menuOpen ? (
+              <path
+                d="M6 6l12 12M18 6L6 18"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+              />
+            ) : (
+              <path
+                d="M3.5 7h17M3.5 12h17M3.5 17h17"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+              />
+            )}
+          </svg>
         </button>
       </div>
 
+      {/* A step darker than the masthead rather than lighter. The bar is navy
+          now, so the drawer has to separate from it downward — at the same
+          value the two would read as one block and the menu would look like
+          part of the header rather than a layer over the catalog. */}
       {menuOpen && (
-        <nav className="bg-[var(--color-chrome-2)]">
+        <nav className="bg-[var(--color-navy-deep)]">
           <ul>
             {menuLinks.map((l) => (
               <li
@@ -126,9 +154,11 @@ export function MobileHeader({ locale }: { locale: Locale }) {
               </li>
             ))}
             <li className="border-b border-[var(--color-chrome-line)]">
+              {/* Muted rather than accented: this is chrome, not a fourth
+                  destination, and gold now means money. */}
               <LocaleSwitch
                 other={other}
-                className="tap block px-4 py-3 text-[16px] font-semibold !text-[var(--color-amber-lift)]"
+                className="tap block px-4 py-3 text-[16px] font-semibold !text-[var(--color-chrome-muted)]"
               />
             </li>
           </ul>

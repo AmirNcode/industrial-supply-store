@@ -141,7 +141,7 @@ function Result({ state, locale }: { state: ImportState; locale: Locale }) {
             .replace("{updated}", formatInt(state.updated, locale))}
         </p>
         {state.mismatches.length > 0 && (
-          <div className="mt-1.5 border border-[var(--color-amber-line)] bg-[var(--color-amber-soft)] px-2.5 py-1.5">
+          <div className="mt-1.5 border border-[var(--color-warn-line)] bg-[var(--color-warn-soft)] px-2.5 py-1.5">
             {/* The upload was applied — it is the operator's stated intent, and
                 refusing it would make a stale export impossible to correct.
                 This is so the disagreement is noticed rather than absorbed. */}

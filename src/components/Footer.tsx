@@ -15,7 +15,7 @@ export function Footer({ locale }: { locale: Locale }) {
       {/* The promise the brand is built on — fast delivery and a money-back
           guarantee — stated once, where it is on every page without competing
           with the catalog for attention. */}
-      <div className="border-b border-[var(--color-rule-light)] px-3 py-2 text-[12px] font-semibold text-[var(--color-pine)]">
+      <div className="border-b border-[var(--color-rule-light)] px-3 py-2 text-[12px] font-semibold text-[var(--color-navy)]">
         {t.brandPromise}
       </div>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-[11px] text-[var(--color-ink-muted)]">
