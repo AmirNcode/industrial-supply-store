@@ -4,6 +4,7 @@ import { SearchBar } from "./SearchBar";
 import { LocaleSwitch } from "./LocaleSwitch";
 import { CartLink } from "./CartLink";
 import { MobileHeader } from "./MobileHeader";
+import { MastheadReveal } from "./MastheadReveal";
 
 /**
  * Two distinct mastheads rather than one that reflows.
@@ -28,6 +29,11 @@ export function Header({ locale }: { locale: Locale }) {
 
   return (
     <header>
+      {/* Renders nothing. Watches the scroll and flags this header so the CSS
+          can reveal it on phones — see MastheadReveal for why it sits inside
+          rather than wrapping. */}
+      <MastheadReveal />
+
       <div className="bg-[var(--color-navy)]">
         <MobileHeader locale={locale} />
 

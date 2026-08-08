@@ -645,6 +645,31 @@ a:hover > .tile-face {
    Mobile
    -------------------------------------------------------------------------- */
 
+/*
+ * Reveal-on-scroll-up masthead. Phones only.
+ *
+ * `sticky`, not `fixed`. The header is a direct child of `body`, so its
+ * containing block is the whole document and it has the entire page to travel —
+ * which is what lets this work without the spacer and layout shift a fixed bar
+ * would need. (Contrast the mobile filter bar, whose wrapper is exactly as tall
+ * as the bar itself, leaving sticky nowhere to go.)
+ *
+ * Below the filter sheet's z-50: that sheet is a modal and has to cover this.
+ * `MastheadReveal` sets `data-hidden`; the reduced-motion rule further down
+ * already flattens the transition for anyone who asks for it.
+ */
+@media (max-width: 1023px) {
+  body > header {
+    position: sticky;
+    top: 0;
+    z-index: 45;
+    transition: transform 0.22s ease;
+  }
+  body > header[data-hidden="true"] {
+    transform: translateY(-100%);
+  }
+}
+
 /* iOS zooms the page when a focused input is under 16px. The desktop UI is
    deliberately 13px, so bump form controls only at phone widths. */
 @media (max-width: 1023px) {

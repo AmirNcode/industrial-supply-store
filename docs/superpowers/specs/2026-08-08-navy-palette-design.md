@@ -122,6 +122,40 @@ Resolution: an ordered row is `rgba(18, 53, 107, 0.13)`, and hovering it
 still hover to `navy-tint`. Monochrome, and still scannable down two hundred
 rows.
 
+## Reveal-on-scroll-up masthead
+
+Phones only. A spec table runs to a couple of hundred rows, and reaching the
+search or the order from halfway down meant scrolling all the way back to the
+top. The bar now tucks away on a downward scroll and returns on an upward one.
+
+Permanently sticky would have been simpler, but it spends ~90px of a phone
+screen on chrome for the entire scroll; this spends it only when the gesture
+says the user wants navigation.
+
+`position: sticky`, not `fixed`. The header is a direct child of `body`, so its
+containing block is the whole document and it has the full page to travel —
+no spacer, no layout shift. (The mobile filter bar cannot do this: its wrapper
+is exactly as tall as the bar, leaving sticky nowhere to go.)
+
+Two guards keep it from flapping: movements under 6px are ignored as thumb
+tremor, and it never hides inside the first 120px, where the bar is on screen
+anyway. `scrollY` readings outside the document are discarded — iOS rubber-
+banding produces them on the way back from an overscroll, and they are not
+gestures.
+
+`MastheadReveal` renders nothing and sets `data-hidden` on the `<header>` above
+it. Wrapping the header in a client component was the first attempt and it
+broke `next build`: the masthead contains `SearchBar`, which calls
+`useSearchParams`, and a client component above that pulls the static-rendering
+bailout up to the page root. Keeping the boundary below the markup leaves the
+whole masthead server-rendered, and means scrolling never re-renders it.
+
+`SearchBar` itself is wrapped in a `Suspense` boundary for the same reason —
+`useSearchParams` in a component that appears on every page fails every
+prerendered route without one. The fallback is the same form posting to the
+same route rather than a spinner, so search works before hydration and nothing
+moves when React swaps it.
+
 ## Search-hit row
 
 The row matching a `?pn=` highlight was gold-washed, which rule 2 disallows, and
