@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getCartLines, unitPriceAt } from "@/lib/cart";
 import { updateQtyAction, removeLineAction } from "@/app/actions";
+import { CartPageSync } from "@/components/CartPageSync";
 import { isLocale, getDict, type Locale } from "@/lib/i18n";
 import { formatPrice, formatInt } from "@/lib/money";
 import { specValueLabel } from "@/lib/specValues";
@@ -23,6 +24,7 @@ export default async function CartPage({
 
   return (
     <main className="mx-auto max-w-[1100px] px-3 pt-3">
+      <CartPageSync revision={lines.map((x) => `${x.productId}:${x.qty}`).join(",")} />
       <h1 className="mb-3 border-b border-[var(--color-ink)] pb-1 text-[17px] font-bold">
         {t.yourOrder}
         {lines.length > 0 && (
