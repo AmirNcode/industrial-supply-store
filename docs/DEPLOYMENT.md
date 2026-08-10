@@ -69,9 +69,10 @@ npm run db:verify:remote        # confirm
 A healthy result:
 
 ```
-tables      11/11 ✓
-extensions.sql 11/11 ✓
+tables      12/12 ✓
+extensions.sql 12/12 ✓
 invoice_seq ✓
+search fns  4/4 ✓
 row-level security ✓ on every table
 ✓ database looks correct
 ```
@@ -111,7 +112,7 @@ Two of those fail *silently*. Nothing looks wrong afterwards.
 
 The mitigation: everything push cannot model lives in `src/db/extensions.sql`,
 and both `db:push` and `db:push:remote` chain the re-apply automatically.
-`scripts/apply-extensions.mts` then verifies 11/11 objects, realigns
+`scripts/apply-extensions.mts` then verifies 12/12 index objects plus the four catalog_* search functions, realigns
 `invoice_seq` past whatever has been issued, and fails if any table lost RLS.
 
 **If you ever run bare `drizzle-kit push`, run `npm run db:extensions` (or

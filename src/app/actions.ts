@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { sql } from "@/db";
 import { addLine, setLineQty, removeLine, clearCart, getCartLines, unitPriceAt } from "@/lib/cart";
 import { findByPartNumbers } from "@/db/queries";
@@ -9,18 +10,21 @@ import { currentUserId } from "@/lib/session";
 import { holdStockForOrder } from "@/db/inventoryQueries";
 
 /**
- * Deliberately no `revalidatePath`.
- *
- * The cart is read on the client: `CartBadge` and `InCartQty` render from the
- * shared copy `CartSync` pulls from /api/cart on each navigation, precisely so
- * the surrounding page can stay cached. No cached page renders cart contents,
- * and none renders inventory either, so there is nothing for a cart mutation
- * to invalidate.
+ * Revalidation is scoped to the cart page only.
  *
  * `revalidatePath("/", "layout")` used to sit at the end of each of these. It
  * purged every prerendered page in the app — both home pages and every
  * category page — on every single add to cart. The next visitor then paid for
  * the regeneration, which is what made the site feel like it was hanging.
+ *
+ * But dropping revalidation entirely broke the one server-rendered view of the
+ * cart: /[locale]/cart renders its lines on the server, and a server action
+ * that revalidates nothing, sets no cookie and does not redirect returns no
+ * updated UI — Update and Remove mutated the row and left the page exactly as
+ * it was until a manual refresh. `CartBadge` and `InCartQty` are unaffected
+ * either way; they render from the client copy `CartSync` pulls from
+ * /api/cart. The cart page is dynamic (it reads the cart cookie), so this
+ * revalidate purges no prerendered page.
  */
 export async function addToCartAction(formData: FormData) {
   const productId = Number(formData.get("productId"));
@@ -34,12 +38,14 @@ export async function updateQtyAction(formData: FormData) {
   const qty = Number(formData.get("qty"));
   if (!Number.isFinite(productId)) return;
   await setLineQty(productId, Math.min(99999, qty));
+  revalidatePath("/[locale]/cart", "page");
 }
 
 export async function removeLineAction(formData: FormData) {
   const productId = Number(formData.get("productId"));
   if (!Number.isFinite(productId)) return;
   await removeLine(productId);
+  revalidatePath("/[locale]/cart", "page");
 }
 
 export type QuickOrderResult = {

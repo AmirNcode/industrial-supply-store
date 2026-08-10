@@ -35,14 +35,26 @@ async function main() {
   const [{ n }] = await sql<{ n: number }[]>`
     SELECT count(*)::int AS n FROM pg_indexes
     WHERE indexname IN (
-      'products_fts_idx','products_part_number_trgm_idx',
+      'products_fts_idx','products_normalized_fts_idx','products_part_number_trgm_idx',
       'families_name_en_trgm_idx','families_name_fa_trgm_idx',
       'categories_name_en_trgm_idx','categories_name_fa_trgm_idx',
       'categories_path_prefix_idx','psv_product_idx',
       'orders_invoice_number_key','orders_email_ref_idx','users_email_lower_key'
     )
   `;
-  console.log(`✓ ${n}/11 extension indexes present, invoice_seq at ${next}`);
+  console.log(`✓ ${n}/12 extension indexes present, invoice_seq at ${next}`);
+
+  // Search calls these directly from queries.ts; a database without them 500s
+  // on /[locale]/search and /api/suggest, which is how their absence was found.
+  const [{ fns }] = await sql<{ fns: number }[]>`
+    SELECT count(*)::int AS fns FROM pg_proc p
+    JOIN pg_namespace ns ON ns.oid = p.pronamespace
+    WHERE ns.nspname = 'public' AND p.proname IN (
+      'catalog_search_words','catalog_search_compact',
+      'catalog_prefix_tsquery','catalog_search_rank'
+    )
+  `;
+  console.log(`${fns === 4 ? "✓" : "✗"} ${fns}/4 catalog search functions present`);
 
   // `drizzle-kit push` emits DISABLE ROW LEVEL SECURITY for every table on
   // every run, so this is checked rather than assumed.
@@ -57,8 +69,8 @@ async function main() {
       : `✗ RLS OFF on: ${unprotected.map((r) => r.tablename).join(", ")}`,
   );
 
-  if (n !== 11) {
-    console.error("✗ an extension index is missing — search or account uniqueness is broken");
+  if (n !== 12 || fns !== 4) {
+    console.error("✗ an extension index or function is missing — search or account uniqueness is broken");
     process.exit(1);
   }
   if (unprotected.length > 0) process.exit(1);

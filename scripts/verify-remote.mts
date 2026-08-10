@@ -83,7 +83,7 @@ console.log(
 
 /** The objects `drizzle-kit push` drops on every run and cannot re-create. */
 const EXTENSION_OBJECTS = [
-  "products_fts_idx", "products_part_number_trgm_idx",
+  "products_fts_idx", "products_normalized_fts_idx", "products_part_number_trgm_idx",
   "families_name_en_trgm_idx", "families_name_fa_trgm_idx",
   "categories_name_en_trgm_idx", "categories_name_fa_trgm_idx",
   "categories_path_prefix_idx", "psv_product_idx",
@@ -106,6 +106,28 @@ const [{ hasSeq }] = await sql<{ hasSeq: boolean }[]>`
   SELECT to_regclass('public.invoice_seq') IS NOT NULL AS "hasSeq"
 `;
 console.log(`invoice_seq ${hasSeq ? "✓" : "✗ MISSING — invoice numbers will restart at 1"}`);
+
+// queries.ts calls these in every search and suggest query; without them the
+// search page and /api/suggest 500 outright. They are dropped-and-forgotten
+// candidates just like the indexes, so they are checked, not assumed.
+const CATALOG_FUNCTIONS = [
+  "catalog_search_words", "catalog_search_compact",
+  "catalog_prefix_tsquery", "catalog_search_rank",
+] as const;
+const fnRows = await sql<{ proname: string }[]>`
+  SELECT proname FROM pg_proc p
+  JOIN pg_namespace ns ON ns.oid = p.pronamespace
+  WHERE ns.nspname = 'public'
+`;
+const haveFns = new Set(fnRows.map((r) => r.proname));
+const missingFns = CATALOG_FUNCTIONS.filter((f) => !haveFns.has(f));
+console.log(
+  `search fns  ${CATALOG_FUNCTIONS.length - missingFns.length}/${CATALOG_FUNCTIONS.length} ${
+    missingFns.length === 0
+      ? "✓"
+      : `✗ MISSING ${missingFns.join(", ")} — search 500s, run db:extensions:remote`
+  }`,
+);
 
 // A managed provider's REST API reads these tables with a key that ships in
 // browser code. `drizzle-kit push` turns RLS off on every run, so it is worth
@@ -147,7 +169,7 @@ const idx = await sql<{ indexname: string }[]>`
     AND (indexname LIKE '%trgm%' OR indexname LIKE '%fts%')
   ORDER BY indexname
 `;
-const expected = 6; // 1 FTS + 1 part number + 4 name indexes
+const expected = 7; // 2 FTS + 1 part number + 4 name indexes
 console.log(
   `search idx  ${idx.length}/${expected} ${idx.length >= expected ? "✓" : "✗ MISSING"}`,
 );
@@ -184,6 +206,7 @@ const ok =
   idx.length >= expected &&
   parts.length > 0 &&
   missingObjs.length === 0 &&
+  missingFns.length === 0 &&
   missingCols.length === 0 &&
   hasSeq &&
   rlsOff.length === 0 &&

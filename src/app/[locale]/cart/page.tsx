@@ -100,7 +100,7 @@ export default async function CartPage({
                       <input type="hidden" name="productId" value={line.productId} />
                       <button
                         type="submit"
-                        className="tap text-[12px] text-[var(--color-ink-muted)] underline"
+                        className="tap cursor-pointer text-[12px] text-[var(--color-ink-muted)] underline"
                       >
                         {t.remove}
                       </button>
@@ -178,7 +178,7 @@ export default async function CartPage({
                           <input type="hidden" name="productId" value={line.productId} />
                           <button
                             type="submit"
-                            className="text-[11px] text-[var(--color-ink-muted)] underline"
+                            className="cursor-pointer text-[11px] text-[var(--color-ink-muted)] underline"
                           >
                             {t.remove}
                           </button>
