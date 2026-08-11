@@ -857,6 +857,14 @@ a:hover > .tile-face {
   max-width: 100%;
 }
 
+/* An admin table's last column is usually a checkbox sitting hard against the
+   right edge, where the window's scrollbar covers it at anything less than a
+   maximised browser. The trailing space is inside the scroll area so it costs
+   nothing when the table already fits. */
+.scroll-x-pad {
+  padding-inline-end: 22px;
+}
+
 .sheet {
   position: fixed;
   inset: 0;

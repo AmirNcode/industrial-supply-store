@@ -87,7 +87,7 @@ export function ColumnEditor({
         </p>
       )}
 
-      <div className="scroll-x">
+      <div className="scroll-x scroll-x-pad">
         <table className="spec-table">
           <thead>
             <tr>
@@ -97,7 +97,7 @@ export function ColumnEditor({
               <th>{t.columnsHeadingFa}</th>
               <th>{t.columnsUnit}</th>
               <th>{t.reviewKind}</th>
-              <th>{t.reviewShowIn}</th>
+              <th className="num">{t.reviewInTable}</th>
               <th className="num">{t.reviewFilterable}</th>
               <th className="num">{t.products}</th>
               <th />
@@ -167,18 +167,17 @@ export function ColumnEditor({
                       <option value="number">{t.reviewKindNumber}</option>
                     </select>
                   </td>
-                  <td>
-                    <select
-                      className="admin-select"
-                      value={r.display}
+                  {/* Checked is the catalog table, unchecked is product
+                      details. Two states do not need a dropdown. */}
+                  <td className="num">
+                    <input
+                      type="checkbox"
+                      checked={r.display === "table"}
                       disabled={dropped || demo}
                       onChange={(e) =>
-                        set(r.key, { display: e.target.value === "table" ? "table" : "detail" })
+                        set(r.key, { display: e.target.checked ? "table" : "detail" })
                       }
-                    >
-                      <option value="table">{t.reviewInTable}</option>
-                      <option value="detail">{t.reviewInDetail}</option>
-                    </select>
+                    />
                   </td>
                   <td className="num">
                     <input

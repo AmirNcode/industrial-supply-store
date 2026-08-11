@@ -134,14 +134,17 @@ export function ColumnReview({
             </span>
           </h4>
           <p className="mb-1 text-[11px] text-[var(--color-ink-muted)]">{t.reviewNewIntro}</p>
-          <div className="scroll-x">
+          <div className="scroll-x scroll-x-pad">
             <table className="spec-table">
               <thead>
                 <tr>
                   <th>{t.importColumn}</th>
                   <th>{t.reviewExamples}</th>
                   <th>{t.reviewRole}</th>
-                  <th>{t.reviewShowIn}</th>
+                  {/* A checkbox rather than a two-option dropdown: promoting
+                      six columns out of thirty-eight is then six clicks, not
+                      thirty-eight visits. Unchecked means product details. */}
+                  <th className="num">{t.reviewInTable}</th>
                   <th>{t.reviewKind}</th>
                   <th className="num">{t.reviewFilterable}</th>
                 </tr>
@@ -181,21 +184,15 @@ export function ColumnReview({
                           <option value={IGNORE_OPTION}>{t.reviewRoleIgnore}</option>
                         </select>
                       </td>
-                      <td>
+                      <td className="num">
                         {p.role === "spec" ? (
-                          <select
-                            className="admin-select"
-                            value={p.display}
+                          <input
+                            type="checkbox"
+                            checked={p.display === "table"}
                             onChange={(e) =>
-                              update(i, {
-                                ...p,
-                                display: e.target.value === "table" ? "table" : "detail",
-                              })
+                              update(i, { ...p, display: e.target.checked ? "table" : "detail" })
                             }
-                          >
-                            <option value="detail">{t.reviewInDetail}</option>
-                            <option value="table">{t.reviewInTable}</option>
-                          </select>
+                          />
                         ) : (
                           <span className="text-[var(--color-ink-faint)]">—</span>
                         )}
