@@ -65,13 +65,31 @@ export function ImportPanel({
   }
 
   return (
-    <div className="grid gap-5">
-      {groups.map((g) => (
-        <section key={g.id}>
-          <h2 className="mb-1 border-b border-[var(--color-rule)] pb-0.5 text-[13px] font-bold">
-            {g.name}
-          </h2>
-          <div className="grid gap-1">
+    <div className="grid gap-2">
+      {groups.map((g) => {
+        /*
+         * Force the group open when it holds the family being worked on.
+         *
+         * `undefined` rather than `false` for every other group: React then
+         * leaves the attribute alone after the first render, so a group the
+         * operator opened by hand stays open when an upload elsewhere on the
+         * page re-renders it. Passing `false` would make every re-render a
+         * chance to snap it shut.
+         */
+        const active = state !== null && g.families.some((f) => f.id === state.familyId);
+        const products = g.families.reduce((n, f) => n + f.productCount, 0);
+
+        return (
+        <details key={g.id} className="admin-group" open={active || undefined}>
+          <summary className="flex cursor-pointer items-center gap-2 border-b border-[var(--color-rule)] pb-0.5 text-[13px] font-bold">
+            <span>{g.name}</span>
+            {/* Collapsed is the default, so the heading has to carry enough to
+                choose a category without opening every one of them. */}
+            <span className="tech text-[11px] font-normal text-[var(--color-ink-muted)]">
+              {formatInt(g.families.length, locale)} · {formatInt(products, locale)}
+            </span>
+          </summary>
+          <div className="mt-1 grid gap-1">
             {g.families.map((f) => (
               <div key={f.id} className="border-b border-[var(--color-rule-light)] py-1.5">
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px]">
@@ -177,8 +195,9 @@ export function ImportPanel({
               </div>
             ))}
           </div>
-        </section>
-      ))}
+        </details>
+        );
+      })}
     </div>
   );
 }

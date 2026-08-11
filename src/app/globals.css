@@ -357,6 +357,34 @@ html[lang="fa"] .spec-table thead th {
   outline-offset: 2px;
 }
 
+/* Collapsible category groups on the admin products page. The marker is styled
+   rather than hidden — with every group closed by default, the triangle is the
+   only thing saying these open at all. */
+.admin-group > summary {
+  list-style: none;
+}
+.admin-group > summary::-webkit-details-marker {
+  display: none;
+}
+.admin-group > summary::before {
+  content: "";
+  flex: none;
+  border-inline-start: 4px solid var(--color-ink-muted);
+  border-top: 3.5px solid transparent;
+  border-bottom: 3.5px solid transparent;
+  transition: transform 0.12s;
+}
+html[dir="rtl"] .admin-group > summary::before {
+  transform: rotate(180deg);
+}
+.admin-group[open] > summary::before,
+html[dir="rtl"] .admin-group[open] > summary::before {
+  transform: rotate(90deg);
+}
+.admin-group > summary:hover {
+  color: var(--color-navy);
+}
+
 /* The card list's version of the same fold. */
 .card-details {
   display: none;
