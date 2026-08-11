@@ -163,11 +163,23 @@ function readCsv(csvText: string): { records: string[][] } | { error: ImportErro
  * it is, so nothing here has to know whether that came from a family's
  * definitions or from a plan someone confirmed in the admin panel.
  */
+/**
+ * `skipped` is populated instead of `errors` when the caller asked for bad rows
+ * to be set aside. Both describe the same problems; which field they land in is
+ * the difference between "nothing was written" and "these rows were left out".
+ */
+export type ParseOutcome = {
+  rows: ImportRow[];
+  errors: ImportError[];
+  skipped: ImportError[];
+};
+
 function parseRows(
   dataRows: readonly string[][],
   headerLen: number,
   located: readonly Located[],
-): { rows: ImportRow[]; errors: ImportError[] } {
+  skipBadRows: boolean,
+): ParseOutcome {
   const errors: ImportError[] = [];
   const rows: ImportRow[] = [];
 
@@ -305,24 +317,34 @@ function parseRows(
     });
   });
 
-  // All-or-nothing. Returning the good rows alongside the errors would let a
-  // caller write a partial import by ignoring the second half of the pair.
-  return errors.length > 0 ? { rows: [], errors } : { rows, errors };
+  /*
+   * All-or-nothing unless the caller has said otherwise. Returning the good
+   * rows alongside the errors by default would let a caller write a partial
+   * import by ignoring the second half of the pair; `skipBadRows` is that
+   * decision made deliberately, once, by someone looking at the list.
+   */
+  if (errors.length === 0) return { rows, errors: [], skipped: [] };
+  if (skipBadRows) return { rows, errors: [], skipped: errors };
+  return { rows: [], errors, skipped: [] };
 }
 
 export function parseImport(
   csvText: string,
   defs: readonly ImportSpecDef[],
-): { rows: ImportRow[]; errors: ImportError[] } {
+): ParseOutcome {
   const expected = columnsFor(defs);
   const errors: ImportError[] = [];
 
   const read = readCsv(csvText);
-  if ("error" in read) return { rows: [], errors: [read.error] };
+  if ("error" in read) return { rows: [], errors: [read.error], skipped: [] };
   const { records } = read;
 
   if (records.length === 0) {
-    return { rows: [], errors: [{ row: 1, column: "", message: "The file is empty." }] };
+    return {
+      rows: [],
+      errors: [{ row: 1, column: "", message: "The file is empty." }],
+      skipped: [],
+    };
   }
 
   const header = records[0];
@@ -348,10 +370,14 @@ export function parseImport(
       errors.push({ row: 1, column: name, message: `Column "${name}" is unknown for this family.` });
     }
   }
-  if (errors.length > 0) return { rows: [], errors };
+  if (errors.length > 0) return { rows: [], errors, skipped: [] };
 
   if (dataRows.length === 0) {
-    return { rows: [], errors: [{ row: 1, column: "", message: "The file has no rows." }] };
+    return {
+      rows: [],
+      errors: [{ row: 1, column: "", message: "The file has no rows." }],
+      skipped: [],
+    };
   }
 
   const at = new Map(header.map((name, i) => [name, i]));
@@ -365,7 +391,7 @@ export function parseImport(
     ),
   ];
 
-  return parseRows(dataRows, header.length, located);
+  return parseRows(dataRows, header.length, located, false);
 }
 
 /**
@@ -376,22 +402,27 @@ export function parseImport(
  * file's header. What remains is locating each planned column and reading the
  * rows.
  */
-export function parseWithPlan(
-  csvText: string,
-  plan: ImportPlan,
-): { rows: ImportRow[]; errors: ImportError[] } {
+export function parseWithPlan(csvText: string, plan: ImportPlan): ParseOutcome {
   const read = readCsv(csvText);
-  if ("error" in read) return { rows: [], errors: [read.error] };
+  if ("error" in read) return { rows: [], errors: [read.error], skipped: [] };
   const { records } = read;
 
   if (records.length === 0) {
-    return { rows: [], errors: [{ row: 1, column: "", message: "The file is empty." }] };
+    return {
+      rows: [],
+      errors: [{ row: 1, column: "", message: "The file is empty." }],
+      skipped: [],
+    };
   }
 
   const header = records[0];
   const dataRows = records.slice(1);
   if (dataRows.length === 0) {
-    return { rows: [], errors: [{ row: 1, column: "", message: "The file has no rows." }] };
+    return {
+      rows: [],
+      errors: [{ row: 1, column: "", message: "The file has no rows." }],
+      skipped: [],
+    };
   }
 
   const at = new Map(header.map((name, i) => [name, i]));
@@ -410,6 +441,7 @@ export function parseWithPlan(
             message: `Column "${h.header}" is not in this file. Upload it again.`,
           },
         ],
+        skipped: [],
       };
     }
     if (h.role === "spec") {
@@ -419,7 +451,7 @@ export function parseWithPlan(
     }
   }
 
-  return parseRows(dataRows, header.length, located);
+  return parseRows(dataRows, header.length, located, plan.skipBadRows);
 }
 
 /**

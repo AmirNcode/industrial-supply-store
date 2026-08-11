@@ -10,8 +10,10 @@ import {
   type AnalyzedHeader,
   type BuiltinField,
   type HeaderPlan,
+  type ImportMode,
   type MissingColumn,
 } from "@/lib/columnPlan";
+import type { ImportError } from "@/lib/importCsv";
 
 /**
  * The screen between choosing a file and importing it.
@@ -31,11 +33,17 @@ type MissingRow = MissingColumn & { productCount: number };
 const SPEC_OPTION = "__spec__";
 const IGNORE_OPTION = "__ignore__";
 
+/** A long file can fail on thousands of rows; the first screenful is what
+ *  someone acts on. */
+const MAX_SHOWN = 50;
+
 export function ColumnReview({
   headers,
   missing,
   rowCount,
   problems,
+  rowProblems,
+  goodRows,
   locale,
   pending,
 }: {
@@ -43,12 +51,16 @@ export function ColumnReview({
   missing: MissingRow[];
   rowCount: number;
   problems: string[];
+  rowProblems: ImportError[];
+  goodRows: number;
   locale: Locale;
   pending: boolean;
 }) {
   const t = getDict(locale);
   const [plans, setPlans] = useState<HeaderPlan[]>(() => headers.map((h) => h.plan));
   const [dropKeys, setDropKeys] = useState<string[]>([]);
+  const [mode, setMode] = useState<ImportMode>("update");
+  const [skipBadRows, setSkipBadRows] = useState(false);
 
   const update = (i: number, next: HeaderPlan) =>
     setPlans((prev) => prev.map((p, j) => (j === i ? next : p)));
@@ -101,7 +113,10 @@ export function ColumnReview({
   const owners = new Map<string, string>();
   for (const p of plans) if (p.role === "builtin") owners.set(p.field, p.header);
 
-  const plan = JSON.stringify({ headers: plans, dropKeys });
+  const plan = JSON.stringify({ headers: plans, dropKeys, mode, skipBadRows });
+  const badRowCount = new Set(rowProblems.map((e) => e.row)).size;
+  // Confirming with bad rows and no decision about them would just bounce back.
+  const blocked = badRowCount > 0 && !skipBadRows;
 
   return (
     <div className="mt-2 border border-[var(--color-rule)] bg-white p-3">
@@ -124,6 +139,85 @@ export function ColumnReview({
           </ul>
         </div>
       )}
+
+      {badRowCount > 0 && (
+        <div className="mt-2 border border-[var(--color-warn-line)] bg-[var(--color-warn-soft)] px-2.5 py-1.5">
+          <p className="text-[12px] font-bold">
+            {t.reviewBadRows
+              .replace("{bad}", formatInt(badRowCount, locale))
+              .replace("{total}", formatInt(rowCount, locale))}
+          </p>
+          <table className="spec-table mt-1">
+            <thead>
+              <tr>
+                <th className="num">{t.importRow}</th>
+                <th>{t.importColumn}</th>
+                <th>{t.importProblem}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rowProblems.slice(0, MAX_SHOWN).map((e, i) => (
+                <tr key={i}>
+                  <td className="num tech tech-num">{formatInt(e.row, locale)}</td>
+                  <td className="tech">{e.column}</td>
+                  <td className="whitespace-normal">{e.message}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {rowProblems.length > MAX_SHOWN && (
+            <p className="mt-1 text-[11px] text-[var(--color-ink-muted)]">
+              + {formatInt(rowProblems.length - MAX_SHOWN, locale)}
+            </p>
+          )}
+          {/* The way through. Without it the only options are editing the file
+              and redoing the columns, or giving up. */}
+          <label className="mt-1.5 flex items-center gap-1.5 text-[12px] font-semibold">
+            <input
+              type="checkbox"
+              checked={skipBadRows}
+              onChange={(e) => setSkipBadRows(e.target.checked)}
+            />
+            {t.reviewSkipBadRows
+              .replace("{bad}", formatInt(badRowCount, locale))
+              .replace("{good}", formatInt(goodRows, locale))}
+          </label>
+        </div>
+      )}
+
+      <fieldset className="mt-3">
+        <legend className="text-[12px] font-bold">{t.reviewMode}</legend>
+        <label className="mt-0.5 flex items-start gap-1.5 text-[12px]">
+          <input
+            type="radio"
+            name="mode-ui"
+            className="mt-0.5"
+            checked={mode === "update"}
+            onChange={() => setMode("update")}
+          />
+          <span>
+            {t.reviewModeUpdate}
+            <span className="block text-[11px] text-[var(--color-ink-muted)]">
+              {t.reviewModeUpdateHint}
+            </span>
+          </span>
+        </label>
+        <label className="mt-1 flex items-start gap-1.5 text-[12px]">
+          <input
+            type="radio"
+            name="mode-ui"
+            className="mt-0.5"
+            checked={mode === "replace"}
+            onChange={() => setMode("replace")}
+          />
+          <span>
+            {t.reviewModeReplace}
+            <span className="block text-[11px] text-[var(--color-ink-muted)]">
+              {t.reviewModeReplaceHint}
+            </span>
+          </span>
+        </label>
+      </fieldset>
 
       {newOnes.length > 0 && (
         <section className="mt-3">
@@ -302,10 +396,13 @@ export function ColumnReview({
         name="stage"
         value="apply"
         className="btn-small mt-3"
-        disabled={pending}
+        disabled={pending || blocked}
       >
         {t.reviewConfirm}
       </button>
+      {blocked && (
+        <p className="mt-1 text-[11px] text-[var(--color-danger)]">{t.reviewBlocked}</p>
+      )}
     </div>
   );
 }

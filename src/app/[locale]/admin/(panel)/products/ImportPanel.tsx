@@ -197,6 +197,8 @@ export function ImportPanel({
                           missing={state.missing}
                           rowCount={state.rowCount}
                           problems={state.problems}
+                          rowProblems={state.rowProblems}
+                          goodRows={state.goodRows}
                           locale={locale}
                           pending={isPending}
                         />
@@ -234,6 +236,13 @@ function Result({
         t.importAddedColumns.replace("{n}", formatInt(state.addedColumns, locale)),
       state.droppedColumns > 0 &&
         t.importDroppedColumns.replace("{n}", formatInt(state.droppedColumns, locale)),
+      state.removed > 0 &&
+        t.importRemoved.replace("{n}", formatInt(state.removed, locale)),
+      state.skipped.length > 0 &&
+        t.importSkipped.replace(
+          "{n}",
+          formatInt(new Set(state.skipped.map((e) => e.row)).size, locale),
+        ),
     ].filter((s): s is string => Boolean(s));
 
     return (
@@ -289,7 +298,9 @@ function Result({
           ? t.importTooLarge
           : state.message === "bad-plan"
             ? t.importBadPlan
-            : t.importFamilyGone;
+            : state.message === "all-rows-skipped"
+              ? t.importAllSkipped
+              : t.importFamilyGone;
     return <Problem>{text}</Problem>;
   }
 

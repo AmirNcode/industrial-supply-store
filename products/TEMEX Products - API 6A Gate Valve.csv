@@ -1,0 +1,181 @@
+product_code,product_name,type,design_standard,valve_size,pressure_rating,test_pressure,pressure_unit,bore_type,bore_size,end_connection,rtj_groove,groove_cladding,body_material,gate_seat_material_and_coating,stem_material,standard_stud_nut_material,custom_stud_nut_material,operation,face_to_face,function,shape,seat_sealing,stem_packing,bonnet_seal_ring,stem_type,material_class,temperature_class,psl,psl_3g,pr,service,standard_painting_system,custom_painting,country_of_origin,application,weight,weight_unit,price_usd,pack_qty,lead_time,in_stock,inventory_available,inventory_on_hold,inventory_sold,documents,description
+1000000001,Gate Valve,Slab - Through Conduit,API 6A,"2-1/16""","3,000","6,000",Psi,Full,"2-1/16""",API 6B RTJ Flange,RX24,Available upon customer request,Forged AISI 4130 (API 60K),AISI 4130 + 200µ Tungsten Carbide (HVOF),AISI 410 + QPQ,ASTM A193 B7 / ASTM A194 2H,Available upon customer request,Handwheel,371 mm,On/Off,Straight,Lip-Seal,HNBR + PTFE,SS316,Non-Rising,DD,"P + U 
+(-29 ~ +121 °C)",3,Available upon customer request,2,Sour Oil & Gas Service – Compliant with NACE MR0175 / ISO 15156,7E System – RAL 1003 Top Coat,Available upon customer request,IRAN,High-Pressure Oil & Gas Wellhead Isolation Service,80,kg,,,,,,,,"Datasheet
+Drawing
+Certificates
+IOM",
+1000000002,Gate Valve,Slab - Through Conduit,API 6A,"2-1/16""","3,000","6,000",Psi,Full,"2-1/16""",API 6B RTJ Flange,RX24,Available upon customer request,Forged AISI 4130 (API 60K),AISI 410 + 200µ Tungsten Carbide (HVOF),AISI 410 + QPQ,ASTM A193 B7 / ASTM A194 2H,Available upon customer request,Handwheel,371 mm,On/Off,Straight,Lip-Seal,HNBR + PTFE,SS316,Non-Rising,EE,"P + U 
+(-29 ~ +121 °C)",3,Available upon customer request,2,Sour Oil & Gas Service – Compliant with NACE MR0175 / ISO 15156,7E System – RAL 1003 Top Coat,Available upon customer request,IRAN,High-Pressure Oil & Gas Wellhead Isolation Service,80,kg,,,,,,,,"Datasheet
+Drawing
+Certificates
+IOM",
+1000000003,Gate Valve,Slab - Through Conduit,API 6A,"2-1/16""","3,000","6,000",Psi,Full,"2-1/16""",API 6B RTJ Flange,RX24,Available upon customer request,Forged AISI 4130 (API 60K),AISI 410 + 200µ Tungsten Carbide (HVOF),INCONEL 718,ASTM A193 B7 / ASTM A194 2H,Available upon customer request,Handwheel,371 mm,On/Off,Straight,Lip-Seal,HNBR + PTFE,SS316,Non-Rising,EE-NL,"P + U 
+(-29 ~ +121 °C)",3,Available upon customer request,2,Sour Oil & Gas Service – Compliant with NACE MR0175 / ISO 15156,7E System – RAL 1003 Top Coat,Available upon customer request,IRAN,High-Pressure Oil & Gas Wellhead Isolation Service,80,kg,,,,,,,,"Datasheet
+Drawing
+Certificates
+IOM",
+1000000004,Gate Valve,Slab - Through Conduit,API 6A,"2-1/16""","5,000","7,500",Psi,Full,"2-1/16""",API 6B RTJ Flange,RX24,Available upon customer request,Forged AISI 4130 (API 60K),AISI 4130 + 200µ Tungsten Carbide (HVOF),AISI 410 + QPQ,ASTM A193 B7 / ASTM A194 2H,Available upon customer request,Handwheel,371 mm,On/Off,Straight,Lip-Seal,HNBR + PTFE,SS316,Non-Rising,DD,"P + U 
+(-29 ~ +121 °C)",3,Available upon customer request,2,Sour Oil & Gas Service – Compliant with NACE MR0175 / ISO 15156,7E System – RAL 1003 Top Coat,Available upon customer request,IRAN,High-Pressure Oil & Gas Wellhead Isolation Service,80,kg,,,,,,,,"Datasheet
+Drawing
+Certificates
+IOM",
+1000000005,Gate Valve,Slab - Through Conduit,API 6A,"2-1/16""","5,000","7,500",Psi,Full,"2-1/16""",API 6B RTJ Flange,RX24,Available upon customer request,Forged AISI 4130 (API 60K),AISI 410 + 200µ Tungsten Carbide (HVOF),AISI 410 + QPQ,ASTM A193 B7 / ASTM A194 2H,Available upon customer request,Handwheel,371 mm,On/Off,Straight,Lip-Seal,HNBR + PTFE,SS316,Non-Rising,EE,"P + U 
+(-29 ~ +121 °C)",3,Available upon customer request,2,Sour Oil & Gas Service – Compliant with NACE MR0175 / ISO 15156,7E System – RAL 1003 Top Coat,Available upon customer request,IRAN,High-Pressure Oil & Gas Wellhead Isolation Service,80,kg,,,,,,,,"Datasheet
+Drawing
+Certificates
+IOM",
+1000000006,Gate Valve,Slab - Through Conduit,API 6A,"2-1/16""","5,000","7,500",Psi,Full,"2-1/16""",API 6B RTJ Flange,RX24,Available upon customer request,Forged AISI 4130 (API 60K),AISI 410 + 200µ Tungsten Carbide (HVOF),INCONEL 718,ASTM A193 B7 / ASTM A194 2H,Available upon customer request,Handwheel,371 mm,On/Off,Straight,Lip-Seal,HNBR + PTFE,SS316,Non-Rising,EE-NL,"P + U 
+(-29 ~ +121 °C)",3,Available upon customer request,2,Sour Oil & Gas Service – Compliant with NACE MR0175 / ISO 15156,7E System – RAL 1003 Top Coat,Available upon customer request,IRAN,High-Pressure Oil & Gas Wellhead Isolation Service,80,kg,,,,,,,,"Datasheet
+Drawing
+Certificates
+IOM",
+1000000007,Gate Valve,Slab - Through Conduit,API 6A,"2-1/16""","10,000","15,000",Psi,Full,"2-1/16""",API 6BX RTJ Flange,BX152,Available upon customer request,Forged AISI 4130 (API 60K),AISI 4130 + 200µ Tungsten Carbide (HVOF),AISI 410 + QPQ,ASTM A193 B7 / ASTM A194 2H,Available upon customer request,Handwheel,521 mm,On/Off,Straight,Lip-Seal,HNBR + PTFE,SS316,Non-Rising,DD,"P + U 
+(-29 ~ +121 °C)",3,Available upon customer request,2,Sour Oil & Gas Service – Compliant with NACE MR0175 / ISO 15156,7E System – RAL 1003 Top Coat,Available upon customer request,IRAN,High-Pressure Oil & Gas Wellhead Isolation Service,123,kg,,,,,,,,"Datasheet
+Drawing
+Certificates
+IOM",
+1000000008,Gate Valve,Slab - Through Conduit,API 6A,"2-1/16""","10,000","15,000",Psi,Full,"2-1/16""",API 6BX RTJ Flange,BX152,Available upon customer request,Forged AISI 4130 (API 60K),AISI 410 + 200µ Tungsten Carbide (HVOF),AISI 410 + QPQ,ASTM A193 B7 / ASTM A194 2H,Available upon customer request,Handwheel,521 mm,On/Off,Straight,Lip-Seal,HNBR + PTFE,SS316,Non-Rising,EE,"P + U 
+(-29 ~ +121 °C)",3,Available upon customer request,2,Sour Oil & Gas Service – Compliant with NACE MR0175 / ISO 15156,7E System – RAL 1003 Top Coat,Available upon customer request,IRAN,High-Pressure Oil & Gas Wellhead Isolation Service,123,kg,,,,,,,,"Datasheet
+Drawing
+Certificates
+IOM",
+1000000009,Gate Valve,Slab - Through Conduit,API 6A,"2-1/16""","10,000","15,000",Psi,Full,"2-1/16""",API 6BX RTJ Flange,BX152,Available upon customer request,Forged AISI 4130 (API 60K),AISI 410 + 200µ Tungsten Carbide (HVOF),INCONEL 718,ASTM A193 B7 / ASTM A194 2H,Available upon customer request,Handwheel,521 mm,On/Off,Straight,Lip-Seal,HNBR + PTFE,SS316,Non-Rising,EE-NL,"P + U 
+(-29 ~ +121 °C)",3,Available upon customer request,2,Sour Oil & Gas Service – Compliant with NACE MR0175 / ISO 15156,7E System – RAL 1003 Top Coat,Available upon customer request,IRAN,High-Pressure Oil & Gas Wellhead Isolation Service,123,kg,,,,,,,,"Datasheet
+Drawing
+Certificates
+IOM",
+1000000010,Gate Valve,Slab - Through Conduit,API 6A,"3-1/8""","3,000","6,000",Psi,Full,"3-1/8""",API 6B RTJ Flange,RX31,Available upon customer request,Forged AISI 4130 (API 60K),AISI 4130 + 200µ Tungsten Carbide (HVOF),AISI 410 + QPQ,ASTM A193 B7 / ASTM A194 2H,Available upon customer request,Handwheel,435 mm,On/Off,Straight,Lip-Seal,HNBR + PTFE,SS316,Non-Rising,DD,"P + U 
+(-29 ~ +121 °C)",3,Available upon customer request,2,Sour Oil & Gas Service – Compliant with NACE MR0175 / ISO 15156,7E System – RAL 1003 Top Coat,Available upon customer request,IRAN,High-Pressure Oil & Gas Wellhead Isolation Service,118,kg,,,,,,,,"Datasheet
+Drawing
+Certificates
+IOM",
+1000000011,Gate Valve,Slab - Through Conduit,API 6A,"3-1/8""","3,000","6,000",Psi,Full,"3-1/8""",API 6B RTJ Flange,RX31,Available upon customer request,Forged AISI 4130 (API 60K),AISI 410 + 200µ Tungsten Carbide (HVOF),AISI 410 + QPQ,ASTM A193 B7 / ASTM A194 2H,Available upon customer request,Handwheel,435 mm,On/Off,Straight,Lip-Seal,HNBR + PTFE,SS316,Non-Rising,EE,"P + U 
+(-29 ~ +121 °C)",3,Available upon customer request,2,Sour Oil & Gas Service – Compliant with NACE MR0175 / ISO 15156,7E System – RAL 1003 Top Coat,Available upon customer request,IRAN,High-Pressure Oil & Gas Wellhead Isolation Service,118,kg,,,,,,,,"Datasheet
+Drawing
+Certificates
+IOM",
+1000000012,Gate Valve,Slab - Through Conduit,API 6A,"3-1/8""","3,000","6,000",Psi,Full,"3-1/8""",API 6B RTJ Flange,RX31,Available upon customer request,Forged AISI 4130 (API 60K),AISI 410 + 200µ Tungsten Carbide (HVOF),INCONEL 718,ASTM A193 B7 / ASTM A194 2H,Available upon customer request,Handwheel,435 mm,On/Off,Straight,Lip-Seal,HNBR + PTFE,SS316,Non-Rising,EE-NL,"P + U 
+(-29 ~ +121 °C)",3,Available upon customer request,2,Sour Oil & Gas Service – Compliant with NACE MR0175 / ISO 15156,7E System – RAL 1003 Top Coat,Available upon customer request,IRAN,High-Pressure Oil & Gas Wellhead Isolation Service,118,kg,,,,,,,,"Datasheet
+Drawing
+Certificates
+IOM",
+1000000013,Gate Valve,Slab - Through Conduit,API 6A,"3-1/8""","5,000","7,500",Psi,Full,"3-1/8""",API 6B RTJ Flange,RX35,Available upon customer request,Forged AISI 4130 (API 60K),AISI 4130 + 200µ Tungsten Carbide (HVOF),AISI 410 + QPQ,ASTM A193 B7 / ASTM A194 2H,Available upon customer request,Handwheel,473 mm,On/Off,Straight,Lip-Seal,HNBR + PTFE,SS316,Non-Rising,DD,"P + U 
+(-29 ~ +121 °C)",3,Available upon customer request,2,Sour Oil & Gas Service – Compliant with NACE MR0175 / ISO 15156,7E System – RAL 1003 Top Coat,Available upon customer request,IRAN,High-Pressure Oil & Gas Wellhead Isolation Service,164,kg,,,,,,,,"Datasheet
+Drawing
+Certificates
+IOM",
+1000000014,Gate Valve,Slab - Through Conduit,API 6A,"3-1/8""","5,000","7,500",Psi,Full,"3-1/8""",API 6B RTJ Flange,RX35,Available upon customer request,Forged AISI 4130 (API 60K),AISI 410 + 200µ Tungsten Carbide (HVOF),AISI 410 + QPQ,ASTM A193 B7 / ASTM A194 2H,Available upon customer request,Handwheel,473 mm,On/Off,Straight,Lip-Seal,HNBR + PTFE,SS316,Non-Rising,EE,"P + U 
+(-29 ~ +121 °C)",3,Available upon customer request,2,Sour Oil & Gas Service – Compliant with NACE MR0175 / ISO 15156,7E System – RAL 1003 Top Coat,Available upon customer request,IRAN,High-Pressure Oil & Gas Wellhead Isolation Service,164,kg,,,,,,,,"Datasheet
+Drawing
+Certificates
+IOM",
+1000000015,Gate Valve,Slab - Through Conduit,API 6A,"3-1/8""","5,000","7,500",Psi,Full,"3-1/8""",API 6B RTJ Flange,RX35,Available upon customer request,Forged AISI 4130 (API 60K),AISI 410 + 200µ Tungsten Carbide (HVOF),INCONEL 718,ASTM A193 B7 / ASTM A194 2H,Available upon customer request,Handwheel,473 mm,On/Off,Straight,Lip-Seal,HNBR + PTFE,SS316,Non-Rising,EE-NL,"P + U 
+(-29 ~ +121 °C)",3,Available upon customer request,2,Sour Oil & Gas Service – Compliant with NACE MR0175 / ISO 15156,7E System – RAL 1003 Top Coat,Available upon customer request,IRAN,High-Pressure Oil & Gas Wellhead Isolation Service,164,kg,,,,,,,,"Datasheet
+Drawing
+Certificates
+IOM",
+1000000016,Gate Valve,Slab - Through Conduit,API 6A,"3-1/16""","10,000","15,000",Psi,Full,"3-1/16""",API 6BX RTJ Flange,BX154,Available upon customer request,Forged AISI 4130 (API 60K),AISI 4130 + 200µ Tungsten Carbide (HVOF),AISI 410 + QPQ,ASTM A193 B7 / ASTM A194 2H,Available upon customer request,Handwheel,619 mm,On/Off,Straight,Lip-Seal,HNBR + PTFE,SS316,Non-Rising,DD,"P + U 
+(-29 ~ +121 °C)",3,Available upon customer request,2,Sour Oil & Gas Service – Compliant with NACE MR0175 / ISO 15156,7E System – RAL 1003 Top Coat,Available upon customer request,IRAN,High-Pressure Oil & Gas Wellhead Isolation Service,240,kg,,,,,,,,"Datasheet
+Drawing
+Certificates
+IOM",
+1000000017,Gate Valve,Slab - Through Conduit,API 6A,"3-1/16""","10,000","15,000",Psi,Full,"3-1/16""",API 6BX RTJ Flange,BX154,Available upon customer request,Forged AISI 4130 (API 60K),AISI 410 + 200µ Tungsten Carbide (HVOF),AISI 410 + QPQ,ASTM A193 B7 / ASTM A194 2H,Available upon customer request,Handwheel,619 mm,On/Off,Straight,Lip-Seal,HNBR + PTFE,SS316,Non-Rising,EE,"P + U 
+(-29 ~ +121 °C)",3,Available upon customer request,2,Sour Oil & Gas Service – Compliant with NACE MR0175 / ISO 15156,7E System – RAL 1003 Top Coat,Available upon customer request,IRAN,High-Pressure Oil & Gas Wellhead Isolation Service,240,kg,,,,,,,,"Datasheet
+Drawing
+Certificates
+IOM",
+1000000018,Gate Valve,Slab - Through Conduit,API 6A,"3-1/16""","10,000","15,000",Psi,Full,"3-1/16""",API 6BX RTJ Flange,BX154,Available upon customer request,Forged AISI 4130 (API 60K),AISI 410 + 200µ Tungsten Carbide (HVOF),INCONEL 718,ASTM A193 B7 / ASTM A194 2H,Available upon customer request,Handwheel,619 mm,On/Off,Straight,Lip-Seal,HNBR + PTFE,SS316,Non-Rising,EE-NL,"P + U 
+(-29 ~ +121 °C)",3,Available upon customer request,2,Sour Oil & Gas Service – Compliant with NACE MR0175 / ISO 15156,7E System – RAL 1003 Top Coat,Available upon customer request,IRAN,High-Pressure Oil & Gas Wellhead Isolation Service,240,kg,,,,,,,,"Datasheet
+Drawing
+Certificates
+IOM",
+1000000019,Gate Valve,Slab - Through Conduit,API 6A,"4-1/16""","3,000","6,000",Psi,Full,"4-1/16""",API 6B RTJ Flange,RX37,Available upon customer request,Forged AISI 4130 (API 60K),AISI 4130 + 200µ Tungsten Carbide (HVOF),AISI 410 + QPQ,ASTM A193 B7 / ASTM A194 2H,Available upon customer request,Handwheel,511 mm,On/Off,Straight,Lip-Seal,HNBR + PTFE,SS316,Non-Rising,DD,"P + U 
+(-29 ~ +121 °C)",3,Available upon customer request,2,Sour Oil & Gas Service – Compliant with NACE MR0175 / ISO 15156,7E System – RAL 1003 Top Coat,Available upon customer request,IRAN,High-Pressure Oil & Gas Wellhead Isolation Service,205,kg,,,,,,,,"Datasheet
+Drawing
+Certificates
+IOM",
+1000000020,Gate Valve,Slab - Through Conduit,API 6A,"4-1/16""","3,000","6,000",Psi,Full,"4-1/16""",API 6B RTJ Flange,RX37,Available upon customer request,Forged AISI 4130 (API 60K),AISI 410 + 200µ Tungsten Carbide (HVOF),AISI 410 + QPQ,ASTM A193 B7 / ASTM A194 2H,Available upon customer request,Handwheel,511 mm,On/Off,Straight,Lip-Seal,HNBR + PTFE,SS316,Non-Rising,EE,"P + U 
+(-29 ~ +121 °C)",3,Available upon customer request,2,Sour Oil & Gas Service – Compliant with NACE MR0175 / ISO 15156,7E System – RAL 1003 Top Coat,Available upon customer request,IRAN,High-Pressure Oil & Gas Wellhead Isolation Service,205,kg,,,,,,,,"Datasheet
+Drawing
+Certificates
+IOM",
+1000000021,Gate Valve,Slab - Through Conduit,API 6A,"4-1/16""","3,000","6,000",Psi,Full,"4-1/16""",API 6B RTJ Flange,RX37,Available upon customer request,Forged AISI 4130 (API 60K),AISI 410 + 200µ Tungsten Carbide (HVOF),INCONEL 718,ASTM A193 B7 / ASTM A194 2H,Available upon customer request,Handwheel,511 mm,On/Off,Straight,Lip-Seal,HNBR + PTFE,SS316,Non-Rising,EE-NL,"P + U 
+(-29 ~ +121 °C)",3,Available upon customer request,2,Sour Oil & Gas Service – Compliant with NACE MR0175 / ISO 15156,7E System – RAL 1003 Top Coat,Available upon customer request,IRAN,High-Pressure Oil & Gas Wellhead Isolation Service,205,kg,,,,,,,,"Datasheet
+Drawing
+Certificates
+IOM",
+1000000022,Gate Valve,Slab - Through Conduit,API 6A,"4-1/16""","5,000","7,500",Psi,Full,"4-1/16""",API 6B RTJ Flange,RX39,Available upon customer request,Forged AISI 4130 (API 60K),AISI 4130 + 200µ Tungsten Carbide (HVOF),AISI 410 + QPQ,ASTM A193 B7 / ASTM A194 2H,Available upon customer request,Handwheel,549 mm,On/Off,Straight,Lip-Seal,HNBR + PTFE,SS316,Non-Rising,DD,"P + U 
+(-29 ~ +121 °C)",3,Available upon customer request,2,Sour Oil & Gas Service – Compliant with NACE MR0175 / ISO 15156,7E System – RAL 1003 Top Coat,Available upon customer request,IRAN,High-Pressure Oil & Gas Wellhead Isolation Service,236,kg,,,,,,,,"Datasheet
+Drawing
+Certificates
+IOM",
+1000000023,Gate Valve,Slab - Through Conduit,API 6A,"4-1/16""","5,000","7,500",Psi,Full,"4-1/16""",API 6B RTJ Flange,RX39,Available upon customer request,Forged AISI 4130 (API 60K),AISI 410 + 200µ Tungsten Carbide (HVOF),AISI 410 + QPQ,ASTM A193 B7 / ASTM A194 2H,Available upon customer request,Handwheel,549 mm,On/Off,Straight,Lip-Seal,HNBR + PTFE,SS316,Non-Rising,EE,"P + U 
+(-29 ~ +121 °C)",3,Available upon customer request,2,Sour Oil & Gas Service – Compliant with NACE MR0175 / ISO 15156,7E System – RAL 1003 Top Coat,Available upon customer request,IRAN,High-Pressure Oil & Gas Wellhead Isolation Service,236,kg,,,,,,,,"Datasheet
+Drawing
+Certificates
+IOM",
+1000000024,Gate Valve,Slab - Through Conduit,API 6A,"4-1/16""","5,000","7,500",Psi,Full,"4-1/16""",API 6B RTJ Flange,RX39,Available upon customer request,Forged AISI 4130 (API 60K),AISI 410 + 200µ Tungsten Carbide (HVOF),INCONEL 718,ASTM A193 B7 / ASTM A194 2H,Available upon customer request,Handwheel,549 mm,On/Off,Straight,Lip-Seal,HNBR + PTFE,SS316,Non-Rising,EE-NL,"P + U 
+(-29 ~ +121 °C)",3,Available upon customer request,2,Sour Oil & Gas Service – Compliant with NACE MR0175 / ISO 15156,7E System – RAL 1003 Top Coat,Available upon customer request,IRAN,High-Pressure Oil & Gas Wellhead Isolation Service,236,kg,,,,,,,,"Datasheet
+Drawing
+Certificates
+IOM",
+1000000025,Gate Valve,Slab - Through Conduit,API 6A,"4-1/16""","10,000","15,000",Psi,Full,"4-1/16""",API 6BX RTJ Flange,BX155,Available upon customer request,Forged AISI 4130 (API 60K),AISI 4130 + 200µ Tungsten Carbide (HVOF),AISI 410 + QPQ,ASTM A193 B7 / ASTM A194 2H,Available upon customer request,Handwheel,670 mm,On/Off,Straight,Lip-Seal,HNBR + PTFE,SS316,Non-Rising,DD,"P + U 
+(-29 ~ +121 °C)",3,Available upon customer request,2,Sour Oil & Gas Service – Compliant with NACE MR0175 / ISO 15156,7E System – RAL 1003 Top Coat,Available upon customer request,IRAN,High-Pressure Oil & Gas Wellhead Isolation Service,395,kg,,,,,,,,"Datasheet
+Drawing
+Certificates
+IOM",
+1000000026,Gate Valve,Slab - Through Conduit,API 6A,"4-1/16""","10,000","15,000",Psi,Full,"4-1/16""",API 6BX RTJ Flange,BX155,Available upon customer request,Forged AISI 4130 (API 60K),AISI 410 + 200µ Tungsten Carbide (HVOF),AISI 410 + QPQ,ASTM A193 B7 / ASTM A194 2H,Available upon customer request,Handwheel,670 mm,On/Off,Straight,Lip-Seal,HNBR + PTFE,SS316,Non-Rising,EE,"P + U 
+(-29 ~ +121 °C)",3,Available upon customer request,2,Sour Oil & Gas Service – Compliant with NACE MR0175 / ISO 15156,7E System – RAL 1003 Top Coat,Available upon customer request,IRAN,High-Pressure Oil & Gas Wellhead Isolation Service,395,kg,,,,,,,,"Datasheet
+Drawing
+Certificates
+IOM",
+1000000027,Gate Valve,Slab - Through Conduit,API 6A,"4-1/16""","10,000","15,000",Psi,Full,"4-1/16""",API 6BX RTJ Flange,BX155,Available upon customer request,Forged AISI 4130 (API 60K),AISI 410 + 200µ Tungsten Carbide (HVOF),INCONEL 718,ASTM A193 B7 / ASTM A194 2H,Available upon customer request,Handwheel,670 mm,On/Off,Straight,Lip-Seal,HNBR + PTFE,SS316,Non-Rising,EE-NL,"P + U 
+(-29 ~ +121 °C)",3,Available upon customer request,2,Sour Oil & Gas Service – Compliant with NACE MR0175 / ISO 15156,7E System – RAL 1003 Top Coat,Available upon customer request,IRAN,High-Pressure Oil & Gas Wellhead Isolation Service,395,kg,,,,,,,,"Datasheet
+Drawing
+Certificates
+IOM",
+1000000028,Gate Valve,Slab - Through Conduit,API 6A,"7-1/16""",3000,6000,Psi,Full,"6-3/8""",API 6B RTJ Flange,RX45,Available upon customer request,Forged AISI 4130 (API 60K),AISI 4130 + 200µ Tungsten Carbide (HVOF),AISI 410 + QPQ,ASTM A193 B7 / ASTM A194 2H,Available upon customer request,Handwheel,714 mm,On/Off,Straight,Lip-Seal,HNBR + PTFE,SS316,Non-Rising,DD,"P + U 
+(-29 ~ +121 °C)",3,Available upon customer request,2,Sour Oil & Gas Service – Compliant with NACE MR0175 / ISO 15156,7E System – RAL 1003 Top Coat,Available upon customer request,IRAN,High-Pressure Oil & Gas Wellhead Isolation Service,851,kg,,,,,,,,"Datasheet
+Drawing
+Certificates
+IOM",
+1000000029,Gate Valve,Slab - Through Conduit,API 6A,"7-1/16""",3000,6000,Psi,Full,"6-3/8""",API 6B RTJ Flange,RX45,Available upon customer request,Forged AISI 4130 (API 60K),AISI 410 + 200µ Tungsten Carbide (HVOF),AISI 410 + QPQ,ASTM A193 B7 / ASTM A194 2H,Available upon customer request,Handwheel,714 mm,On/Off,Straight,Lip-Seal,HNBR + PTFE,SS316,Non-Rising,EE,"P + U 
+(-29 ~ +121 °C)",3,Available upon customer request,2,Sour Oil & Gas Service – Compliant with NACE MR0175 / ISO 15156,7E System – RAL 1003 Top Coat,Available upon customer request,IRAN,High-Pressure Oil & Gas Wellhead Isolation Service,851,kg,,,,,,,,"Datasheet
+Drawing
+Certificates
+IOM",
+1000000030,Gate Valve,Slab - Through Conduit,API 6A,"7-1/16""",3000,6000,Psi,Full,"6-3/8""",API 6B RTJ Flange,RX45,Available upon customer request,Forged AISI 4130 (API 60K),AISI 410 + 200µ Tungsten Carbide (HVOF),INCONEL 718,ASTM A193 B7 / ASTM A194 2H,Available upon customer request,Handwheel,714 mm,On/Off,Straight,Lip-Seal,HNBR + PTFE,SS316,Non-Rising,EE-NL,"P + U 
+(-29 ~ +121 °C)",3,Available upon customer request,2,Sour Oil & Gas Service – Compliant with NACE MR0175 / ISO 15156,7E System – RAL 1003 Top Coat,Available upon customer request,IRAN,High-Pressure Oil & Gas Wellhead Isolation Service,851,kg,,,,,,,,"Datasheet
+Drawing
+Certificates
+IOM",
+1000000031,Gate Valve,Slab - Through Conduit,API 6A,"7-1/16""","5,000","7,500",Psi,Full,"6-3/8""",API 6B RTJ Flange,RX46,Available upon customer request,Forged AISI 4130 (API 60K),AISI 4130 + 200µ Tungsten Carbide (HVOF),AISI 410 + QPQ,ASTM A193 B7 / ASTM A194 2H,Available upon customer request,Handwheel,813 mm,On/Off,Straight,Lip-Seal,HNBR + PTFE,SS316,Non-Rising,DD,"P + U 
+(-29 ~ +121 °C)",3,Available upon customer request,2,Sour Oil & Gas Service – Compliant with NACE MR0175 / ISO 15156,7E System – RAL 1003 Top Coat,Available upon customer request,IRAN,High-Pressure Oil & Gas Wellhead Isolation Service,896,kg,,,,,,,,"Datasheet
+Drawing
+Certificates
+IOM",
+1000000032,Gate Valve,Slab - Through Conduit,API 6A,"7-1/16""","5,000","7,500",Psi,Full,"6-3/8""",API 6B RTJ Flange,RX46,Available upon customer request,Forged AISI 4130 (API 60K),AISI 410 + 200µ Tungsten Carbide (HVOF),AISI 410 + QPQ,ASTM A193 B7 / ASTM A194 2H,Available upon customer request,Handwheel,813 mm,On/Off,Straight,Lip-Seal,HNBR + PTFE,SS316,Non-Rising,EE,"P + U 
+(-29 ~ +121 °C)",3,Available upon customer request,2,Sour Oil & Gas Service – Compliant with NACE MR0175 / ISO 15156,7E System – RAL 1003 Top Coat,Available upon customer request,IRAN,High-Pressure Oil & Gas Wellhead Isolation Service,896,kg,,,,,,,,"Datasheet
+Drawing
+Certificates
+IOM",
+1000000033,Gate Valve,Slab - Through Conduit,API 6A,"7-1/16""","5,000","7,500",Psi,Full,"6-3/8""",API 6B RTJ Flange,RX46,Available upon customer request,Forged AISI 4130 (API 60K),AISI 410 + 200µ Tungsten Carbide (HVOF),INCONEL 718,ASTM A193 B7 / ASTM A194 2H,Available upon customer request,Handwheel,813 mm,On/Off,Straight,Lip-Seal,HNBR + PTFE,SS316,Non-Rising,EE-NL,"P + U 
+(-29 ~ +121 °C)",3,Available upon customer request,2,Sour Oil & Gas Service – Compliant with NACE MR0175 / ISO 15156,7E System – RAL 1003 Top Coat,Available upon customer request,IRAN,High-Pressure Oil & Gas Wellhead Isolation Service,896,kg,,,,,,,,"Datasheet
+Drawing
+Certificates
+IOM",
+1000000034,Gate Valve,Slab - Through Conduit,API 6A,"7-1/16""","10,000","15,000",Psi,Full,"6-3/8""",API 6BX RTJ Flange,BX156,Available upon customer request,Forged AISI 4130 (API 60K),AISI 4130 + 200µ Tungsten Carbide (HVOF),AISI 410 + QPQ,ASTM A193 B7 / ASTM A194 2H,Available upon customer request,Handwheel,889 mm,On/Off,Straight,Lip-Seal,HNBR + PTFE,SS316,Non-Rising,DD,"P + U 
+(-29 ~ +121 °C)",3,Available upon customer request,2,Sour Oil & Gas Service – Compliant with NACE MR0175 / ISO 15156,7E System – RAL 1003 Top Coat,Available upon customer request,IRAN,High-Pressure Oil & Gas Wellhead Isolation Service,1134,kg,,,,,,,,"Datasheet
+Drawing
+Certificates
+IOM",
+1000000035,Gate Valve,Slab - Through Conduit,API 6A,"7-1/16""","10,000","15,000",Psi,Full,"6-3/8""",API 6BX RTJ Flange,BX156,Available upon customer request,Forged AISI 4130 (API 60K),AISI 410 + 200µ Tungsten Carbide (HVOF),AISI 410 + QPQ,ASTM A193 B7 / ASTM A194 2H,Available upon customer request,Handwheel,889 mm,On/Off,Straight,Lip-Seal,HNBR + PTFE,SS316,Non-Rising,EE,"P + U 
+(-29 ~ +121 °C)",3,Available upon customer request,2,Sour Oil & Gas Service – Compliant with NACE MR0175 / ISO 15156,7E System – RAL 1003 Top Coat,Available upon customer request,IRAN,High-Pressure Oil & Gas Wellhead Isolation Service,1134,kg,,,,,,,,"Datasheet
+Drawing
+Certificates
+IOM",
+1000000036,Gate Valve,Slab - Through Conduit,API 6A,"7-1/16""","10,000","15,000",Psi,Full,"6-3/8""",API 6BX RTJ Flange,BX156,Available upon customer request,Forged AISI 4130 (API 60K),AISI 410 + 200µ Tungsten Carbide (HVOF),INCONEL 718,ASTM A193 B7 / ASTM A194 2H,Available upon customer request,Handwheel,889 mm,On/Off,Straight,Lip-Seal,HNBR + PTFE,SS316,Non-Rising,EE-NL,"P + U 
+(-29 ~ +121 °C)",3,Available upon customer request,2,Sour Oil & Gas Service – Compliant with NACE MR0175 / ISO 15156,7E System – RAL 1003 Top Coat,Available upon customer request,IRAN,High-Pressure Oil & Gas Wellhead Isolation Service,1134,kg,,,,,,,,"Datasheet
+Drawing
+Certificates
+IOM",

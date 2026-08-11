@@ -67,9 +67,29 @@ export type HeaderPlan =
  * `dropKeys` is separate from `headers` because a deleted column is precisely
  * the one the file does *not* mention — there is no header to hang it off.
  */
+/**
+ * What an upload does to the products already in the family.
+ *
+ * `update` matches on part number: rows in the file are written, products it
+ * does not mention are left alone. `replace` additionally deletes those it does
+ * not mention, which is what you want when a supplier sends a new catalog and
+ * the old rows are a different product line with none of the new columns.
+ *
+ * Orders survive either way — `order_items` snapshots the part number and specs
+ * and holds `product_id` with `ON DELETE SET NULL`.
+ */
+export type ImportMode = "update" | "replace";
+
 export type ImportPlan = {
   headers: HeaderPlan[];
   dropKeys: string[];
+  mode: ImportMode;
+  /**
+   * Import the good rows and set the bad ones aside, rather than refusing the
+   * file. Three duplicate part numbers in a file of thirty-six should not mean
+   * redoing the column mapping.
+   */
+  skipBadRows: boolean;
 };
 
 /** A family's current column, as the analyzer needs to see it. */
@@ -405,9 +425,11 @@ export function parsePlanJson(raw: unknown): ImportPlan | null {
   }
   if (typeof parsed !== "object" || parsed === null) return null;
 
-  const { headers, dropKeys } = parsed as Record<string, unknown>;
+  const { headers, dropKeys, mode, skipBadRows } = parsed as Record<string, unknown>;
   if (!Array.isArray(headers) || !Array.isArray(dropKeys)) return null;
   if (!dropKeys.every((k): k is string => typeof k === "string")) return null;
+  if (mode !== "update" && mode !== "replace") return null;
+  if (typeof skipBadRows !== "boolean") return null;
 
   const out: HeaderPlan[] = [];
   for (const h of headers) {
@@ -445,7 +467,7 @@ export function parsePlanJson(raw: unknown): ImportPlan | null {
     }
   }
 
-  return { headers: out, dropKeys };
+  return { headers: out, dropKeys, mode, skipBadRows };
 }
 
 export function validatePlan(plan: ImportPlan): string[] {

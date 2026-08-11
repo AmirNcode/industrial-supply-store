@@ -223,7 +223,7 @@ function proposedPlan(csv: string): ImportPlan {
   const a = analyzeCsv(csv, []);
   assert.equal(a.ok, true);
   if (!a.ok) throw new Error("unreachable");
-  return { headers: a.headers.map((h) => h.plan), dropKeys: [] };
+  return { headers: a.headers.map((h) => h.plan), dropKeys: [], mode: "update", skipBadRows: false };
 }
 
 test("the real 47-column supplier file imports against its proposed plan", () => {
@@ -265,9 +265,49 @@ test("an ignored header contributes nothing to the product", () => {
   const headers = plan.headers.map((h) =>
     h.header === "product_name" ? ({ role: "ignore", header: h.header } as const) : h,
   );
-  const { rows, errors } = parseWithPlan(GATE_VALVE, { headers, dropKeys: [] });
+  const { rows, errors } = parseWithPlan(GATE_VALVE, { headers, dropKeys: [], mode: "update", skipBadRows: false });
   assert.deepEqual(errors, []);
   assert.equal("product_name" in rows[0].specs, false);
+});
+
+test("skipping bad rows imports the rest and reports what was left out", () => {
+  // Exactly the shape of the real file: three part numbers used twice.
+  const csv =
+    `${HEADER}\n` +
+    "P1,004,0.07,0.35,1,0,yes,10,0,0\n" +
+    "P2,004,0.08,0.35,1,0,yes,10,0,0\n" +
+    "P1,004,0.09,0.35,1,0,yes,10,0,0\n";
+
+  const refused = parseImport(csv, DEFS);
+  assert.equal(refused.rows.length, 0, "the default is still all-or-nothing");
+  assert.equal(refused.errors.length, 1);
+
+  const plan = { ...proposedPlan(csv), skipBadRows: true };
+  const { rows, errors, skipped } = parseWithPlan(csv, plan);
+  assert.deepEqual(errors, []);
+  assert.deepEqual(rows.map((r) => r.partNumber), ["P1", "P2"], "the first P1 is kept");
+  assert.equal(skipped.length, 1);
+  assert.equal(skipped[0].row, 4, "the later duplicate is the one dropped");
+});
+
+test("a file whose every row is bad imports nothing even when skipping", () => {
+  const csv = `${HEADER}\n,004,0.07,0.35,1,0,yes,10,0,0\n`;
+  const { rows, errors, skipped } = parseWithPlan(csv, {
+    ...proposedPlan(csv),
+    skipBadRows: true,
+  });
+  assert.deepEqual(errors, []);
+  assert.equal(rows.length, 0);
+  assert.equal(skipped.length, 1);
+});
+
+test("the real supplier file's three duplicates can be skipped", () => {
+  const plan = { ...proposedPlan(GATE_VALVE), skipBadRows: true };
+  const { rows, errors, skipped } = parseWithPlan(GATE_VALVE, plan);
+  assert.deepEqual(errors, []);
+  // The fixture holds three products, none duplicated, so nothing is dropped.
+  assert.equal(rows.length, 3);
+  assert.equal(skipped.length, 0);
 });
 
 test("a plan naming a column the file lacks is refused rather than half-read", () => {

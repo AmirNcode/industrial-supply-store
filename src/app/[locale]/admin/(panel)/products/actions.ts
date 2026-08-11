@@ -8,6 +8,7 @@ import {
   parsePlanJson,
   validatePlan,
   type AnalyzedHeader,
+  type ImportPlan,
   type MissingColumn,
 } from "@/lib/columnPlan";
 import {
@@ -41,14 +42,29 @@ export type ImportState =
       rowCount: number;
       /** Set when a confirmed plan came back and could not be applied. */
       problems: string[];
+      /**
+       * Rows the file cannot import as they stand — duplicate part numbers, a
+       * blank one, a ragged row, a word where a number belongs.
+       *
+       * Found at this stage rather than at confirm so they are visible before
+       * anyone spends time on the columns, and offered with a way through:
+       * skipping three bad rows should not mean editing the file and starting
+       * the column mapping again.
+       */
+      rowProblems: ImportError[];
+      /** How many rows would import if the bad ones were skipped. */
+      goodRows: number;
     }
   | {
       kind: "ok";
       familyId: number;
       inserted: number;
       updated: number;
+      removed: number;
       addedColumns: number;
       droppedColumns: number;
+      /** Rows left out at the operator's request, with the reason for each. */
+      skipped: ImportError[];
       /** Imported without a price, so they render as "call for price". */
       priceless: string[];
       /** Written, but on_hold/sold disagreed with what the orders imply. */
@@ -60,7 +76,12 @@ export type ImportState =
   | {
       kind: "message";
       familyId: number;
-      message: "no-file" | "too-large" | "not-found" | "bad-plan";
+      message:
+        | "no-file"
+        | "too-large"
+        | "not-found"
+        | "bad-plan"
+        | "all-rows-skipped";
       detail?: string;
     };
 
@@ -120,8 +141,13 @@ export async function importCsvAction(
     return review(familyId, text, family, problems);
   }
 
-  const { rows, errors } = parseWithPlan(text, plan);
-  if (errors.length > 0) return { kind: "errors", familyId, errors };
+  const { rows, errors, skipped } = parseWithPlan(text, plan);
+  // Back to the review screen rather than a dead end: the operator's column
+  // choices are still on screen, and ticking "skip the bad rows" is the fix.
+  if (errors.length > 0) return review(familyId, text, family, [], errors);
+  if (rows.length === 0) {
+    return { kind: "message", familyId, message: "all-rows-skipped" };
+  }
   if (rows.length > MAX_ROWS) {
     return { kind: "message", familyId, message: "too-large" };
   }
@@ -147,6 +173,8 @@ export async function importCsvAction(
     familyId,
     inserted: result.inserted,
     updated: result.updated,
+    removed: result.removed,
+    skipped,
     addedColumns,
     droppedColumns: plan.dropKeys.length,
     priceless: pricelessParts(rows),
@@ -187,6 +215,8 @@ async function review(
   text: string,
   family: NonNullable<Awaited<ReturnType<typeof getFamilyForImport>>>,
   problems: string[],
+  /** Row errors already found by a rejected confirm; recomputed if absent. */
+  knownRowProblems?: ImportError[],
 ): Promise<ImportState> {
   const analysis = analyzeCsv(text, family.defs, family.fieldAliases);
   if (!analysis.ok) {
@@ -202,6 +232,29 @@ async function review(
     analysis.missing.map((m) => m.key),
   );
 
+  /*
+   * Read the rows against the proposal to find what is wrong with the file
+   * itself.
+   *
+   * The proposal is what the screen opens with, so this is what the operator
+   * would hit on confirming without changing anything. Errors that depend on a
+   * choice they later make — text in a column they mark numeric — are caught at
+   * confirm and routed back here.
+   */
+  const proposed: ImportPlan = {
+    headers: analysis.headers.map((h) => h.plan),
+    dropKeys: [],
+    mode: "update",
+    skipBadRows: false,
+  };
+  const dryRun = knownRowProblems
+    ? { errors: knownRowProblems }
+    : validatePlan(proposed).length === 0
+      ? parseWithPlan(text, proposed)
+      : { errors: [] as ImportError[] };
+
+  const badRows = new Set(dryRun.errors.map((e) => e.row));
+
   return {
     kind: "review",
     familyId,
@@ -209,5 +262,7 @@ async function review(
     missing: analysis.missing.map((m) => ({ ...m, productCount: counts[m.key] ?? 0 })),
     rowCount: analysis.rowCount,
     problems,
+    rowProblems: dryRun.errors,
+    goodRows: analysis.rowCount - badRows.size,
   };
 }

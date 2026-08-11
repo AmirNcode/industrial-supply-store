@@ -213,6 +213,8 @@ export type ImportResult = {
    *  the upsert would duplicate rather than update. Each entry is the
    *  catalog's spelling, so the fix is to copy it. */
   caseVariants: string[];
+  /** Products deleted because `replace` mode and the file did not mention them. */
+  removed: number;
   /** Either of the two lists above being non-empty means nothing was written. */
   /**
    * Rows whose uploaded on_hold/sold disagree with what the order flow says
@@ -374,7 +376,7 @@ export async function writeImport(
   const family = await getFamilyForImport(familyId);
   if (!family) throw new Error(`No family ${familyId}`);
   if (rows.length === 0) {
-    return { inserted: 0, updated: 0, conflicts: [], caseVariants: [], mismatches: [] };
+    return { inserted: 0, updated: 0, removed: 0, conflicts: [], caseVariants: [], mismatches: [] };
   }
 
   // The facet index has to be built from the columns as the plan leaves them,
@@ -524,6 +526,29 @@ export async function writeImport(
         }
       }
 
+      /*
+       * `replace` deletes what the file does not mention.
+       *
+       * A supplier sending a new catalog for a family is often replacing the
+       * line, not amending it — the old rows have none of the new columns and
+       * render as a block of blanks beside the new ones. Deleting them is the
+       * only way to be rid of that, and it happens inside this transaction so a
+       * failure later leaves them in place.
+       *
+       * Orders are unaffected: `order_items` snapshots the part number, family
+       * name and specs at submission, and holds `product_id` with ON DELETE SET
+       * NULL. `product_spec_values` cascades.
+       */
+      let removed = 0;
+      if (plan?.mode === "replace") {
+        const gone = await tx<{ id: number }[]>`
+          DELETE FROM products
+          WHERE family_id = ${familyId} AND id <> ALL(${touched}::int[])
+          RETURNING id
+        `;
+        removed = gone.length;
+      }
+
       // Replace rather than merge: a spec that lost its value in the file must
       // lose its facet row too, or the product stays filterable under a value
       // it no longer has.
@@ -635,13 +660,14 @@ export async function writeImport(
         }
       }
 
-      return { inserted, updated, conflicts: [], caseVariants: [], mismatches };
+      return { inserted, updated, removed, conflicts: [], caseVariants: [], mismatches };
     });
   } catch (e) {
     if (e instanceof ImportRefused) {
       return {
         inserted: 0,
         updated: 0,
+        removed: 0,
         conflicts: e.conflicts,
         caseVariants: e.caseVariants,
         mismatches: [],

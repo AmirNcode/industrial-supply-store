@@ -276,7 +276,7 @@ const partNo: HeaderPlan = {
 };
 
 test("a plan with no part number column is refused", () => {
-  const errors = validatePlan({ headers: [spec("bore_size")], dropKeys: [] });
+  const errors = validatePlan({ headers: [spec("bore_size")], dropKeys: [], mode: "update", skipBadRows: false });
   assert.equal(errors.length, 1);
   assert.match(errors[0], /part number/i);
 });
@@ -285,6 +285,8 @@ test("two columns claiming the same field or key are refused", () => {
   const twoParts = validatePlan({
     headers: [partNo, { role: "builtin", header: "sku", field: "part_number" }],
     dropKeys: [],
+    mode: "update",
+    skipBadRows: false,
   });
   assert.match(twoParts[0], /more than one/i);
 
@@ -295,12 +297,16 @@ test("two columns claiming the same field or key are refused", () => {
       { role: "builtin", header: "price_usd", field: "price_usd" },
     ],
     dropKeys: [],
+    mode: "update",
+    skipBadRows: false,
   });
   assert.match(twoPrices[0], /price_usd/);
 
   const twoKeys = validatePlan({
     headers: [partNo, spec("Bore Size", { key: "bore_size" }), spec("bore-size", { key: "bore_size" })],
     dropKeys: [],
+    mode: "update",
+    skipBadRows: false,
   });
   assert.match(twoKeys[0], /both named/i);
 });
@@ -309,6 +315,8 @@ test("a spec column cannot be named after a built-in field", () => {
   const errors = validatePlan({
     headers: [partNo, spec("price", { key: "price_usd" })],
     dropKeys: [],
+    mode: "update",
+    skipBadRows: false,
   });
   assert.match(errors[0], /built-in/i);
 });
@@ -317,6 +325,8 @@ test("importing and deleting the same column in one upload is refused", () => {
   const errors = validatePlan({
     headers: [partNo, spec("bore_size")],
     dropKeys: ["bore_size"],
+    mode: "update",
+    skipBadRows: false,
   });
   assert.equal(errors.length, 1);
   assert.match(errors[0], /deleted and imported/i);
@@ -324,7 +334,7 @@ test("importing and deleting the same column in one upload is refused", () => {
 
 test("the plan from the real file validates once a part number is mapped", () => {
   const a = analyzed();
-  assert.deepEqual(validatePlan({ headers: a.headers.map((h) => h.plan), dropKeys: [] }), []);
+  assert.deepEqual(validatePlan({ headers: a.headers.map((h) => h.plan), dropKeys: [], mode: "update", skipBadRows: false }), []);
 });
 
 // ---------------------------------------------------------------------------
@@ -341,6 +351,8 @@ test("table columns sort before detail columns", () => {
       spec("pressure_rating", { display: "table" }),
     ],
     dropKeys: [],
+    mode: "update",
+    skipBadRows: false,
   };
   const defs = plannedDefs(plan);
   assert.deepEqual(
@@ -354,6 +366,8 @@ test("a spec column remembers the header it came from only when they differ", ()
   const plan: ImportPlan = {
     headers: [partNo, spec("Bore Size", { key: "bore_size" }), spec("psl")],
     dropKeys: [],
+    mode: "update",
+    skipBadRows: false,
   };
   const defs = plannedDefs(plan);
   assert.equal(defs.find((d) => d.key === "bore_size")?.csvAlias, "Bore Size");
@@ -364,6 +378,8 @@ test("built-in and ignored headers are remembered on the family", () => {
   const plan: ImportPlan = {
     headers: [partNo, { role: "ignore", header: "product_name" }, spec("psl")],
     dropKeys: [],
+    mode: "update",
+    skipBadRows: false,
   };
   assert.deepEqual(plannedAliases(plan), {
     product_code: "part_number",
