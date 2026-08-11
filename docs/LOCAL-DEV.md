@@ -244,6 +244,40 @@ docker compose ps && docker compose port db 5432 && grep DATABASE_URL .env
 
 The port in the middle line must match the port in the last line.
 
+**"Another next dev server is already running."** Next.js allows one dev server
+per directory, so this means an older one is still alive — usually one you
+started days ago in a terminal tab you have since closed. The message names the
+PID and offers `kill <pid>`, which works, but it is worth seeing what you are
+killing first:
+
+```bash
+lsof -nP -iTCP:3000 -sTCP:LISTEN
+```
+
+That prints whatever is listening on port 3000. To confirm it is this project
+and not something else of yours, ask the process where it is running from and
+how long it has been up — substituting its PID:
+
+```bash
+lsof -a -p <pid> -d cwd -Fn | grep '^n' | sed 's/^n//' && ps -p <pid> -o lstart,etime
+```
+
+`cwd` is the working directory, so if that prints this repo's path, it is a
+stale server for this project and safe to stop. `etime` is how long it has been
+running, in `days-hh:mm:ss`. Then kill the **parent** — the `next dev` launcher
+— and the worker goes with it:
+
+```bash
+kill <parent-pid>
+```
+
+`ps -p <pid> -o ppid=` gives you the parent's PID. Killing only the worker can
+leave the launcher behind to respawn it.
+
+A stale dev server is worth clearing rather than working around on another
+port: it is serving the code as it was when it started, so you can spend a while
+wondering why an edit has no effect.
+
 **The container keeps restarting.** Read its logs — the reason is almost always
 in the last twenty lines:
 
