@@ -451,22 +451,35 @@ export function parsePlanJson(raw: unknown): ImportPlan | null {
 export function validatePlan(plan: ImportPlan): string[] {
   const errors: string[] = [];
 
-  const partNumberCols = plan.headers.filter(
-    (h) => h.role === "builtin" && h.field === "part_number",
-  );
-  if (partNumberCols.length === 0) {
-    errors.push("No column is mapped to the part number, so rows cannot be identified.");
-  } else if (partNumberCols.length > 1) {
-    errors.push("More than one column is mapped to the part number.");
+  /*
+   * One message per clashing field, naming the columns.
+   *
+   * Reported per field rather than per offending column: mapping ten columns
+   * to `documents` used to emit nine identical lines that named neither the
+   * field's columns nor which one to change, which is a wall of text saying
+   * nothing.
+   */
+  const byField = new Map<BuiltinField, string[]>();
+  for (const h of plan.headers) {
+    if (h.role !== "builtin") continue;
+    const cols = byField.get(h.field) ?? [];
+    cols.push(h.header);
+    byField.set(h.field, cols);
   }
 
-  const seenField = new Set<string>();
-  for (const h of plan.headers) {
-    if (h.role !== "builtin" || h.field === "part_number") continue;
-    if (seenField.has(h.field)) {
-      errors.push(`More than one column is mapped to ${h.field}.`);
-    }
-    seenField.add(h.field);
+  const partNumberCols = byField.get("part_number") ?? [];
+  if (partNumberCols.length === 0) {
+    errors.push("No column is mapped to the part number, so rows cannot be identified.");
+  }
+
+  for (const [field, cols] of byField) {
+    if (cols.length < 2) continue;
+    const list = cols.map((c) => `"${c}"`).join(", ");
+    const name = field === "part_number" ? "the part number" : field;
+    errors.push(
+      `More than one column is mapped to ${name}: ${list}. ` +
+        `Only one column can be — set the others to "Product spec" or ignore them.`,
+    );
   }
 
   const seenKey = new Set<string>();

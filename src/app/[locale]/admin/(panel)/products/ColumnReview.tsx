@@ -89,6 +89,18 @@ export function ColumnReview({
     .map((h, i) => ({ h, i }))
     .filter(({ h }) => !h.isNew);
 
+  /**
+   * Which column already holds each built-in field.
+   *
+   * There is one `documents` slot, one `price_usd`, one part number. Offering
+   * a slot that is already taken is offering a mistake — the confirm step
+   * refuses it, so the only thing a second choice can produce is an error.
+   * Shown as disabled, named after its owner, rather than hidden: "taken by
+   * documents" explains the absence where a missing row would puzzle.
+   */
+  const owners = new Map<string, string>();
+  for (const p of plans) if (p.role === "builtin") owners.set(p.field, p.header);
+
   const plan = JSON.stringify({ headers: plans, dropKeys });
 
   return (
@@ -156,11 +168,16 @@ export function ColumnReview({
                           onChange={(e) => setRole(i, e.target.value)}
                         >
                           <option value={SPEC_OPTION}>{t.reviewRoleSpec}</option>
-                          {BUILTIN_FIELDS.map((f) => (
-                            <option key={f} value={f}>
-                              {f}
-                            </option>
-                          ))}
+                          {BUILTIN_FIELDS.map((f) => {
+                            const owner = owners.get(f);
+                            const taken = owner !== undefined && owner !== p.header;
+                            return (
+                              <option key={f} value={f} disabled={taken}>
+                                {f}
+                                {taken ? ` — ${t.reviewFieldTaken.replace("{column}", owner)}` : ""}
+                              </option>
+                            );
+                          })}
                           <option value={IGNORE_OPTION}>{t.reviewRoleIgnore}</option>
                         </select>
                       </td>
