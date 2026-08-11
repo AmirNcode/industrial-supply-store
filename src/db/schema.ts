@@ -26,6 +26,38 @@ export type SpecBag = Record<string, SpecValue>;
 /** A single quantity-break price row, denormalised onto the product for display. */
 export type PriceTier = { minQty: number; priceCents: number };
 
+/**
+ * A downloadable attached to a product — datasheet, drawing, certificate.
+ *
+ * `url` is empty for a document a spreadsheet named but nobody has uploaded
+ * yet, which is the state every row imported from a supplier file starts in.
+ * The label is still worth keeping: it says the document exists and can be
+ * asked for.
+ */
+export type ProductDocument = { label: string; url: string };
+
+/**
+ * Where a spec column appears.
+ *
+ * A family can hold far more columns than a table can show — the first real
+ * gate valve file has 45. `table` columns identify a product while scanning a
+ * list; `detail` columns describe it once it is the product you care about, and
+ * render only in the expanded row.
+ */
+export type SpecDisplay = "table" | "detail";
+
+/**
+ * How one uploaded CSV header maps onto something that is not a spec: a
+ * built-in product field, or nothing at all.
+ *
+ * Stored per family so the second upload of the same supplier's file has
+ * nothing left to confirm. `"__ignore__"` is a decision, not an absence — it is
+ * what stops a column someone deliberately dropped from being re-proposed as
+ * new on every subsequent upload.
+ */
+export const IGNORED_FIELD = "__ignore__";
+export type FieldAliases = Record<string, string>;
+
 // ---------------------------------------------------------------------------
 // Catalog taxonomy
 // ---------------------------------------------------------------------------
@@ -88,6 +120,13 @@ export const productFamilies = pgTable(
     /** Grouping heading above a run of family cards, e.g. "Oil-Resistant O-Rings". */
     groupEn: text("group_en").notNull().default(""),
     groupFa: text("group_fa").notNull().default(""),
+    /**
+     * Remembered CSV header decisions that are not spec columns — a header
+     * mapped onto a built-in field, or one marked ignored. Spec columns
+     * remember their own header in `spec_defs.csv_alias` instead, because they
+     * are rows that can be deleted and the memory should go with them.
+     */
+    fieldAliases: jsonb("field_aliases").$type<FieldAliases>().notNull().default({}),
   },
   (t) => [
     uniqueIndex("families_slug_key").on(t.slug),
@@ -117,6 +156,20 @@ export const specDefs = pgTable(
     kind: text("kind", { enum: ["number", "text"] }).notNull().default("text"),
     filterable: boolean("filterable").notNull().default(false),
     sort: integer("sort").notNull().default(0),
+    /**
+     * `table` renders as a spec-table column; `detail` renders only in a
+     * product's expanded row. Defaults to `table` so every column that existed
+     * before tiering keeps rendering exactly where it did.
+     */
+    display: text("display", { enum: ["table", "detail"] })
+      .notNull()
+      .default("table"),
+    /**
+     * The header this column was last imported under, when it differs from
+     * `key`. Set on import so a supplier's spelling is matched automatically
+     * the next time rather than proposed as a new column.
+     */
+    csvAlias: text("csv_alias"),
   },
   (t) => [
     uniqueIndex("spec_defs_family_key").on(t.familyId, t.key),
@@ -163,6 +216,17 @@ export const products = pgTable(
     /** Flattened part number + family + spec values, fed to the FTS index. */
     searchText: text("search_text").notNull().default(""),
     sort: integer("sort").notNull().default(0),
+    /**
+     * Product photo for the expanded row. Empty until someone uploads one —
+     * there is no upload UI yet, and the expanded row renders a placeholder.
+     */
+    imageUrl: text("image_url").notNull().default(""),
+    /**
+     * Attached documents. A supplier file names them ("Datasheet", "Drawing")
+     * long before the PDFs exist, so entries with an empty `url` are normal and
+     * render as unlinked labels.
+     */
+    documents: jsonb("documents").$type<ProductDocument[]>().notNull().default([]),
   },
   (t) => [
     uniqueIndex("products_part_number_key").on(t.partNumber),

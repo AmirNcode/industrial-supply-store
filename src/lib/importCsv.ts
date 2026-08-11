@@ -1,4 +1,6 @@
 import { parse } from "csv-parse/sync";
+import { parseNumeric, type BuiltinField, type ImportPlan } from "./columnPlan";
+import type { ProductDocument } from "@/db/schema";
 
 /**
  * Reading a product spreadsheet.
@@ -7,6 +9,16 @@ import { parse } from "csv-parse/sync";
  * two families do not share them. The template download and the export
  * download emit the same columns, which is what lets someone export a family,
  * edit the prices in Excel, and upload the same file back.
+ *
+ * Two ways in, one row parser underneath:
+ *
+ *   `parseImport` — the round trip. The file must have exactly the family's
+ *   columns, and anything else is an error, because a template that quietly
+ *   tolerated a stray column would let someone believe they had set something.
+ *
+ *   `parseWithPlan` — a supplier's own file, after someone has said in the
+ *   admin panel what its columns mean. The plan is the answer to "what is this
+ *   column", so there is nothing left to reject on.
  *
  * No database here on purpose: this is where the phase's correctness lives, so
  * it should be testable without one.
@@ -53,7 +65,48 @@ export type ImportRow = {
   inventoryAvailable: number;
   inventoryOnHold: number;
   inventorySold: number;
+  imageUrl: string;
+  documents: ProductDocument[];
 };
+
+/**
+ * What a built-in column holds when the file does not carry it, or carries it
+ * blank.
+ *
+ * A supplier's file is a description of the goods, not of the commercial terms
+ * — the first one to arrive priced nothing, because pricing happens on the
+ * phone. Refusing it would mean nobody could load a catalog until every price
+ * existed.
+ *
+ * Absent is therefore allowed and *wrong* is still refused: text where a number
+ * belongs is an error, and a zero price renders as "call for price" rather than
+ * as free. The importer also counts the priceless rows back to the operator, so
+ * a column cleared by accident in Excel is noticed rather than absorbed.
+ */
+const DEFAULTS = {
+  priceCents: 0,
+  packQty: 1,
+  leadDays: 0,
+  inStock: true,
+  inventoryAvailable: 0,
+  inventoryOnHold: 0,
+  inventorySold: 0,
+} as const;
+
+/**
+ * Split a documents cell into labels.
+ *
+ * Newlines and semicolons only. Commas are left alone deliberately: a cell
+ * reading "Datasheet, Rev B" is one document with a qualifier far more often
+ * than it is two documents.
+ */
+export function parseDocuments(raw: string): ProductDocument[] {
+  return raw
+    .split(/[\n;]+/)
+    .map((s) => s.trim())
+    .filter((s) => s !== "")
+    .map((label) => ({ label, url: "" }));
+}
 
 /** `row` is 1-based and counts the header, so the first data row is 2 — the
  *  number Excel shows in its gutter. An error naming a row someone cannot find
@@ -63,6 +116,188 @@ export type ImportError = { row: number; column: string; message: string };
 const TRUTHY = new Set(["yes", "true", "1"]);
 const FALSY = new Set(["no", "false", "0"]);
 
+/** Where one meaningful column sits in the file, and what it is. */
+type Located =
+  | { role: "spec"; at: number; key: string; kind: "number" | "text" }
+  | { role: "builtin"; at: number; field: BuiltinField };
+
+function readCsv(csvText: string): { records: string[][] } | { error: ImportError } {
+  try {
+    return {
+      records: parse(csvText, {
+        // Headers are handled here rather than by `columns: true` so that a file
+        // with a header and no data rows can be told apart from an empty one,
+        // and so a duplicated header is visible instead of silently winning.
+        columns: false,
+        skip_empty_lines: true,
+        // Excel writes a byte-order mark; without this the first header reads as
+        // "﻿part_number" and every row fails on a missing part number.
+        bom: true,
+        trim: true,
+        // A short or long row is reported per row below, rather than aborting
+        // the whole parse with an exception that names no column.
+        relax_column_count: true,
+      }),
+    };
+  } catch (e) {
+    return {
+      error: { row: 1, column: "", message: `Could not read the file: ${(e as Error).message}` },
+    };
+  }
+}
+
+/**
+ * The row loop, shared by both ways in.
+ *
+ * `located` has already resolved what every meaningful column means and where
+ * it is, so nothing here has to know whether that came from a family's
+ * definitions or from a plan someone confirmed in the admin panel.
+ */
+function parseRows(
+  dataRows: readonly string[][],
+  headerLen: number,
+  located: readonly Located[],
+): { rows: ImportRow[]; errors: ImportError[] } {
+  const errors: ImportError[] = [];
+  const rows: ImportRow[] = [];
+
+  const partAt = located.find((c) => c.role === "builtin" && c.field === "part_number");
+  const builtinAt = new Map<BuiltinField, number>();
+  for (const c of located) if (c.role === "builtin") builtinAt.set(c.field, c.at);
+  const specs = located.filter((c) => c.role === "spec");
+
+  /** Case-insensitive: the database's unique index is on the raw column, so
+   *  `1000a1` and `1000A1` would become two products, and every lookup in the
+   *  app upper-cases before matching. Two spellings of one part number in one
+   *  file is a mistake worth stopping. */
+  const seenPart = new Map<string, number>();
+
+  dataRows.forEach((record, i) => {
+    const rowNo = i + 2;
+    const before = errors.length;
+    const cellAt = (at: number | undefined) =>
+      at === undefined ? "" : (record[at] ?? "").trim();
+    const field = (f: BuiltinField) => cellAt(builtinAt.get(f));
+
+    if (record.length !== headerLen) {
+      errors.push({
+        row: rowNo,
+        column: "",
+        message: `Expected ${headerLen} columns, found ${record.length}.`,
+      });
+      return;
+    }
+
+    const partNumber = cellAt(partAt?.at);
+    if (!partNumber) {
+      errors.push({ row: rowNo, column: "part_number", message: "Part number is required." });
+    } else {
+      const key = partNumber.toUpperCase();
+      const first = seenPart.get(key);
+      if (first !== undefined) {
+        errors.push({
+          row: rowNo,
+          column: "part_number",
+          message: `Part number "${partNumber}" already appears on row ${first}.`,
+        });
+      } else {
+        seenPart.set(key, rowNo);
+      }
+    }
+
+    const bag: Record<string, string | number> = {};
+    for (const def of specs) {
+      const raw = cellAt(def.at);
+      // An empty cell means the product has no value for that spec. The export
+      // writes one for a product that lacks the spec, so refusing it here would
+      // break the export-edit-upload round trip that the two downloads exist for.
+      if (raw === "") continue;
+      if (def.kind === "number") {
+        const n = parseNumeric(raw);
+        if (n === null) {
+          errors.push({ row: rowNo, column: def.key, message: `"${raw}" is not a number.` });
+          continue;
+        }
+        bag[def.key] = n;
+      } else {
+        bag[def.key] = raw;
+      }
+    }
+
+    // Blank is absence and takes the default; anything present has to be valid.
+    const priceRaw = field("price_usd");
+    let priceCents: number = DEFAULTS.priceCents;
+    if (priceRaw !== "") {
+      const price = parseNumeric(priceRaw);
+      if (price === null || price < 0) {
+        errors.push({
+          row: rowNo,
+          column: "price_usd",
+          message: `"${priceRaw}" is not a price of zero or more.`,
+        });
+      } else {
+        priceCents = Math.round(price * 100);
+      }
+    }
+
+    const counts: Record<string, number> = {
+      pack_qty: DEFAULTS.packQty,
+      lead_days: DEFAULTS.leadDays,
+      inventory_available: DEFAULTS.inventoryAvailable,
+      inventory_on_hold: DEFAULTS.inventoryOnHold,
+      inventory_sold: DEFAULTS.inventorySold,
+    };
+    for (const name of ["pack_qty", "lead_days", ...INVENTORY_COLUMNS] as const) {
+      const raw = field(name);
+      if (raw === "") continue;
+      const n = parseNumeric(raw);
+      if (n === null || !Number.isInteger(n) || n < 0) {
+        errors.push({
+          row: rowNo,
+          column: name,
+          message: `"${raw}" is not a whole number of zero or more.`,
+        });
+        continue;
+      }
+      counts[name] = n;
+    }
+
+    const stockRaw = field("in_stock").toLowerCase();
+    let inStock: boolean = DEFAULTS.inStock;
+    if (stockRaw === "") inStock = DEFAULTS.inStock;
+    else if (TRUTHY.has(stockRaw)) inStock = true;
+    else if (FALSY.has(stockRaw)) inStock = false;
+    else {
+      // Falling back to false would quietly hide a product from the catalog.
+      errors.push({
+        row: rowNo,
+        column: "in_stock",
+        message: `"${stockRaw}" is not yes or no.`,
+      });
+    }
+
+    if (errors.length > before) return;
+
+    rows.push({
+      partNumber,
+      specs: bag,
+      priceCents,
+      packQty: counts.pack_qty,
+      leadDays: counts.lead_days,
+      inStock,
+      inventoryAvailable: counts.inventory_available,
+      inventoryOnHold: counts.inventory_on_hold,
+      inventorySold: counts.inventory_sold,
+      imageUrl: field("image_url"),
+      documents: parseDocuments(field("documents")),
+    });
+  });
+
+  // All-or-nothing. Returning the good rows alongside the errors would let a
+  // caller write a partial import by ignoring the second half of the pair.
+  return errors.length > 0 ? { rows: [], errors } : { rows, errors };
+}
+
 export function parseImport(
   csvText: string,
   defs: readonly ImportSpecDef[],
@@ -70,28 +305,9 @@ export function parseImport(
   const expected = columnsFor(defs);
   const errors: ImportError[] = [];
 
-  let records: string[][];
-  try {
-    records = parse(csvText, {
-      // Headers are handled here rather than by `columns: true` so that a file
-      // with a header and no data rows can be told apart from an empty one,
-      // and so a duplicated header is visible instead of silently winning.
-      columns: false,
-      skip_empty_lines: true,
-      // Excel writes a byte-order mark; without this the first header reads as
-      // "﻿part_number" and every row fails on a missing part number.
-      bom: true,
-      trim: true,
-      // A short or long row is reported per row below, rather than aborting
-      // the whole parse with an exception that names no column.
-      relax_column_count: true,
-    });
-  } catch (e) {
-    return {
-      rows: [],
-      errors: [{ row: 1, column: "", message: `Could not read the file: ${(e as Error).message}` }],
-    };
-  }
+  const read = readCsv(csvText);
+  if ("error" in read) return { rows: [], errors: [read.error] };
+  const { records } = read;
 
   if (records.length === 0) {
     return { rows: [], errors: [{ row: 1, column: "", message: "The file is empty." }] };
@@ -127,121 +343,82 @@ export function parseImport(
   }
 
   const at = new Map(header.map((name, i) => [name, i]));
-  const rows: ImportRow[] = [];
-  /** Case-insensitive: the database's unique index is on the raw column, so
-   *  `1000a1` and `1000A1` would become two products, and every lookup in the
-   *  app upper-cases before matching. Two spellings of one part number in one
-   *  file is a mistake worth stopping. */
-  const seenPart = new Map<string, number>();
+  const located: Located[] = [
+    { role: "builtin", at: at.get("part_number")!, field: "part_number" },
+    ...defs.map(
+      (d): Located => ({ role: "spec", at: at.get(d.key)!, key: d.key, kind: d.kind }),
+    ),
+    ...FIXED_COLUMNS.map(
+      (name): Located => ({ role: "builtin", at: at.get(name)!, field: name }),
+    ),
+  ];
 
-  dataRows.forEach((record, i) => {
-    const rowNo = i + 2;
-    const before = errors.length;
-    const cell = (name: string) => (record[at.get(name)!] ?? "").trim();
+  return parseRows(dataRows, header.length, located);
+}
 
-    if (record.length !== header.length) {
-      errors.push({
-        row: rowNo,
-        column: "",
-        message: `Expected ${header.length} columns, found ${record.length}.`,
-      });
-      return;
+/**
+ * Read a supplier's own file against the column decisions someone confirmed.
+ *
+ * Unlike `parseImport` there is no header validation left to do: a header the
+ * plan does not mention cannot exist, because the plan was built from this
+ * file's header. What remains is locating each planned column and reading the
+ * rows.
+ */
+export function parseWithPlan(
+  csvText: string,
+  plan: ImportPlan,
+): { rows: ImportRow[]; errors: ImportError[] } {
+  const read = readCsv(csvText);
+  if ("error" in read) return { rows: [], errors: [read.error] };
+  const { records } = read;
+
+  if (records.length === 0) {
+    return { rows: [], errors: [{ row: 1, column: "", message: "The file is empty." }] };
+  }
+
+  const header = records[0];
+  const dataRows = records.slice(1);
+  if (dataRows.length === 0) {
+    return { rows: [], errors: [{ row: 1, column: "", message: "The file has no rows." }] };
+  }
+
+  const at = new Map(header.map((name, i) => [name, i]));
+  const located: Located[] = [];
+  for (const h of plan.headers) {
+    const col = at.get(h.header);
+    if (col === undefined) {
+      // The plan was built from a header row; a plan naming a column this file
+      // does not have means the file changed between the two stages.
+      return {
+        rows: [],
+        errors: [
+          {
+            row: 1,
+            column: h.header,
+            message: `Column "${h.header}" is not in this file. Upload it again.`,
+          },
+        ],
+      };
     }
-
-    const partNumber = cell("part_number");
-    if (!partNumber) {
-      errors.push({ row: rowNo, column: "part_number", message: "Part number is required." });
-    } else {
-      const key = partNumber.toUpperCase();
-      const first = seenPart.get(key);
-      if (first !== undefined) {
-        errors.push({
-          row: rowNo,
-          column: "part_number",
-          message: `Part number "${partNumber}" already appears on row ${first}.`,
-        });
-      } else {
-        seenPart.set(key, rowNo);
-      }
+    if (h.role === "spec") {
+      located.push({ role: "spec", at: col, key: h.key, kind: h.specKind });
+    } else if (h.role === "builtin") {
+      located.push({ role: "builtin", at: col, field: h.field });
     }
+  }
 
-    const specs: Record<string, string | number> = {};
-    for (const def of defs) {
-      const raw = cell(def.key);
-      // An empty cell means the product has no value for that spec. The export
-      // writes one for a product that lacks the spec, so refusing it here would
-      // break the export-edit-upload round trip that the two downloads exist for.
-      if (raw === "") continue;
-      if (def.kind === "number") {
-        const n = Number(raw);
-        if (!Number.isFinite(n)) {
-          errors.push({ row: rowNo, column: def.key, message: `"${raw}" is not a number.` });
-          continue;
-        }
-        specs[def.key] = n;
-      } else {
-        specs[def.key] = raw;
-      }
-    }
+  return parseRows(dataRows, header.length, located);
+}
 
-    const priceRaw = cell("price_usd");
-    const price = Number(priceRaw);
-    // Number("") is 0, so emptiness is checked before finiteness — a blank
-    // price would otherwise import silently as free.
-    if (priceRaw === "" || !Number.isFinite(price) || price < 0) {
-      errors.push({
-        row: rowNo,
-        column: "price_usd",
-        message: `"${priceRaw}" is not a price of zero or more.`,
-      });
-    }
-
-    const counts: Record<string, number> = {};
-    for (const name of ["pack_qty", "lead_days", ...INVENTORY_COLUMNS] as const) {
-      const raw = cell(name);
-      const n = Number(raw);
-      if (raw === "" || !Number.isInteger(n) || n < 0) {
-        errors.push({
-          row: rowNo,
-          column: name,
-          message: `"${raw}" is not a whole number of zero or more.`,
-        });
-        continue;
-      }
-      counts[name] = n;
-    }
-
-    const stockRaw = cell("in_stock").toLowerCase();
-    let inStock = false;
-    if (TRUTHY.has(stockRaw)) inStock = true;
-    else if (FALSY.has(stockRaw)) inStock = false;
-    else {
-      // Falling back to false would quietly hide a product from the catalog.
-      errors.push({
-        row: rowNo,
-        column: "in_stock",
-        message: `"${stockRaw}" is not yes or no.`,
-      });
-    }
-
-    if (errors.length > before) return;
-
-    rows.push({
-      partNumber,
-      specs,
-      priceCents: Math.round(price * 100),
-      packQty: counts.pack_qty,
-      leadDays: counts.lead_days,
-      inStock,
-      inventoryAvailable: counts.inventory_available,
-      inventoryOnHold: counts.inventory_on_hold,
-      inventorySold: counts.inventory_sold,
-    });
-  });
-
-  // All-or-nothing. Returning the good rows alongside the errors would let a
-  // caller write a partial import by ignoring the second half of the pair.
-  return errors.length > 0 ? { rows: [], errors } : { rows, errors };
+/**
+ * Part numbers that imported without a price.
+ *
+ * Allowed — the catalog shows "call for price" — but surfaced, because the
+ * other way to arrive here is clearing the column by accident in Excel, and
+ * that should not be silent.
+ */
+export function pricelessParts(rows: readonly ImportRow[]): string[] {
+  return rows.filter((r) => r.priceCents === 0).map((r) => r.partNumber);
 }
 
 function quote(field: string): string {

@@ -3,7 +3,7 @@
 ## Problem
 
 Spec columns are set by the seeder. Adding a product type whose columns nobody
-anticipated — the TEMEX API 6A gate valve file has 45 of them — currently means
+anticipated — the TEMEX API 6A gate valve file has 47 of them — currently means
 a code change. The catalog will keep meeting products whose real specs are
 unknown today, so the shape of a family has to be an admin decision, not a
 deploy.
@@ -12,7 +12,7 @@ Two things block that:
 
 1. `parseImport` rejects any header not already in `spec_defs`, and there is no
    way to put a header there from the admin panel.
-2. A 45-column spec table is unreadable. Some columns identify a product in a
+2. A 47-column spec table is unreadable. Some columns identify a product in a
    list; the rest belong on the product itself.
 
 ## What already works
@@ -33,7 +33,7 @@ machinery and leaves the machinery itself alone.
 - `table` — a column in the catalog spec table, as today.
 - `detail` — hidden from the table, shown when a row is expanded.
 
-Tiering is the answer to unreadable width. A family may have 45 columns and
+Tiering is the answer to unreadable width. A family may have 47 columns and
 show six.
 
 ### Upload
@@ -47,10 +47,16 @@ header into:
 - *matched* — equals a `spec_defs.key`, that column's remembered `csv_alias`,
   or a built-in field name.
 - *new* — unknown. Proposed as a new spec column, with `kind` inferred from the
-  values (numeric after stripping thousands separators and a trailing unit →
-  `number`) and a label prettified from the header.
+  values (every non-empty value numeric once thousands separators are stripped
+  → `number`) and a label prettified from the header. A unit is *not* guessed:
+  `"371 mm"` stays text, because inferring that `mm` is a unit rather than part
+  of the value is what silently mangles one column in forty.
 - *missing* — a `spec_defs` key absent from the file, with a count of how many
   products hold a value for it.
+
+New columns are proposed as `detail`, never `table`. A 47-column file would
+otherwise produce an unreadable table on the first upload, and promoting the six
+columns that matter is a smaller job than demoting forty-one.
 
 Nothing is written. The operator sees the three lists and, per new column,
 sets: spec vs. built-in field vs. ignore, `table` vs. `detail`, `number` vs.
@@ -87,8 +93,8 @@ non-numeric price is still an error. Absent stays absent; wrong stays refused.
 Per family, at `/admin/products/family/[id]/columns`: reorder, edit English and
 Persian labels, unit, `number`/`text`, `filterable`, `table`/`detail`, and
 add or remove a column. This is where Persian labels arrive after an import —
-the upload uses the English label for both locales so a 45-column file does not
-become a 45-field form.
+the upload uses the English label for both locales so a 47-column file does not
+become a 47-field form.
 
 ### Expanded row
 
@@ -121,9 +127,11 @@ identical the moment the migration lands.
 
 The diff and the plan are pure functions over a header, sample values and the
 current defs — no database, like `parseImport`. Unit tested against the real
-TEMEX file as a fixture: 45 headers, `product_code` → part number,
-`lead_time` → lead days, `product_name` ignored, quoted values containing
-commas and embedded newlines, `"3,000 "` inferred as a number.
+TEMEX file as a fixture (`src/lib/fixtures/gate-valve-sample.csv`, its real
+header and first three rows): 47 headers, `product_code` → part number,
+`lead_time` → lead days, quoted values containing commas and embedded newlines,
+`"3,000 "` inferred as a number, and `"Available upon customer request"` keeping
+its column text.
 
 The transaction is exercised against the local Docker database. Nothing in this
 work runs against either Supabase project.
