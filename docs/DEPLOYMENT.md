@@ -93,6 +93,21 @@ npm run db:push:remote && npm run db:verify:remote
 
 Until then the deployed build will error on any admin order or products page.
 
+The 2026-08-11 work added five more: `spec_defs.display`, `spec_defs.csv_alias`,
+`product_families.field_aliases`, `products.image_url` and
+`products.documents`. These have their own script, because every one of them is
+an `ADD COLUMN IF NOT EXISTS` — there is nothing for push to diff against and
+therefore nothing for it to drop:
+
+```bash
+npm run db:column-tiers:remote
+```
+
+Run it before the deploy, not after: the catalog selects `display` and
+`documents` on every family page, so a build that ships first errors on all of
+them. It is idempotent, so running it twice is free, and it is safe to run
+against a database that already has the columns.
+
 ### 1. `drizzle-kit push` destroys things it cannot express
 
 This has bitten the project three separate times. Push reconciles by diffing the

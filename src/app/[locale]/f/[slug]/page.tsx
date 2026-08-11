@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
@@ -9,7 +10,7 @@ import {
   getCategoryByPath,
   getAncestors,
   type SpecDefRow,
-  type ProductRow,
+  type ProductDetailRow,
 } from "@/db/queries";
 import { sql } from "@/db";
 import { FacetSidebar } from "@/components/FacetSidebar";
@@ -20,8 +21,15 @@ import { Breadcrumb } from "@/components/Breadcrumb";
 import { AddToCartRow } from "@/components/AddToCartRow";
 import { InCartQty } from "@/components/InCartQty";
 import { ProductIcon } from "@/components/ProductIcon";
+import { ProductDetails } from "@/components/ProductDetails";
 import { isLocale, getDict, pick, type Locale } from "@/lib/i18n";
-import { formatInt, formatPriceBare, formatSpecNumber, currencyLabel } from "@/lib/money";
+import {
+  formatInt,
+  formatPriceBare,
+  formatSpecNumber,
+  currencyLabel,
+  isPriceOnRequest,
+} from "@/lib/money";
 import { getFxRate } from "@/lib/fx";
 import { specValueLabel, isTechnicalValue } from "@/lib/specValues";
 import { parseFilters, pageHref, clearAllHref, type RawSearchParams } from "@/lib/filters";
@@ -193,6 +201,7 @@ export default async function FamilyPage({
                     products={products}
                     highlighted={highlighted}
                     rate={rate}
+                    icon={family.icon}
                   />
                 </div>
 
@@ -257,16 +266,27 @@ function SpecTable({
   products,
   highlighted,
   rate,
+  icon,
 }: {
   locale: Locale;
   defs: SpecDefRow[];
-  products: ProductRow[];
+  products: ProductDetailRow[];
   highlighted: string | null;
   rate: number;
+  icon: string;
 }) {
   const t = getDict(locale);
   // Two price columns mirror the reference site's 1-9 / 10-Up quantity breaks.
   const hasBulk = products.some((p) => p.priceTiers.length > 1);
+
+  /*
+   * A family owns as many columns as its supplier keeps, which for the first
+   * gate valve file is 47. Only the ones marked `table` become columns here;
+   * the rest are the expanded row, reached from the part number.
+   */
+  const tableDefs = defs.filter((d) => d.display === "table");
+  const detailDefs = defs.filter((d) => d.display === "detail");
+  const columnCount = tableDefs.length + (hasBulk ? 6 : 5);
 
   return (
     <table className="spec-table">
@@ -274,7 +294,7 @@ function SpecTable({
         {/* Two-tier header: the quantity-break columns share one "Pkg." cap,
             exactly as on the reference site. */}
         <tr>
-          {defs.map((d) => (
+          {tableDefs.map((d) => (
             <th key={d.key} className="!border-b-0" />
           ))}
           <th className="!border-b-0" />
@@ -286,7 +306,7 @@ function SpecTable({
           <th className="!border-b-0" />
         </tr>
         <tr>
-          {defs.map((d) => (
+          {tableDefs.map((d) => (
             <th key={d.key} className={d.kind === "number" ? "num" : undefined}>
               {pick(d, "label", locale)}
             </th>
@@ -305,60 +325,103 @@ function SpecTable({
           const isHit = highlighted && p.partNumber.toUpperCase() === highlighted;
           const base = p.priceTiers[0]?.priceCents ?? p.priceCents;
           const bulk = p.priceTiers[1]?.priceCents;
+          const onRequest = isPriceOnRequest(base);
+          const expandable =
+            detailDefs.some((d) => {
+              const v = p.specs[d.key];
+              return v !== null && v !== undefined && v !== "";
+            }) || p.documents.length > 0;
+
           return (
-            <tr
-              key={p.id}
-              // A wash alone no longer separates this from a hovered row now
-              // that both are navy; `.row-hit` adds an outline that survives
-              // the pointer passing over it.
-              className={isHit ? "row-hit" : undefined}
-            >
-              {defs.map((d) => {
-                const raw = p.specs[d.key];
-                const isNum = d.kind === "number" && typeof raw === "number";
-                const text =
-                  raw === null || raw === undefined || raw === ""
-                    ? "—"
-                    : isNum
-                      ? formatSpecNumber(raw as number)
-                      : specValueLabel(String(raw), locale);
-                // Only genuinely technical values (dimensions, codes, untranslated
-                // Latin strings) get forced LTR. Translated words like
-                // "بونا-ان (نیتریل)" must follow the page direction, or mixed
-                // runs inside them reorder wrongly.
-                const technical = isNum || isTechnicalValue(text);
-                return (
-                  <td
-                    key={d.key}
-                    className={
-                      isNum ? "num tech tech-num" : technical ? "tech" : undefined
-                    }
-                  >
-                    {text}
-                    {isNum && d.unit ? d.unit : ""}
-                  </td>
-                );
-              })}
-              <td className="num tech tech-num">{p.packQty}</td>
-              <td>
-                <span className="part-no tech">{p.partNumber}</span>
-              </td>
-              {/* Bare amounts — the currency is named once in the group header.
-                  Repeating "تومان" on 200 rows costs ~40px of table width and
-                  tells the buyer nothing they don't already know. */}
-              <td className="num tech tech-num price-col font-semibold">{formatPriceBare(base, locale, rate)}</td>
-              {hasBulk && (
-                <td className="num tech tech-num price-col text-[var(--color-ink-muted)]">
-                  {bulk !== undefined ? formatPriceBare(bulk, locale, rate) : ""}
+            <Fragment key={p.id}>
+              <tr
+                // A wash alone no longer separates this from a hovered row now
+                // that both are navy; `.row-hit` adds an outline that survives
+                // the pointer passing over it.
+                className={isHit ? "product-row row-hit" : "product-row"}
+              >
+                {tableDefs.map((d) => {
+                  const raw = p.specs[d.key];
+                  const isNum = d.kind === "number" && typeof raw === "number";
+                  const text =
+                    raw === null || raw === undefined || raw === ""
+                      ? "—"
+                      : isNum
+                        ? formatSpecNumber(raw as number)
+                        : specValueLabel(String(raw), locale);
+                  // Only genuinely technical values (dimensions, codes, untranslated
+                  // Latin strings) get forced LTR. Translated words like
+                  // "بونا-ان (نیتریل)" must follow the page direction, or mixed
+                  // runs inside them reorder wrongly.
+                  const technical = isNum || isTechnicalValue(text);
+                  return (
+                    <td
+                      key={d.key}
+                      className={
+                        isNum ? "num tech tech-num" : technical ? "tech" : undefined
+                      }
+                    >
+                      {text}
+                      {isNum && d.unit ? d.unit : ""}
+                    </td>
+                  );
+                })}
+                <td className="num tech tech-num">{p.packQty}</td>
+                <td>
+                  {expandable ? (
+                    // A checkbox and CSS rather than a client component: the
+                    // detail content is server-rendered, and a hundred rows of
+                    // hydrated toggle state buys nothing over `:has()`.
+                    <label className="row-expand">
+                      <input type="checkbox" className="row-toggle" />
+                      <span className="part-no tech">{p.partNumber}</span>
+                      <span className="row-caret" aria-hidden="true" />
+                    </label>
+                  ) : (
+                    <span className="part-no tech">{p.partNumber}</span>
+                  )}
                 </td>
+                {/* Bare amounts — the currency is named once in the group header.
+                    Repeating "تومان" on 200 rows costs ~40px of table width and
+                    tells the buyer nothing they don't already know. */}
+                <td
+                  className={
+                    onRequest
+                      ? "num price-col text-[11px] text-[var(--color-ink-muted)]"
+                      : "num tech tech-num price-col font-semibold"
+                  }
+                >
+                  {onRequest ? t.callForPriceShort : formatPriceBare(base, locale, rate)}
+                </td>
+                {hasBulk && (
+                  <td className="num tech tech-num price-col text-[var(--color-ink-muted)]">
+                    {bulk !== undefined && !isPriceOnRequest(bulk)
+                      ? formatPriceBare(bulk, locale, rate)
+                      : ""}
+                  </td>
+                )}
+                <td>
+                  <AddToCartRow productId={p.id} locale={locale} packQty={p.packQty} />
+                </td>
+                <td className="in-cart-col">
+                  <InCartQty productId={p.id} locale={locale} />
+                </td>
+              </tr>
+              {expandable && (
+                <tr className="detail-row">
+                  <td colSpan={columnCount}>
+                    <ProductDetails
+                      specs={p.specs}
+                      defs={detailDefs}
+                      documents={p.documents}
+                      imageUrl={p.imageUrl}
+                      icon={icon}
+                      locale={locale}
+                    />
+                  </td>
+                </tr>
               )}
-              <td>
-                <AddToCartRow productId={p.id} locale={locale} packQty={p.packQty} />
-              </td>
-              <td className="in-cart-col">
-                <InCartQty productId={p.id} locale={locale} />
-              </td>
-            </tr>
+            </Fragment>
           );
         })}
       </tbody>

@@ -69,6 +69,22 @@ export function currencyLabel(locale: Locale): string {
   return locale === "fa" ? "تومان" : "USD";
 }
 
+/**
+ * Whether a product has no catalog price and should say so.
+ *
+ * Zero is the importer's default for a blank price column, and a supplier file
+ * routinely arrives priced at nothing because pricing happens on the phone.
+ * Rendering that as $0.00 would advertise free goods; every price site asks
+ * this first and prints "call for price" instead.
+ *
+ * Negative cannot occur — the parser refuses it — but it is included so a bad
+ * row that somehow reached the database reads as "ask us" rather than as a
+ * discount.
+ */
+export function isPriceOnRequest(cents: number): boolean {
+  return cents <= 0;
+}
+
 // ---------------------------------------------------------------------------
 // Explicit currency
 // ---------------------------------------------------------------------------

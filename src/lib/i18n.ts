@@ -351,6 +351,17 @@ const en = {
   importDroppedColumns: "{n} columns deleted",
   importPriceless:
     "Imported with no price, so they show “call for price” until one is set:",
+  // Adding a family
+  newFamily: "Add a product family",
+  newFamilyIntro:
+    "An empty family for a CSV to land in. The first upload defines its columns.",
+  newFamilyCategory: "Category",
+  newFamilyNameEn: "Name (English)",
+  newFamilyNameFa: "Name (Persian)",
+  newFamilyAdd: "Add family",
+  newFamilyCreated: "Added “{name}”. Upload a CSV into it below.",
+  newFamilyNoName: "Give the family an English name.",
+  newFamilyNoCategory: "Choose a category.",
   // Editing a family's columns
   editColumns: "Columns",
   columnsTitle: "Columns for {family}",
@@ -684,6 +695,17 @@ const fa: typeof en = {
   importDroppedColumns: "{n} ستون حذف شد",
   importPriceless:
     "بدون قیمت ثبت شدند و تا تعیین قیمت «تماس بگیرید» نمایش داده می‌شوند:",
+  // Adding a family
+  newFamily: "افزودن خانواده کالا",
+  newFamilyIntro:
+    "یک خانواده خالی برای بارگذاری فایل CSV. اولین بارگذاری، ستون‌های آن را می‌سازد.",
+  newFamilyCategory: "دسته‌بندی",
+  newFamilyNameEn: "نام (انگلیسی)",
+  newFamilyNameFa: "نام (فارسی)",
+  newFamilyAdd: "افزودن خانواده",
+  newFamilyCreated: "«{name}» افزوده شد. اکنون فایل CSV را در آن بارگذاری کنید.",
+  newFamilyNoName: "برای خانواده یک نام انگلیسی وارد کنید.",
+  newFamilyNoCategory: "یک دسته‌بندی انتخاب کنید.",
   // Editing a family's columns
   editColumns: "ستون‌ها",
   columnsTitle: "ستون‌های {family}",

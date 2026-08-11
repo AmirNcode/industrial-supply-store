@@ -1,6 +1,6 @@
 import "server-only";
 import { sql } from "./index";
-import type { SpecBag, PriceTier } from "./schema";
+import type { SpecBag, PriceTier, ProductDocument, SpecDisplay } from "./schema";
 
 export type CategoryRow = {
   id: number;
@@ -38,6 +38,8 @@ export type SpecDefRow = {
   kind: "number" | "text";
   filterable: boolean;
   sort: number;
+  /** `table` is a spec-table column; `detail` shows only in the expanded row. */
+  display: SpecDisplay;
 };
 
 export type ProductRow = {
@@ -49,6 +51,12 @@ export type ProductRow = {
   packQty: number;
   leadDays: number;
   inStock: boolean;
+};
+
+/** A product plus what only the expanded row needs. Read on the family page. */
+export type ProductDetailRow = ProductRow & {
+  imageUrl: string;
+  documents: ProductDocument[];
 };
 
 export type FacetValue = { value: string; num: number | null; count: number };
@@ -161,7 +169,7 @@ export async function getFamilyBySlug(slug: string): Promise<FamilyRow | null> {
 export async function getSpecDefs(familyId: number): Promise<SpecDefRow[]> {
   return sql<SpecDefRow[]>`
     SELECT key, label_en AS "labelEn", label_fa AS "labelFa", unit, kind,
-           filterable, sort
+           filterable, sort, display
     FROM spec_defs WHERE family_id = ${familyId} ORDER BY sort
   `;
 }
@@ -204,12 +212,12 @@ export async function getProducts(
   filters: Filters,
   limit: number,
   offset: number,
-): Promise<ProductRow[]> {
-  return sql<ProductRow[]>`
+): Promise<ProductDetailRow[]> {
+  return sql<ProductDetailRow[]>`
     SELECT p.id, p.part_number AS "partNumber", p.specs,
            p.price_tiers AS "priceTiers", p.price_cents AS "priceCents",
            p.pack_qty AS "packQty", p.lead_days AS "leadDays",
-           p.in_stock AS "inStock"
+           p.in_stock AS "inStock", p.image_url AS "imageUrl", p.documents
     FROM products p
     WHERE ${filterClause(familyId, filters)}
     ORDER BY p.sort
@@ -472,7 +480,7 @@ export async function getSpecDefsForFamilies(
   if (familyIds.length === 0) return out;
   const rows = await sql<(SpecDefRow & { familyId: number })[]>`
     SELECT family_id AS "familyId", key, label_en AS "labelEn",
-           label_fa AS "labelFa", unit, kind, filterable, sort
+           label_fa AS "labelFa", unit, kind, filterable, sort, display
     FROM spec_defs WHERE family_id = ANY(${familyIds}) ORDER BY family_id, sort
   `;
   for (const r of rows) {

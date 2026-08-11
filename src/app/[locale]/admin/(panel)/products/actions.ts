@@ -15,6 +15,7 @@ import {
   getFamilyForImport,
   writeImport,
 } from "@/db/importQueries";
+import { createFamily } from "@/db/familyQueries";
 
 /**
  * Uploading a supplier's spreadsheet, in two stages through one form.
@@ -148,6 +149,33 @@ export async function importCsvAction(
     priceless: pricelessParts(rows),
     mismatches: result.mismatches,
   };
+}
+
+export type NewFamilyState =
+  | { kind: "created"; name: string }
+  | { kind: "error"; message: "no-name" | "no-category" };
+
+/**
+ * Create an empty family for an upload to target.
+ *
+ * It starts with no columns at all, which is the point: the first CSV uploaded
+ * into it defines them.
+ */
+export async function createFamilyAction(
+  _prev: NewFamilyState | null,
+  formData: FormData,
+): Promise<NewFamilyState> {
+  await assertAdminWrite();
+
+  const result = await createFamily(
+    Number(formData.get("categoryId")),
+    String(formData.get("nameEn") ?? ""),
+    String(formData.get("nameFa") ?? ""),
+  );
+  if (!result.ok) return { kind: "error", message: result.reason };
+
+  revalidatePath("/", "layout");
+  return { kind: "created", name: String(formData.get("nameEn") ?? "").trim() };
 }
 
 /** Analyze the file and build the review screen's state. */
