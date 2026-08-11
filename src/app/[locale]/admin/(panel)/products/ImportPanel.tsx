@@ -6,6 +6,7 @@ import { getDict, type Locale } from "@/lib/i18n";
 import { formatInt } from "@/lib/money";
 import { importCsvAction, type ImportState } from "./actions";
 import { ColumnReview } from "./ColumnReview";
+import { DeleteControl } from "./DeleteControl";
 import type { FamilyListRow } from "@/db/importQueries";
 
 /**
@@ -80,6 +81,7 @@ export function ImportPanel({
          */
         const active = state !== null && g.families.some((f) => f.id === state.familyId);
         const products = g.families.reduce((n, f) => n + f.productCount, 0);
+        const ordered = g.families.reduce((n, f) => n + f.orderedProducts, 0);
 
         return (
         <details key={g.id} className="admin-group" open={active || undefined}>
@@ -89,6 +91,23 @@ export function ImportPanel({
                 choose a category without opening every one of them. */}
             <span className="tech text-[11px] font-normal text-[var(--color-ink-muted)]">
               {formatInt(g.families.length, locale)} · {formatInt(products, locale)}
+            </span>
+            {/* Inside the summary but outside its toggle: a click on the delete
+                control must not also collapse the group it belongs to. */}
+            <span
+              className="ms-auto font-normal"
+              onClick={(e) => e.preventDefault()}
+            >
+              <DeleteControl
+                what="category"
+                id={g.id}
+                name={g.name}
+                families={g.families.length}
+                products={products}
+                ordered={ordered}
+                locale={locale}
+                demo={demo}
+              />
             </span>
           </summary>
           <div className="mt-1 grid gap-1">
@@ -143,6 +162,15 @@ export function ImportPanel({
                   <Link className="text-[11px]" href={`/${locale}/admin/products/${f.id}/columns`}>
                     {t.editColumns}
                   </Link>
+                  <DeleteControl
+                    what="family"
+                    id={f.id}
+                    name={locale === "fa" ? f.nameFa : f.nameEn}
+                    products={f.productCount}
+                    ordered={f.orderedProducts}
+                    locale={locale}
+                    demo={demo}
+                  />
 
                   {/* The review panel lives inside this form on purpose:
                       confirming posts the same CSV back with the decisions

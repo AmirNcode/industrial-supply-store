@@ -47,6 +47,111 @@ export function familySlug(name: string): string {
   );
 }
 
+/**
+ * What deleting would destroy, so the confirmation can say so.
+ *
+ * Orders are counted but not blocked on: `order_items` keeps its own copy of
+ * the part number, family name and specs, and its `product_id` is ON DELETE SET
+ * NULL, so a past order stays readable and correctly priced after the product
+ * it referenced is gone. The count is shown because "12 products, 3 of them on
+ * past orders" is a different decision from "12 products".
+ */
+export type DeleteImpact = {
+  families: number;
+  products: number;
+  orderedProducts: number;
+};
+
+export async function getFamilyImpact(familyId: number): Promise<DeleteImpact | null> {
+  const [row] = await sql<DeleteImpact[]>`
+    SELECT 1::int AS families,
+           count(p.id)::int AS products,
+           count(DISTINCT p.id) FILTER (WHERE i.id IS NOT NULL)::int AS "orderedProducts"
+    FROM product_families f
+    LEFT JOIN products p ON p.family_id = f.id
+    LEFT JOIN order_items i ON i.product_id = p.id
+    WHERE f.id = ${familyId}
+    GROUP BY f.id
+  `;
+  return row ?? null;
+}
+
+export async function getCategoryImpact(categoryId: number): Promise<DeleteImpact | null> {
+  const [exists] = await sql<{ path: string }[]>`
+    SELECT path FROM categories WHERE id = ${categoryId}
+  `;
+  if (!exists) return null;
+
+  // The whole subtree, not just the category itself — deleting a branch takes
+  // its children with it, and the confirmation has to say how much that is.
+  const [row] = await sql<DeleteImpact[]>`
+    SELECT count(DISTINCT f.id)::int AS families,
+           count(p.id)::int AS products,
+           count(DISTINCT p.id) FILTER (WHERE i.id IS NOT NULL)::int AS "orderedProducts"
+    FROM categories c
+    LEFT JOIN product_families f ON f.category_id = c.id
+    LEFT JOIN products p ON p.family_id = f.id
+    LEFT JOIN order_items i ON i.product_id = p.id
+    WHERE c.path = ${exists.path} OR c.path LIKE ${exists.path + "/%"}
+  `;
+  return row ?? { families: 0, products: 0, orderedProducts: 0 };
+}
+
+/**
+ * Delete a family and everything under it.
+ *
+ * `products`, `spec_defs` and `product_spec_values` all cascade from the
+ * foreign keys, so this one statement is the whole deletion. The category
+ * counts are then rebuilt, because they are denormalised onto every ancestor.
+ */
+export async function deleteFamily(familyId: number): Promise<boolean> {
+  return sql.begin(async (tx) => {
+    const gone = await tx`DELETE FROM product_families WHERE id = ${familyId} RETURNING id`;
+    if (gone.length === 0) return false;
+    await recountCategories(tx);
+    return true;
+  });
+}
+
+/**
+ * Delete a category, its descendants, and their families and products.
+ *
+ * `categories.parent_id` cascades to children and `product_families.category_id`
+ * cascades to families, so deleting the row is enough — but only if the
+ * subtree is deleted from the top. Deleted by path prefix rather than relying
+ * on recursion so the intent is visible in the statement.
+ */
+export async function deleteCategory(categoryId: number): Promise<boolean> {
+  return sql.begin(async (tx) => {
+    const [c] = await tx<{ path: string }[]>`
+      SELECT path FROM categories WHERE id = ${categoryId}
+    `;
+    if (!c) return false;
+    await tx`
+      DELETE FROM categories
+      WHERE path = ${c.path} OR path LIKE ${c.path + "/%"}
+    `;
+    await recountCategories(tx);
+    return true;
+  });
+}
+
+/** The seeder's roll-up: every ancestor carries the count of its subtree. */
+async function recountCategories(tx: Parameters<Parameters<typeof sql.begin>[1]>[0]) {
+  await tx`UPDATE categories SET product_count = 0`;
+  await tx`
+    UPDATE categories c SET product_count = COALESCE(sub.n, 0)
+    FROM (
+      SELECT anc.id, SUM(f.product_count) AS n
+      FROM categories anc
+      JOIN categories d ON d.path = anc.path OR d.path LIKE anc.path || '/%'
+      JOIN product_families f ON f.category_id = d.id
+      GROUP BY anc.id
+    ) sub
+    WHERE c.id = sub.id
+  `;
+}
+
 export type CreateFamilyResult =
   | { ok: true; id: number; slug: string }
   | { ok: false; reason: "no-category" | "no-name" };

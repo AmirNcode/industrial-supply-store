@@ -94,6 +94,8 @@ export type FamilyListRow = {
   inventoryAvailable: number;
   inventoryOnHold: number;
   inventorySold: number;
+  /** Products with a past order against them, for the delete confirmation. */
+  orderedProducts: number;
 };
 
 export async function getFamiliesGrouped(): Promise<FamilyListRow[]> {
@@ -104,9 +106,16 @@ export async function getFamiliesGrouped(): Promise<FamilyListRow[]> {
            c.name_fa AS "categoryNameFa",
            COALESCE(s.available, 0)::int AS "inventoryAvailable",
            COALESCE(s.on_hold, 0)::int   AS "inventoryOnHold",
-           COALESCE(s.sold, 0)::int      AS "inventorySold"
+           COALESCE(s.sold, 0)::int      AS "inventorySold",
+           COALESCE(o.n, 0)::int         AS "orderedProducts"
     FROM product_families f
     JOIN categories c ON c.id = f.category_id
+    -- Same shape as the stock roll-up: one pass, not a subquery per family.
+    LEFT JOIN (
+      SELECT p.family_id, count(DISTINCT p.id) AS n
+      FROM products p JOIN order_items i ON i.product_id = p.id
+      GROUP BY p.family_id
+    ) o ON o.family_id = f.id
     -- Aggregated once per family rather than per product: this page lists
     -- every family, and a per-row subquery would be one scan each.
     LEFT JOIN (

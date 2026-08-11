@@ -16,7 +16,7 @@ import {
   getFamilyForImport,
   writeImport,
 } from "@/db/importQueries";
-import { createFamily } from "@/db/familyQueries";
+import { createFamily, deleteCategory, deleteFamily } from "@/db/familyQueries";
 
 /**
  * Uploading a supplier's spreadsheet, in two stages through one form.
@@ -207,6 +207,42 @@ export async function createFamilyAction(
 
   revalidatePath("/", "layout");
   return { kind: "created", name: String(formData.get("nameEn") ?? "").trim() };
+}
+
+export type DeleteState =
+  | { kind: "deleted"; what: "family" | "category"; name: string; products: number }
+  | { kind: "error"; message: "not-found" | "not-confirmed" };
+
+/**
+ * Delete a family or a whole category subtree.
+ *
+ * Guarded by a typed confirmation rather than a dialog: the button sits in a
+ * list of a hundred, and this is the one action on the page that cannot be
+ * undone. `assertAdminWrite` still refuses under DEMO_MODE, so a hand-made POST
+ * gets the same answer as a disabled button.
+ */
+export async function deleteCatalogAction(
+  _prev: DeleteState | null,
+  formData: FormData,
+): Promise<DeleteState> {
+  await assertAdminWrite();
+
+  const id = Number(formData.get("id"));
+  const what = formData.get("what") === "category" ? "category" : "family";
+  const name = String(formData.get("name") ?? "");
+  const products = Number(formData.get("products")) || 0;
+
+  // The word is checked here, not only in the browser.
+  if (String(formData.get("confirm") ?? "").trim().toUpperCase() !== "DELETE") {
+    return { kind: "error", message: "not-confirmed" };
+  }
+
+  const ok =
+    what === "category" ? await deleteCategory(id) : await deleteFamily(id);
+  if (!ok) return { kind: "error", message: "not-found" };
+
+  revalidatePath("/", "layout");
+  return { kind: "deleted", what, name, products };
 }
 
 /** Analyze the file and build the review screen's state. */

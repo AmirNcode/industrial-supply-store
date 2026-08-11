@@ -377,6 +377,14 @@ const en = {
   newFamilyCreated: "Added “{name}”. Upload a CSV into it below.",
   newFamilyNoName: "Give the family an English name.",
   newFamilyNoCategory: "Choose a category.",
+  // Deleting
+  deleteType: "type DELETE",
+  deleteFamilyWarn: "Delete “{name}” and its {products} products? This cannot be undone.",
+  deleteCategoryWarn:
+    "Delete “{name}”, its {families} families and {products} products? This cannot be undone.",
+  deleteOrdered: "{n} of them appear on past orders, which keep their own record.",
+  deleteDone: "Deleted “{name}”.",
+  deleteNotConfirmed: "Type DELETE to confirm.",
   // Editing a family's columns
   editColumns: "Columns",
   columnsTitle: "Columns for {family}",
@@ -736,6 +744,14 @@ const fa: typeof en = {
   newFamilyCreated: "«{name}» افزوده شد. اکنون فایل CSV را در آن بارگذاری کنید.",
   newFamilyNoName: "برای خانواده یک نام انگلیسی وارد کنید.",
   newFamilyNoCategory: "یک دسته‌بندی انتخاب کنید.",
+  // Deleting
+  deleteType: "DELETE بنویسید",
+  deleteFamilyWarn: "«{name}» و {products} کالای آن حذف شود؟ این کار برگشت‌پذیر نیست.",
+  deleteCategoryWarn:
+    "«{name}» با {families} خانواده و {products} کالا حذف شود؟ این کار برگشت‌پذیر نیست.",
+  deleteOrdered: "{n} مورد از آن‌ها در سفارش‌های گذشته هستند که سوابق خود را حفظ می‌کنند.",
+  deleteDone: "«{name}» حذف شد.",
+  deleteNotConfirmed: "برای تأیید DELETE بنویسید.",
   // Editing a family's columns
   editColumns: "ستون‌ها",
   columnsTitle: "ستون‌های {family}",
