@@ -49,11 +49,13 @@ export function ImportPanel({
    * One at a time: only one upload can be in flight, and holding a megabyte of
    * CSV per family on a page listing a hundred of them would be pure waste.
    */
-  const [picked, setPicked] = useState<{ familyId: number; text: string } | null>(null);
+  const [picked, setPicked] = useState<
+    { familyId: number; name: string; text: string } | null
+  >(null);
 
   async function pick(familyId: number, file: File | undefined) {
     if (!file) return setPicked(null);
-    setPicked({ familyId, text: await file.text() });
+    setPicked({ familyId, name: file.name, text: await file.text() });
   }
 
   const groups: { id: number; name: string; families: FamilyListRow[] }[] = [];
@@ -90,7 +92,9 @@ export function ImportPanel({
             </span>
           </summary>
           <div className="mt-1 grid gap-1">
-            {g.families.map((f) => (
+            {g.families.map((f) => {
+              const chosen = picked?.familyId === f.id ? picked.name : null;
+              return (
               <div key={f.id} className="border-b border-[var(--color-rule-light)] py-1.5">
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px]">
                   <span className="font-semibold">
@@ -146,26 +150,38 @@ export function ImportPanel({
                   <form action={formAction} className="ms-auto flex flex-1 flex-col items-end gap-2">
                     <div className="flex items-center gap-2">
                       <input type="hidden" name="familyId" value={f.id} />
-                      {/* Unnamed: the file itself is never posted. Its text is,
-                          in the field below, which survives the form reset that
+                      {/* A bare file input reads as plain text and gives no
+                          hint that it comes before the button beside it, so it
+                          is numbered and styled as the first of two steps. The
+                          input itself is visually hidden but still focusable —
+                          the label is what gets clicked.
+
+                          Unnamed on purpose: the file is never posted. Its text
+                          is, in the field below, which survives the form reset
                           React performs after each action. */}
-                      <input
-                        type="file"
-                        accept=".csv,text/csv"
-                        disabled={demo}
-                        className="text-[11px]"
-                        onChange={(e) => pick(f.id, e.target.files?.[0])}
-                      />
+                      <label className={`btn-file ${chosen ? "btn-file-set" : ""}`}>
+                        <input
+                          type="file"
+                          accept=".csv,text/csv"
+                          disabled={demo}
+                          onChange={(e) => pick(f.id, e.target.files?.[0])}
+                        />
+                        <span className="btn-file-step">1</span>
+                        <span className="btn-file-name">{chosen ?? t.chooseCsv}</span>
+                      </label>
                       <input
                         type="hidden"
                         name="csvText"
                         value={picked?.familyId === f.id ? picked.text : ""}
                       />
+                      {/* Disabled until a file is chosen, so the order of the
+                          two steps is enforced rather than merely implied. */}
                       <button
                         type="submit"
-                        className="btn-small"
-                        disabled={demo || isPending}
+                        className="btn-small btn-step"
+                        disabled={demo || isPending || !chosen}
                       >
+                        <span className="btn-file-step">2</span>
                         {t.uploadCsv}
                       </button>
                     </div>
@@ -193,7 +209,8 @@ export function ImportPanel({
                   <Result state={state} locale={locale} />
                 )}
               </div>
-            ))}
+              );
+            })}
           </div>
         </details>
         );

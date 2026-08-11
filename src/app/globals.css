@@ -357,6 +357,88 @@ html[lang="fa"] .spec-table thead th {
   outline-offset: 2px;
 }
 
+/* Choosing a CSV is step one of two, and a bare file input says neither that
+   it is clickable nor that it comes first. The real input is hidden inside this
+   label — hidden, not removed, so it stays keyboard-reachable. */
+.btn-file {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 230px;
+  padding: 2px 8px 2px 3px;
+  border: 1px dashed var(--color-navy-lift);
+  border-radius: 3px;
+  background: #fff;
+  font-size: var(--text-xxs);
+  font-weight: 600;
+  color: var(--color-navy);
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+.btn-file:hover {
+  background: var(--color-navy-tint);
+}
+.btn-file input[type="file"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+.btn-file:has(input:focus-visible) {
+  outline: 2px solid var(--color-navy);
+  outline-offset: 2px;
+}
+/* Solid once a file is held, so "chosen" is visible down a long list. */
+.btn-file-set {
+  border-style: solid;
+  background: var(--color-navy-tint);
+}
+.btn-file-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The step numbers. On the submit button it inverts, since that button is
+   already navy. */
+.btn-file-step {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--color-navy);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+}
+.btn-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.btn-step .btn-file-step {
+  background: #fff;
+  color: var(--color-navy);
+}
+.btn-step:disabled .btn-file-step {
+  color: #a3aec2;
+}
+.btn-file input[type="file"]:disabled {
+  pointer-events: none;
+}
+.btn-file:has(input:disabled) {
+  border-color: var(--color-rule);
+  color: var(--color-ink-faint);
+  cursor: default;
+}
+.btn-file:has(input:disabled) .btn-file-step {
+  background: var(--color-ink-faint);
+}
+
 /* Collapsible category groups on the admin products page. The marker is styled
    rather than hidden — with every group closed by default, the triangle is the
    only thing saying these open at all. */
