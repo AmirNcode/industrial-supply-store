@@ -15,6 +15,11 @@ reference table and must not be used to select a real part. See
 
 Requires Docker and Node 24+.
 
+The commands below are the short version. `docs/LOCAL-DEV.md` is the same thing
+explained — what each command does, how to confirm Docker is running natively on
+Apple Silicon rather than emulating Intel, and what to check when something
+will not connect.
+
 ### Day-to-day (app on the host, database in Docker)
 
 ```bash
