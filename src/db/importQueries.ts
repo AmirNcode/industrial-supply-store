@@ -1,12 +1,26 @@
 import "server-only";
+import type { TransactionSql } from "postgres";
 import { sql } from "./index";
 import type { ImportSpecDef, ImportRow } from "@/lib/importCsv";
+import { plannedAliases, plannedDefs, type ImportPlan } from "@/lib/columnPlan";
+import type { FieldAliases, SpecDisplay } from "./schema";
 
 /**
- * `filterable` rides along because the write half needs it: only a filterable
- * spec becomes a row in `product_spec_values`, which is the facet index.
+ * A family's spec column, in full.
+ *
+ * `filterable` is what the write half needs — only a filterable spec becomes a
+ * row in `product_spec_values`, which is the facet index. The labels and
+ * `display` are what the analyzer needs, so a header matching an existing
+ * column can keep the settings someone already chose for it.
  */
-export type FamilySpecDef = ImportSpecDef & { filterable: boolean };
+export type FamilySpecDef = ImportSpecDef & {
+  labelEn: string;
+  labelFa: string;
+  unit: string;
+  filterable: boolean;
+  display: SpecDisplay;
+  csvAlias: string | null;
+};
 
 export type FamilyForImport = {
   id: number;
@@ -17,6 +31,7 @@ export type FamilyForImport = {
   categoryNameEn: string;
   categoryNameFa: string;
   categoryPath: string;
+  fieldAliases: FieldAliases;
   defs: FamilySpecDef[];
 };
 
@@ -25,6 +40,7 @@ export async function getFamilyForImport(id: number): Promise<FamilyForImport | 
 
   const [family] = await sql<Omit<FamilyForImport, "defs">[]>`
     SELECT f.id, f.slug, f.name_en AS "nameEn", f.name_fa AS "nameFa",
+           f.field_aliases AS "fieldAliases",
            c.id AS "categoryId", c.name_en AS "categoryNameEn",
            c.name_fa AS "categoryNameFa", c.path AS "categoryPath"
     FROM product_families f
@@ -34,10 +50,36 @@ export async function getFamilyForImport(id: number): Promise<FamilyForImport | 
   if (!family) return null;
 
   const defs = await sql<FamilySpecDef[]>`
-    SELECT key, kind, filterable
+    SELECT key, label_en AS "labelEn", label_fa AS "labelFa", unit, kind,
+           filterable, display, csv_alias AS "csvAlias"
     FROM spec_defs WHERE family_id = ${id} ORDER BY sort, id
   `;
   return { ...family, defs };
+}
+
+/**
+ * How many products would lose a value if a column were deleted.
+ *
+ * Shown next to each removable column so "delete this column" is a decision
+ * about known data rather than a guess.
+ */
+export async function countProductsWithSpec(
+  familyId: number,
+  keys: readonly string[],
+): Promise<Record<string, number>> {
+  if (keys.length === 0) return {};
+  const rows = await sql<{ key: string; n: number }[]>`
+    SELECT k.key, count(*)::int AS n
+    FROM products p
+    JOIN unnest(${keys as string[]}::text[]) AS k(key) ON p.specs ? k.key
+    WHERE p.family_id = ${familyId}
+      AND p.specs ->> k.key <> ''
+    GROUP BY k.key
+  `;
+  const out: Record<string, number> = {};
+  for (const key of keys) out[key] = 0;
+  for (const r of rows) out[r.key] = r.n;
+  return out;
 }
 
 export type FamilyListRow = {
@@ -202,6 +244,103 @@ class ImportRefused extends Error {
 /** Postgres caps a statement's size, and the seeder already settled on this. */
 const CHUNK = 800;
 
+/** The handle `sql.begin` hands its callback — a connection pinned to the transaction. */
+type Tx = TransactionSql<Record<string, never>>;
+
+/**
+ * Bring a family's column definitions in line with a confirmed plan.
+ *
+ * Runs inside the caller's transaction, before any product is written, so the
+ * rows land against the columns the plan describes.
+ *
+ * Deleting a column is four things, not one, and skipping any of them leaves
+ * the catalog wrong in a way that still renders:
+ *
+ *   1. the `spec_defs` row — the heading disappears;
+ *   2. the key inside every `products.specs` — otherwise the value is still
+ *      there, invisible, and comes back if the column is ever re-added;
+ *   3. the `product_spec_values` rows — the facet index, which is what filter
+ *      queries actually read, so a stale row keeps offering a filter that
+ *      matches a value no page displays;
+ *   4. `products.search_text` — a product still findable by a spec it no
+ *      longer has.
+ */
+async function syncColumns(tx: Tx, family: FamilyForImport, plan: ImportPlan) {
+  const defs = plannedDefs(plan);
+  const familyId = family.id;
+
+  for (let i = 0; i < defs.length; i += CHUNK) {
+    const chunk = defs.slice(i, i + CHUNK);
+    await tx`
+      INSERT INTO spec_defs (family_id, key, label_en, label_fa, unit, kind,
+                             filterable, sort, display, csv_alias)
+      SELECT ${familyId}, u.key, u.label_en, u.label_fa, u.unit, u.kind,
+             u.filterable::boolean, u.sort, u.display, NULLIF(u.csv_alias, '')
+      FROM unnest(
+        ${chunk.map((d) => d.key)}::text[],
+        ${chunk.map((d) => d.labelEn)}::text[],
+        ${chunk.map((d) => d.labelFa)}::text[],
+        ${chunk.map((d) => d.unit)}::text[],
+        ${chunk.map((d) => d.kind)}::text[],
+        -- Text then cast, as elsewhere: postgres-js infers no boolean array.
+        ${chunk.map((d) => (d.filterable ? "t" : "f"))}::text[],
+        ${chunk.map((d) => d.sort)}::int[],
+        ${chunk.map((d) => d.display)}::text[],
+        ${chunk.map((d) => d.csvAlias ?? "")}::text[]
+      ) AS u(key, label_en, label_fa, unit, kind, filterable, sort, display, csv_alias)
+      ON CONFLICT (family_id, key) DO UPDATE SET
+        label_en = EXCLUDED.label_en,
+        label_fa = EXCLUDED.label_fa,
+        unit = EXCLUDED.unit,
+        kind = EXCLUDED.kind,
+        filterable = EXCLUDED.filterable,
+        sort = EXCLUDED.sort,
+        display = EXCLUDED.display,
+        csv_alias = EXCLUDED.csv_alias
+    `;
+  }
+
+  if (plan.dropKeys.length > 0) {
+    const drop = plan.dropKeys;
+    await tx`
+      DELETE FROM spec_defs WHERE family_id = ${familyId} AND key = ANY(${drop}::text[])
+    `;
+    await tx`
+      DELETE FROM product_spec_values
+      WHERE family_id = ${familyId} AND spec_key = ANY(${drop}::text[])
+    `;
+    await tx`
+      UPDATE products SET specs = specs - ${drop}::text[]
+      WHERE family_id = ${familyId} AND specs ?| ${drop}::text[]
+    `;
+    /*
+     * Rebuild the search document for the whole family.
+     *
+     * Products the upload does not mention keep their old `search_text`, which
+     * still names the values just stripped out of `specs`. This is the same
+     * document `buildSearchText` composes in TypeScript; the spec values come
+     * out of jsonb in a different order, which does not matter to a full-text
+     * index.
+     */
+    await tx`
+      UPDATE products p SET search_text = left(
+        concat_ws(' ', p.part_number, ${family.nameEn}, ${family.nameFa},
+                  ${family.categoryNameEn}, ${family.categoryNameFa},
+                  (SELECT string_agg(v.value, ' ')
+                   FROM jsonb_each_text(p.specs) AS v
+                   WHERE v.value <> '')),
+        2000)
+      WHERE p.family_id = ${familyId}
+    `;
+  }
+
+  await tx`
+    UPDATE product_families
+    SET field_aliases = ${JSON.stringify(plannedAliases(plan))}::jsonb
+    WHERE id = ${familyId}
+  `;
+}
+
 /**
  * Write an import in one transaction.
  *
@@ -224,6 +363,13 @@ const CHUNK = 800;
 export async function writeImport(
   familyId: number,
   rows: readonly ImportRow[],
+  /**
+   * Given when the upload also redefines the family's columns. The column
+   * changes and the row writes share this one transaction on purpose: a family
+   * whose columns changed but whose products did not — or the reverse — is a
+   * catalog that renders headings with no values under them.
+   */
+  plan?: ImportPlan,
 ): Promise<ImportResult> {
   const family = await getFamilyForImport(familyId);
   if (!family) throw new Error(`No family ${familyId}`);
@@ -231,11 +377,17 @@ export async function writeImport(
     return { inserted: 0, updated: 0, conflicts: [], caseVariants: [], mismatches: [] };
   }
 
-  const filterable = new Set(family.defs.filter((d) => d.filterable).map((d) => d.key));
-  const numeric = new Set(family.defs.filter((d) => d.kind === "number").map((d) => d.key));
+  // The facet index has to be built from the columns as the plan leaves them,
+  // not as they were: a column this upload marks filterable for the first time
+  // would otherwise import with no facet rows and silently filter to nothing.
+  const effective = plan ? plannedDefs(plan) : family.defs;
+  const filterable = new Set(effective.filter((d) => d.filterable).map((d) => d.key));
+  const numeric = new Set(effective.filter((d) => d.kind === "number").map((d) => d.key));
 
   try {
     return await sql.begin(async (tx) => {
+      if (plan) await syncColumns(tx, family, plan);
+
       const parts = rows.map((r) => r.partNumber);
 
       // Matched case-insensitively, because ON CONFLICT below is not.
@@ -328,6 +480,47 @@ export async function writeImport(
           touched.push(r.id);
           if (r.inserted) inserted++;
           else updated++;
+        }
+      }
+
+      /*
+       * Images and documents are written separately, and only for the rows
+       * that carried them.
+       *
+       * Both columns are `NOT NULL`, so the upsert above cannot tell "the file
+       * had no such column" from "the cell was blank" — everything arrives as
+       * a default. That difference is the whole point here: neither column is
+       * in the template, so a routine price edit exported to Excel and uploaded
+       * back mentions neither, and must leave both alone rather than erase
+       * every product's documents.
+       */
+      const withImage = rows.filter((r) => r.imageUrl !== undefined);
+      if (withImage.length > 0) {
+        for (let i = 0; i < withImage.length; i += CHUNK) {
+          const chunk = withImage.slice(i, i + CHUNK);
+          await tx`
+            UPDATE products p SET image_url = u.image_url
+            FROM unnest(
+              ${chunk.map((r) => r.partNumber)}::text[],
+              ${chunk.map((r) => r.imageUrl as string)}::text[]
+            ) AS u(part_number, image_url)
+            WHERE p.part_number = u.part_number AND p.family_id = ${familyId}
+          `;
+        }
+      }
+
+      const withDocs = rows.filter((r) => r.documents !== undefined);
+      if (withDocs.length > 0) {
+        for (let i = 0; i < withDocs.length; i += CHUNK) {
+          const chunk = withDocs.slice(i, i + CHUNK);
+          await tx`
+            UPDATE products p SET documents = u.documents::jsonb
+            FROM unnest(
+              ${chunk.map((r) => r.partNumber)}::text[],
+              ${chunk.map((r) => JSON.stringify(r.documents))}::text[]
+            ) AS u(part_number, documents)
+            WHERE p.part_number = u.part_number AND p.family_id = ${familyId}
+          `;
         }
       }
 

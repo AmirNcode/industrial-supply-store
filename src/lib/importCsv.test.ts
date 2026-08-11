@@ -246,10 +246,18 @@ test("the real 47-column supplier file imports against its proposed plan", () =>
 test("the documents column becomes labelled documents with no files yet", () => {
   const { rows } = parseWithPlan(GATE_VALVE, proposedPlan(GATE_VALVE));
   assert.deepEqual(
-    rows[0].documents.map((d) => d.label),
+    rows[0].documents?.map((d) => d.label),
     ["Datasheet", "Drawing", "Certificates", "IOM"],
   );
-  assert.ok(rows[0].documents.every((d) => d.url === ""));
+  assert.ok(rows[0].documents?.every((d) => d.url === ""));
+});
+
+test("a file with no documents column leaves the products' documents alone", () => {
+  // Undefined, not []. The template has no documents column, so a routine
+  // price edit round-tripped through Excel must not erase them.
+  const { rows } = parseImport(`${HEADER}\nP1,004,0.07,0.35,1,0,yes,10,0,0\n`, DEFS);
+  assert.equal(rows[0].documents, undefined);
+  assert.equal(rows[0].imageUrl, undefined);
 });
 
 test("an ignored header contributes nothing to the product", () => {

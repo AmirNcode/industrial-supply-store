@@ -65,8 +65,18 @@ export type ImportRow = {
   inventoryAvailable: number;
   inventoryOnHold: number;
   inventorySold: number;
-  imageUrl: string;
-  documents: ProductDocument[];
+  /**
+   * Undefined when the file had no such column — which is the normal case, as
+   * neither is in the template.
+   *
+   * The distinction matters: a blank cell in a column that *is* mapped clears
+   * the value, but a file that never mentioned images must leave the ones
+   * already on the products alone. Images and documents will be managed by an
+   * upload screen rather than by spreadsheet, so almost every import should
+   * leave them untouched.
+   */
+  imageUrl?: string;
+  documents?: ProductDocument[];
 };
 
 /**
@@ -288,8 +298,10 @@ function parseRows(
       inventoryAvailable: counts.inventory_available,
       inventoryOnHold: counts.inventory_on_hold,
       inventorySold: counts.inventory_sold,
-      imageUrl: field("image_url"),
-      documents: parseDocuments(field("documents")),
+      ...(builtinAt.has("image_url") ? { imageUrl: field("image_url") } : {}),
+      ...(builtinAt.has("documents")
+        ? { documents: parseDocuments(field("documents")) }
+        : {}),
     });
   });
 

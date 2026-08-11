@@ -1,9 +1,11 @@
 "use client";
 
 import { useActionState } from "react";
+import Link from "next/link";
 import { getDict, type Locale } from "@/lib/i18n";
 import { formatInt } from "@/lib/money";
 import { importCsvAction, type ImportState } from "./actions";
+import { ColumnReview } from "./ColumnReview";
 import type { FamilyListRow } from "@/db/importQueries";
 
 /**
@@ -97,27 +99,53 @@ export function ImportPanel({
                   >
                     {t.exportProducts}
                   </a>
+                  <Link className="text-[11px]" href={`/${locale}/admin/products/${f.id}/columns`}>
+                    {t.editColumns}
+                  </Link>
 
-                  <form action={formAction} className="ms-auto flex items-center gap-2">
-                    <input type="hidden" name="familyId" value={f.id} />
-                    <input
-                      type="file"
-                      name="file"
-                      accept=".csv,text/csv"
-                      disabled={demo}
-                      className="text-[11px]"
-                    />
-                    <button
-                      type="submit"
-                      className="btn-small"
-                      disabled={demo || isPending}
-                    >
-                      {t.uploadCsv}
-                    </button>
+                  {/* The review panel lives inside this form on purpose: the
+                      chosen file is still in the input, so confirming posts the
+                      same bytes back with the decisions rather than asking for
+                      the file a second time. */}
+                  <form action={formAction} className="ms-auto flex flex-1 flex-col items-end gap-2">
+                    <div className="flex items-center gap-2">
+                      <input type="hidden" name="familyId" value={f.id} />
+                      <input
+                        type="file"
+                        name="file"
+                        accept=".csv,text/csv"
+                        disabled={demo}
+                        className="text-[11px]"
+                      />
+                      <button
+                        type="submit"
+                        className="btn-small"
+                        disabled={demo || isPending}
+                      >
+                        {t.uploadCsv}
+                      </button>
+                    </div>
+
+                    {state?.kind === "review" && state.familyId === f.id && (
+                      <div className="w-full text-start">
+                        <ColumnReview
+                          // Remounting per upload throws away the decisions made
+                          // about the previous file, which no longer describe
+                          // this one.
+                          key={state.headers.map((h) => h.plan.header).join("|")}
+                          headers={state.headers}
+                          missing={state.missing}
+                          rowCount={state.rowCount}
+                          problems={state.problems}
+                          locale={locale}
+                          pending={isPending}
+                        />
+                      </div>
+                    )}
                   </form>
                 </div>
 
-                {state && state.familyId === f.id && (
+                {state && state.kind !== "review" && state.familyId === f.id && (
                   <Result state={state} locale={locale} />
                 )}
               </div>
@@ -129,17 +157,43 @@ export function ImportPanel({
   );
 }
 
-function Result({ state, locale }: { state: ImportState; locale: Locale }) {
+function Result({
+  state,
+  locale,
+}: {
+  state: Exclude<ImportState, { kind: "review" }>;
+  locale: Locale;
+}) {
   const t = getDict(locale);
 
   if (state.kind === "ok") {
+    const columnNotes = [
+      state.addedColumns > 0 &&
+        t.importAddedColumns.replace("{n}", formatInt(state.addedColumns, locale)),
+      state.droppedColumns > 0 &&
+        t.importDroppedColumns.replace("{n}", formatInt(state.droppedColumns, locale)),
+    ].filter((s): s is string => Boolean(s));
+
     return (
       <>
         <p className="mt-1.5 border border-[#b6d7bb] bg-[#f0f8f1] px-2.5 py-1.5 text-[12px]">
           {t.importSummary
             .replace("{inserted}", formatInt(state.inserted, locale))
             .replace("{updated}", formatInt(state.updated, locale))}
+          {columnNotes.length > 0 && ` ${columnNotes.join(" · ")}.`}
         </p>
+        {state.priceless.length > 0 && (
+          <div className="mt-1.5 border border-[var(--color-warn-line)] bg-[var(--color-warn-soft)] px-2.5 py-1.5">
+            {/* Allowed — pricing happens on the phone — but the other way to
+                arrive here is clearing the column by accident in Excel. */}
+            <p className="mb-1 text-[12px] font-bold">{t.importPriceless}</p>
+            <p className="tech text-[11px]">
+              {state.priceless.slice(0, MAX_SHOWN).join(", ")}
+              {state.priceless.length > MAX_SHOWN &&
+                ` + ${formatInt(state.priceless.length - MAX_SHOWN, locale)}`}
+            </p>
+          </div>
+        )}
         {state.mismatches.length > 0 && (
           <div className="mt-1.5 border border-[var(--color-warn-line)] bg-[var(--color-warn-soft)] px-2.5 py-1.5">
             {/* The upload was applied — it is the operator's stated intent, and
@@ -171,7 +225,9 @@ function Result({ state, locale }: { state: ImportState; locale: Locale }) {
         ? t.importNoFile
         : state.message === "too-large"
           ? t.importTooLarge
-          : t.importFamilyGone;
+          : state.message === "bad-plan"
+            ? t.importBadPlan
+            : t.importFamilyGone;
     return <Problem>{text}</Problem>;
   }
 

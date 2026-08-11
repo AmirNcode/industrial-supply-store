@@ -384,6 +384,70 @@ export function analyzeCsv(
  * Checked on the server even though the UI prevents most of them: the plan
  * arrives as a form field, and a form field is whatever the client sends.
  */
+/** A spec key is a jsonb key, a CSV column name and part of a query string. */
+const KEY_SHAPE = /^[a-z0-9_]+$/;
+
+/**
+ * Read a plan that arrived as a form field.
+ *
+ * The confirm screen builds this in the browser, so it is whatever the client
+ * sent — every field is checked before anything acts on it. Returns null rather
+ * than throwing, because the caller's answer to a malformed plan is to ask for
+ * the upload again, not to show a stack trace.
+ */
+export function parsePlanJson(raw: unknown): ImportPlan | null {
+  if (typeof raw !== "string") return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (typeof parsed !== "object" || parsed === null) return null;
+
+  const { headers, dropKeys } = parsed as Record<string, unknown>;
+  if (!Array.isArray(headers) || !Array.isArray(dropKeys)) return null;
+  if (!dropKeys.every((k): k is string => typeof k === "string")) return null;
+
+  const out: HeaderPlan[] = [];
+  for (const h of headers) {
+    if (typeof h !== "object" || h === null) return null;
+    const o = h as Record<string, unknown>;
+    if (typeof o.header !== "string" || o.header === "") return null;
+
+    if (o.role === "ignore") {
+      out.push({ role: "ignore", header: o.header });
+    } else if (o.role === "builtin") {
+      if (typeof o.field !== "string" || !isBuiltinField(o.field)) return null;
+      out.push({ role: "builtin", header: o.header, field: o.field });
+    } else if (o.role === "spec") {
+      if (typeof o.key !== "string" || !KEY_SHAPE.test(o.key)) return null;
+      if (o.specKind !== "number" && o.specKind !== "text") return null;
+      if (o.display !== "table" && o.display !== "detail") return null;
+      if (typeof o.labelEn !== "string" || typeof o.labelFa !== "string") return null;
+      if (typeof o.unit !== "string") return null;
+      if (typeof o.filterable !== "boolean") return null;
+      out.push({
+        role: "spec",
+        header: o.header,
+        key: o.key,
+        // Trimmed here rather than trusted: a label of spaces would render as
+        // a blank column heading with no way to tell which column it is.
+        labelEn: o.labelEn.trim() || o.key,
+        labelFa: o.labelFa.trim() || o.labelEn.trim() || o.key,
+        unit: o.unit.trim(),
+        specKind: o.specKind,
+        display: o.display,
+        filterable: o.filterable,
+      });
+    } else {
+      return null;
+    }
+  }
+
+  return { headers: out, dropKeys };
+}
+
 export function validatePlan(plan: ImportPlan): string[] {
   const errors: string[] = [];
 

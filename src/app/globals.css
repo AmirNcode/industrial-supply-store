@@ -378,6 +378,40 @@ select:focus {
   box-shadow: 0 0 0 3px var(--color-navy-tint);
 }
 
+/* Admin tables put a control in every cell of forty-odd rows. At the default
+   padding that is a page nobody can see the shape of, so these shrink to the
+   density of the surrounding table rather than the density of a form. */
+.admin-select,
+.admin-input {
+  padding: 1px 4px;
+  font-size: var(--text-xs);
+  max-width: 100%;
+}
+
+/* A secondary control that sits inside a table cell — reorder and delete.
+   Outlined rather than filled: a row with three navy buttons in it reads as
+   three calls to action, when the actual call to action is Save at the end. */
+.btn-tiny {
+  background: #fff;
+  color: var(--color-ink);
+  font-size: var(--text-xxs);
+  font-weight: 600;
+  padding: 1px 5px;
+  border: 1px solid var(--color-rule);
+  border-radius: 3px;
+  cursor: pointer;
+  line-height: 1.4;
+  transition: border-color 0.12s, background 0.12s;
+}
+.btn-tiny:hover:not(:disabled) {
+  border-color: var(--color-navy-lift);
+  background: var(--color-navy-tint);
+}
+.btn-tiny:disabled {
+  color: var(--color-ink-faint);
+  cursor: default;
+}
+
 input[type="number"]::-webkit-outer-spin-button,
 input[type="number"]::-webkit-inner-spin-button {
   -webkit-appearance: none;
