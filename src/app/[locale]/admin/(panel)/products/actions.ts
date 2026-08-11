@@ -74,25 +74,28 @@ export async function importCsvAction(
   await assertAdminWrite();
 
   const familyId = Number(formData.get("familyId"));
-  const file = formData.get("file");
-
-  if (!(file instanceof File) || file.size === 0) {
+  /*
+   * The file's text, not the file.
+   *
+   * An import is two posts and React empties a file input once the first one
+   * resolves, so the browser reads the file when it is chosen and sends the
+   * text with both. The limits below therefore measure the string.
+   */
+  const text = formData.get("csvText");
+  if (typeof text !== "string" || text.trim() === "") {
     return { kind: "message", familyId, message: "no-file" };
   }
-  // Checked before reading the file into memory.
-  if (file.size > MAX_BYTES) {
+  if (text.length > MAX_BYTES) {
+    return { kind: "message", familyId, message: "too-large" };
+  }
+  // Counted before parsing, so a file well inside the size limit but made of
+  // millions of tiny rows does not get parsed first and rejected after.
+  if (text.split("\n").length > MAX_ROWS + 1) {
     return { kind: "message", familyId, message: "too-large" };
   }
 
   const family = await getFamilyForImport(familyId);
   if (!family) return { kind: "message", familyId, message: "not-found" };
-
-  const text = await file.text();
-  // Counted before parsing, so a file well inside the byte limit but made of
-  // millions of tiny rows does not get parsed first and rejected after.
-  if (text.split("\n").length > MAX_ROWS + 1) {
-    return { kind: "message", familyId, message: "too-large" };
-  }
 
   const rawPlan = formData.get("plan");
   const confirming = formData.get("stage") === "apply";

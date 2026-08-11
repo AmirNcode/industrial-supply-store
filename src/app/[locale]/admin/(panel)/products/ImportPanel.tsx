@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import Link from "next/link";
 import { getDict, type Locale } from "@/lib/i18n";
 import { formatInt } from "@/lib/money";
@@ -36,6 +36,25 @@ export function ImportPanel({
     importCsvAction,
     null,
   );
+
+  /**
+   * The chosen file's text, held here rather than left in the file input.
+   *
+   * The import is two posts — analyze, then confirm — and React resets a form
+   * once its action resolves, which empties the file input between them. So the
+   * file is read when it is picked and posted as a field both times. It also
+   * means nothing is stashed on the server waiting for a confirmation that may
+   * never come.
+   *
+   * One at a time: only one upload can be in flight, and holding a megabyte of
+   * CSV per family on a page listing a hundred of them would be pure waste.
+   */
+  const [picked, setPicked] = useState<{ familyId: number; text: string } | null>(null);
+
+  async function pick(familyId: number, file: File | undefined) {
+    if (!file) return setPicked(null);
+    setPicked({ familyId, text: await file.text() });
+  }
 
   const groups: { id: number; name: string; families: FamilyListRow[] }[] = [];
   for (const f of families) {
@@ -103,19 +122,26 @@ export function ImportPanel({
                     {t.editColumns}
                   </Link>
 
-                  {/* The review panel lives inside this form on purpose: the
-                      chosen file is still in the input, so confirming posts the
-                      same bytes back with the decisions rather than asking for
-                      the file a second time. */}
+                  {/* The review panel lives inside this form on purpose:
+                      confirming posts the same CSV back with the decisions
+                      attached, rather than asking for the file a second time. */}
                   <form action={formAction} className="ms-auto flex flex-1 flex-col items-end gap-2">
                     <div className="flex items-center gap-2">
                       <input type="hidden" name="familyId" value={f.id} />
+                      {/* Unnamed: the file itself is never posted. Its text is,
+                          in the field below, which survives the form reset that
+                          React performs after each action. */}
                       <input
                         type="file"
-                        name="file"
                         accept=".csv,text/csv"
                         disabled={demo}
                         className="text-[11px]"
+                        onChange={(e) => pick(f.id, e.target.files?.[0])}
+                      />
+                      <input
+                        type="hidden"
+                        name="csvText"
+                        value={picked?.familyId === f.id ? picked.text : ""}
                       />
                       <button
                         type="submit"

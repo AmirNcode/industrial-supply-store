@@ -73,8 +73,14 @@ sets: spec vs. built-in field vs. ignore, `table` vs. `detail`, `number` vs.
 
 All-or-nothing. A failure anywhere leaves the family exactly as it was.
 
-The file survives between stages by staying in the file input and being posted
-again with the confirmed plan — no server-side stash, nothing to expire.
+The file is read in the browser when it is chosen and its text is posted with
+both stages — no server-side stash, nothing to expire.
+
+It cannot simply be left sitting in the file input between the two: React
+empties an uncontrolled form field once the form's action resolves, so by the
+time the operator confirms, the input is blank and the second post carries no
+file. Reading it up front sidesteps that, and means the confirm step does not
+depend on the picker still holding anything.
 
 ### Blank commercial columns
 
