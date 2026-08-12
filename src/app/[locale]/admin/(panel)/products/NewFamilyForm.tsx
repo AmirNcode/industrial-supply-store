@@ -61,11 +61,11 @@ export function NewFamilyForm({
         </label>
         <label className="grid gap-0.5 text-[11px]">
           {t.newFamilyNameEn}
-          <input name="nameEn" className="admin-input" required />
+          <input type="text" name="nameEn" className="admin-input" required />
         </label>
         <label className="grid gap-0.5 text-[11px]">
           {t.newFamilyNameFa}
-          <input name="nameFa" className="admin-input" dir="rtl" />
+          <input type="text" name="nameFa" className="admin-input" dir="rtl" />
         </label>
         <button type="submit" className="btn-small" disabled={demo || isPending}>
           {t.newFamilyAdd}

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getTopCategories, getFeaturedFamilies, type FamilyRow } from "@/db/queries";
 import { CategorySidebar } from "@/components/CategorySidebar";
-import { ProductIcon } from "@/components/ProductIcon";
+import { CatalogImage } from "@/components/CatalogImage";
 import { isLocale, getDict, pick, type Locale } from "@/lib/i18n";
 import { categorySpine } from "@/lib/categoryColor";
 import { formatInt } from "@/lib/money";
@@ -57,13 +57,24 @@ export default async function HomePage({
             <section key={top.id} className="mb-6 lg:mb-8">
               {/* baseline alignment, not centre: the heading and the link are
                   five sizes apart and centring leaves the link floating. */}
-              <h2 className="mb-3 flex items-baseline justify-between gap-3 border-b border-[var(--color-rule)] pb-1">
-                <Link
-                  href={`/${l}/c/${top.path}`}
-                  className="text-[19px] font-bold text-[var(--color-navy)] lg:text-[21px]"
-                >
-                  {pick(top, "name", l)}
-                </Link>
+              <h2 className="mb-3 flex items-center justify-between gap-3 border-b border-[var(--color-rule)] pb-1">
+                <span className="flex min-w-0 items-center gap-2">
+                  {top.imageUrl && (
+                    <CatalogImage
+                      imageUrl={top.imageUrl}
+                      icon={top.icon}
+                      alt=""
+                      size={30}
+                      className="h-[30px] w-[30px] shrink-0 object-contain"
+                    />
+                  )}
+                  <Link
+                    href={`/${l}/c/${top.path}`}
+                    className="text-[19px] font-bold text-[var(--color-navy)] lg:text-[21px]"
+                  >
+                    {pick(top, "name", l)}
+                  </Link>
+                </span>
                 <Link
                   href={`/${l}/c/${top.path}`}
                   prefetch={false}
@@ -115,7 +126,13 @@ function FamilyTiles({
               className="tile-face mx-auto flex aspect-square w-full items-center justify-center lg:h-[92px] lg:w-[92px]"
               style={{ "--spine": categorySpine(spinePath) } as React.CSSProperties}
             >
-              <ProductIcon name={f.icon} size={66} className="h-3/5 w-3/5 lg:h-auto lg:w-auto" />
+              <CatalogImage
+                imageUrl={f.imageUrl}
+                icon={f.icon}
+                alt={pick(f, "name", locale)}
+                size={66}
+                className="h-3/5 w-3/5 object-contain lg:h-[66px] lg:w-[66px]"
+              />
             </span>
             <span className="mt-1 block text-[11.5px] font-semibold leading-tight text-[var(--color-ink)] group-hover:text-[var(--color-navy)] group-hover:underline">
               {pick(f, "name", locale)}

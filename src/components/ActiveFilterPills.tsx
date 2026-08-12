@@ -8,9 +8,9 @@ import { toggleHref, clearAllHref, type RawSearchParams } from "@/lib/filters";
 /**
  * Horizontal row of active filters, each removable in one tap.
  *
- * On mobile the facet rail is behind a sheet, so without this there is no
- * on-screen evidence of what is narrowing the results — a buyer would see a
- * short list and have no idea why.
+ * This stays visible when the facet controls are closed, so there is always
+ * on-screen evidence of what is narrowing the results and every selection can
+ * be removed without reopening the full filter controls.
  */
 export function ActiveFilterPills({
   locale,
@@ -33,7 +33,7 @@ export function ActiveFilterPills({
   if (entries.length === 0) return null;
 
   return (
-    <div className="scroll-x -mx-3 mb-2 px-3 lg:hidden">
+    <div className="scroll-x -mx-3 mb-2 px-3 lg:mx-0 lg:px-0">
       <div className="flex items-center gap-2 pb-1">
         {entries.map(({ key, value }) => {
           const def = defByKey.get(key);

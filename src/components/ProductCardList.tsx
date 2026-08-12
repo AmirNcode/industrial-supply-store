@@ -3,7 +3,7 @@ import type { ProductRow, SpecDefRow } from "@/db/queries";
 import type { ProductDocument } from "@/db/schema";
 import { AddToCartRow } from "./AddToCartRow";
 import { InCartQty } from "./InCartQty";
-import { ProductIcon } from "./ProductIcon";
+import { CatalogImage } from "./CatalogImage";
 import { ProductDetails } from "./ProductDetails";
 import { getDict, pick, type Locale } from "@/lib/i18n";
 import { formatPrice, formatSpecNumber, formatInt, isPriceOnRequest } from "@/lib/money";
@@ -15,6 +15,7 @@ type Item = ProductRow & {
   familyEn?: string;
   familyFa?: string;
   icon?: string;
+  familyImageUrl?: string;
   /** Present on a family page, where the card can expand. */
   imageUrl?: string;
   documents?: ProductDocument[];
@@ -35,6 +36,7 @@ export function ProductCardList({
   defsByFamily,
   familyName,
   familyIcon,
+  familyImageUrl,
   rate,
 }: {
   locale: Locale;
@@ -46,6 +48,7 @@ export function ProductCardList({
   /** Set on a family page, where the name is already the page heading. */
   familyName?: string;
   familyIcon?: string;
+  familyImageUrl?: string;
   /** Toman per USD, resolved once by the page. */
   rate: number;
 }) {
@@ -199,7 +202,13 @@ export function ProductCardList({
           <li key={p.id} className="product-card px-2 py-3">
             <div className="flex gap-3">
               <span className="shrink-0 pt-0.5">
-                <ProductIcon name={p.icon ?? familyIcon ?? "box"} size={44} />
+                <CatalogImage
+                  imageUrl={p.familyImageUrl ?? familyImageUrl ?? ""}
+                  icon={p.icon ?? familyIcon ?? "box"}
+                  alt={name ?? ""}
+                  size={44}
+                  className="h-[44px] w-[44px] object-contain"
+                />
               </span>
 
               <div className="min-w-0 flex-1">
@@ -252,6 +261,7 @@ export function ProductCardList({
                   defs={detailDefs}
                   documents={documents}
                   imageUrl={p.imageUrl ?? ""}
+                  imageAlt={p.partNumber}
                   icon={p.icon ?? familyIcon ?? "box"}
                   locale={locale}
                 />

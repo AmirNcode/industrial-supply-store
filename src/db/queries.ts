@@ -11,6 +11,8 @@ export type CategoryRow = {
   nameEn: string;
   nameFa: string;
   icon: string;
+  imageUrl: string;
+  isVisible: boolean;
   productCount: number;
 };
 
@@ -27,6 +29,8 @@ export type FamilyRow = {
   groupEn: string;
   groupFa: string;
   icon: string;
+  imageUrl: string;
+  isVisible: boolean;
   productCount: number;
 };
 
@@ -71,31 +75,69 @@ export type Filters = Record<string, string[]>;
 // Categories
 // ---------------------------------------------------------------------------
 
+/**
+ * Public category rows carry a count of products that can actually be reached.
+ *
+ * The stored `product_count` intentionally remains the administrative total.
+ * Reusing it after a family or branch is hidden would advertise products that
+ * the following page refuses to show, so public counts are derived from the
+ * visible descendant families instead.
+ */
+const CATEGORY_COLS = sql`
+  c.id, c.slug, c.path, c.depth, c.parent_id AS "parentId",
+  c.name_en AS "nameEn", c.name_fa AS "nameFa", c.icon,
+  c.image_url AS "imageUrl", c.is_visible AS "isVisible",
+  COALESCE((
+    SELECT SUM(vf.product_count)::int
+    FROM product_families vf
+    JOIN categories vc ON vc.id = vf.category_id
+    WHERE vf.is_visible
+      AND (vc.path = c.path OR vc.path LIKE c.path || '/%')
+      AND NOT EXISTS (
+        SELECT 1 FROM categories hidden
+        WHERE NOT hidden.is_visible
+          AND (vc.path = hidden.path OR vc.path LIKE hidden.path || '/%')
+      )
+  ), 0)::int AS "productCount"
+`;
+
+/** A hidden category hides itself and every descendant, even if they are true. */
+const CATEGORY_VISIBLE = sql`
+  c.is_visible
+  AND NOT EXISTS (
+    SELECT 1 FROM categories hidden
+    WHERE NOT hidden.is_visible
+      AND (c.path = hidden.path OR c.path LIKE hidden.path || '/%')
+  )
+`;
+
+const FAMILY_VISIBLE = sql`f.is_visible AND ${CATEGORY_VISIBLE}`;
+
 export async function getTopCategories(): Promise<CategoryRow[]> {
   return sql<CategoryRow[]>`
-    SELECT id, slug, path, depth, parent_id AS "parentId",
-           name_en AS "nameEn", name_fa AS "nameFa", icon,
-           product_count AS "productCount"
-    FROM categories WHERE depth = 0 ORDER BY sort
+    SELECT ${CATEGORY_COLS}
+    FROM categories c
+    WHERE c.depth = 0 AND ${CATEGORY_VISIBLE}
+    ORDER BY c.sort
   `;
 }
 
 export async function getCategoryByPath(path: string): Promise<CategoryRow | null> {
   const rows = await sql<CategoryRow[]>`
-    SELECT id, slug, path, depth, parent_id AS "parentId",
-           name_en AS "nameEn", name_fa AS "nameFa", icon,
-           product_count AS "productCount"
-    FROM categories WHERE path = ${path} LIMIT 1
+    SELECT ${CATEGORY_COLS}
+    FROM categories c
+    WHERE c.path = ${path} AND ${CATEGORY_VISIBLE}
+    LIMIT 1
   `;
   return rows[0] ?? null;
 }
 
 export async function getChildren(parentId: number): Promise<CategoryRow[]> {
   return sql<CategoryRow[]>`
-    SELECT id, slug, path, depth, parent_id AS "parentId",
-           name_en AS "nameEn", name_fa AS "nameFa", icon,
-           product_count AS "productCount"
-    FROM categories WHERE parent_id = ${parentId} ORDER BY sort
+    SELECT ${CATEGORY_COLS}
+    FROM categories c
+    WHERE c.parent_id = ${parentId} AND ${CATEGORY_VISIBLE}
+    ORDER BY c.sort
   `;
 }
 
@@ -105,10 +147,10 @@ export async function getAncestors(path: string): Promise<CategoryRow[]> {
   const paths = parts.slice(0, -1).map((_, i) => parts.slice(0, i + 1).join("/"));
   if (paths.length === 0) return [];
   return sql<CategoryRow[]>`
-    SELECT id, slug, path, depth, parent_id AS "parentId",
-           name_en AS "nameEn", name_fa AS "nameFa", icon,
-           product_count AS "productCount"
-    FROM categories WHERE path = ANY(${paths}) ORDER BY depth
+    SELECT ${CATEGORY_COLS}
+    FROM categories c
+    WHERE c.path = ANY(${paths}) AND ${CATEGORY_VISIBLE}
+    ORDER BY c.depth
   `;
 }
 
@@ -122,7 +164,8 @@ const FAMILY_COLS = sql`
   f.desc_en AS "descEn", f.desc_fa AS "descFa",
   f.about_en AS "aboutEn", f.about_fa AS "aboutFa",
   f.group_en AS "groupEn", f.group_fa AS "groupFa",
-  f.icon, f.product_count AS "productCount"
+  f.icon, f.image_url AS "imageUrl", f.is_visible AS "isVisible",
+  f.product_count AS "productCount"
 `;
 
 /** Families anywhere at or below a category, so mid-tree pages are never empty. */
@@ -131,7 +174,8 @@ export async function getFamiliesInSubtree(path: string): Promise<FamilyRow[]> {
     SELECT ${FAMILY_COLS}
     FROM product_families f
     JOIN categories c ON c.id = f.category_id
-    WHERE c.path = ${path} OR c.path LIKE ${path + "/%"}
+    WHERE (c.path = ${path} OR c.path LIKE ${path + "/%"})
+      AND ${FAMILY_VISIBLE}
     ORDER BY c.sort, f.sort
   `;
 }
@@ -155,6 +199,7 @@ export async function getFeaturedFamilies(
              ) AS rn
       FROM product_families f
       JOIN categories c ON c.id = f.category_id
+      WHERE ${FAMILY_VISIBLE}
     ) ranked
     WHERE rn <= ${perCategory}
     ORDER BY "rootPath", rn
@@ -163,7 +208,11 @@ export async function getFeaturedFamilies(
 
 export async function getFamilyBySlug(slug: string): Promise<FamilyRow | null> {
   const rows = await sql<FamilyRow[]>`
-    SELECT ${FAMILY_COLS} FROM product_families f WHERE f.slug = ${slug} LIMIT 1
+    SELECT ${FAMILY_COLS}
+    FROM product_families f
+    JOIN categories c ON c.id = f.category_id
+    WHERE f.slug = ${slug} AND ${FAMILY_VISIBLE}
+    LIMIT 1
   `;
   return rows[0] ?? null;
 }
@@ -274,15 +323,15 @@ export async function suggest(q: string, limit = 8): Promise<Suggestion[]> {
   const [cats, fams, prods] = await Promise.all([
     sql<{ path: string; nameEn: string; nameFa: string; count: number }[]>`
       WITH ranked AS (
-        SELECT path, name_en AS "nameEn", name_fa AS "nameFa",
-               product_count AS count,
+        SELECT ${CATEGORY_COLS},
                greatest(
-                 catalog_search_rank(${term}, name_en),
-                 catalog_search_rank(${term}, name_fa)
+                 catalog_search_rank(${term}, c.name_en),
+                 catalog_search_rank(${term}, c.name_fa)
                ) AS relevance
-        FROM categories
+        FROM categories c
+        WHERE ${CATEGORY_VISIBLE}
       )
-      SELECT path, "nameEn", "nameFa", count
+      SELECT path, "nameEn", "nameFa", "productCount" AS count
       FROM ranked
       WHERE relevance > 0
       ORDER BY relevance DESC, count DESC
@@ -290,13 +339,15 @@ export async function suggest(q: string, limit = 8): Promise<Suggestion[]> {
     `,
     sql<{ slug: string; nameEn: string; nameFa: string; count: number }[]>`
       WITH ranked AS (
-        SELECT slug, name_en AS "nameEn", name_fa AS "nameFa",
-               product_count AS count,
+        SELECT f.slug, f.name_en AS "nameEn", f.name_fa AS "nameFa",
+               f.product_count AS count,
                greatest(
-                 catalog_search_rank(${term}, name_en),
-                 catalog_search_rank(${term}, name_fa)
+                 catalog_search_rank(${term}, f.name_en),
+                 catalog_search_rank(${term}, f.name_fa)
                ) AS relevance
-        FROM product_families
+        FROM product_families f
+        JOIN categories c ON c.id = f.category_id
+        WHERE ${FAMILY_VISIBLE}
       )
       SELECT slug, "nameEn", "nameFa", count
       FROM ranked
@@ -313,8 +364,10 @@ export async function suggest(q: string, limit = 8): Promise<Suggestion[]> {
                f.name_en AS "nameEn", f.name_fa AS "nameFa"
         FROM products p
         JOIN product_families f ON f.id = p.family_id
-        WHERE p.part_number ILIKE ${term + "%"}
-           OR p.part_number % ${term}
+        JOIN categories c ON c.id = f.category_id
+        WHERE (p.part_number ILIKE ${term + "%"}
+           OR p.part_number % ${term})
+          AND ${FAMILY_VISIBLE}
       ), ranked AS (
         SELECT candidates.*,
                catalog_search_rank(${term}, "partNumber") AS relevance
@@ -358,9 +411,11 @@ export async function search(q: string): Promise<SearchResults> {
                ) AS relevance
         FROM product_families f
         JOIN categories c ON c.id = f.category_id
+        WHERE ${FAMILY_VISIBLE}
       )
       SELECT id, slug, "categoryId", "nameEn", "nameFa", "descEn", "descFa",
-             "aboutEn", "aboutFa", "groupEn", "groupFa", icon,
+             "aboutEn", "aboutFa", "groupEn", "groupFa", icon, "imageUrl",
+             "isVisible",
              "productCount", "categoryPath"
       FROM ranked
       WHERE relevance > 0
@@ -369,17 +424,16 @@ export async function search(q: string): Promise<SearchResults> {
     `,
     sql<CategoryRow[]>`
       WITH ranked AS (
-        SELECT id, slug, path, depth, parent_id AS "parentId",
-               name_en AS "nameEn", name_fa AS "nameFa", icon,
-               product_count AS "productCount",
+        SELECT ${CATEGORY_COLS},
                greatest(
-                 catalog_search_rank(${term}, name_en),
-                 catalog_search_rank(${term}, name_fa)
+                 catalog_search_rank(${term}, c.name_en),
+                 catalog_search_rank(${term}, c.name_fa)
                ) AS relevance
-        FROM categories
+        FROM categories c
+        WHERE ${CATEGORY_VISIBLE}
       )
       SELECT id, slug, path, depth, "parentId", "nameEn", "nameFa", icon,
-             "productCount"
+             "imageUrl", "isVisible", "productCount"
       FROM ranked
       WHERE relevance > 0
       ORDER BY relevance DESC, "productCount" DESC
@@ -397,6 +451,8 @@ export async function search(q: string): Promise<SearchResults> {
                    catalog_search_rank(${term}, f.desc_fa) * 0.8
                  ) AS relevance
           FROM product_families f
+          JOIN categories c ON c.id = f.category_id
+          WHERE ${FAMILY_VISIBLE}
         ) scored
         WHERE relevance > 0
       ), candidate_scores AS MATERIALIZED (
@@ -447,6 +503,8 @@ export async function search(q: string): Promise<SearchResults> {
       FROM ranked r
       JOIN products p ON p.id = r.id
       JOIN product_families f ON f.id = p.family_id
+      JOIN categories c ON c.id = f.category_id
+      WHERE ${FAMILY_VISIBLE}
       ORDER BY r.relevance DESC, r.part_relevance DESC,
                f.product_count DESC, p.sort
       LIMIT 60
@@ -467,6 +525,7 @@ export type SubtreeProduct = ProductRow & {
   familyEn: string;
   familyFa: string;
   icon: string;
+  familyImageUrl: string;
 };
 
 /**
@@ -508,11 +567,12 @@ export async function getProductsInSubtree(
            p.pack_qty AS "packQty", p.lead_days AS "leadDays",
            p.in_stock AS "inStock",
            f.id AS "familyId", f.slug AS "familySlug", f.name_en AS "familyEn",
-           f.name_fa AS "familyFa", f.icon
+           f.name_fa AS "familyFa", f.icon, f.image_url AS "familyImageUrl"
     FROM products p
     JOIN product_families f ON f.id = p.family_id
     JOIN categories c ON c.id = f.category_id
-    WHERE c.path = ${path} OR c.path LIKE ${path + "/%"}
+    WHERE (c.path = ${path} OR c.path LIKE ${path + "/%"})
+      AND ${FAMILY_VISIBLE}
     ORDER BY f.sort, p.sort
     LIMIT ${limit} OFFSET ${offset}
   `;
@@ -524,7 +584,8 @@ export async function countProductsInSubtree(path: string): Promise<number> {
     FROM products p
     JOIN product_families f ON f.id = p.family_id
     JOIN categories c ON c.id = f.category_id
-    WHERE c.path = ${path} OR c.path LIKE ${path + "/%"}
+    WHERE (c.path = ${path} OR c.path LIKE ${path + "/%"})
+      AND ${FAMILY_VISIBLE}
   `;
   return rows[0]?.n ?? 0;
 }
@@ -541,7 +602,10 @@ export async function findByPartNumbers(
            p.pack_qty AS "packQty", p.lead_days AS "leadDays",
            p.in_stock AS "inStock",
            f.name_en AS "familyEn", f.name_fa AS "familyFa"
-    FROM products p JOIN product_families f ON f.id = p.family_id
+    FROM products p
+    JOIN product_families f ON f.id = p.family_id
+    JOIN categories c ON c.id = f.category_id
     WHERE upper(p.part_number) = ANY(${upper})
+      AND ${FAMILY_VISIBLE}
   `;
 }

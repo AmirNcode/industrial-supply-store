@@ -3,32 +3,30 @@ import { DEMO_MODE } from "@/lib/demo";
 import { getFxSettings, getFxRate } from "@/lib/fx";
 import { envFxRate } from "@/lib/fxRate";
 import { FxRatePanel } from "@/components/FxRatePanel";
-import { saveFxAction } from "../../actions";
+import { getSiteContact } from "@/lib/siteContact";
+import { saveFxAction, saveSiteContactAction } from "../../actions";
 import { isLocale, getDict, type Locale } from "@/lib/i18n";
 import { formatInt } from "@/lib/money";
 
-/**
- * Settings. Today that is the exchange rate and nothing else.
- *
- * It has its own page rather than a strip above the order queue because it is
- * consulted rarely and changes every price on the site when it is — sitting
- * above a list staff scan all day is the wrong place for a control with that
- * blast radius.
- */
+/** Settings that staff change occasionally, away from the daily order queue. */
 export default async function AdminSettingsPage({
   params,
   searchParams,
 }: {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{ fx?: string }>;
+  searchParams: Promise<{ fx?: string; contact?: string }>;
 }) {
   const { locale } = await params;
   if (!isLocale(locale)) notFound();
   const l = locale as Locale;
   const t = getDict(l);
-  const { fx } = await searchParams;
+  const { fx, contact: contactStatus } = await searchParams;
 
-  const [fxSettings, rate] = await Promise.all([getFxSettings(), getFxRate()]);
+  const [fxSettings, rate, contact] = await Promise.all([
+    getFxSettings(),
+    getFxRate(),
+    getSiteContact(),
+  ]);
 
   return (
     <>
@@ -41,6 +39,61 @@ export default async function AdminSettingsPage({
       <form action={saveFxAction} id="fx-save" className="hidden">
         <input type="hidden" name="locale" value={l} />
       </form>
+
+      <section className="mb-4 border border-[var(--color-rule)] p-3">
+        <h2 className="mb-1 text-[13px] font-bold">{t.siteContact}</h2>
+        <p className="mb-3 text-[11px] text-[var(--color-ink-muted)]">
+          {t.siteContactHint}
+        </p>
+
+        {contactStatus === "saved" && (
+          <SuccessBanner>{t.siteContactSaved}</SuccessBanner>
+        )}
+        {contactStatus === "invalid-email" && (
+          <ErrorBanner>{t.siteContactInvalidEmail}</ErrorBanner>
+        )}
+        {contactStatus === "invalid-phone" && (
+          <ErrorBanner>{t.siteContactInvalidPhone}</ErrorBanner>
+        )}
+
+        <form
+          action={saveSiteContactAction}
+          className="grid max-w-[680px] gap-3 sm:grid-cols-2"
+        >
+          <input type="hidden" name="locale" value={l} />
+          <label className="grid gap-0.5 text-[11px] font-semibold">
+            {t.email}
+            <input
+              type="email"
+              name="email"
+              dir="ltr"
+              defaultValue={contact.email}
+              autoComplete="off"
+              disabled={DEMO_MODE}
+              required
+            />
+          </label>
+          <label className="grid gap-0.5 text-[11px] font-semibold">
+            {t.phone}
+            <input
+              type="tel"
+              name="phone"
+              dir="ltr"
+              defaultValue={contact.phone}
+              autoComplete="off"
+              disabled={DEMO_MODE}
+              required
+            />
+          </label>
+          <button
+            type="submit"
+            className="btn-small justify-self-start sm:col-span-2"
+            disabled={DEMO_MODE}
+          >
+            {t.siteContactSave}
+          </button>
+        </form>
+      </section>
 
       {fx === "saved" && (
         <p className="mb-2 border border-[var(--color-ok)] bg-[var(--color-ok-soft)] px-3 py-2 text-[12px] text-[var(--color-ok)]">
@@ -65,6 +118,14 @@ export default async function AdminSettingsPage({
 function ErrorBanner({ children }: { children: React.ReactNode }) {
   return (
     <p className="mb-2 border border-[var(--color-danger)] bg-[#fdf2f1] px-3 py-2 text-[12px] text-[var(--color-danger)]">
+      {children}
+    </p>
+  );
+}
+
+function SuccessBanner({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="mb-2 border border-[var(--color-ok)] bg-[var(--color-ok-soft)] px-3 py-2 text-[12px] text-[var(--color-ok)]">
       {children}
     </p>
   );

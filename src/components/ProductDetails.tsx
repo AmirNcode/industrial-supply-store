@@ -22,6 +22,7 @@ export function ProductDetails({
   defs,
   documents,
   imageUrl,
+  imageAlt,
   icon,
   locale,
 }: {
@@ -30,6 +31,7 @@ export function ProductDetails({
   defs: SpecDefRow[];
   documents: ProductDocument[];
   imageUrl: string;
+  imageAlt: string;
   icon: string;
   locale: Locale;
 }) {
@@ -55,7 +57,7 @@ export function ProductDetails({
           // host allow-listed before a single one renders.
           <img
             src={imageUrl}
-            alt=""
+            alt={imageAlt}
             className="max-h-[110px] w-full rounded-[3px] border border-[var(--color-rule-light)] object-contain"
           />
         ) : (

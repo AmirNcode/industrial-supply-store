@@ -83,6 +83,7 @@ export function DeleteControl({
       </span>
 
       <input
+        type="text"
         name="confirm"
         className="admin-input w-24"
         placeholder={t.deleteType}

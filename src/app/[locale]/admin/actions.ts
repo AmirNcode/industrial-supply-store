@@ -11,6 +11,11 @@ import { assertAdminWrite, signInAdmin, signOutAdmin } from "@/lib/admin";
 import { getFxRate, saveFxSettings } from "@/lib/fx";
 import { envFxRate, isFxMode, isPlausibleRate, parseRate } from "@/lib/fxRate";
 import { safeLocale } from "@/lib/i18n";
+import { saveSiteContact } from "@/lib/siteContact";
+import {
+  normalizeContactEmail,
+  normalizeContactPhone,
+} from "@/lib/siteContactValues";
 import { assertTransition, isOrderStatus } from "@/lib/orders";
 import { addComment } from "@/db/commentQueries";
 import { sellHeldStock, releaseHeldStock } from "@/db/inventoryQueries";
@@ -66,6 +71,21 @@ export async function saveFxAction(formData: FormData): Promise<void> {
   // a rate change would take up to an hour to reach the pages that show it.
   revalidatePath("/", "layout");
   redirect(`/${locale}/admin/settings?fx=saved`);
+}
+
+export async function saveSiteContactAction(formData: FormData): Promise<void> {
+  await assertAdminWrite();
+
+  const locale = safeLocale(formData);
+  const email = normalizeContactEmail(String(formData.get("email") ?? ""));
+  if (!email) redirect(`/${locale}/admin/settings?contact=invalid-email`);
+
+  const phone = normalizeContactPhone(String(formData.get("phone") ?? ""));
+  if (!phone) redirect(`/${locale}/admin/settings?contact=invalid-phone`);
+
+  await saveSiteContact(email, phone);
+  revalidatePath("/", "layout");
+  redirect(`/${locale}/admin/settings?contact=saved`);
 }
 
 /**

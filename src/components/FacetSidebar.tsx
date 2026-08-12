@@ -48,20 +48,27 @@ export function FacetSidebar({
     <aside className={band ? "w-full" : "shrink-0"} style={band ? undefined : { width: 210 }}>
       {/* In a band the fold's own summary already says "Filter by", so only the
           clear-all link is worth repeating. */}
-      <div
-        className={
-          band
-            ? "mb-2 flex justify-end"
-            : "mb-2 flex items-baseline justify-between border-b border-[var(--color-ink)] pb-1"
-        }
-      >
-        {!band && <h2 className="text-[13px] font-bold">{t.filterBy}</h2>}
-        {active > 0 && (
-          <Link href={clearAllHref(base, searchParams)} prefetch={false} scroll={false} className="text-[11px]">
-            {t.clearAll}
-          </Link>
-        )}
-      </div>
+      {(!band || active > 0) && (
+        <div
+          className={
+            band
+              ? "mb-2 flex justify-end"
+              : "mb-2 flex items-baseline justify-between border-b border-[var(--color-ink)] pb-1"
+          }
+        >
+          {!band && <h2 className="text-[13px] font-bold">{t.filterBy}</h2>}
+          {active > 0 && (
+            <Link
+              href={clearAllHref(base, searchParams)}
+              prefetch={false}
+              scroll={false}
+              className="text-[11px]"
+            >
+              {t.clearAll}
+            </Link>
+          )}
+        </div>
+      )}
 
       <div className={band ? "grid gap-x-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" : ""}>
       {ordered.map((facet) => {

@@ -1,5 +1,6 @@
 import { parse } from "csv-parse/sync";
 import { parseNumeric, type BuiltinField, type ImportPlan } from "./columnPlan";
+import { normalizeCatalogImageUrl } from "./catalogImages";
 import type { ProductDocument } from "@/db/schema";
 
 /**
@@ -44,6 +45,9 @@ export const FIXED_COLUMNS = [
   "inventory_sold",
 ] as const;
 
+/** Included in new templates, but not required in older round-trip files. */
+const OPTIONAL_COLUMNS = ["image_url"] as const;
+
 /** The inventory columns, which share one validation rule and one warning. */
 export const INVENTORY_COLUMNS = [
   "inventory_available",
@@ -52,7 +56,7 @@ export const INVENTORY_COLUMNS = [
 ] as const;
 
 export function columnsFor(defs: readonly ImportSpecDef[]): string[] {
-  return ["part_number", ...defs.map((d) => d.key), ...FIXED_COLUMNS];
+  return ["part_number", ...defs.map((d) => d.key), ...FIXED_COLUMNS, ...OPTIONAL_COLUMNS];
 }
 
 export type ImportRow = {
@@ -66,14 +70,12 @@ export type ImportRow = {
   inventoryOnHold: number;
   inventorySold: number;
   /**
-   * Undefined when the file had no such column — which is the normal case, as
-   * neither is in the template.
+   * Undefined when the file had no image column, or when that cell is blank.
    *
-   * The distinction matters: a blank cell in a column that *is* mapped clears
-   * the value, but a file that never mentioned images must leave the ones
-   * already on the products alone. Images and documents will be managed by an
-   * upload screen rather than by spreadsheet, so almost every import should
-   * leave them untouched.
+   * The distinction matters: staff commonly add the column before every URL is
+   * ready, and a blank cell must preserve an image already on that product.
+   * Clearing a category/family image is an explicit admin action; product
+   * images are URL-only and likewise never disappear from a blank spreadsheet.
    */
   imageUrl?: string;
   documents?: ProductDocument[];
@@ -298,6 +300,21 @@ function parseRows(
       });
     }
 
+    const imageRaw = field("image_url");
+    let imageUrl: string | undefined;
+    if (imageRaw !== "") {
+      const normalized = normalizeCatalogImageUrl(imageRaw);
+      if (normalized === null) {
+        errors.push({
+          row: rowNo,
+          column: "image_url",
+          message: `"${imageRaw}" is not an HTTP or HTTPS image URL.`,
+        });
+      } else {
+        imageUrl = normalized;
+      }
+    }
+
     if (errors.length > before) return;
 
     rows.push({
@@ -310,7 +327,7 @@ function parseRows(
       inventoryAvailable: counts.inventory_available,
       inventoryOnHold: counts.inventory_on_hold,
       inventorySold: counts.inventory_sold,
-      ...(builtinAt.has("image_url") ? { imageUrl: field("image_url") } : {}),
+      ...(builtinAt.has("image_url") && imageUrl !== undefined ? { imageUrl } : {}),
       ...(builtinAt.has("documents")
         ? { documents: parseDocuments(field("documents")) }
         : {}),
@@ -359,7 +376,8 @@ export function parseImport(
     }
     seenHeader.add(name);
   }
-  for (const name of expected) {
+  const required = ["part_number", ...defs.map((d) => d.key), ...FIXED_COLUMNS];
+  for (const name of required) {
     if (!seenHeader.has(name)) {
       errors.push({ row: 1, column: name, message: `Column "${name}" is missing.` });
     }
@@ -389,6 +407,10 @@ export function parseImport(
     ...FIXED_COLUMNS.map(
       (name): Located => ({ role: "builtin", at: at.get(name)!, field: name }),
     ),
+    ...OPTIONAL_COLUMNS.flatMap((name): Located[] => {
+      const col = at.get(name);
+      return col === undefined ? [] : [{ role: "builtin", at: col, field: name }];
+    }),
   ];
 
   return parseRows(dataRows, header.length, located, false);

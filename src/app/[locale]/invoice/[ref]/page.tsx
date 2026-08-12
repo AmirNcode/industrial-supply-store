@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { getInvoiceByRef } from "@/db/invoiceQueries";
 import { lineTotalCents, subtotalCents } from "@/lib/invoice";
 import { getSeller } from "@/lib/seller";
+import { getSiteContact } from "@/lib/siteContact";
 import { isAdmin } from "@/lib/admin";
 import { DEMO_MODE } from "@/lib/demo";
 import { currentUserId } from "@/lib/session";
@@ -101,7 +102,8 @@ export default async function InvoicePage({
   if (!staff && (order.userId === null || order.userId !== uid)) notFound();
 
   const rate = order.fxRateToToman;
-  const seller = getSeller(l);
+  const contact = await getSiteContact();
+  const seller = { ...getSeller(l), email: contact.email, phone: contact.phone };
   const subtotal = subtotalCents(items);
   const issued = new Date(order.invoicedAt).toISOString().slice(0, 10);
   // `invoiced → cancelled` is one click in the admin queue, and the emailed

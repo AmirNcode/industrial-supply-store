@@ -7,6 +7,7 @@ import { getDict, type Locale } from "@/lib/i18n";
 import { SearchBar } from "./SearchBar";
 import { LocaleSwitch } from "./LocaleSwitch";
 import { CartBadge } from "./CartBadge";
+import type { SiteContact } from "@/lib/siteContactValues";
 
 /**
  * The phone masthead.
@@ -26,7 +27,13 @@ import { CartBadge } from "./CartBadge";
  * Still a client component: the drawer needs state, and closing it on
  * navigation needs the current route.
  */
-export function MobileHeader({ locale }: { locale: Locale }) {
+export function MobileHeader({
+  locale,
+  contact,
+}: {
+  locale: Locale;
+  contact: SiteContact;
+}) {
   const t = getDict(locale);
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -210,20 +217,17 @@ export function MobileHeader({ locale }: { locale: Locale }) {
             </li>
           </ul>
           <div className="px-4 py-3 text-[12px] text-[var(--color-chrome-muted)]">
-            <div className="mb-1 font-semibold text-[var(--color-chrome-ink)]">
-              {t.emailUs}
-            </div>
             <a
-              href="mailto:sales@temex.example"
-              className="tech block !text-[var(--color-chrome-muted)]"
+              href={`mailto:${contact.email}`}
+              className="tech mb-1 block !text-[var(--color-chrome-ink)]"
             >
-              sales@temex.example
+              {contact.email}
             </a>
             <a
-              href="tel:+982188880000"
+              href={contact.phoneHref}
               className="tech block !text-[var(--color-chrome-muted)]"
             >
-              +98 21 8888 0000
+              {contact.phone}
             </a>
           </div>
         </nav>

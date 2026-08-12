@@ -41,8 +41,9 @@ export function FacetList({
   return (
     <div>
       {searchable && (
-        <div className="mb-1 flex items-center border border-[var(--color-rule)] bg-white">
+        <div className="mb-1 flex items-center border border-[var(--color-control-border)] bg-white">
           <input
+            type="search"
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder={searchLabel}

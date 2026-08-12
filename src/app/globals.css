@@ -133,6 +133,10 @@
 
   --color-rule: #d8dde5;
   --color-rule-light: #eceff4;
+  /* Form controls need a clearer edge than structural dividers. This muted
+     blue-gray is still light, but carries enough of the navy palette to stay
+     visible against both white and the near-white panel backgrounds. */
+  --color-control-border: #b8c5d8;
   --color-panel: #f3f5f9;
   --color-panel-alt: #fafbfd;
 
@@ -505,15 +509,14 @@ html[lang="fa"] .spec-table thead th {
    rather than hidden — with every group closed by default, the triangle is the
    only thing saying these open at all. */
 .admin-group > summary,
-.filter-fold > summary {
+.filter-trigger {
   list-style: none;
 }
 .admin-group > summary::-webkit-details-marker,
-.filter-fold > summary::-webkit-details-marker {
+.filter-trigger::-webkit-details-marker {
   display: none;
 }
-.admin-group > summary::before,
-.filter-fold > summary::before {
+.admin-group > summary::before {
   content: "";
   flex: none;
   border-inline-start: 4px solid var(--color-ink-muted);
@@ -521,19 +524,86 @@ html[lang="fa"] .spec-table thead th {
   border-bottom: 3.5px solid transparent;
   transition: transform 0.12s;
 }
-html[dir="rtl"] .admin-group > summary::before,
-.filter-fold > summary::before {
+html[dir="rtl"] .admin-group > summary::before {
   transform: rotate(180deg);
 }
 .admin-group[open] > summary::before,
-.filter-fold[open] > summary::before,
-html[dir="rtl"] .admin-group[open] > summary::before,
-html[dir="rtl"] .filter-fold[open] > summary::before {
+html[dir="rtl"] .admin-group[open] > summary::before {
   transform: rotate(90deg);
 }
-.admin-group > summary:hover,
-.filter-fold > summary:hover {
+.admin-group > summary:hover {
   color: var(--color-navy);
+}
+
+/* The desktop filter is a toolbar rather than a hairline disclosure. It keeps
+   the table's full width while making the control easy to find, understand and
+   hit. Native details/summary preserves keyboard and no-JavaScript behaviour. */
+.filter-fold {
+  overflow: hidden;
+  border: 1px solid var(--color-rule);
+  border-radius: 5px;
+  background: #fff;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+.filter-fold[open] {
+  border-color: var(--color-navy-lift);
+  box-shadow: 0 0 0 1px rgba(42, 93, 176, 0.12);
+}
+.filter-trigger {
+  display: flex;
+  min-height: 52px;
+  cursor: pointer;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  background: var(--color-panel);
+  transition: background 0.12s;
+}
+.filter-trigger:hover,
+.filter-fold[open] > .filter-trigger {
+  background: var(--color-navy-tint);
+}
+.filter-trigger:focus-visible {
+  outline: 2px solid var(--color-navy-lift);
+  outline-offset: -3px;
+}
+.filter-trigger-icon {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  place-items: center;
+  border-radius: 3px;
+  background: var(--color-navy);
+  color: #fff;
+}
+.filter-trigger-results {
+  flex: none;
+  border-inline-start: 1px solid var(--color-rule);
+  padding-inline-start: 12px;
+  font-size: 11px;
+  color: var(--color-ink-muted);
+}
+.filter-trigger-chevron {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  place-items: center;
+  border: 1px solid var(--color-rule);
+  border-radius: 3px;
+  background: #fff;
+  color: var(--color-navy);
+}
+.filter-trigger-chevron svg {
+  transition: transform 0.12s;
+}
+.filter-fold[open] .filter-trigger-chevron svg {
+  transform: rotate(180deg);
+}
+.filter-fold-content {
+  border-top: 1px solid var(--color-rule);
+  padding: 12px 12px 0;
 }
 
 /* The card list's version of the same fold. */
@@ -624,6 +694,25 @@ html[dir="rtl"] .filter-fold[open] > summary::before {
   font-variant-numeric: tabular-nums;
 }
 
+/* The customer catalog is scanned column-by-column, so its desktop headings
+   and values share one visual axis. Other `.spec-table` instances (admin,
+   search, cart) keep their task-specific alignment. Expanded details remain
+   start-aligned because they are prose, not cells in the comparison grid. */
+.catalog-table thead th,
+.catalog-table tbody tr.product-row > td,
+html[dir="rtl"] .catalog-table thead th.tech-num,
+html[dir="rtl"] .catalog-table tbody tr.product-row > td.tech-num {
+  text-align: center;
+}
+.catalog-table tbody tr.product-row > td {
+  vertical-align: middle;
+}
+
+.catalog-art {
+  display: block;
+  object-fit: contain;
+}
+
 /* Ink, not a link colour, and no `:visited` — this is a `<span>`, so the blue it
    used to wear dressed a dead identifier up as something clickable. The two
    cart tables are the only place a part number is a real anchor, and those get
@@ -638,14 +727,19 @@ html[dir="rtl"] .filter-fold[open] > summary::before {
    Controls
    -------------------------------------------------------------------------- */
 
+/* `input:not([type])` covers HTML's default text input. Several compact admin
+   editors intentionally relied on that default, so omitting it here made those
+   fields look like plain text even though explicitly typed fields had borders. */
+input:not([type]),
 input[type="text"],
 input[type="number"],
 input[type="email"],
+input[type="url"],
 input[type="tel"],
 input[type="password"],
 textarea,
 select {
-  border: 1px solid var(--color-rule);
+  border: 1px solid var(--color-control-border);
   border-radius: 3px;
   background: #fff;
   padding: 4px 7px;
@@ -670,6 +764,26 @@ select:focus {
   padding: 1px 4px;
   font-size: var(--text-xs);
   max-width: 100%;
+}
+
+.catalog-image-file {
+  max-width: 100%;
+  color: var(--color-ink-muted);
+}
+.catalog-image-file::file-selector-button {
+  margin-inline-end: 7px;
+  border: 1px solid var(--color-rule);
+  border-radius: 3px;
+  background: var(--color-panel);
+  padding: 2px 7px;
+  color: var(--color-ink);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.catalog-image-file::file-selector-button:hover {
+  border-color: var(--color-navy-lift);
+  background: var(--color-navy-tint);
 }
 
 /* A secondary control that sits inside a table cell — reorder and delete.
@@ -999,10 +1113,14 @@ a:hover > .tile-face {
 /* iOS zooms the page when a focused input is under 16px. The desktop UI is
    deliberately 13px, so bump form controls only at phone widths. */
 @media (max-width: 1023px) {
+  input:not([type]),
   input[type="text"],
   input[type="number"],
   input[type="email"],
+  input[type="url"],
+  input[type="tel"],
   input[type="password"],
+  input[type="search"],
   textarea,
   select {
     font-size: 16px;

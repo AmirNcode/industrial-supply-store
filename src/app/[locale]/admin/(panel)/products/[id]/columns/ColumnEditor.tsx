@@ -165,6 +165,7 @@ export function ColumnEditor({
                   <td className={`tech ${dropped ? "line-through" : ""}`}>{r.key}</td>
                   <td>
                     <input
+                      type="text"
                       className="admin-input"
                       value={r.labelEn}
                       disabled={dropped || demo}
@@ -173,6 +174,7 @@ export function ColumnEditor({
                   </td>
                   <td>
                     <input
+                      type="text"
                       className="admin-input"
                       dir="rtl"
                       value={r.labelFa}
@@ -182,6 +184,7 @@ export function ColumnEditor({
                   </td>
                   <td>
                     <input
+                      type="text"
                       className="admin-input w-14"
                       value={r.unit}
                       disabled={dropped || demo}

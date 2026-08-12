@@ -56,6 +56,10 @@ const COLUMNS: readonly (readonly [string, string])[] = [
   ["spec_defs", "csv_alias"],
   ["product_families", "field_aliases"],
   ["products", "image_url"],
+  ["categories", "image_url"],
+  ["categories", "is_visible"],
+  ["product_families", "image_url"],
+  ["product_families", "is_visible"],
   ["products", "documents"],
 ];
 

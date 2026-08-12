@@ -35,6 +35,10 @@ Set in Vercel → Settings → Environment Variables → Production.
 | `ADMIN_PASSWORD` | runtime | build fine, `/admin` throws |
 | `USD_TO_TOMAN` | runtime | falls back to a hardcoded rate |
 | `SELLER_*` | runtime | invoices print "set SELLER_NAME" |
+| `SUPABASE_URL` | runtime image upload | URL images still work; file upload reports not configured |
+| `SUPABASE_PUBLIC_URL` | runtime image upload | falls back to `SUPABASE_URL` |
+| `SUPABASE_SECRET_KEY` or `SUPABASE_SERVICE_ROLE_KEY` | runtime image upload | file upload reports not configured |
+| `SUPABASE_CATALOG_BUCKET` | runtime image upload | defaults to `catalog-images` |
 
 `AUTH_SECRET` is the surprising one. `src/lib/session.ts` resolves it at module
 import, so `next build` needs it during "Collecting page data" — not only the
@@ -108,6 +112,21 @@ Run it before the deploy, not after: the catalog selects `display` and
 them. It is idempotent, so running it twice is free, and it is safe to run
 against a database that already has the columns.
 
+The 2026-08-12 catalog media work adds `image_url` and `is_visible` to both
+`categories` and `product_families`. It is also additive and idempotent:
+
+```bash
+npm run db:catalog-media:remote
+```
+
+Run it before a build containing the new catalog queries. File uploads also
+need Supabase Storage at runtime. `SUPABASE_URL` is the URL the Next.js server
+can reach; if that is an internal Docker hostname, set `SUPABASE_PUBLIC_URL` to
+the external reverse-proxy origin so URLs saved into the catalog work in a
+customer's browser. Keep the secret/service-role key server-side. The first
+upload creates (or tightens) the dedicated public bucket to JPG, PNG and WebP,
+with a 5 MB object limit.
+
 ### 1. `drizzle-kit push` destroys things it cannot express
 
 This has bitten the project three separate times. Push reconciles by diffing the
@@ -162,8 +181,9 @@ copy and exercising reads, writes, search, cart and admin.
 Because push turns it off, the enable lives in `extensions.sql` and both
 `apply-extensions` and `db:verify:remote` fail rather than assume.
 
-This trap disappears on the self-hosted instance, which has no REST API — but
-leaving RLS on there costs nothing.
+The future self-hosted Supabase stack can expose the same REST and Storage APIs,
+so keeping RLS enabled and keeping service credentials out of browser code
+remain required there too.
 
 ### 5. Supabase's direct host is IPv6-only
 

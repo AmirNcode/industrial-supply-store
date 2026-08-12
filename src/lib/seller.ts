@@ -4,11 +4,12 @@ import type { Locale } from "./i18n";
 /**
  * Who the invoice is from.
  *
- * Environment rather than a database table: this changes when the company
- * moves office, not when a user clicks something, and putting it behind an
- * admin form would be a settings screen nobody opens twice. The defaults are
- * deliberately obviously-placeholder, so an unconfigured deployment produces
- * an invoice that looks unfinished instead of one that looks real and is wrong.
+ * Legal identity, address and tax ID stay in deployment configuration. Email
+ * and phone are also the deployment fallbacks, but the invoice page overlays
+ * the administrator's site-contact settings when they have been saved. The
+ * defaults are deliberately obviously-placeholder, so an unconfigured
+ * deployment produces an invoice that looks unfinished instead of one that
+ * looks real and is wrong.
  */
 export type Seller = {
   name: string;

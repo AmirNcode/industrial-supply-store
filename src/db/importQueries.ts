@@ -91,6 +91,10 @@ export type FamilyListRow = {
   categoryId: number;
   categoryNameEn: string;
   categoryNameFa: string;
+  categoryImageUrl: string;
+  categoryIsVisible: boolean;
+  imageUrl: string;
+  isVisible: boolean;
   inventoryAvailable: number;
   inventoryOnHold: number;
   inventorySold: number;
@@ -101,9 +105,11 @@ export type FamilyListRow = {
 export async function getFamiliesGrouped(): Promise<FamilyListRow[]> {
   return sql<FamilyListRow[]>`
     SELECT f.id, f.slug, f.name_en AS "nameEn", f.name_fa AS "nameFa",
-           f.product_count AS "productCount",
+           f.product_count AS "productCount", f.image_url AS "imageUrl",
+           f.is_visible AS "isVisible",
            c.id AS "categoryId", c.name_en AS "categoryNameEn",
-           c.name_fa AS "categoryNameFa",
+           c.name_fa AS "categoryNameFa", c.image_url AS "categoryImageUrl",
+           c.is_visible AS "categoryIsVisible",
            COALESCE(s.available, 0)::int AS "inventoryAvailable",
            COALESCE(s.on_hold, 0)::int   AS "inventoryOnHold",
            COALESCE(s.sold, 0)::int      AS "inventorySold",
@@ -139,6 +145,7 @@ export type ExportProduct = {
   inventoryAvailable: number;
   inventoryOnHold: number;
   inventorySold: number;
+  imageUrl: string;
 };
 
 export async function getProductsForExport(familyId: number): Promise<ExportProduct[]> {
@@ -147,7 +154,7 @@ export async function getProductsForExport(familyId: number): Promise<ExportProd
            pack_qty AS "packQty", lead_days AS "leadDays", in_stock AS "inStock",
            inventory_available AS "inventoryAvailable",
            inventory_on_hold AS "inventoryOnHold",
-           inventory_sold AS "inventorySold"
+           inventory_sold AS "inventorySold", image_url AS "imageUrl"
     FROM products WHERE family_id = ${familyId} ORDER BY sort, id
   `;
 }
@@ -182,6 +189,7 @@ export function exportRow(p: ExportProduct, defs: readonly FamilySpecDef[]): str
     String(p.inventoryAvailable),
     String(p.inventoryOnHold),
     String(p.inventorySold),
+    p.imageUrl,
   ];
 }
 

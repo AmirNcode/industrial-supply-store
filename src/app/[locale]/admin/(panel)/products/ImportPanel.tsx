@@ -87,6 +87,16 @@ export function ImportPanel({
         <details key={g.id} className="admin-group" open={active || undefined}>
           <summary className="flex cursor-pointer items-center gap-2 border-b border-[var(--color-rule)] pb-0.5 text-[13px] font-bold">
             <span>{g.name}</span>
+            <Link
+              className="text-[11px] font-normal"
+              href={`/${locale}/admin/products/categories/${g.id}`}
+              onClick={(event) => event.stopPropagation()}
+            >
+              {t.editCategory}
+            </Link>
+            {!g.families[0]?.categoryIsVisible && (
+              <span className="pill pill-muted font-normal">{t.catalogHidden}</span>
+            )}
             {/* Collapsed is the default, so the heading has to carry enough to
                 choose a category without opening every one of them. */}
             <span className="tech text-[11px] font-normal text-[var(--color-ink-muted)]">
@@ -162,6 +172,15 @@ export function ImportPanel({
                   <Link className="text-[11px]" href={`/${locale}/admin/products/${f.id}/columns`}>
                     {t.editColumns}
                   </Link>
+                  <Link
+                    className="text-[11px]"
+                    href={`/${locale}/admin/products/categories/${g.id}#family-${f.id}`}
+                  >
+                    {t.editImage}
+                  </Link>
+                  {!f.isVisible && (
+                    <span className="pill pill-muted">{t.catalogHidden}</span>
+                  )}
                   <DeleteControl
                     what="family"
                     id={f.id}

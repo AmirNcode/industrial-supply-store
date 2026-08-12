@@ -24,7 +24,7 @@ const HEADER =
 test("the column set is the family's spec keys between part number and the fixed tail", () => {
   assert.deepEqual(columnsFor(DEFS), [
     "part_number", "dash", "width", "price_usd", "pack_qty", "lead_days", "in_stock",
-    "inventory_available", "inventory_on_hold", "inventory_sold",
+    "inventory_available", "inventory_on_hold", "inventory_sold", "image_url",
   ]);
   assert.ok(FIXED_COLUMNS.includes("price_usd"));
 });
@@ -258,6 +258,28 @@ test("a file with no documents column leaves the products' documents alone", () 
   const { rows } = parseImport(`${HEADER}\nP1,004,0.07,0.35,1,0,yes,10,0,0\n`, DEFS);
   assert.equal(rows[0].documents, undefined);
   assert.equal(rows[0].imageUrl, undefined);
+});
+
+test("a blank image_url preserves an existing product image", () => {
+  const csv = `${HEADER},image_url\nP1,004,0.07,0.35,1,0,yes,10,0,0,\n`;
+  const { rows, errors } = parseImport(csv, DEFS);
+  assert.deepEqual(errors, []);
+  assert.equal(rows[0].imageUrl, undefined);
+});
+
+test("image_url accepts HTTP images and refuses unsafe schemes", () => {
+  const ok = parseImport(
+    `${HEADER},image_url\nP1,004,0.07,0.35,1,0,yes,10,0,0,https://img.example/gate.webp\n`,
+    DEFS,
+  );
+  assert.deepEqual(ok.errors, []);
+  assert.equal(ok.rows[0].imageUrl, "https://img.example/gate.webp");
+
+  const bad = parseImport(
+    `${HEADER},image_url\nP1,004,0.07,0.35,1,0,yes,10,0,0,javascript:alert(1)\n`,
+    DEFS,
+  );
+  assert.equal(bad.errors[0].column, "image_url");
 });
 
 test("an ignored header contributes nothing to the product", () => {

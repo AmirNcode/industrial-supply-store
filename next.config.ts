@@ -23,6 +23,8 @@ const nextConfig: NextConfig = {
   // Spec tables are huge; keep the server payload lean.
   experimental: {
     optimizePackageImports: ["drizzle-orm"],
+    // Five-megabyte catalog images plus multipart field overhead.
+    serverActions: { bodySizeLimit: "6mb" },
   },
   async redirects() {
     return [{ source: "/", destination: "/en", permanent: false }];

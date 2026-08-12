@@ -19,6 +19,113 @@ export type CategoryChoice = {
   nameFa: string;
 };
 
+export type CatalogCategoryEditorRow = {
+  id: number;
+  path: string;
+  nameEn: string;
+  nameFa: string;
+  icon: string;
+  imageUrl: string;
+  isVisible: boolean;
+};
+
+export type CatalogCategoryListRow = CatalogCategoryEditorRow & {
+  depth: number;
+  productCount: number;
+};
+
+export type CatalogFamilyEditorRow = {
+  id: number;
+  categoryId: number;
+  nameEn: string;
+  nameFa: string;
+  icon: string;
+  imageUrl: string;
+  isVisible: boolean;
+};
+
+export type CatalogCategoryEditor = {
+  category: CatalogCategoryEditorRow;
+  children: CatalogCategoryEditorRow[];
+  families: CatalogFamilyEditorRow[];
+};
+
+/** Every taxonomy node, including branch categories that own no family rows. */
+export async function getCatalogCategoriesForAdmin(): Promise<CatalogCategoryListRow[]> {
+  return sql<CatalogCategoryListRow[]>`
+    SELECT id, path, depth, name_en AS "nameEn", name_fa AS "nameFa", icon,
+           image_url AS "imageUrl", is_visible AS "isVisible",
+           product_count AS "productCount"
+    FROM categories
+    ORDER BY path
+  `;
+}
+
+/** Everything editable from one category's media page. */
+export async function getCatalogCategoryEditor(
+  categoryId: number,
+): Promise<CatalogCategoryEditor | null> {
+  if (!Number.isInteger(categoryId) || categoryId <= 0) return null;
+
+  const [category] = await sql<CatalogCategoryEditorRow[]>`
+    SELECT id, path, name_en AS "nameEn", name_fa AS "nameFa", icon,
+           image_url AS "imageUrl", is_visible AS "isVisible"
+    FROM categories WHERE id = ${categoryId}
+  `;
+  if (!category) return null;
+
+  const [children, families] = await Promise.all([
+    sql<CatalogCategoryEditorRow[]>`
+      SELECT id, path, name_en AS "nameEn", name_fa AS "nameFa", icon,
+             image_url AS "imageUrl", is_visible AS "isVisible"
+      FROM categories WHERE parent_id = ${categoryId} ORDER BY sort, id
+    `,
+    sql<CatalogFamilyEditorRow[]>`
+      SELECT id, category_id AS "categoryId", name_en AS "nameEn",
+             name_fa AS "nameFa", icon, image_url AS "imageUrl",
+             is_visible AS "isVisible"
+      FROM product_families WHERE category_id = ${categoryId} ORDER BY sort, id
+    `,
+  ]);
+
+  return { category, children, families };
+}
+
+export type CatalogEntityUpdate = {
+  id: number;
+  nameEn: string;
+  nameFa: string;
+  /** Undefined preserves the current image; an empty string explicitly clears it. */
+  imageUrl: string | undefined;
+  isVisible: boolean;
+};
+
+export async function updateCatalogCategory(input: CatalogEntityUpdate): Promise<boolean> {
+  const preserveImage = input.imageUrl === undefined;
+  const rows = await sql<{ id: number }[]>`
+    UPDATE categories
+    SET name_en = ${input.nameEn}, name_fa = ${input.nameFa},
+        image_url = CASE WHEN ${preserveImage} THEN image_url ELSE ${input.imageUrl ?? ""} END,
+        is_visible = ${input.isVisible}
+    WHERE id = ${input.id}
+    RETURNING id
+  `;
+  return rows.length > 0;
+}
+
+export async function updateCatalogFamily(input: CatalogEntityUpdate): Promise<boolean> {
+  const preserveImage = input.imageUrl === undefined;
+  const rows = await sql<{ id: number }[]>`
+    UPDATE product_families
+    SET name_en = ${input.nameEn}, name_fa = ${input.nameFa},
+        image_url = CASE WHEN ${preserveImage} THEN image_url ELSE ${input.imageUrl ?? ""} END,
+        is_visible = ${input.isVisible}
+    WHERE id = ${input.id}
+    RETURNING id
+  `;
+  return rows.length > 0;
+}
+
 /**
  * Categories a family may hang off — the leaves.
  *

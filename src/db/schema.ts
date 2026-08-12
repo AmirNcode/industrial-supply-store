@@ -82,6 +82,10 @@ export const categories = pgTable(
     nameFa: text("name_fa").notNull(),
     /** Key into the in-house SVG icon set. */
     icon: text("icon").notNull().default("box"),
+    /** Optional catalog artwork. The SVG icon remains the empty-state fallback. */
+    imageUrl: text("image_url").notNull().default(""),
+    /** Hidden categories also hide their complete descendant subtree publicly. */
+    isVisible: boolean("is_visible").notNull().default(true),
     sort: integer("sort").notNull().default(0),
     /** Denormalised count of SKUs in this subtree; filled by the seeder. */
     productCount: integer("product_count").notNull().default(0),
@@ -115,6 +119,10 @@ export const productFamilies = pgTable(
     aboutEn: text("about_en").notNull().default(""),
     aboutFa: text("about_fa").notNull().default(""),
     icon: text("icon").notNull().default("box"),
+    /** Optional family artwork shown anywhere the generic icon used to appear. */
+    imageUrl: text("image_url").notNull().default(""),
+    /** Admin-controlled catalog visibility; products and search inherit it. */
+    isVisible: boolean("is_visible").notNull().default(true),
     sort: integer("sort").notNull().default(0),
     productCount: integer("product_count").notNull().default(0),
     /** Grouping heading above a run of family cards, e.g. "Oil-Resistant O-Rings". */
@@ -416,8 +424,8 @@ export const orderComments = pgTable(
 
 /**
  * Key/value rather than one row with a column per setting, so the next setting
- * is an insert instead of a migration. Values are text and parsed at the edge;
- * there are two of them and both are small.
+ * is an insert instead of a migration. Values are text, small, and parsed at
+ * the edge according to the setting they represent.
  */
 export const appSettings = pgTable("app_settings", {
   key: text("key").primaryKey(),

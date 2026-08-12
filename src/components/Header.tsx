@@ -5,6 +5,7 @@ import { LocaleSwitch } from "./LocaleSwitch";
 import { CartLink } from "./CartLink";
 import { MobileHeader } from "./MobileHeader";
 import { MastheadReveal } from "./MastheadReveal";
+import { getSiteContact } from "@/lib/siteContact";
 
 /**
  * Two distinct mastheads rather than one that reflows.
@@ -23,9 +24,10 @@ import { MastheadReveal } from "./MastheadReveal";
  * That is what took a row out of the masthead — the branding line was costing
  * ~30px of every screen to say something the logo already says in place.
  */
-export function Header({ locale }: { locale: Locale }) {
+export async function Header({ locale }: { locale: Locale }) {
   const t = getDict(locale);
   const other: Locale = locale === "fa" ? "en" : "fa";
+  const contact = await getSiteContact();
 
   return (
     <header>
@@ -35,7 +37,7 @@ export function Header({ locale }: { locale: Locale }) {
       <MastheadReveal />
 
       <div className="bg-[var(--color-navy)]">
-        <MobileHeader locale={locale} />
+        <MobileHeader locale={locale} contact={contact} />
 
         {/* The tagline keeps the top line but gives up the wordmark that used to
             sit beside it, so this is now a thin strip rather than a branding
@@ -77,10 +79,18 @@ export function Header({ locale }: { locale: Locale }) {
 
           <div className="ms-auto shrink-0 text-end">
             <div className="flex items-center justify-end gap-3 text-[12.5px] text-[var(--color-chrome-ink)]">
-              <span className="tech">+98 21 8888 0000</span>
+              <a
+                href={contact.phoneHref}
+                className="tech !text-[var(--color-chrome-ink)]"
+              >
+                {contact.phone}
+              </a>
               <span className="text-[var(--color-navy-lift)]">|</span>
-              <a href="mailto:sales@temex.example" className="!text-white">
-                {t.emailUs}
+              <a
+                href={`mailto:${contact.email}`}
+                className="tech !text-white"
+              >
+                {contact.email}
               </a>
               <span className="text-[var(--color-navy-lift)]">|</span>
               <LocaleSwitch other={other} className="font-bold !text-white" />

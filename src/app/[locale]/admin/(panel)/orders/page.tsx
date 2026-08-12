@@ -266,8 +266,21 @@ export default async function AdminPage({
                     <input type="hidden" name="statusFilter" value={statusFilter ?? ""} />
                     {next === "shipped" && (
                       <>
-                        <input name="courier" placeholder={t.courier} className="w-28 text-[11px]" required />
-                        <input name="trackingNumber" dir="ltr" placeholder={t.trackingNumber} className="tech w-36 text-[11px]" required />
+                        <input
+                          type="text"
+                          name="courier"
+                          placeholder={t.courier}
+                          className="w-28 text-[11px]"
+                          required
+                        />
+                        <input
+                          type="text"
+                          name="trackingNumber"
+                          dir="ltr"
+                          placeholder={t.trackingNumber}
+                          className="tech w-36 text-[11px]"
+                          required
+                        />
                       </>
                     )}
                     <ConfirmSubmit

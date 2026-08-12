@@ -20,7 +20,7 @@ import { ProductCardList } from "@/components/ProductCardList";
 import { Breadcrumb } from "@/components/Breadcrumb";
 import { AddToCartRow } from "@/components/AddToCartRow";
 import { InCartQty } from "@/components/InCartQty";
-import { ProductIcon } from "@/components/ProductIcon";
+import { CatalogImage } from "@/components/CatalogImage";
 import { ProductDetails } from "@/components/ProductDetails";
 import { isLocale, getDict, pick, type Locale } from "@/lib/i18n";
 import {
@@ -131,7 +131,13 @@ export default async function FamilyPage({
         {(family.aboutEn || family.aboutFa) && (
           <div className="mb-4 flex items-start gap-3 rounded-[4px] border border-[var(--color-rule)] border-s-[3px] border-s-[var(--color-navy)] bg-[var(--color-navy-tint)] p-3.5">
             <span className="shrink-0">
-              <ProductIcon name={family.icon} size={46} />
+              <CatalogImage
+                imageUrl={family.imageUrl}
+                icon={family.icon}
+                alt=""
+                size={46}
+                className="h-[46px] w-[46px] object-contain"
+              />
             </span>
             <div className="min-w-0">
               <h2 className="text-[15px] font-bold text-[var(--color-navy)]">
@@ -147,7 +153,14 @@ export default async function FamilyPage({
         <div className="flex gap-5">
           <section className="min-w-0 flex-1">
             <div className="mb-2 flex items-start gap-3">
-              <ProductIcon name={family.icon} size={64} className="hidden sm:block" />
+              <CatalogImage
+                imageUrl={family.imageUrl}
+                icon={family.icon}
+                alt={pick(family, "name", l)}
+                size={64}
+                className="hidden h-[64px] w-[64px] object-contain sm:block"
+                eager
+              />
               <div className="min-w-0">
                 <h1 className="text-[19px] font-bold text-[var(--color-navy)]">
                   {pick(family, "name", l)}
@@ -180,19 +193,54 @@ export default async function FamilyPage({
 
               Desktop only — MobileFilterBar carries the same facets at phone
               width, where a fold competing with the fixed bar would be two
-              answers to one question.
+              answers to one question. When filters are active the fold opens
+              on the next render, keeping the state visible and easy to adjust.
             */}
             {facets.some((f) => f.values.length > 0) && (
-              <details className="filter-fold mb-2 hidden lg:block">
-                <summary className="flex cursor-pointer items-center gap-2 border-b border-[var(--color-rule)] pb-1 text-[13px] font-bold">
-                  {t.filterBy}
-                  {activeFilterCount > 0 && (
-                    <span className="tech text-[11px] font-normal text-[var(--color-ink-muted)]">
-                      {formatInt(activeFilterCount, l)}
+              <details
+                className="filter-fold mb-2 hidden lg:block"
+                open={activeFilterCount > 0}
+              >
+                <summary className="filter-trigger">
+                  <span className="filter-trigger-icon" aria-hidden="true">
+                    <svg width="17" height="17" viewBox="0 0 20 20" fill="none">
+                      <path
+                        d="M3 4h14l-5.5 6.2v4.6l-3 1.7v-6.3L3 4Z"
+                        stroke="currentColor"
+                        strokeWidth="1.7"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[14px] font-bold text-[var(--color-navy-deep)]">
+                      {t.filterBy}
                     </span>
-                  )}
+                    <span className="block text-[11px] font-normal text-[var(--color-ink-muted)]">
+                      {activeFilterCount > 0
+                        ? `${formatInt(activeFilterCount, l)} ${
+                            activeFilterCount === 1 ? t.filterApplied : t.filtersApplied
+                          }`
+                        : t.filterHelp}
+                    </span>
+                  </span>
+                  <span className="filter-trigger-results">
+                    <span className="tech font-bold">{formatInt(total, l)}</span>{" "}
+                    {t.productsLower}
+                  </span>
+                  <span className="filter-trigger-chevron" aria-hidden="true">
+                    <svg width="14" height="14" viewBox="0 0 20 20" fill="none">
+                      <path
+                        d="m5 7.5 5 5 5-5"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  </span>
                 </summary>
-                <div className="pt-2">
+                <div className="filter-fold-content">
                   <FacetSidebar
                     locale={l}
                     base={base}
@@ -241,6 +289,7 @@ export default async function FamilyPage({
                     defs={defs}
                     familyName={pick(family, "name", l)}
                     familyIcon={family.icon}
+                    familyImageUrl={family.imageUrl}
                     rate={rate}
                   />
                 </div>
@@ -318,7 +367,7 @@ function SpecTable({
   const columnCount = tableDefs.length + (hasBulk ? 6 : 5);
 
   return (
-    <table className="spec-table">
+    <table className="spec-table catalog-table">
       <thead>
         {/* Two-tier header: the quantity-break columns share one "Pkg." cap,
             exactly as on the reference site. */}
@@ -468,6 +517,7 @@ function SpecTable({
                       defs={detailDefs}
                       documents={p.documents}
                       imageUrl={p.imageUrl}
+                      imageAlt={p.partNumber}
                       icon={icon}
                       locale={locale}
                     />

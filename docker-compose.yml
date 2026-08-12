@@ -37,6 +37,11 @@ services:
       DATABASE_URL: postgres://isupply:isupply@db:5432/isupply
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-changeme}
       USD_TO_TOMAN: ${USD_TO_TOMAN:-110000}
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_PUBLIC_URL: ${SUPABASE_PUBLIC_URL:-}
+      SUPABASE_SECRET_KEY: ${SUPABASE_SECRET_KEY:-}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
+      SUPABASE_CATALOG_BUCKET: ${SUPABASE_CATALOG_BUCKET:-catalog-images}
       NODE_ENV: production
     ports:
       - "3000:3000"

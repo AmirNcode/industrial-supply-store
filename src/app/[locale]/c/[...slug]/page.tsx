@@ -11,7 +11,7 @@ import {
 } from "@/db/queries";
 import { CategorySidebar } from "@/components/CategorySidebar";
 import { Breadcrumb } from "@/components/Breadcrumb";
-import { ProductIcon } from "@/components/ProductIcon";
+import { CatalogImage } from "@/components/CatalogImage";
 import { ViewAsToggle } from "@/components/ViewAsToggle";
 import { ProductCardList } from "@/components/ProductCardList";
 import { isLocale, getDict, pick, type Locale } from "@/lib/i18n";
@@ -91,10 +91,22 @@ export default async function CategoryPage({
           countLabel={`${formatInt(category.productCount, l)} ${t.products}`}
         />
 
-        <div className="mb-4 flex items-baseline justify-between gap-3 border-b border-[var(--color-rule)] pb-1">
-          <h1 className="text-[19px] font-bold text-[var(--color-navy)] lg:text-[21px]">
-            {pick(category, "name", l)}
-          </h1>
+        <div className="mb-4 flex items-center justify-between gap-3 border-b border-[var(--color-rule)] pb-1">
+          <span className="flex min-w-0 items-center gap-2">
+            {category.imageUrl && (
+              <CatalogImage
+                imageUrl={category.imageUrl}
+                icon={category.icon}
+                alt=""
+                size={34}
+                className="h-[34px] w-[34px] shrink-0 object-contain"
+                eager
+              />
+            )}
+            <h1 className="text-[19px] font-bold text-[var(--color-navy)] lg:text-[21px]">
+              {pick(category, "name", l)}
+            </h1>
+          </span>
           {category.productCount > 0 && (
             <ViewAsToggle
               locale={l}
@@ -153,7 +165,13 @@ export default async function CategoryPage({
                     className="tile-face mx-auto flex aspect-square w-full items-center justify-center lg:h-[84px] lg:w-[84px]"
                     style={{ "--spine": categorySpine(c.path) } as React.CSSProperties}
                   >
-                    <ProductIcon name={c.icon} size={62} className="h-3/5 w-3/5 lg:h-auto lg:w-auto" />
+                    <CatalogImage
+                      imageUrl={c.imageUrl}
+                      icon={c.icon}
+                      alt={pick(c, "name", l)}
+                      size={62}
+                      className="h-3/5 w-3/5 object-contain lg:h-[62px] lg:w-[62px]"
+                    />
                   </span>
                   <span className="mt-1 block text-[11px] leading-tight group-hover:text-[var(--color-navy)] group-hover:underline">
                     {pick(c, "name", l)}
@@ -180,7 +198,13 @@ export default async function CategoryPage({
                     className="group flex h-full gap-3 border border-[var(--color-rule)] p-3 hover:border-[var(--color-navy)] hover:no-underline"
                   >
                     <span className="shrink-0 pt-0.5">
-                      <ProductIcon name={f.icon} size={58} />
+                      <CatalogImage
+                        imageUrl={f.imageUrl}
+                        icon={f.icon}
+                        alt={pick(f, "name", l)}
+                        size={58}
+                        className="h-[58px] w-[58px] object-contain"
+                      />
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="block text-[14px] font-bold leading-snug text-[var(--color-navy)] group-hover:underline">

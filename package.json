@@ -17,6 +17,8 @@
     "db:rename-orders": "tsx scripts/rename-quotes-to-orders.mts",
     "db:column-tiers": "tsx scripts/add-column-tiers.mts",
     "db:column-tiers:remote": "dotenv -e .env.production.local -- tsx scripts/add-column-tiers.mts",
+    "db:catalog-media": "tsx scripts/add-catalog-media.mts",
+    "db:catalog-media:remote": "dotenv -e .env.production.local -- tsx scripts/add-catalog-media.mts",
     "i18n:missing": "tsx scripts/find-untranslated.mjs",
     "db:rename-orders:remote": "dotenv -e .env.production.local -v ALLOW_REMOTE_MIGRATION=1 -- tsx scripts/rename-quotes-to-orders.mts",
     "db:push:remote": "dotenv -e .env.production.local -- drizzle-kit push && npm run db:extensions:remote",
@@ -26,6 +28,7 @@
     "db:verify:remote": "dotenv -e .env.production.local -- tsx scripts/verify-remote.mts"
   },
   "dependencies": {
+    "@supabase/supabase-js": "2.112.3",
     "@vercel/analytics": "^2.0.1",
     "csv-parse": "^7.0.2",
     "dotenv": "^17.4.2",

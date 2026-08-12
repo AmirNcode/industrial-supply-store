@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { search } from "@/db/queries";
 import { CategorySidebar } from "@/components/CategorySidebar";
-import { ProductIcon } from "@/components/ProductIcon";
+import { CatalogImage } from "@/components/CatalogImage";
 import { isLocale, getDict, pick, type Locale } from "@/lib/i18n";
 import { formatInt, formatPrice } from "@/lib/money";
 import { getFxRate } from "@/lib/fx";
@@ -106,7 +106,13 @@ export default async function SearchPage({
                     className="group flex h-full gap-3 border border-[var(--color-rule)] p-3 hover:border-[var(--color-navy)] hover:no-underline"
                   >
                     <span className="shrink-0">
-                      <ProductIcon name={f.icon} size={52} />
+                      <CatalogImage
+                        imageUrl={f.imageUrl}
+                        icon={f.icon}
+                        alt={pick(f, "name", l)}
+                        size={52}
+                        className="h-[52px] w-[52px] object-contain"
+                      />
                     </span>
                     <span className="min-w-0">
                       <span className="block text-[14px] font-bold text-[var(--color-navy)] group-hover:underline">

@@ -46,6 +46,7 @@ function SearchField({ locale }: { locale: Locale }) {
     <div className="relative">
       <form action={`/${locale}/search`} className={FORM_CLASS}>
         <input
+          type="search"
           name="q"
           placeholder={t.searchPlaceholder}
           aria-label={t.search}
@@ -162,6 +163,7 @@ function LiveSearchBar({ locale }: { locale: Locale }) {
         className={FORM_CLASS}
       >
         <input
+          type="search"
           ref={inputRef}
           name="q"
           value={q}

@@ -1,10 +1,11 @@
 import { notFound } from "next/navigation";
 import { DEMO_MODE } from "@/lib/demo";
 import { getFamiliesGrouped } from "@/db/importQueries";
-import { getLeafCategories } from "@/db/familyQueries";
+import { getCatalogCategoriesForAdmin, getLeafCategories } from "@/db/familyQueries";
 import { isLocale, getDict, type Locale } from "@/lib/i18n";
 import { ImportPanel } from "./ImportPanel";
 import { NewFamilyForm } from "./NewFamilyForm";
+import { CategoryAdminIndex } from "./CategoryAdminIndex";
 
 /**
  * Products: the catalog side of admin. Bulk import today, inventory alongside it.
@@ -24,9 +25,10 @@ export default async function AdminProductsPage({
   const l = locale as Locale;
   const t = getDict(l);
 
-  const [families, categories] = await Promise.all([
+  const [families, categories, allCategories] = await Promise.all([
     getFamiliesGrouped(),
     getLeafCategories(),
+    getCatalogCategoriesForAdmin(),
   ]);
 
   return (
@@ -43,6 +45,8 @@ export default async function AdminProductsPage({
       )}
 
       <NewFamilyForm categories={categories} locale={l} demo={DEMO_MODE} />
+
+      <CategoryAdminIndex categories={allCategories} locale={l} />
 
       <ImportPanel families={families} locale={l} demo={DEMO_MODE} />
     </>
