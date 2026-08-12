@@ -1,8 +1,8 @@
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { isAdmin } from "@/lib/admin";
 import { DEMO_MODE } from "@/lib/demo";
 import { logoutAction } from "../actions";
+import { AdminTabs } from "./AdminTabs";
 import { isLocale, getDict, type Locale } from "@/lib/i18n";
 
 /**
@@ -41,21 +41,18 @@ export default async function AdminPanelLayout({
   ];
 
   return (
-    <div className="mx-auto flex max-w-[1240px] flex-col gap-4 px-3 pt-3 pb-16 sm:flex-row">
-      <nav className="shrink-0 sm:w-[160px]">
-        <div className="mb-2 border-b border-[var(--color-ink)] pb-1 text-[13px] font-bold">
-          {t.admin}
-        </div>
-        <ul className="flex flex-wrap gap-x-4 gap-y-1 text-[12px] sm:block sm:space-y-1">
-          {sections.map((s) => (
-            <li key={s.href}>
-              <Link href={s.href}>{s.label}</Link>
-            </li>
-          ))}
-        </ul>
+    <div className="mx-auto max-w-[1240px] px-3 pt-3 pb-16">
+      {/*
+        Tabs across the top rather than a rail down the side.
+        The panel's tables are the widest thing in the app, and a 160px column
+        of three links was charging them for it on every page.
+      */}
+      <nav className="admin-tabs">
+        <span className="admin-tabs-brand">{t.admin}</span>
+        <AdminTabs sections={sections} />
 
         {!DEMO_MODE && (
-          <form action={logoutAction} className="mt-4">
+          <form action={logoutAction} className="ms-auto">
             <input type="hidden" name="locale" value={l} />
             <button type="submit" className="text-[11px] underline">
               {t.signOut}
@@ -64,7 +61,7 @@ export default async function AdminPanelLayout({
         )}
       </nav>
 
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0 pt-3">
         {DEMO_MODE && (
           <p className="mb-3 border border-[var(--color-warn)] bg-[var(--color-warn-soft)] px-3 py-2 text-[12px] text-[var(--color-warn)]">
             {t.demoAdminPublic}

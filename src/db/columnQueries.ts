@@ -19,6 +19,8 @@ export type EditableDef = {
   kind: "number" | "text";
   filterable: boolean;
   display: SpecDisplay;
+  /** Shown on the collapsed phone card. */
+  mobile: boolean;
   sort: number;
   /** How many products hold a value, so deleting one is an informed decision. */
   productCount: number;
@@ -27,7 +29,7 @@ export type EditableDef = {
 export async function getEditableDefs(familyId: number): Promise<EditableDef[]> {
   return sql<EditableDef[]>`
     SELECT d.key, d.label_en AS "labelEn", d.label_fa AS "labelFa", d.unit,
-           d.kind, d.filterable, d.display, d.sort,
+           d.kind, d.filterable, d.display, d.mobile, d.sort,
            COALESCE(v.n, 0)::int AS "productCount"
     FROM spec_defs d
     -- One pass over the family's products rather than a subquery per column:
@@ -51,6 +53,7 @@ export type ColumnEdit = {
   kind: "number" | "text";
   filterable: boolean;
   display: SpecDisplay;
+  mobile: boolean;
 };
 
 /**
@@ -87,6 +90,7 @@ export async function saveColumns(
           kind = u.kind,
           filterable = u.filterable::boolean,
           display = u.display,
+          mobile = u.mobile::boolean,
           sort = u.sort
         FROM unnest(
           ${edits.map((e) => e.key)}::text[],
@@ -95,9 +99,10 @@ export async function saveColumns(
           ${edits.map((e) => e.unit)}::text[],
           ${edits.map((e) => e.kind)}::text[],
           ${edits.map((e) => (e.filterable ? "t" : "f"))}::text[],
-          ${edits.map((e) => e.display)}::text[]
+          ${edits.map((e) => e.display)}::text[],
+          ${edits.map((e) => (e.mobile ? "t" : "f"))}::text[]
         ) WITH ORDINALITY AS u(key, label_en, label_fa, unit, kind, filterable,
-                               display, sort)
+                               display, mobile, sort)
         WHERE d.family_id = ${familyId} AND d.key = u.key
       `;
     }

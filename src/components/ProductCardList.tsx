@@ -60,7 +60,11 @@ export function ProductCardList({
    * available for a family whose columns came from a supplier file, where
    * nothing is filterable until someone says so.
    */
-  const identifying = (defs ?? []).filter((d) => d.display === "table" || d.filterable);
+  const mobileDefs = (defs ?? []).filter((d) => d.mobile);
+  const identifying =
+    mobileDefs.length > 0
+      ? mobileDefs
+      : (defs ?? []).filter((d) => d.display === "table" || d.filterable);
 
   /**
    * Summarise the specs that actually differ across the visible rows.
@@ -69,7 +73,9 @@ export function ProductCardList({
    * six consecutive cards that differ only by durometer — the buyer sees a list
    * of apparent duplicates and cannot tell the parts apart.
    */
-  const varying = identifying.filter((d) => {
+  // An explicit mobile choice is an instruction, not a hint: show exactly those
+  // and do not drop the ones that happen not to vary on this page.
+  const varying = mobileDefs.length > 0 ? [] : identifying.filter((d) => {
     const seen = new Set<string>();
     for (const p of products) {
       const v = p.specs[d.key];
@@ -103,9 +109,14 @@ export function ProductCardList({
     // described by its own family's leading specs.
     const perRow =
       defsByFamily && p.familyId !== undefined
-        ? (defsByFamily.get(p.familyId) ?? [])
-            .filter((d) => d.display === "table" || d.filterable)
-            .slice(0, 3)
+        ? (() => {
+            const forFamily = defsByFamily.get(p.familyId) ?? [];
+            const mob = forFamily.filter((d) => d.mobile);
+            return (mob.length > 0
+              ? mob
+              : forFamily.filter((d) => d.display === "table" || d.filterable)
+            ).slice(0, 3);
+          })()
         : summaryDefs;
 
     return perRow

@@ -40,6 +40,8 @@ export type SpecDefRow = {
   sort: number;
   /** `table` is a spec-table column; `detail` shows only in the expanded row. */
   display: SpecDisplay;
+  /** Shown on the collapsed phone card. */
+  mobile: boolean;
 };
 
 export type ProductRow = {
@@ -169,7 +171,7 @@ export async function getFamilyBySlug(slug: string): Promise<FamilyRow | null> {
 export async function getSpecDefs(familyId: number): Promise<SpecDefRow[]> {
   return sql<SpecDefRow[]>`
     SELECT key, label_en AS "labelEn", label_fa AS "labelFa", unit, kind,
-           filterable, sort, display
+           filterable, sort, display, mobile
     FROM spec_defs WHERE family_id = ${familyId} ORDER BY sort
   `;
 }
@@ -480,7 +482,7 @@ export async function getSpecDefsForFamilies(
   if (familyIds.length === 0) return out;
   const rows = await sql<(SpecDefRow & { familyId: number })[]>`
     SELECT family_id AS "familyId", key, label_en AS "labelEn",
-           label_fa AS "labelFa", unit, kind, filterable, sort, display
+           label_fa AS "labelFa", unit, kind, filterable, sort, display, mobile
     FROM spec_defs WHERE family_id = ANY(${familyIds}) ORDER BY family_id, sort
   `;
   for (const r of rows) {

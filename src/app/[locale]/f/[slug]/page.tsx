@@ -32,7 +32,13 @@ import {
 } from "@/lib/money";
 import { getFxRate } from "@/lib/fx";
 import { specValueLabel, isTechnicalValue } from "@/lib/specValues";
-import { parseFilters, pageHref, clearAllHref, type RawSearchParams } from "@/lib/filters";
+import {
+  parseFilters,
+  pageHref,
+  clearAllHref,
+  countActiveFilters,
+  type RawSearchParams,
+} from "@/lib/filters";
 
 /**
  * 100 rather than 200.
@@ -103,6 +109,7 @@ export default async function FamilyPage({
         ? `${t.shipsIn} ${formatInt(maxLead, l)} ${t.days}`
         : null;
   const highlighted = typeof sp.pn === "string" ? sp.pn.toUpperCase() : null;
+  const activeFilterCount = countActiveFilters(filters);
   const pages = Math.ceil(total / PAGE_SIZE);
 
   return (
@@ -138,19 +145,6 @@ export default async function FamilyPage({
         )}
 
         <div className="flex gap-5">
-          {/* The rail is desktop-only; MobileFilterBar carries the same facets
-              at phone width. */}
-          <div className="hidden lg:block">
-            <FacetSidebar
-              locale={l}
-              base={base}
-              searchParams={sp}
-              facets={facets}
-              defs={defs}
-              filters={filters}
-            />
-          </div>
-
           <section className="min-w-0 flex-1">
             <div className="mb-2 flex items-start gap-3">
               <ProductIcon name={family.icon} size={64} className="hidden sm:block" />
@@ -176,6 +170,41 @@ export default async function FamilyPage({
                 </div>
               </div>
             </div>
+
+            {/*
+              The facets fold out above the table rather than standing beside
+              it. A 210px rail is charged to every page whether or not anyone
+              is filtering, and it is exactly the width a wide spec table needs
+              to avoid a horizontal scrollbar. Closed by default so the table is
+              the first thing on the page; opening it pushes the table down.
+
+              Desktop only — MobileFilterBar carries the same facets at phone
+              width, where a fold competing with the fixed bar would be two
+              answers to one question.
+            */}
+            {facets.some((f) => f.values.length > 0) && (
+              <details className="filter-fold mb-2 hidden lg:block">
+                <summary className="flex cursor-pointer items-center gap-2 border-b border-[var(--color-rule)] pb-1 text-[13px] font-bold">
+                  {t.filterBy}
+                  {activeFilterCount > 0 && (
+                    <span className="tech text-[11px] font-normal text-[var(--color-ink-muted)]">
+                      {formatInt(activeFilterCount, l)}
+                    </span>
+                  )}
+                </summary>
+                <div className="pt-2">
+                  <FacetSidebar
+                    locale={l}
+                    base={base}
+                    searchParams={sp}
+                    facets={facets}
+                    defs={defs}
+                    filters={filters}
+                    layout="band"
+                  />
+                </div>
+              </details>
+            )}
 
             <ActiveFilterPills
               locale={l}

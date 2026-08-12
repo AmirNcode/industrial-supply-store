@@ -401,6 +401,7 @@ const en = {
   columnsSaved: "Columns saved.",
   columnsNone: "This family has no columns yet. Upload a CSV to create some.",
   columnsFixed: "fixed",
+  columnsMobile: "Mobile",
   columnsDeleteHint: "Deleting a column also deletes its values from every product.",
   columnsBack: "Back to products",
   // The expanded product row
@@ -769,6 +770,7 @@ const fa: typeof en = {
   columnsSaved: "ستون‌ها ذخیره شد.",
   columnsNone: "این خانواده هنوز ستونی ندارد. برای ساخت ستون یک فایل CSV بارگذاری کنید.",
   columnsFixed: "ثابت",
+  columnsMobile: "موبایل",
   columnsDeleteHint: "حذف یک ستون، مقادیر آن را از همه کالاها نیز حذف می‌کند.",
   columnsBack: "بازگشت به کالاها",
   // The expanded product row

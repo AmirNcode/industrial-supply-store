@@ -24,10 +24,11 @@ async function main() {
   console.log(`→ target: ${targetHost()}`);
 
   await sql.begin(async (tx) => {
-    console.log("→ spec_defs: display tier and remembered CSV header");
+    console.log("→ spec_defs: display tier, mobile flag, remembered CSV header");
     await tx.unsafe(`
       ALTER TABLE spec_defs
         ADD COLUMN IF NOT EXISTS display text NOT NULL DEFAULT 'table',
+        ADD COLUMN IF NOT EXISTS mobile boolean NOT NULL DEFAULT false,
         ADD COLUMN IF NOT EXISTS csv_alias text;
     `);
 
@@ -62,16 +63,16 @@ async function main() {
   const [{ ok }] = await sql<{ ok: number }[]>`
     SELECT count(*)::int AS ok
     FROM information_schema.columns
-    WHERE (table_name = 'spec_defs' AND column_name IN ('display', 'csv_alias'))
+    WHERE (table_name = 'spec_defs' AND column_name IN ('display', 'mobile', 'csv_alias'))
        OR (table_name = 'product_families' AND column_name = 'field_aliases')
        OR (table_name = 'products' AND column_name IN ('image_url', 'documents'))
   `;
-  if (ok !== 5) {
-    console.error(`\n✗ Expected 5 new columns, found ${ok}.\n`);
+  if (ok !== 6) {
+    console.error(`\n✗ Expected 6 new columns, found ${ok}.\n`);
     process.exit(1);
   }
 
-  console.log("✓ 5 columns present");
+  console.log("✓ 6 columns present");
   await sql.end();
 }
 

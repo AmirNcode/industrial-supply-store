@@ -244,7 +244,10 @@ html[dir="rtl"] th.tech-num {
   text-transform: uppercase;
   text-align: start;
   padding: 8px 9px;
-  white-space: nowrap;
+  /* Headings wrap. A single long label — "Gate Seat Material And Coating" —
+     otherwise sets the column's minimum width and pushes the whole table into
+     a horizontal scroll it does not need. */
+  white-space: normal;
   vertical-align: bottom;
 }
 html[lang="fa"] .spec-table thead th {
@@ -264,8 +267,11 @@ html[lang="fa"] .spec-table thead th {
 
 .spec-table td {
   padding: 4px 9px;
-  vertical-align: middle;
-  white-space: nowrap;
+  vertical-align: top;
+  /* Values wrap too, for the same reason. The columns that must stay on one
+     line — numbers, part numbers, prices — opt back in below. A table that
+     fits the window beats one whose every cell is a single line. */
+  white-space: normal;
   line-height: 1.5;
   border-bottom: 1px solid var(--color-rule-light);
 }
@@ -443,16 +449,71 @@ html[lang="fa"] .spec-table thead th {
   background: var(--color-ink-faint);
 }
 
+/* ---------------------------------------------------------------------------
+   The admin tab strip.
+
+   A classic tab bar: the strip carries a rule along its foot, and the current
+   tab covers its own stretch of that rule so the tab and the page beneath read
+   as one surface. That join is what says "you are here" — no second colour
+   needed, and it survives a viewer who cannot see the accent at all.
+   --------------------------------------------------------------------------- */
+.admin-tabs {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  border-bottom: 1px solid var(--color-rule);
+}
+.admin-tabs-brand {
+  padding-bottom: 6px;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--color-navy);
+}
+.admin-tabs-list {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  /* Pulls the tabs' own bottom border down onto the strip's, so the current
+     tab's gap in it lines up exactly. */
+  margin-bottom: -1px;
+}
+.admin-tab {
+  display: block;
+  padding: 5px 12px;
+  border: 1px solid transparent;
+  border-bottom-color: var(--color-rule);
+  border-radius: 3px 3px 0 0;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--color-ink-muted);
+  transition: background 0.12s, color 0.12s;
+}
+.admin-tab:hover {
+  background: var(--color-panel);
+  color: var(--color-navy);
+  text-decoration: none;
+}
+.admin-tab[aria-current="page"] {
+  background: #fff;
+  color: var(--color-navy);
+  border-color: var(--color-rule);
+  /* The join. */
+  border-bottom-color: #fff;
+}
+
 /* Collapsible category groups on the admin products page. The marker is styled
    rather than hidden — with every group closed by default, the triangle is the
    only thing saying these open at all. */
-.admin-group > summary {
+.admin-group > summary,
+.filter-fold > summary {
   list-style: none;
 }
-.admin-group > summary::-webkit-details-marker {
+.admin-group > summary::-webkit-details-marker,
+.filter-fold > summary::-webkit-details-marker {
   display: none;
 }
-.admin-group > summary::before {
+.admin-group > summary::before,
+.filter-fold > summary::before {
   content: "";
   flex: none;
   border-inline-start: 4px solid var(--color-ink-muted);
@@ -460,14 +521,18 @@ html[lang="fa"] .spec-table thead th {
   border-bottom: 3.5px solid transparent;
   transition: transform 0.12s;
 }
-html[dir="rtl"] .admin-group > summary::before {
+html[dir="rtl"] .admin-group > summary::before,
+.filter-fold > summary::before {
   transform: rotate(180deg);
 }
 .admin-group[open] > summary::before,
-html[dir="rtl"] .admin-group[open] > summary::before {
+.filter-fold[open] > summary::before,
+html[dir="rtl"] .admin-group[open] > summary::before,
+html[dir="rtl"] .filter-fold[open] > summary::before {
   transform: rotate(90deg);
 }
-.admin-group > summary:hover {
+.admin-group > summary:hover,
+.filter-fold > summary:hover {
   color: var(--color-navy);
 }
 
@@ -533,6 +598,25 @@ html[dir="rtl"] .admin-group[open] > summary::before {
 }
 .spec-table tbody tr:hover .price-col {
   background: transparent;
+}
+
+/* Fifteen columns spend 270px on cell padding alone, which is most of what
+   pushes a wide family into a horizontal scroll on a laptop. Below the desktop
+   breakpoint the gutters halve; the type size is untouched, so nothing becomes
+   harder to read. */
+@media (max-width: 1279px) {
+  .spec-table thead th,
+  .spec-table td {
+    padding-inline: 5px;
+  }
+}
+
+.spec-table td.num,
+.spec-table td.tech-num,
+.spec-table td.price-col,
+.spec-table .part-no,
+.spec-table .btn-tiny {
+  white-space: nowrap;
 }
 
 .num {

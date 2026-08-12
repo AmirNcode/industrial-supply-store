@@ -165,6 +165,14 @@ export const specDefs = pgTable(
       .notNull()
       .default("table"),
     /**
+     * Show this column on the collapsed phone card.
+     *
+     * Separate from `display` because a phone fits three or four values, not
+     * the eight a desktop table carries. Expanding the card still shows
+     * everything, exactly as the desktop expanded row does.
+     */
+    mobile: boolean("mobile").notNull().default(false),
+    /**
      * The header this column was last imported under, when it differs from
      * `key`. Set on import so a supplier's spelling is matched automatically
      * the next time rather than proposed as a new column.

@@ -66,6 +66,7 @@ function parseEdits(
     if (o.kind !== "number" && o.kind !== "text") return null;
     if (o.display !== "table" && o.display !== "detail") return null;
     if (typeof o.filterable !== "boolean") return null;
+    if (typeof o.mobile !== "boolean") return null;
     out.push({
       key: o.key,
       // A blank heading renders as a column nobody can identify, so the key
@@ -76,6 +77,7 @@ function parseEdits(
       kind: o.kind,
       display: o.display,
       filterable: o.filterable,
+      mobile: o.mobile,
     });
   }
 

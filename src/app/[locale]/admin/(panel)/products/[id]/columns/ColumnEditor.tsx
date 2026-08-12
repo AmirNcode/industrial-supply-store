@@ -64,6 +64,7 @@ export function ColumnEditor({
       kind: r.kind,
       display: r.display,
       filterable: r.filterable,
+      mobile: r.mobile,
     })),
     dropKeys,
   });
@@ -97,6 +98,7 @@ export function ColumnEditor({
               <th>{t.columnsUnit}</th>
               <th>{t.reviewKind}</th>
               <th className="num">{t.reviewInTable}</th>
+              <th className="num">{t.columnsMobile}</th>
               <th className="num">{t.reviewFilterable}</th>
               <th className="num">{t.products}</th>
               <th />
@@ -123,6 +125,9 @@ export function ColumnEditor({
               <td />
               <td className="text-[11px] text-[var(--color-ink-muted)]">
                 {t.reviewKindText}
+              </td>
+              <td className="num">
+                <input type="checkbox" checked readOnly disabled />
               </td>
               <td className="num">
                 <input type="checkbox" checked readOnly disabled />
@@ -206,6 +211,16 @@ export function ColumnEditor({
                       onChange={(e) =>
                         set(r.key, { display: e.target.checked ? "table" : "detail" })
                       }
+                    />
+                  </td>
+                  {/* Shown on the collapsed phone card. A phone fits three or
+                      four values, not the eight a desktop row carries. */}
+                  <td className="num">
+                    <input
+                      type="checkbox"
+                      checked={r.mobile}
+                      disabled={dropped || demo}
+                      onChange={(e) => set(r.key, { mobile: e.target.checked })}
                     />
                   </td>
                   <td className="num">

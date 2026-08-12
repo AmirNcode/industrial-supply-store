@@ -16,6 +16,7 @@ export function FacetSidebar({
   facets,
   defs,
   filters,
+  layout = "rail",
 }: {
   locale: Locale;
   base: string;
@@ -23,6 +24,13 @@ export function FacetSidebar({
   facets: Facet[];
   defs: SpecDefRow[];
   filters: Filters;
+  /**
+   * `rail` is the fixed-width column beside a table. `band` is the full-width
+   * fold above one, where the facets sit side by side instead of stacked — a
+   * rail costs 210px of table width on every page whether or not anyone is
+   * filtering, and the tables are wide enough that the trade stopped paying.
+   */
+  layout?: "rail" | "band";
 }) {
   const t = getDict(locale);
   const defByKey = new Map(defs.map((d) => [d.key, d]));
@@ -34,10 +42,20 @@ export function FacetSidebar({
     .map((d) => facets.find((f) => f.key === d.key))
     .filter((f): f is Facet => Boolean(f) && f!.values.length > 0);
 
+  const band = layout === "band";
+
   return (
-    <aside className="shrink-0" style={{ width: 210 }}>
-      <div className="mb-2 flex items-baseline justify-between border-b border-[var(--color-ink)] pb-1">
-        <h2 className="text-[13px] font-bold">{t.filterBy}</h2>
+    <aside className={band ? "w-full" : "shrink-0"} style={band ? undefined : { width: 210 }}>
+      {/* In a band the fold's own summary already says "Filter by", so only the
+          clear-all link is worth repeating. */}
+      <div
+        className={
+          band
+            ? "mb-2 flex justify-end"
+            : "mb-2 flex items-baseline justify-between border-b border-[var(--color-ink)] pb-1"
+        }
+      >
+        {!band && <h2 className="text-[13px] font-bold">{t.filterBy}</h2>}
         {active > 0 && (
           <Link href={clearAllHref(base, searchParams)} prefetch={false} scroll={false} className="text-[11px]">
             {t.clearAll}
@@ -45,6 +63,7 @@ export function FacetSidebar({
         )}
       </div>
 
+      <div className={band ? "grid gap-x-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" : ""}>
       {ordered.map((facet) => {
         const def = defByKey.get(facet.key);
         if (!def) return null;
@@ -81,6 +100,8 @@ export function FacetSidebar({
           </section>
         );
       })}
+
+      </div>
 
       {ordered.length === 0 && (
         <p className="text-[11px] text-[var(--color-ink-faint)]">—</p>
