@@ -48,6 +48,15 @@ const COLUMNS: readonly (readonly [string, string])[] = [
   ["orders", "fx_rate_to_toman"],
   ["orders", "invoice_number"],
   ["orders", "user_id"],
+  // Added 2026-08-12 by `db:column-tiers`. Every family page selects
+  // spec_defs.display and products.documents, so a build that ships before the
+  // script has run errors on the whole catalog, not just on admin.
+  ["spec_defs", "display"],
+  ["spec_defs", "mobile"],
+  ["spec_defs", "csv_alias"],
+  ["product_families", "field_aliases"],
+  ["products", "image_url"],
+  ["products", "documents"],
 ];
 
 const present = await sql<{ name: string }[]>`
