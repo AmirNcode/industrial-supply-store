@@ -294,10 +294,10 @@ function SpecTable({
         {/* Two-tier header: the quantity-break columns share one "Pkg." cap,
             exactly as on the reference site. */}
         <tr>
+          <th className="!border-b-0" />
           {tableDefs.map((d) => (
             <th key={d.key} className="!border-b-0" />
           ))}
-          <th className="!border-b-0" />
           <th className="!border-b-0" />
           <th className="group" colSpan={hasBulk ? 2 : 1}>
             {t.pkg} — {currencyLabel(locale)}
@@ -306,13 +306,16 @@ function SpecTable({
           <th className="!border-b-0" />
         </tr>
         <tr>
+          {/* The part number leads: it is what a buyer quotes on the phone and
+              types into Quick Order, so it should not be hiding past a dozen
+              spec columns. */}
+          <th>{t.partNumber}</th>
           {tableDefs.map((d) => (
             <th key={d.key} className={d.kind === "number" ? "num" : undefined}>
               {pick(d, "label", locale)}
             </th>
           ))}
           <th className="num">{t.pkgQty}</th>
-          <th>{t.partNumber}</th>
           {/* Quantity-break captions are Latin ranges; they must not mirror. */}
           <th className="num tech tech-num price-col">1–9</th>
           {hasBulk && <th className="num tech tech-num price-col">10+</th>}
@@ -340,7 +343,25 @@ function SpecTable({
                 // the pointer passing over it.
                 className={isHit ? "product-row row-hit" : "product-row"}
               >
-                {tableDefs.map((d) => {
+                <td>
+                  {expandable ? (
+                    // A checkbox and CSS rather than a client component: the
+                    // detail content is server-rendered, and a hundred rows of
+                    // hydrated toggle state buys nothing over `:has()`.
+                    //
+                    // The checkbox carries an id so cells further along the row
+                    // can point a plain `<label for>` at it — one row, one
+                    // toggle, several ways to reach it.
+                    <label className="row-expand" htmlFor={`row-${p.id}`}>
+                      <input type="checkbox" className="row-toggle" id={`row-${p.id}`} />
+                      <span className="part-no tech">{p.partNumber}</span>
+                      <span className="row-caret" aria-hidden="true" />
+                    </label>
+                  ) : (
+                    <span className="part-no tech">{p.partNumber}</span>
+                  )}
+                </td>
+                {tableDefs.map((d, col) => {
                   const raw = p.specs[d.key];
                   const isNum = d.kind === "number" && typeof raw === "number";
                   const text =
@@ -354,6 +375,14 @@ function SpecTable({
                   // "بونا-ان (نیتریل)" must follow the page direction, or mixed
                   // runs inside them reorder wrongly.
                   const technical = isNum || isTechnicalValue(text);
+                  /*
+                   * The leading spec column opens the row too.
+                   *
+                   * It is the product's name in every family that has one, and
+                   * a name is what a reader clicks. Only the first: making every
+                   * cell a target would swallow text selection across the table.
+                   */
+                  const opens = expandable && col === 0 && !isNum;
                   return (
                     <td
                       key={d.key}
@@ -361,26 +390,21 @@ function SpecTable({
                         isNum ? "num tech tech-num" : technical ? "tech" : undefined
                       }
                     >
-                      {text}
-                      {isNum && d.unit ? d.unit : ""}
+                      {opens ? (
+                        <label className="row-expand" htmlFor={`row-${p.id}`}>
+                          <span className="row-name">{text}</span>
+                          <span className="row-caret" aria-hidden="true" />
+                        </label>
+                      ) : (
+                        <>
+                          {text}
+                          {isNum && d.unit ? d.unit : ""}
+                        </>
+                      )}
                     </td>
                   );
                 })}
                 <td className="num tech tech-num">{p.packQty}</td>
-                <td>
-                  {expandable ? (
-                    // A checkbox and CSS rather than a client component: the
-                    // detail content is server-rendered, and a hundred rows of
-                    // hydrated toggle state buys nothing over `:has()`.
-                    <label className="row-expand">
-                      <input type="checkbox" className="row-toggle" />
-                      <span className="part-no tech">{p.partNumber}</span>
-                      <span className="row-caret" aria-hidden="true" />
-                    </label>
-                  ) : (
-                    <span className="part-no tech">{p.partNumber}</span>
-                  )}
-                </td>
                 {/* Bare amounts — the currency is named once in the group header.
                     Repeating "تومان" on 200 rows costs ~40px of table width and
                     tells the buyer nothing they don't already know. */}

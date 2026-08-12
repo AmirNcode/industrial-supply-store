@@ -49,6 +49,9 @@ export function ColumnEditor({
     });
   }
 
+  /** Every product in the family has a part number, so the widest count is it. */
+  const productTotal = rows.reduce((n, r) => Math.max(n, r.productCount), 0);
+
   const kept = rows.filter((r) => !dropKeys.includes(r.key));
   const edits = JSON.stringify({
     // Sort is the position in the kept list, so deleting a column closes the
@@ -64,10 +67,6 @@ export function ColumnEditor({
     })),
     dropKeys,
   });
-
-  if (rows.length === 0) {
-    return <p className="text-[12px] text-[var(--color-ink-muted)]">{t.columnsNone}</p>;
-  }
 
   return (
     <form action={formAction}>
@@ -104,6 +103,36 @@ export function ColumnEditor({
             </tr>
           </thead>
           <tbody>
+            {/*
+              The part number, shown but not editable.
+
+              It is a column on `products`, not one of this family's specs, so
+              there is nothing here to rename, reorder or delete. It was absent
+              entirely before, which made the catalog's first column look like
+              it came from nowhere.
+            */}
+            <tr className="bg-[var(--color-panel-alt)]">
+              <td className="num text-[10px] text-[var(--color-ink-faint)]">
+                {t.columnsFixed}
+              </td>
+              <td className="tech">part_number</td>
+              <td className="text-[11px]">{t.partNumber}</td>
+              <td className="text-[11px]" dir="rtl">
+                {t.partNumber}
+              </td>
+              <td />
+              <td className="text-[11px] text-[var(--color-ink-muted)]">
+                {t.reviewKindText}
+              </td>
+              <td className="num">
+                <input type="checkbox" checked readOnly disabled />
+              </td>
+              <td className="num">
+                <input type="checkbox" checked={false} readOnly disabled />
+              </td>
+              <td className="num tech tech-num">{formatInt(productTotal, locale)}</td>
+              <td />
+            </tr>
             {rows.map((r, i) => {
               const dropped = dropKeys.includes(r.key);
               return (
@@ -209,7 +238,9 @@ export function ColumnEditor({
         </table>
       </div>
 
-      <p className="mt-1 text-[11px] text-[var(--color-ink-muted)]">{t.columnsDeleteHint}</p>
+      <p className="mt-1 text-[11px] text-[var(--color-ink-muted)]">
+        {rows.length === 0 ? t.columnsNone : t.columnsDeleteHint}
+      </p>
 
       <button type="submit" className="btn-small mt-2" disabled={demo || isPending}>
         {t.columnsSave}

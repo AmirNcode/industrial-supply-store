@@ -338,18 +338,22 @@ html[lang="fa"] .spec-table thead th {
   opacity: 0;
   pointer-events: none;
 }
-.row-expand .part-no {
+.row-expand .part-no,
+.row-expand .row-name {
   text-decoration: underline;
   text-decoration-style: dotted;
   text-underline-offset: 2px;
 }
 .row-caret {
+  flex: none;
   border-inline-start: 3.5px solid transparent;
   border-inline-end: 3.5px solid transparent;
   border-top: 4px solid var(--color-ink-muted);
   transition: transform 0.12s;
 }
-.row-expand:has(.row-toggle:checked) .row-caret {
+/* Keyed off the row rather than the label, because a cell further along the
+   row opens it through `<label for>` and has no checkbox of its own. */
+.spec-table tbody tr.product-row:has(.row-toggle:checked) .row-caret {
   transform: rotate(180deg);
 }
 .row-expand:has(.row-toggle:focus-visible) .part-no {
