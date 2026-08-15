@@ -222,10 +222,17 @@ html[dir="rtl"] th.tech-num {
    Spec table
    -------------------------------------------------------------------------- */
 
+/* No `overflow` on purpose, and it is load-bearing: `position: sticky` binds to
+   the nearest scroll container, so a card that clipped or scrolled would pin the
+   table head to its own top edge — where the head already is — instead of to the
+   window. The catalog table is built to fit the window at 1024 and up, which is
+   what the wrapping cells and the folded facets bought, so the horizontal scroll
+   this used to carry no longer earns a dead sticky head. A family whose columns
+   outgrow the window scrolls the page sideways now rather than the card, which
+   is worse-looking than a scrollbar and better than unreachable columns. */
 .table-card {
   border: 1px solid var(--color-rule);
   border-radius: 5px;
-  overflow: hidden;
   background: #fff;
 }
 
@@ -321,9 +328,10 @@ html[lang="fa"] .spec-table thead th {
   padding: 0;
   background: var(--color-paper);
 }
-/* Kept inside the visible area of a table that scrolls sideways. Capped at a
-   readable measure rather than stretched to the table's full width, which for
-   a 47-column family is several screens. */
+/* Kept inside the visible area when a table is wide enough to scroll sideways —
+   the page carries that scroll now, not the card. Capped at a readable measure
+   rather than stretched to the table's full width, which for a 47-column family
+   is several screens. */
 .detail-sticky {
   position: sticky;
   inset-inline-start: 0;
@@ -604,6 +612,51 @@ html[dir="rtl"] .admin-group[open] > summary::before {
 .filter-fold-content {
   border-top: 1px solid var(--color-rule);
   padding: 12px 12px 0;
+}
+
+/* --------------------------------------------------------------------------
+   The catalog head, pinned — desktop
+
+   A family renders all of its rows, so "which column is this?" can come up a
+   thousand rows below the heading that answers it. The filter toolbar and the
+   table head pin to the top of the window together, and only while the reader
+   is scrolling back up: `CatalogHeadReveal` sets `data-hidden` on the way down,
+   which is the same gesture the masthead makes on a phone, for the same reason
+   — chrome that is only worth its ~90px when someone is looking for it.
+
+   Un-pinning is `static` rather than the masthead's `translateY(-100%)`. A
+   transform would drag the head up over the rows above it whenever the reader
+   scrolls down while it is still sitting in its natural place, which is most of
+   the first screenful. `static` simply puts it back where it belongs.
+
+   Phones are untouched: they render the card list, not this table, and their
+   own masthead reveal is below.
+   -------------------------------------------------------------------------- */
+@media (min-width: 1024px) {
+  /* An open fold stays pinned in both directions, unlike everything else here.
+     It is a panel the reader is working in, not chrome they are scrolling past:
+     letting the reveal drop it would put it back at the top of the document,
+     which from a thousand rows down means it has simply vanished. */
+  [data-catalog-head]:not([data-hidden="true"]) .filter-fold,
+  [data-catalog-head] .filter-fold[open] {
+    position: sticky;
+    top: 0;
+    /* Above the table head, which pins directly beneath it. */
+    z-index: 30;
+    /* However many facets a family has, the panel cannot take the whole window
+       and leave no results to look at while filtering. */
+    max-height: 85vh;
+    overflow-y: auto;
+  }
+
+  [data-catalog-head]:not([data-hidden="true"]) .catalog-table thead {
+    position: sticky;
+    /* However tall the pinned fold currently is — 0 when a family has no
+       filterable columns and renders none. `CatalogHeadReveal` measures it,
+       because an open fold is as tall as its facets and no constant can say. */
+    top: var(--catalog-head-top, 0px);
+    z-index: 20;
+  }
 }
 
 /* The card list's version of the same fold. */

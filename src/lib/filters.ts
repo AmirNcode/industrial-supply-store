@@ -2,8 +2,12 @@ import type { Filters } from "@/db/queries";
 
 /**
  * Filter params carry an `f_` prefix so a spec key can never collide with a
- * reserved param (`page`, `q`, `pn`) — spec keys come from seed data and are
- * not a namespace we fully control.
+ * reserved param (`q`, `pn`) — spec keys come from seed data and are not a
+ * namespace we fully control.
+ *
+ * The helpers below still drop `page`. The family table is no longer paginated,
+ * so nothing writes it, but a link bookmarked while it was carries it and there
+ * is no reason to propagate it into every facet href from then on.
  */
 export const FILTER_PREFIX = "f_";
 
@@ -67,14 +71,6 @@ export function clearAllHref(base: string, sp: RawSearchParams): string {
     if (v === undefined) continue;
     for (const one of Array.isArray(v) ? v : [v]) params.append(k, one);
   }
-  const qs = params.toString();
-  return qs ? `${base}?${qs}` : base;
-}
-
-export function pageHref(base: string, sp: RawSearchParams, page: number): string {
-  const params = toParams(sp);
-  params.delete("page");
-  if (page > 1) params.set("page", String(page));
   const qs = params.toString();
   return qs ? `${base}?${qs}` : base;
 }

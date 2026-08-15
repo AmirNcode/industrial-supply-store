@@ -16,7 +16,12 @@ import {
   getFamilyForImport,
   writeImport,
 } from "@/db/importQueries";
-import { createFamily, deleteCategory, deleteFamily } from "@/db/familyQueries";
+import {
+  createFamily,
+  deleteCategory,
+  deleteFamily,
+  moveFamily,
+} from "@/db/familyQueries";
 
 /**
  * Uploading a supplier's spreadsheet, in two stages through one form.
@@ -207,6 +212,27 @@ export async function createFamilyAction(
 
   revalidatePath("/", "layout");
   return { kind: "created", name: String(formData.get("nameEn") ?? "").trim() };
+}
+
+/**
+ * Reorder one family within its category.
+ *
+ * No returned state, unlike the other actions on this page: the list is
+ * re-rendered from the database by the revalidation below, so the new position
+ * *is* the confirmation. A move that cannot happen — the family is gone, or it
+ * is already at the end it was asked to move past — changes nothing and says
+ * nothing, which is what the redrawn list shows either way.
+ */
+export async function moveFamilyAction(formData: FormData): Promise<void> {
+  await assertAdminWrite();
+
+  const id = Number(formData.get("familyId"));
+  if (!Number.isInteger(id) || id <= 0) return;
+
+  if (await moveFamily(id, formData.get("dir") === "up" ? -1 : 1)) {
+    // Family order is what the category pages list families in.
+    revalidatePath("/", "layout");
+  }
 }
 
 export type DeleteState =

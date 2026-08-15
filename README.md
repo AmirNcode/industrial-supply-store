@@ -193,6 +193,7 @@ knowing before you open it in front of someone.
 |---|---|
 | Category tree, 4 levels deep, 97 categories | ✅ |
 | Data-driven spec tables, per-family columns | ✅ |
+| Whole family on one page, with a sticky head | ✅ |
 | Faceted filtering with live counts | ✅ |
 | Inline quantity + add to cart, per row | ✅ |
 | Quantity-break pricing (1–9 / 10+) | ✅ |
@@ -203,6 +204,7 @@ knowing before you open it in front of someone.
 | Cart persisted to Postgres via cookie session | ✅ |
 | RFQ submission with reference number | ✅ |
 | Admin inbox for submitted RFQs | ✅ |
+| Admin: catalog order of families within a category | ✅ |
 | English + Persian, full RTL | ✅ |
 | Payment processing | ❌ out of scope for v1 |
 | Buyer accounts | ❌ out of scope for v1 |
@@ -241,11 +243,83 @@ server-rendered.
 | Category page | 9 ms |
 | Category "list of products" view | 27 ms |
 | Filtered spec table | 33 ms |
-| Largest spec table (1,374-product family) | 61 ms |
 | Search autocomplete | 3 ms |
 
 The facet aggregation runs in ~4.7 ms against ~160,000 facet rows, entirely on
 index scans.
+
+Family pages are the exception and are measured separately below — they render
+every row they have, so their cost is a function of family size rather than a
+constant.
+
+---
+
+## The whole family on one page
+
+The spec table used to page at 100 rows. It does not any more: a family renders
+all of its products, however many that is.
+
+The reason is that a page number is a bad answer to "where is the 1.5 inch one?".
+The facets and the browser's own find-in-page both work on what is rendered, and
+neither of them can see page 9 — so on a 1,600-row family the reader had to
+guess which of sixteen pages held the size they wanted, then filter again once
+they got there. Every row on one page makes both tools work on the whole family.
+
+It is not free, and the cost lands on the largest families. Both layouts render
+from the same data (see [Mobile](#mobile)), so each row is rendered twice:
+
+| Family | Rows | Server render | HTML | Over the wire (gzip) |
+|---|---|---|---|---|
+| Grinding Wheels | 126 | 33 ms | 0.8 MB | 113 KB |
+| Oil-Resistant Buna-N O-Rings | 1,374 | 361 ms | 10.1 MB | 1.2 MB |
+| Socket Head Cap Screws | 2,400 | 538 ms | 14.6 MB | 1.9 MB |
+
+Measured against a warm local Postgres on a production build. Half a second and
+~2 MB is the worst case in this catalog, and a real one is unlikely to hold a
+2,400-part family — but it is the number to watch if one does. The sticky table
+head below is what makes a page that long readable; if the payload ever becomes
+the problem, rendering one layout per request instead of both is the lever, and
+[Mobile](#mobile) explains why that was not taken.
+
+The category "list of products" view still pages at 100. It spans a whole
+subtree — 12,948 products at the top of this catalog — which is a different
+order of magnitude from a family.
+
+### The head stays with the table
+
+Desktop only. The filter toolbar pins to the top of the window and the table's
+column headings pin directly under it, and both do so **only while the reader is
+scrolling back up** — `CatalogHeadReveal` un-pins them on the way down. That is
+the phone masthead's gesture applied to the table, for the same reason: chrome
+worth its ~90px when someone is looking for it, and not before.
+
+**An open filter panel is the exception and stays pinned in both directions.**
+It is a panel someone is working in, not chrome they are scrolling past, and
+un-pinning it puts it back at the top of the document — which from a thousand
+rows down means it has simply vanished. The column headings still get out of the
+way on the way down; only the panel holds. It is capped at `85vh` so a family
+with a lot of facets cannot take the whole window and leave no results to filter.
+
+Three things about it are worth knowing before changing anything nearby:
+
+- **`.table-card` must not have `overflow`.** `position: sticky` binds to the
+  nearest scroll container, so the wrapper's old `overflow-x: auto` pinned the
+  head to the wrapper's own top edge — which is where the head already sits.
+  Removing it is what makes the head reach the window. The table is built to fit
+  the window at 1024 and up, so nothing was lost; a family whose columns outgrow
+  the window now scrolls the page sideways instead of the card.
+- **Un-pinning is `position: static`, not the masthead's `translateY(-100%)`.**
+  A transform hides an element wherever it is, and for most of the first
+  screenful the head is still in its natural place — it would be dragged up over
+  the rows above it.
+- **The headings' offset is measured, not a constant.** An open fold is as tall
+  as its facets, so `CatalogHeadReveal` keeps `--catalog-head-top` on the
+  section equal to the fold's current height with a `ResizeObserver`. The same
+  callback resets the scroll baseline: opening the fold grows the page and the
+  browser shifts the scroll offset to compensate, and without that reset the
+  shift reads as a scroll down and drops the head the moment it is opened.
+
+Phones are untouched: they render the card list, not this table.
 
 ---
 
@@ -357,10 +431,13 @@ Three details that are easy to get wrong and are handled explicitly:
   bar, so it never pinned.
 
 Both layouts are rendered from the same data and one is hidden with CSS, which
-costs a second render per row. That doubled spec-table latency (~27 ms → ~95 ms
-at 200 rows), so the page size is 100. Sniffing the User-Agent to render only one
-layout would be faster still, but it breaks resizing a desktop window to check
-the mobile view — which is how this actually gets reviewed.
+costs a second render per row. Sniffing the User-Agent to render only one layout
+would be faster, but it breaks resizing a desktop window to check the mobile
+view — which is how this actually gets reviewed.
+
+That second render is what makes family size expensive, and the family page is
+no longer paginated: a family renders every one of its rows. See
+[The whole family on one page](#the-whole-family-on-one-page).
 
 ## Persian / RTL notes
 

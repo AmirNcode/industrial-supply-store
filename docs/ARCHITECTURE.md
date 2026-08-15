@@ -76,6 +76,18 @@ tracking payload.
 **Inventory is advisory.** Nothing blocks an order that exceeds
 `inventory_available`; the admin queue flags it. Counts are in packs.
 
+**`.table-card` must not be given `overflow`.** The catalog table's head is
+`position: sticky`, which binds to the nearest scroll container — so a wrapper
+that scrolls or clips pins the head to its own top edge instead of the window,
+and the head silently stops working. This already cost the horizontal scroll the
+wrapper used to carry; the table is built to fit the window at 1024 and up.
+
+**Catalog order is `sort`, and admin renumbers a whole run when it changes.**
+`categories.sort` and `product_families.sort` default to 0, so a seeded run is a
+set of ties broken by `id`. `moveFamily` renumbers the category's families from
+the order they render in rather than swapping two rows, because swapping two
+zeros changes nothing.
+
 ## Data flow: an order
 
 1. `submitQuoteAction` (`src/app/actions.ts`) writes `orders` + `order_items`

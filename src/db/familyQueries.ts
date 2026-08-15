@@ -259,6 +259,46 @@ async function recountCategories(tx: Parameters<Parameters<typeof sql.begin>[1]>
   `;
 }
 
+/**
+ * Move a family one place up or down among its category's families.
+ *
+ * The whole category is renumbered rather than two rows swapped. `sort`
+ * defaults to 0, so a seeded category is a run of ties that `ORDER BY sort, id`
+ * breaks by id — swapping two zeros would reorder nothing. Renumbering from the
+ * order the catalog actually renders makes the first move on such a category
+ * take effect, and every later one is then a plain swap.
+ *
+ * Returns false at either end of the list, which the buttons already prevent;
+ * this is the same answer for a hand-made POST.
+ */
+export async function moveFamily(familyId: number, delta: -1 | 1): Promise<boolean> {
+  return sql.begin(async (tx) => {
+    const [family] = await tx<{ categoryId: number }[]>`
+      SELECT category_id AS "categoryId" FROM product_families WHERE id = ${familyId}
+    `;
+    if (!family) return false;
+
+    const siblings = await tx<{ id: number }[]>`
+      SELECT id FROM product_families
+      WHERE category_id = ${family.categoryId}
+      ORDER BY sort, id
+    `;
+    const from = siblings.findIndex((f) => f.id === familyId);
+    const to = from + delta;
+    if (from < 0 || to < 0 || to >= siblings.length) return false;
+
+    const ids = siblings.map((f) => f.id);
+    [ids[from], ids[to]] = [ids[to], ids[from]];
+
+    await tx`
+      UPDATE product_families f SET sort = u.sort
+      FROM unnest(${ids}::int[]) WITH ORDINALITY AS u(id, sort)
+      WHERE f.id = u.id
+    `;
+    return true;
+  });
+}
+
 export type CreateFamilyResult =
   | { ok: true; id: number; slug: string }
   | { ok: false; reason: "no-category" | "no-name" };

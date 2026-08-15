@@ -1,10 +1,11 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import { useFormStatus } from "react-dom";
 import Link from "next/link";
 import { getDict, type Locale } from "@/lib/i18n";
 import { formatInt } from "@/lib/money";
-import { importCsvAction, type ImportState } from "./actions";
+import { importCsvAction, moveFamilyAction, type ImportState } from "./actions";
 import { ColumnReview } from "./ColumnReview";
 import { DeleteControl } from "./DeleteControl";
 import type { FamilyListRow } from "@/db/importQueries";
@@ -121,7 +122,7 @@ export function ImportPanel({
             </span>
           </summary>
           <div className="mt-1 grid gap-1">
-            {g.families.map((f) => {
+            {g.families.map((f, i) => {
               const chosen = picked?.familyId === f.id ? picked.name : null;
               return (
               <div key={f.id} className="border-b border-[var(--color-rule-light)] py-1.5">
@@ -252,6 +253,23 @@ export function ImportPanel({
                       </div>
                     )}
                   </form>
+
+                  {/* Catalog order, set the same way the column editor sets it:
+                      two buttons rather than dragging. A category runs to a
+                      dozen families and the drop target for the one at the
+                      bottom is off-screen, and buttons work on a phone and from
+                      the keyboard without a library.
+
+                      Unlike the column editor there is nothing to save — the
+                      list here is the database's own order, so each press is a
+                      write and the redrawn row is the confirmation. */}
+                  <MoveFamily
+                    familyId={f.id}
+                    first={i === 0}
+                    last={i === g.families.length - 1}
+                    locale={locale}
+                    demo={demo}
+                  />
                 </div>
 
                 {state && state.kind !== "review" && state.familyId === f.id && (
@@ -265,6 +283,69 @@ export function ImportPanel({
         );
       })}
     </div>
+  );
+}
+
+/**
+ * The two order buttons, in their own form.
+ *
+ * A form of its own because it sits beside the upload form and forms cannot
+ * nest; the direction rides on the submit button's own value, so one form
+ * carries both. `useFormStatus` has to read from inside the form it reports on,
+ * which is why the buttons are a component rather than markup here.
+ */
+function MoveFamily({
+  familyId,
+  first,
+  last,
+  locale,
+  demo,
+}: {
+  familyId: number;
+  first: boolean;
+  last: boolean;
+  locale: Locale;
+  demo: boolean;
+}) {
+  const t = getDict(locale);
+  return (
+    <form action={moveFamilyAction} className="flex shrink-0 items-center gap-1">
+      <input type="hidden" name="familyId" value={familyId} />
+      <MoveButton dir="up" label={t.columnsMoveUp} disabled={first || demo}>
+        ↑
+      </MoveButton>
+      <MoveButton dir="down" label={t.columnsMoveDown} disabled={last || demo}>
+        ↓
+      </MoveButton>
+    </form>
+  );
+}
+
+function MoveButton({
+  dir,
+  label,
+  disabled,
+  children,
+}: {
+  dir: "up" | "down";
+  label: string;
+  disabled: boolean;
+  children: React.ReactNode;
+}) {
+  // Both buttons go quiet while either is in flight: a second press before the
+  // list is redrawn would be aimed at a position that has already changed.
+  const { pending } = useFormStatus();
+  return (
+    <button
+      type="submit"
+      name="dir"
+      value={dir}
+      className="btn-tiny"
+      disabled={disabled || pending}
+      aria-label={label}
+    >
+      {children}
+    </button>
   );
 }
 

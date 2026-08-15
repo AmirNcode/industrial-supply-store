@@ -13,3 +13,6 @@ next-env.d.ts
 # Machine-local Docker port overrides. The documented setup is in
 # docker-compose.yml; override locally when another project holds the port.
 docker-compose.override.yml
+
+# `vercel env pull` output — carries real project keys.
+venv.txt

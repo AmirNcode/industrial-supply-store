@@ -258,11 +258,14 @@ export async function countProducts(
   return rows[0]?.n ?? 0;
 }
 
+/**
+ * Every product in the family that matches the filters — the whole set, not a
+ * page of it. A buyer comparing a family reads it as one table and finds a size
+ * by scrolling or by filtering, not by guessing which of sixteen pages holds it.
+ */
 export async function getProducts(
   familyId: number,
   filters: Filters,
-  limit: number,
-  offset: number,
 ): Promise<ProductDetailRow[]> {
   return sql<ProductDetailRow[]>`
     SELECT p.id, p.part_number AS "partNumber", p.specs,
@@ -272,7 +275,6 @@ export async function getProducts(
     FROM products p
     WHERE ${filterClause(familyId, filters)}
     ORDER BY p.sort
-    LIMIT ${limit} OFFSET ${offset}
   `;
 }
 

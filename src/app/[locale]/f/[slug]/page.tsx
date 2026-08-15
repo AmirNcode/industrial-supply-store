@@ -22,6 +22,7 @@ import { AddToCartRow } from "@/components/AddToCartRow";
 import { InCartQty } from "@/components/InCartQty";
 import { CatalogImage } from "@/components/CatalogImage";
 import { ProductDetails } from "@/components/ProductDetails";
+import { CatalogHeadReveal } from "@/components/CatalogHeadReveal";
 import { isLocale, getDict, pick, type Locale } from "@/lib/i18n";
 import {
   formatInt,
@@ -34,27 +35,27 @@ import { getFxRate } from "@/lib/fx";
 import { specValueLabel, isTechnicalValue } from "@/lib/specValues";
 import {
   parseFilters,
-  pageHref,
   clearAllHref,
   countActiveFilters,
   type RawSearchParams,
 } from "@/lib/filters";
 
 /**
- * 100 rather than 200.
+ * The whole family on one page.
  *
- * The page renders the desktop table and the mobile card list from the same
- * data and hides one with CSS, so every row costs two renders and two
- * add-to-cart islands in the RSC payload. At 200 rows that measured ~95ms
- * against ~27ms before the mobile layout existed. Halving the page restores
- * the original latency and 100 rows is still a long page to scan.
+ * It was paginated at 100 rows because the page renders the desktop table and
+ * the mobile card list from the same data and hides one with CSS, so every row
+ * costs two renders and two add-to-cart islands in the RSC payload. A buyer
+ * reads a family as one table, though, and a 1,600-row family split across
+ * sixteen pages means finding a size by guessing which page holds it. The
+ * facets and the browser's own find-in-page both work on what is rendered, and
+ * neither of them can see page 9.
  *
- * The alternative — sniffing the User-Agent to render only one layout — was
- * rejected because it breaks resizing a desktop window to check the mobile
- * view, which is exactly how this gets reviewed.
+ * The cost is real and lands on the largest families, and this route is
+ * dynamic — it reads `searchParams`, so every visit pays it. The 2,400-product
+ * family in the seed measures ~540ms and 1.9MB over the wire; README has the
+ * table. The sticky table head is what makes a page that long readable.
  */
-const PAGE_SIZE = 100;
-
 export default async function FamilyPage({
   params,
   searchParams,
@@ -72,13 +73,12 @@ export default async function FamilyPage({
   if (!family) notFound();
 
   const filters = parseFilters(sp);
-  const page = Math.max(1, Number(sp.page) || 1);
   const base = `/${l}/f/${slug}`;
 
   const [defs, total, products, facets, catRow, rate] = await Promise.all([
     getSpecDefs(family.id),
     countProducts(family.id, filters),
-    getProducts(family.id, filters, PAGE_SIZE, (page - 1) * PAGE_SIZE),
+    getProducts(family.id, filters),
     getFacets(family.id, filters),
     sql<{ path: string }[]>`SELECT path FROM categories WHERE id = ${family.categoryId}`,
     getFxRate(),
@@ -110,7 +110,6 @@ export default async function FamilyPage({
         : null;
   const highlighted = typeof sp.pn === "string" ? sp.pn.toUpperCase() : null;
   const activeFilterCount = countActiveFilters(filters);
-  const pages = Math.ceil(total / PAGE_SIZE);
 
   return (
     // The family page drops the top-level category rail — as the reference site
@@ -151,7 +150,15 @@ export default async function FamilyPage({
         )}
 
         <div className="flex gap-5">
-          <section className="min-w-0 flex-1">
+          {/*
+            The section is what the sticky head is measured against. The filter
+            fold pins to the top of the window and the table's own head pins
+            directly beneath it, and the CSS needs one element that sees both to
+            know how far down the second one sits. `CatalogHeadReveal` marks this
+            element while the reader is scrolling down, which un-pins the pair —
+            the same reveal the masthead does on a phone.
+          */}
+          <section className="min-w-0 flex-1" data-catalog-head>
             <div className="mb-2 flex items-start gap-3">
               <CatalogImage
                 imageUrl={family.imageUrl}
@@ -183,6 +190,8 @@ export default async function FamilyPage({
                 </div>
               </div>
             </div>
+
+            <CatalogHeadReveal />
 
             {/*
               The facets fold out above the table rather than standing beside
@@ -271,7 +280,7 @@ export default async function FamilyPage({
               </p>
             ) : (
               <>
-                <div className="table-card scroll-x hidden lg:block">
+                <div className="table-card hidden lg:block">
                   <SpecTable
                     locale={l}
                     defs={defs}
@@ -293,32 +302,6 @@ export default async function FamilyPage({
                     rate={rate}
                   />
                 </div>
-
-                {pages > 1 && (
-                  <nav className="mt-3 flex flex-wrap items-center gap-1.5 text-[12px]">
-                    {Array.from({ length: pages }, (_, i) => i + 1)
-                      .filter(
-                        (p) =>
-                          p === 1 ||
-                          p === pages ||
-                          Math.abs(p - page) <= 2,
-                      )
-                      .map((p, i, arr) => (
-                        <span key={p} className="flex items-center gap-1.5">
-                          {i > 0 && arr[i - 1] !== p - 1 && (
-                            <span className="text-[var(--color-ink-faint)]">…</span>
-                          )}
-                          {p === page ? (
-                            <span className="font-bold tech">{formatInt(p, l)}</span>
-                          ) : (
-                            <Link href={pageHref(base, sp, p)} prefetch={false} className="tech">
-                              {formatInt(p, l)}
-                            </Link>
-                          )}
-                        </span>
-                      ))}
-                  </nav>
-                )}
               </>
             )}
           </section>
