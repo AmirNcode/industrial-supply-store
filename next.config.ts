@@ -21,6 +21,22 @@ const nextConfig: NextConfig = {
    */
   allowedDevOrigins: ["192.168.2.*", "192.168.2.48"],
   /**
+   * Raised from the default 60.
+   *
+   * Vercel builds this project in `iad1` while the database is in
+   * `eu-central-1`, so every query during prerendering is a transatlantic round
+   * trip and a page that renders in milliseconds locally can take tens of
+   * seconds here. Pages were already brushing the 60-second ceiling before
+   * anything was added to the build — and a page that trips it is *retried*,
+   * which spends the same latency again and pushes the next page closer to its
+   * own limit. The 2026-08-16 deploy failed that way, ending in the pooler
+   * dropping a connection mid-render.
+   *
+   * This buys headroom; it does not make the build fast. The real lever is
+   * prerendering fewer pages, which is why the category route generates none.
+   */
+  staticPageGenerationTimeout: 120,
+  /**
    * Catalog artwork goes through the image optimiser.
    *
    * Every picture in this catalog is painted into a 34–64px tile, and the

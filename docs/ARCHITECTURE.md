@@ -79,6 +79,18 @@ tracking payload.
 **Inventory is advisory.** Nothing blocks an order that exceeds
 `inventory_available`; the admin queue flags it. Counts are in packs.
 
+**`generateStaticParams` must stay cheap, and the category route deliberately
+returns `[]`.** Two facts collide here. A dynamic segment with *no*
+`generateStaticParams` is fully dynamic — `no-store`, re-rendered per request,
+`revalidate` ignored. But every path it *does* return is prerendered at build
+time, and Vercel builds this project in `iad1` while the database is in
+`eu-central-1`, so each one costs a transatlantic round trip per query on a
+single-worker machine. Returning the 26 top-level categories across two locales
+added 52 pages, pushed several past the 60-second page ceiling, and failed the
+2026-08-16 deploy with `CONNECTION_CLOSED` from the pooler. Empty gets both:
+the route stays cacheable and the build pays nothing. `staticPageGenerationTimeout`
+is raised to 120 for the pages that still prerender.
+
 **Catalog artwork goes through `next/image`, and `remotePatterns` allows every
 HTTPS host.** Administrators paste arbitrary supplier URLs, so the host cannot
 be enumerated in advance; the consequence is that the optimiser will fetch any

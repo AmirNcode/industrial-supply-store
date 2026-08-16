@@ -5,12 +5,11 @@ import {
   getChildren,
   getAncestors,
   getFamiliesInSubtree,
-  getTopCategories,
   type FamilyRow,
 } from "@/db/queries";
 import { CategorySidebar } from "@/components/CategorySidebar";
 import { CatalogImage } from "@/components/CatalogImage";
-import { isLocale, getDict, pick, locales, type Locale } from "@/lib/i18n";
+import { isLocale, getDict, pick, type Locale } from "@/lib/i18n";
 import { categorySpine } from "@/lib/categoryColor";
 import { formatInt } from "@/lib/money";
 import { CategoryHeader } from "./CategoryHeader";
@@ -18,25 +17,27 @@ import { CategoryHeader } from "./CategoryHeader";
 export const revalidate = 3600;
 
 /**
- * The top-level categories, prerendered at build; everything deeper is
- * generated on its first request and cached from then on.
+ * Empty on purpose: prerender nothing, cache everything.
  *
- * The list matters less than its existence. A dynamic segment with no
+ * What matters is that this function *exists*. A dynamic segment with no
  * `generateStaticParams` at all is treated as fully dynamic — served
- * `no-store`, re-rendered per request, with `revalidate` above ignored, which
- * is what the production logs were showing. Declaring even a short list opts
- * the route into the static path, and `dynamicParams` (on by default) is what
- * lets the ninety-odd deeper categories still resolve.
+ * `no-store`, re-rendered on every request, with the `revalidate` above
+ * ignored, which is what the production logs were showing. Declaring it, even
+ * returning nothing, opts the route into the static path; `dynamicParams`
+ * (on by default) then generates each category on its first request and caches
+ * it for an hour.
  *
- * Only the ten roots are listed because the build queries the live database
- * for each entry, and the deep pages are cheap to fill in on demand — one
- * visitor pays for one render, once an hour, per category.
+ * Returning the actual categories is the obvious version and it broke the
+ * build. Vercel builds this project in `iad1` while the database is in
+ * `eu-central-1`, so every query at build time is a transatlantic round trip,
+ * and the build machine runs a single worker. Twenty-six top-level categories
+ * across two locales is fifty-two extra pages of that; several blew past
+ * Next's 60-second per-page ceiling and the pooler eventually dropped the
+ * connection mid-render. One visitor paying for one render, once an hour, is
+ * the cheaper trade — and it costs the build nothing.
  */
 export async function generateStaticParams() {
-  const roots = await getTopCategories();
-  return locales.flatMap((locale) =>
-    roots.map((c) => ({ locale, slug: c.path.split("/") })),
-  );
+  return [];
 }
 
 /**

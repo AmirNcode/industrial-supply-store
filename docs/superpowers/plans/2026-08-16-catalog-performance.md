@@ -113,6 +113,24 @@ generated on first request and cached from then on.
 | A category not prerendered | same | MISS once (108 ms), HIT after |
 | `Cache-Control` | `private, no-cache, no-store` | `s-maxage=3600, stale-while-revalidate` |
 
+**This shipped broken once.** The first version returned the top-level
+categories from `generateStaticParams`, on the assumption there were about ten
+of them. There are 26, and across two locales that is 52 extra pages
+prerendered at build time — 35 pages became 87. Vercel builds in `iad1` and the
+database is in `eu-central-1`, so every one of those pages paid transatlantic
+latency per query on a single-worker machine: several blew past Next's
+60-second page ceiling, each timeout triggered a retry that spent the latency
+again, and the build ended with the pooler dropping a connection mid-render.
+
+The fix is that `generateStaticParams` returns `[]`. Its *existence* is what
+opts the route out of fully-dynamic rendering; the paths it returns are only
+what gets built ahead of time, and nothing here needs to be. Verified: 35 pages
+again, route still `●`, first request MISS and every one after it a 2–3 ms HIT.
+
+The lesson worth keeping: **`generateStaticParams` is a build-time cost
+multiplied by locales, paid at whatever latency the build region has to the
+database.** Count the rows before returning them.
+
 ### Step 1 (original wording, for reference)
 
 Move the `view` / `page` reading out of the statically rendered path so the
