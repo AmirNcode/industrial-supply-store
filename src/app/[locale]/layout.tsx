@@ -14,6 +14,17 @@ export const metadata: Metadata = {
     "Industrial parts catalog: fasteners, sealing, bearings, pipe fittings and more.",
 };
 
+/**
+ * Hard ceiling on every page and Server Action under this layout. The platform
+ * default is 300s, and the 2026-08-15 incident showed what that buys: a request
+ * wedged behind a starved connection pool hangs for five minutes before anyone
+ * — user or log — learns anything. The slowest legitimate page (the largest
+ * unpaginated family) renders in well under 2s, so 60s is not a budget any real
+ * request uses; it is how fast a wedged one turns into an error we can see.
+ * Route handlers under /api do not inherit this and carry their own.
+ */
+export const maxDuration = 60;
+
 export function generateStaticParams() {
   return locales.map((locale) => ({ locale }));
 }

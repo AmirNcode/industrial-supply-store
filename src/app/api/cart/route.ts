@@ -66,3 +66,6 @@ export async function DELETE(request: Request) {
     { headers: NO_STORE },
   );
 }
+
+/** Route handlers do not inherit the layout ceiling; same reasoning as there. */
+export const maxDuration = 60;

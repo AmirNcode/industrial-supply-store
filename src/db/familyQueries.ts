@@ -260,40 +260,42 @@ async function recountCategories(tx: Parameters<Parameters<typeof sql.begin>[1]>
 }
 
 /**
- * Move a family one place up or down among its category's families.
+ * Write a category's families into the order the operator arranged them in.
  *
- * The whole category is renumbered rather than two rows swapped. `sort`
- * defaults to 0, so a seeded category is a run of ties that `ORDER BY sort, id`
- * breaks by id — swapping two zeros would reorder nothing. Renumbering from the
- * order the catalog actually renders makes the first move on such a category
- * take effect, and every later one is then a plain swap.
+ * A whole category at once, not one move at a time: moving a family seven
+ * places is one intention and should be one write, and the admin page only
+ * sends this when Save is pressed. It also renumbers rather than swapping —
+ * `sort` defaults to 0, so a seeded category is a run of ties that
+ * `ORDER BY sort, id` breaks by id, and swapping two zeros would reorder
+ * nothing.
  *
- * Returns false at either end of the list, which the buttons already prevent;
- * this is the same answer for a hand-made POST.
+ * The submitted ids must be exactly the category's own families, no more and
+ * no fewer. A list that has drifted is refused whole rather than applied in
+ * part: the page it came from was drawn before something else changed the
+ * category, so its order is an answer to a question that has moved on.
  */
-export async function moveFamily(familyId: number, delta: -1 | 1): Promise<boolean> {
+export async function saveFamilyOrder(
+  categoryId: number,
+  orderedIds: readonly number[],
+): Promise<boolean> {
+  if (orderedIds.length === 0) return false;
+  if (new Set(orderedIds).size !== orderedIds.length) return false;
+
   return sql.begin(async (tx) => {
-    const [family] = await tx<{ categoryId: number }[]>`
-      SELECT category_id AS "categoryId" FROM product_families WHERE id = ${familyId}
+    const current = await tx<{ id: number }[]>`
+      SELECT id FROM product_families WHERE category_id = ${categoryId}
     `;
-    if (!family) return false;
+    const actual = new Set(current.map((f) => f.id));
+    if (actual.size !== orderedIds.length) return false;
+    if (!orderedIds.every((id) => actual.has(id))) return false;
 
-    const siblings = await tx<{ id: number }[]>`
-      SELECT id FROM product_families
-      WHERE category_id = ${family.categoryId}
-      ORDER BY sort, id
-    `;
-    const from = siblings.findIndex((f) => f.id === familyId);
-    const to = from + delta;
-    if (from < 0 || to < 0 || to >= siblings.length) return false;
-
-    const ids = siblings.map((f) => f.id);
-    [ids[from], ids[to]] = [ids[to], ids[from]];
-
+    const ids = [...orderedIds];
     await tx`
       UPDATE product_families f SET sort = u.sort
       FROM unnest(${ids}::int[]) WITH ORDINALITY AS u(id, sort)
-      WHERE f.id = u.id
+      -- The category is re-asserted here as well as checked above, so even a
+      -- mismatch that slipped past cannot move a family out of its category.
+      WHERE f.id = u.id AND f.category_id = ${categoryId}
     `;
     return true;
   });

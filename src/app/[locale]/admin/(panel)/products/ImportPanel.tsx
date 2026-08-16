@@ -1,13 +1,13 @@
 "use client";
 
-import { useActionState, useState } from "react";
-import { useFormStatus } from "react-dom";
+import { useActionState, useState, useTransition } from "react";
 import Link from "next/link";
 import { getDict, type Locale } from "@/lib/i18n";
 import { formatInt } from "@/lib/money";
-import { importCsvAction, moveFamilyAction, type ImportState } from "./actions";
+import { importCsvAction, saveFamilyOrderAction, type ImportState } from "./actions";
 import { ColumnReview } from "./ColumnReview";
 import { DeleteControl } from "./DeleteControl";
+import { UnsavedOrderGuard } from "./UnsavedOrderGuard";
 import type { FamilyListRow } from "@/db/importQueries";
 
 /**
@@ -60,6 +60,21 @@ export function ImportPanel({
     setPicked({ familyId, name: file.name, text: await file.text() });
   }
 
+  /*
+   * Catalog order while it is being arranged, by category: the family ids in
+   * the order the operator has put them in, held here until Save.
+   *
+   * Only categories that have actually been touched get an entry, so this is a
+   * handful of ids rather than a shadow copy of a hundred-family page — and a
+   * category whose entry is gone is, by definition, unchanged. Moving a family
+   * back where it started deletes the entry rather than leaving the group
+   * marked dirty for an arrangement identical to the database's.
+   */
+  const [arranged, setArranged] = useState<Record<number, number[]>>({});
+  const [orderSaving, startOrderSave] = useTransition();
+  /** Categories whose last save was refused; cleared when they are touched. */
+  const [orderFailed, setOrderFailed] = useState<number[]>([]);
+
   const groups: { id: number; name: string; families: FamilyListRow[] }[] = [];
   for (const f of families) {
     const name = locale === "fa" ? f.categoryNameFa : f.categoryNameEn;
@@ -68,8 +83,87 @@ export function ImportPanel({
     else groups.push({ id: f.categoryId, name, families: [f] });
   }
 
+  /** What the database currently holds, kept before any arrangement is laid over it. */
+  const serverOrder = new Map(groups.map((g) => [g.id, g.families.map((f) => f.id)]));
+
+  /*
+   * The arrangement is applied over the server's list rather than replacing
+   * it, and only ids the category still holds are honoured. If a family was
+   * deleted in another tab while this page sat open, the stale id drops out
+   * here and the save is refused server-side rather than writing a partial
+   * order from a list that no longer describes the category.
+   */
+  for (const g of groups) {
+    const order = arranged[g.id];
+    if (!order) continue;
+    const byId = new Map(g.families.map((f) => [f.id, f]));
+    const rearranged = order.map((id) => byId.get(id)).filter((f) => f !== undefined);
+    if (rearranged.length === g.families.length) g.families = rearranged;
+  }
+
+  function move(categoryId: number, families: FamilyListRow[], from: number, by: number) {
+    const to = from + by;
+    if (to < 0 || to >= families.length) return;
+
+    const next = families.map((f) => f.id);
+    [next[from], next[to]] = [next[to], next[from]];
+
+    const server = serverOrder.get(categoryId);
+    const backWhereItStarted =
+      server !== undefined && server.length === next.length && server.every((id, i) => id === next[i]);
+
+    setOrderFailed((prev) => prev.filter((id) => id !== categoryId));
+    setArranged((prev) => {
+      const updated = { ...prev };
+      // Arranging a category back into the order it already had is not a
+      // change, so Save and Discard go away again rather than offering to
+      // write what is already there.
+      if (backWhereItStarted) delete updated[categoryId];
+      else updated[categoryId] = next;
+      return updated;
+    });
+  }
+
+  const discard = (categoryId: number) =>
+    setArranged((prev) => {
+      const next = { ...prev };
+      delete next[categoryId];
+      return next;
+    });
+
+  async function saveOrder(categoryId: number): Promise<boolean> {
+    const order = arranged[categoryId];
+    if (!order) return true;
+    try {
+      const result = await saveFamilyOrderAction(categoryId, order);
+      if (result !== "saved") {
+        setOrderFailed((prev) => (prev.includes(categoryId) ? prev : [...prev, categoryId]));
+        return false;
+      }
+      discard(categoryId);
+      return true;
+    } catch {
+      // `assertAdminWrite` throws on an expired session. Without this the
+      // rejection escapes the transition and takes the whole panel down with
+      // it, losing every other category's arrangement as well.
+      setOrderFailed((prev) => (prev.includes(categoryId) ? prev : [...prev, categoryId]));
+      return false;
+    }
+  }
+
+  const dirtyIds = Object.keys(arranged).map(Number);
+
   return (
     <div className="grid gap-2">
+      <UnsavedOrderGuard
+        dirtyCount={dirtyIds.length}
+        locale={locale}
+        onSave={async () => {
+          const results = await Promise.all(dirtyIds.map((id) => saveOrder(id)));
+          return results.every(Boolean);
+        }}
+        onDiscard={() => setArranged({})}
+      />
       {groups.map((g) => {
         /*
          * Force the group open when it holds the family being worked on.
@@ -103,12 +197,42 @@ export function ImportPanel({
             <span className="tech text-[11px] font-normal text-[var(--color-ink-muted)]">
               {formatInt(g.families.length, locale)} · {formatInt(products, locale)}
             </span>
-            {/* Inside the summary but outside its toggle: a click on the delete
-                control must not also collapse the group it belongs to. */}
+            {/* Inside the summary but outside its toggle: a click on these
+                controls must not also collapse the group it belongs to. That
+                cancelled click is also why the order buttons are plain buttons
+                calling the action directly — a cancelled click never submits a
+                form. */}
             <span
-              className="ms-auto font-normal"
+              className="ms-auto flex items-center gap-1.5 font-normal"
               onClick={(e) => e.preventDefault()}
             >
+              {/* Only while this category is actually rearranged, and ahead of
+                  Delete: the two buttons that resolve pending work should not
+                  sit past the one that destroys it. */}
+              {arranged[g.id] && (
+                <>
+                  <button
+                    type="button"
+                    className="btn-tiny"
+                    disabled={demo || orderSaving}
+                    onClick={() =>
+                      startOrderSave(async () => {
+                        await saveOrder(g.id);
+                      })
+                    }
+                  >
+                    {t.orderSave}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-tiny"
+                    disabled={orderSaving}
+                    onClick={() => discard(g.id)}
+                  >
+                    {t.orderDiscard}
+                  </button>
+                </>
+              )}
               <DeleteControl
                 what="category"
                 id={g.id}
@@ -121,6 +245,12 @@ export function ImportPanel({
               />
             </span>
           </summary>
+
+          {orderFailed.includes(g.id) && (
+            <p className="mt-1 border border-[#e0b4b0] bg-[#fdf2f1] px-2.5 py-1.5 text-[12px] text-[var(--color-danger)]">
+              {t.orderFailed}
+            </p>
+          )}
           <div className="mt-1 grid gap-1">
             {g.families.map((f, i) => {
               const chosen = picked?.familyId === f.id ? picked.name : null;
@@ -254,22 +384,36 @@ export function ImportPanel({
                     )}
                   </form>
 
-                  {/* Catalog order, set the same way the column editor sets it:
-                      two buttons rather than dragging. A category runs to a
-                      dozen families and the drop target for the one at the
-                      bottom is off-screen, and buttons work on a phone and from
-                      the keyboard without a library.
+                  {/* Catalog order, set exactly the way the column editor sets
+                      it: two buttons rather than dragging, arranging a local
+                      list that is written only when Save is pressed. A category
+                      runs to a dozen families and the drop target for the one
+                      at the bottom is off-screen; buttons also work on a phone
+                      and from the keyboard without a library.
 
-                      Unlike the column editor there is nothing to save — the
-                      list here is the database's own order, so each press is a
-                      write and the redrawn row is the confirmation. */}
-                  <MoveFamily
-                    familyId={f.id}
-                    first={i === 0}
-                    last={i === g.families.length - 1}
-                    locale={locale}
-                    demo={demo}
-                  />
+                      Nothing is written per press. Moving a family seven places
+                      is one intention, and it should cost one write and one
+                      cache purge, not seven of each. */}
+                  <span className="flex shrink-0 items-center gap-1">
+                    <button
+                      type="button"
+                      className="btn-tiny"
+                      disabled={i === 0 || demo || orderSaving}
+                      aria-label={t.columnsMoveUp}
+                      onClick={() => move(g.id, g.families, i, -1)}
+                    >
+                      ↑
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-tiny"
+                      disabled={i === g.families.length - 1 || demo || orderSaving}
+                      aria-label={t.columnsMoveDown}
+                      onClick={() => move(g.id, g.families, i, 1)}
+                    >
+                      ↓
+                    </button>
+                  </span>
                 </div>
 
                 {state && state.kind !== "review" && state.familyId === f.id && (
@@ -283,69 +427,6 @@ export function ImportPanel({
         );
       })}
     </div>
-  );
-}
-
-/**
- * The two order buttons, in their own form.
- *
- * A form of its own because it sits beside the upload form and forms cannot
- * nest; the direction rides on the submit button's own value, so one form
- * carries both. `useFormStatus` has to read from inside the form it reports on,
- * which is why the buttons are a component rather than markup here.
- */
-function MoveFamily({
-  familyId,
-  first,
-  last,
-  locale,
-  demo,
-}: {
-  familyId: number;
-  first: boolean;
-  last: boolean;
-  locale: Locale;
-  demo: boolean;
-}) {
-  const t = getDict(locale);
-  return (
-    <form action={moveFamilyAction} className="flex shrink-0 items-center gap-1">
-      <input type="hidden" name="familyId" value={familyId} />
-      <MoveButton dir="up" label={t.columnsMoveUp} disabled={first || demo}>
-        ↑
-      </MoveButton>
-      <MoveButton dir="down" label={t.columnsMoveDown} disabled={last || demo}>
-        ↓
-      </MoveButton>
-    </form>
-  );
-}
-
-function MoveButton({
-  dir,
-  label,
-  disabled,
-  children,
-}: {
-  dir: "up" | "down";
-  label: string;
-  disabled: boolean;
-  children: React.ReactNode;
-}) {
-  // Both buttons go quiet while either is in flight: a second press before the
-  // list is redrawn would be aimed at a position that has already changed.
-  const { pending } = useFormStatus();
-  return (
-    <button
-      type="submit"
-      name="dir"
-      value={dir}
-      className="btn-tiny"
-      disabled={disabled || pending}
-      aria-label={label}
-    >
-      {children}
-    </button>
   );
 }
 

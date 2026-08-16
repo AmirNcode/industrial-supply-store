@@ -43,11 +43,40 @@ const globalForDb = globalThis as unknown as {
   __isupplySql?: ReturnType<typeof postgres>;
 };
 
+/**
+ * Tuned against the 2026-08-15 production incident: requests hanging the full
+ * 300s function budget while the database showed the same queries completing
+ * in under two seconds. Two client-side causes, both addressed here:
+ *
+ *   `max: 2` starved warm instances. Fluid Compute routes several concurrent
+ *   requests into one instance, a single family page runs six queries, and a
+ *   queued query waits for a pool slot with no timeout — one slow or stale
+ *   connection wedged everything behind it. Six connections give one instance
+ *   room for two concurrent page renders; the provider's pooler (200 client
+ *   connections) is what absorbs the instance count.
+ *
+ *   `idle_timeout: 10` churned connections instead of keeping them. The
+ *   pooler's auth counter showed ~21k client connects in days — every reap is
+ *   a TLS handshake, an auth round trip and a type fetch on the next query.
+ *   20s keeps a warm instance's pool alive between a person's clicks.
+ *
+ * `keep_alive` sends TCP probes so a peer that silently dropped a connection
+ * (pooler idle-out, NAT expiry while the instance was suspended) is detected
+ * and the socket replaced, instead of a query being written into a black hole
+ * — the one failure with no server-side timeout to catch it. `max_lifetime`
+ * caps how long any socket lives, bounding how stale one can get.
+ *
+ * The database's own `statement_timeout` (120s on the hosted project) stays
+ * the backstop for statements that genuinely run away; a client-set
+ * `statement_timeout` was tested and does not survive the transaction pooler.
+ */
 export const sql =
   globalForDb.__isupplySql ??
   postgres(connectionString, {
-    max: isServerless ? 2 : 12,
-    idle_timeout: isServerless ? 10 : 20,
+    max: isServerless ? 6 : 12,
+    idle_timeout: 20,
+    max_lifetime: 60 * 5,
+    keep_alive: 30,
     // Neon and Supabase free tiers suspend an idle database; the first query
     // after a quiet spell has to wait for it to wake.
     connect_timeout: isServerless ? 15 : 10,

@@ -20,7 +20,7 @@ import {
   createFamily,
   deleteCategory,
   deleteFamily,
-  moveFamily,
+  saveFamilyOrder,
 } from "@/db/familyQueries";
 
 /**
@@ -214,25 +214,46 @@ export async function createFamilyAction(
   return { kind: "created", name: String(formData.get("nameEn") ?? "").trim() };
 }
 
+export type FamilyOrderResult = "saved" | "stale";
+
 /**
- * Reorder one family within its category.
+ * Commit one category's family order.
  *
- * No returned state, unlike the other actions on this page: the list is
- * re-rendered from the database by the revalidation below, so the new position
- * *is* the confirmation. A move that cannot happen — the family is gone, or it
- * is already at the end it was asked to move past — changes nothing and says
- * nothing, which is what the redrawn list shows either way.
+ * Typed arguments rather than a `FormData`, because this is called directly
+ * from a transition instead of by submitting a form. The buttons live inside
+ * the group's `<summary>`, which cancels the click's default action so that
+ * pressing one does not also collapse the group it belongs to — and a
+ * cancelled click never submits a form.
+ *
+ * `"stale"` means the arrangement no longer describes the category: a family
+ * was added or deleted elsewhere while this page sat open. Nothing is written,
+ * and the page says so rather than silently applying a partial order.
  */
-export async function moveFamilyAction(formData: FormData): Promise<void> {
+export async function saveFamilyOrderAction(
+  categoryId: number,
+  orderedIds: number[],
+): Promise<FamilyOrderResult> {
   await assertAdminWrite();
 
-  const id = Number(formData.get("familyId"));
-  if (!Number.isInteger(id) || id <= 0) return;
+  if (!Number.isInteger(categoryId) || categoryId <= 0) return "stale";
+  if (!Array.isArray(orderedIds)) return "stale";
+  if (!orderedIds.every((id) => Number.isInteger(id) && id > 0)) return "stale";
 
-  if (await moveFamily(id, formData.get("dir") === "up" ? -1 : 1)) {
-    // Family order is what the category pages list families in.
-    revalidatePath("/", "layout");
-  }
+  if (!(await saveFamilyOrder(categoryId, orderedIds))) return "stale";
+
+  /*
+   * Only the category pages, not the whole layout.
+   *
+   * Family order is rendered by exactly two things: this admin page, which is
+   * dynamic and uncached, and the ISR category pages. The layout-wide purge
+   * the other actions use would also invalidate the home pages, quick order
+   * and search — and a whole-site purge per reorder is the regeneration storm
+   * behind the 2026-08-15 production incident. Batching a session's moves
+   * behind one Save button keeps this to one purge per category, rather than
+   * one per arrow press.
+   */
+  revalidatePath("/[locale]/c/[...slug]", "page");
+  return "saved";
 }
 
 export type DeleteState =

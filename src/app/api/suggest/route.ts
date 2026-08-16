@@ -11,3 +11,6 @@ export async function GET(request: Request) {
     headers: { "cache-control": "private, max-age=30" },
   });
 }
+
+/** Route handlers do not inherit the layout ceiling; same reasoning as there. */
+export const maxDuration = 60;

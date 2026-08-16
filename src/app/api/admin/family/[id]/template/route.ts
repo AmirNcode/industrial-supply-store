@@ -32,3 +32,6 @@ export async function GET(
 
   return csvAttachment(toCsv(columns, records), `${family.slug}-template.csv`);
 }
+
+/** Route handlers do not inherit the layout ceiling; same reasoning as there. */
+export const maxDuration = 60;

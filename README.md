@@ -205,6 +205,7 @@ knowing before you open it in front of someone.
 | RFQ submission with reference number | ✅ |
 | Admin inbox for submitted RFQs | ✅ |
 | Admin: catalog order of families within a category | ✅ |
+| Admin: unsaved-work guard on the way off a page | ✅ |
 | English + Persian, full RTL | ✅ |
 | Payment processing | ❌ out of scope for v1 |
 | Buyer accounts | ❌ out of scope for v1 |

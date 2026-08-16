@@ -84,9 +84,34 @@ wrapper used to carry; the table is built to fit the window at 1024 and up.
 
 **Catalog order is `sort`, and admin renumbers a whole run when it changes.**
 `categories.sort` and `product_families.sort` default to 0, so a seeded run is a
-set of ties broken by `id`. `moveFamily` renumbers the category's families from
-the order they render in rather than swapping two rows, because swapping two
-zeros changes nothing.
+set of ties broken by `id`. `saveFamilyOrder` renumbers the category's families
+from the order the operator arranged rather than swapping two rows, because
+swapping two zeros changes nothing. It refuses any list that is not exactly the
+category's own families — no partial orders from a page drawn before something
+else changed.
+
+**A click inside a `<summary>` cannot submit a form.** The admin group headers
+cancel the click's default action so pressing a control does not also collapse
+the group, and a cancelled click never runs a submit button's activation
+behavior. Controls in there must be `type="button"` calling a Server Action
+directly (as the order Save does), not form submits.
+
+**`revalidatePath("/", "layout")` is a whole-site purge — never put it on a
+per-click action.** It marks every ISR page stale at once, so the next visit to
+each one is a regeneration, and a burst of regenerations against the small
+shared database is how production melted on 2026-08-15: statements queued past
+the database's 120s `statement_timeout` and requests behind them hung to the
+300s function ceiling. It is acceptable on rare, coarse writes (an import, a
+deletion); anything a person presses repeatedly must revalidate only the pages
+its write actually changes, as `moveFamilyAction` does.
+
+**Serverless database limits live in `src/db/index.ts`, and every wait must be
+bounded.** The pool options there (pool size, keep-alive, lifetime) are tuned
+to the same incident; `export const maxDuration = 60` on the locale layout and
+each API route is the hard ceiling that turns a wedged request into a visible
+error instead of a five-minute hang. A client-set `statement_timeout` does not
+survive the transaction pooler (tested), so the database's own 120s is the
+statement backstop.
 
 ## Data flow: an order
 

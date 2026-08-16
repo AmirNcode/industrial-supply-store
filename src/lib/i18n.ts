@@ -437,6 +437,21 @@ const en = {
   columnsMoveDown: "Move down",
   columnsSave: "Save columns",
   columnsSaved: "Columns saved.",
+  // Catalog order of the families inside one category. Arranged with the same
+  // arrows as the columns above, and saved the same way — deliberately, since
+  // moving a family seven places is one intention, not seven writes.
+  orderSave: "Save order",
+  orderDiscard: "Discard",
+  orderSaved: "Order saved.",
+  orderFailed: "That order could not be saved — this category has changed since the page loaded. Reload and arrange it again.",
+  orderUnsavedTitle: "Unsaved order changes",
+  orderUnsavedBody:
+    "The catalog order of {n} has been changed and not saved yet. Leaving now loses the arrangement.",
+  orderUnsavedOne: "one category",
+  orderUnsavedMany: "{n} categories",
+  orderSaveAndLeave: "Save and leave",
+  orderDiscardAndLeave: "Discard and leave",
+  orderStay: "Stay on this page",
   columnsNone: "This family has no columns yet. Upload a CSV to create some.",
   columnsFixed: "fixed",
   columnsMobile: "Mobile",
@@ -844,6 +859,19 @@ const fa: typeof en = {
   columnsMoveDown: "انتقال به پایین",
   columnsSave: "ذخیره ستون‌ها",
   columnsSaved: "ستون‌ها ذخیره شد.",
+  orderSave: "ذخیره ترتیب",
+  orderDiscard: "لغو تغییرات",
+  orderSaved: "ترتیب ذخیره شد.",
+  orderFailed:
+    "ترتیب ذخیره نشد — این دسته‌بندی پس از باز شدن صفحه تغییر کرده است. صفحه را دوباره بارگذاری کنید و ترتیب را دوباره بچینید.",
+  orderUnsavedTitle: "تغییرات ذخیره‌نشده",
+  orderUnsavedBody:
+    "ترتیب کاتالوگ در {n} تغییر کرده و هنوز ذخیره نشده است. با خروج از صفحه این چیدمان از دست می‌رود.",
+  orderUnsavedOne: "یک دسته‌بندی",
+  orderUnsavedMany: "{n} دسته‌بندی",
+  orderSaveAndLeave: "ذخیره و خروج",
+  orderDiscardAndLeave: "خروج بدون ذخیره",
+  orderStay: "ماندن در این صفحه",
   columnsNone: "این خانواده هنوز ستونی ندارد. برای ساخت ستون یک فایل CSV بارگذاری کنید.",
   columnsFixed: "ثابت",
   columnsMobile: "موبایل",
