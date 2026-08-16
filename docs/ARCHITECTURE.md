@@ -5,6 +5,9 @@ covers what the pieces are, which invariants are load-bearing, and where the
 traps are. Deployment lives in [`DEPLOYMENT.md`](DEPLOYMENT.md); the design
 history lives in `docs/superpowers/`.
 
+**Agents: read [`../CLAUDE.md`](../CLAUDE.md) first.** It sets how to work in
+this repository and — the part most often got wrong — how to report back.
+
 ## Stack
 
 Next.js 16 App Router (Server Components, Server Actions, Route Handlers),
@@ -12,7 +15,7 @@ postgres-js with raw SQL tagged templates, Tailwind v4, `node:test` via `tsx`.
 Drizzle is used **only** to define the schema and run `drizzle-kit push` — every
 query in the app is hand-written SQL. Bilingual English/Persian with RTL.
 
-Tests: `npm test` (76). Types: `npx tsc --noEmit`. Both must be clean.
+Tests: `npm test` (128). Types: `npx tsc --noEmit`. Both must be clean.
 
 ## Routes
 
@@ -103,7 +106,7 @@ shared database is how production melted on 2026-08-15: statements queued past
 the database's 120s `statement_timeout` and requests behind them hung to the
 300s function ceiling. It is acceptable on rare, coarse writes (an import, a
 deletion); anything a person presses repeatedly must revalidate only the pages
-its write actually changes, as `moveFamilyAction` does.
+its write actually changes, as `saveFamilyOrderAction` does.
 
 **Serverless database limits live in `src/db/index.ts`, and every wait must be
 bounded.** The pool options there (pool size, keep-alive, lifetime) are tuned
@@ -112,6 +115,48 @@ each API route is the hard ceiling that turns a wedged request into a visible
 error instead of a five-minute hang. A client-set `statement_timeout` does not
 survive the transaction pooler (tested), so the database's own 120s is the
 statement backstop.
+
+## Admin editing conventions
+
+Every editing screen in `/admin` follows the same four rules. They are listed
+together because a new screen that breaks one of them will look right and be
+wrong in a way that only shows up in production.
+
+**Arrange locally, write once.** A control that a person presses repeatedly —
+reorder arrows, a row of checkboxes — changes React state and nothing else. The
+write happens when they press Save. The column editor, the family order and the
+category media page all work this way. The alternative costs one round trip and
+one cache purge per press, which is the incident above.
+
+**One Save per page, and one revalidation per Save.** The category media page
+posts every changed card in a single action (`saveCatalogMediaAction`) and
+purges once at the end. Per-card save buttons meant a dozen whole-site purges in
+a row.
+
+**Dirty means "differs from the database", not "was touched".** Every screen
+compares live state against the values the server sent, so arranging a family
+back where it started, or typing a name and typing it back, clears the pending
+state and disables Save. A boolean flag set on first keystroke would leave Save
+offering to write what is already there.
+
+**Nothing is written unless every changed thing is valid.** The CSV import set
+this rule and the batch saves follow it: validate everything, then write. A typo
+in one image URL should not leave the operator guessing which of eight edits
+landed. Uploads are the one unavoidable exception — they cannot be rolled back,
+so they run only after every field has passed, and a failed upload still writes
+nothing.
+
+**Unsaved work is guarded on the way out.** `UnsavedOrderGuard` catches in-app
+navigation in the capture phase and offers Save, Discard or Stay; `beforeunload`
+covers closing the tab, where the browser substitutes its own wording and there
+is nothing to be done about that. It deliberately ignores `download` links,
+modified clicks and same-page anchors. Any new screen holding unsaved state
+should reuse it.
+
+**Limits on the catalog are advice, not rules.** `MAX_LEGIBLE_COLUMNS` warns in
+red beside Save on both the column editor and the import review, and neither
+blocks. A supplier's file sometimes genuinely carries twelve dimensions that all
+matter, and refusing it would mean refusing the catalog.
 
 ## Data flow: an order
 

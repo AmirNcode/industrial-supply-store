@@ -489,6 +489,10 @@ store, the seeder gets replaced by an importer against supplier data.
 > environment variables, the database command order, and six traps that have
 > already cost this project real incidents — `drizzle-kit push` silently dropping
 > indexes, the invoice sequence and row-level security among them.
+>
+> **A coding agent?** [`CLAUDE.md`](CLAUDE.md) is how to work here, and how to
+> report back — which for this project means saying only what cannot be learned
+> by opening the site.
 
 Known gaps, stated plainly:
 

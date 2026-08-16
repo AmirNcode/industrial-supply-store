@@ -4,6 +4,7 @@ import { useActionState, useState } from "react";
 import { getDict, type Locale } from "@/lib/i18n";
 import { formatInt } from "@/lib/money";
 import { saveColumnsAction, type ColumnsState } from "./actions";
+import { MAX_LEGIBLE_COLUMNS } from "@/lib/columnPlan";
 import type { EditableDef } from "@/db/columnQueries";
 
 /**
@@ -51,6 +52,14 @@ export function ColumnEditor({
 
   /** Every product in the family has a part number, so the widest count is it. */
   const productTotal = rows.reduce((n, r) => Math.max(n, r.productCount), 0);
+
+  /**
+   * How many columns the catalog table would carry. The part number is one of
+   * them and is not in `rows`, so it is counted here — the reader sees it as a
+   * column like any other, and the advice is about what they end up scanning.
+   */
+  const tableColumns =
+    1 + rows.filter((r) => r.display === "table" && !dropKeys.includes(r.key)).length;
 
   const kept = rows.filter((r) => !dropKeys.includes(r.key));
   const edits = JSON.stringify({
@@ -260,9 +269,17 @@ export function ColumnEditor({
         {rows.length === 0 ? t.columnsNone : t.columnsDeleteHint}
       </p>
 
-      <button type="submit" className="btn-small mt-2" disabled={demo || isPending}>
-        {t.columnsSave}
-      </button>
+      <div className="mt-2 flex flex-wrap items-center gap-3">
+        <button type="submit" className="btn-small" disabled={demo || isPending}>
+          {t.columnsSave}
+        </button>
+        {/* Counted on the catalog table, which is the thing that gets hard to
+            read — the columns left in the expanded detail row cost nothing to
+            scan past. Advice only: the button beside it stays enabled. */}
+        {tableColumns > MAX_LEGIBLE_COLUMNS && (
+          <p className="text-[11px] text-[var(--color-danger)]">{t.columnsTooMany}</p>
+        )}
+      </div>
     </form>
   );
 }

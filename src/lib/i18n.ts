@@ -398,7 +398,7 @@ const en = {
   catalogHidden: "Hidden from catalog",
   catalogEditTitle: "Edit {category}",
   catalogEditIntro:
-    "Set names, artwork, and catalog visibility. An uploaded file is stored in Supabase; a URL remains hosted at its source.",
+    "Set names, images, and catalog visibility. An uploaded file is stored in Supabase; a URL remains hosted at its source.",
   catalogEditCategory: "Category",
   catalogEditSubcategories: "Subcategories",
   catalogEditFamilies: "Product families",
@@ -412,6 +412,8 @@ const en = {
   catalogEditRemoveImage: "Remove current image",
   catalogEditSave: "Save",
   catalogEditSaved: "Saved.",
+  catalogEditNothingSaved:
+    "Nothing was saved. Fix the cards marked below and press Save again.",
   catalogEditNoName: "Enter both the English and Persian names.",
   catalogEditBadUrl: "Enter a complete HTTP or HTTPS image URL.",
   catalogEditBadFileType: "Choose a JPG, PNG, or WebP image. SVG is not accepted.",
@@ -437,6 +439,10 @@ const en = {
   columnsMoveDown: "Move down",
   columnsSave: "Save columns",
   columnsSaved: "Columns saved.",
+  // Advice, not a rule: the save goes through either way. A supplier's file
+  // sometimes genuinely needs twelve columns, and refusing it would mean
+  // refusing the catalog.
+  columnsTooMany: "Limit selection to 10 columns for better legibility.",
   // Catalog order of the families inside one category. Arranged with the same
   // arrows as the columns above, and saved the same way — deliberately, since
   // moving a family seven places is one intention, not seven writes.
@@ -834,6 +840,8 @@ const fa: typeof en = {
   catalogEditRemoveImage: "حذف تصویر فعلی",
   catalogEditSave: "ذخیره",
   catalogEditSaved: "ذخیره شد.",
+  catalogEditNothingSaved:
+    "چیزی ذخیره نشد. کارت‌های مشخص‌شده در زیر را اصلاح کنید و دوباره ذخیره را بزنید.",
   catalogEditNoName: "نام انگلیسی و فارسی را وارد کنید.",
   catalogEditBadUrl: "یک نشانی کامل HTTP یا HTTPS برای تصویر وارد کنید.",
   catalogEditBadFileType: "یک تصویر JPG، PNG یا WebP انتخاب کنید. SVG پذیرفته نمی‌شود.",
@@ -859,6 +867,7 @@ const fa: typeof en = {
   columnsMoveDown: "انتقال به پایین",
   columnsSave: "ذخیره ستون‌ها",
   columnsSaved: "ستون‌ها ذخیره شد.",
+  columnsTooMany: "برای خوانایی بهتر، انتخاب را به ۱۰ ستون محدود کنید.",
   orderSave: "ذخیره ترتیب",
   orderDiscard: "لغو تغییرات",
   orderSaved: "ترتیب ذخیره شد.",

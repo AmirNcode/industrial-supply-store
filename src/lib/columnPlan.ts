@@ -44,6 +44,15 @@ export function isBuiltinField(name: string): name is BuiltinField {
 /** The sentinel stored in `product_families.field_aliases` for a dropped header. */
 export const IGNORE = "__ignore__";
 
+/**
+ * How many catalog-table columns stay comfortably readable, part number
+ * included. Past this the admin screens warn and still save: a supplier's file
+ * sometimes genuinely carries twelve dimensions that all matter, and refusing
+ * it would mean refusing the catalog. Nothing enforces this number — it exists
+ * so both screens warn at the same point.
+ */
+export const MAX_LEGIBLE_COLUMNS = 10;
+
 /** What one header in the uploaded file becomes. */
 export type HeaderPlan =
   | { role: "ignore"; header: string }

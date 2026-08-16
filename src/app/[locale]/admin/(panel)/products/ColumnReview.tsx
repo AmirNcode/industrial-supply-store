@@ -5,6 +5,7 @@ import { getDict, type Locale } from "@/lib/i18n";
 import { formatInt } from "@/lib/money";
 import {
   BUILTIN_FIELDS,
+  MAX_LEGIBLE_COLUMNS,
   prettifyLabel,
   slugifyKey,
   type AnalyzedHeader,
@@ -112,6 +113,17 @@ export function ColumnReview({
    */
   const owners = new Map<string, string>();
   for (const p of plans) if (p.role === "builtin") owners.set(p.field, p.header);
+
+  /*
+   * What the catalog table would carry after this import: the part number,
+   * every spec column this file marks for the table, and the family's existing
+   * table columns that the file does not carry and is not dropping — those
+   * survive the import and keep their place in the table.
+   */
+  const tableColumns =
+    1 +
+    plans.filter((p) => p.role === "spec" && p.display === "table").length +
+    missing.filter((m) => m.display === "table" && !dropKeys.includes(m.key)).length;
 
   const plan = JSON.stringify({ headers: plans, dropKeys, mode, skipBadRows });
   const badRowCount = new Set(rowProblems.map((e) => e.row)).size;
@@ -391,15 +403,23 @@ export function ColumnReview({
         </section>
       )}
 
-      <button
-        type="submit"
-        name="stage"
-        value="apply"
-        className="btn-small mt-3"
-        disabled={pending || blocked}
-      >
-        {t.reviewConfirm}
-      </button>
+      <div className="mt-3 flex flex-wrap items-center gap-3">
+        <button
+          type="submit"
+          name="stage"
+          value="apply"
+          className="btn-small"
+          disabled={pending || blocked}
+        >
+          {t.reviewConfirm}
+        </button>
+        {/* The same advice the column editor gives, at the same count, so an
+            import cannot quietly build the table the editor would warn about.
+            Advice only — the import is not blocked. */}
+        {tableColumns > MAX_LEGIBLE_COLUMNS && (
+          <p className="text-[11px] text-[var(--color-danger)]">{t.columnsTooMany}</p>
+        )}
+      </div>
       {blocked && (
         <p className="mt-1 text-[11px] text-[var(--color-danger)]">{t.reviewBlocked}</p>
       )}
