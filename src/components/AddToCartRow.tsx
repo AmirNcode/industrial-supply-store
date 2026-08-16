@@ -36,12 +36,9 @@ export function AddToCartRow({
   }
 
   return (
-    // Both controls get the same explicit box. `aspect-square` alone does not
-    // work here: a flex item is sized from its content first, so the button
-    // collapsed to the width of a "+" glyph however the ratio was declared.
-    // One shared size variable is the only version that is actually square and
-    // actually matches the field.
-    <span className="flex items-center gap-1 whitespace-nowrap">
+    // Both boxes are sized by `.qty-add` in globals.css, off one variable —
+    // see the note there for why, and for how the catalog table scales them.
+    <span className="qty-add">
       <input
         type="number"
         min={1}
@@ -54,13 +51,12 @@ export function AddToCartRow({
           }
         }}
         aria-label={`${t.qty} — ${packQty > 1 ? `${t.pkg} ${packQty}` : ""}`}
-        className="h-7 w-11 px-1 py-0 text-[11px] text-center"
       />
       <button
         type="button"
         onClick={add}
         disabled={pending}
-        className="btn-small flex h-7 w-7 shrink-0 items-center justify-center !p-0 text-[15px] leading-none"
+        className="btn-small"
         aria-label={t.addToOrder}
       >
         {done ? "✓" : pending ? "…" : "+"}

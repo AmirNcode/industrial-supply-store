@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { getCatalogCategoryEditor } from "@/db/familyQueries";
 import { DEMO_MODE } from "@/lib/demo";
 import { getDict, isLocale, pick, type Locale } from "@/lib/i18n";
-import { CatalogMediaEditor, type CatalogMediaSection } from "./CatalogMediaForm";
+import { CatalogMediaEditor, type CatalogMediaSection } from "./CatalogMediaEditor";
 
 export default async function CatalogCategoryEditPage({
   params,

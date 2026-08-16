@@ -236,10 +236,16 @@ html[dir="rtl"] th.tech-num {
   background: #fff;
 }
 
+/*
+ * Sizes here are written as `calc(base * var(--table-scale, 1))` so one table
+ * can ask for a size up without a parallel set of rules. Absent the variable
+ * every instance renders exactly as before, which is what keeps the admin,
+ * cart and search tables where they were; `.catalog-table` sets it below.
+ */
 .spec-table {
   border-collapse: collapse;
   width: 100%;
-  font-size: var(--text-xxs);
+  font-size: calc(var(--text-xxs) * var(--table-scale, 1));
 }
 
 /* The masthead is white now, so this band is the last dark surface on a catalog
@@ -250,11 +256,11 @@ html[dir="rtl"] th.tech-num {
   color: var(--color-chrome-ink);
   font-family: var(--font-mono);
   font-weight: 600;
-  font-size: 10px;
+  font-size: calc(10px * var(--table-scale, 1));
   letter-spacing: 0.09em;
   text-transform: uppercase;
   text-align: start;
-  padding: 8px 9px;
+  padding: calc(8px * var(--table-scale, 1)) calc(9px * var(--table-scale, 1));
   /* Headings wrap. A single long label — "Gate Seat Material And Coating" —
      otherwise sets the column's minimum width and pushes the whole table into
      a horizontal scroll it does not need. */
@@ -265,7 +271,7 @@ html[lang="fa"] .spec-table thead th {
   font-family: var(--font-fa);
   letter-spacing: 0;
   text-transform: none;
-  font-size: 11px;
+  font-size: calc(11px * var(--table-scale, 1));
 }
 /* A column-group label is structure, not money, so it takes the band's own
    muted blue rather than the gold it used to borrow. */
@@ -277,7 +283,7 @@ html[lang="fa"] .spec-table thead th {
 }
 
 .spec-table td {
-  padding: 4px 9px;
+  padding: calc(4px * var(--table-scale, 1)) calc(9px * var(--table-scale, 1));
   vertical-align: top;
   /* Values wrap too, for the same reason. The columns that must stay on one
      line — numbers, part numbers, prices — opt back in below. A table that
@@ -364,9 +370,9 @@ html[lang="fa"] .spec-table thead th {
 }
 .row-caret {
   flex: none;
-  border-inline-start: 3.5px solid transparent;
-  border-inline-end: 3.5px solid transparent;
-  border-top: 4px solid var(--color-ink-muted);
+  border-inline-start: calc(3.5px * var(--table-scale, 1)) solid transparent;
+  border-inline-end: calc(3.5px * var(--table-scale, 1)) solid transparent;
+  border-top: calc(4px * var(--table-scale, 1)) solid var(--color-ink-muted);
   transition: transform 0.12s;
 }
 /* Keyed off the row rather than the label, because a cell further along the
@@ -730,7 +736,7 @@ html[dir="rtl"] .admin-group[open] > summary::before {
 @media (max-width: 1279px) {
   .spec-table thead th,
   .spec-table td {
-    padding-inline: 5px;
+    padding-inline: calc(5px * var(--table-scale, 1));
   }
 }
 
@@ -745,6 +751,21 @@ html[dir="rtl"] .admin-group[open] > summary::before {
 .num {
   text-align: end;
   font-variant-numeric: tabular-nums;
+}
+
+/*
+ * The catalog table runs a tenth larger than every other `.spec-table`.
+ *
+ * It is the one table a buyer reads for minutes at a stretch, across a
+ * thousand rows of dimensions, and at the shared size it was doing that in
+ * 11px type. The columns were already wider than their contents — the extra
+ * size is spent on the slack inside the cells rather than on the table's
+ * width, which is why this does not push the table back into a horizontal
+ * scroll. Everything sized off `--table-scale` moves together: headings,
+ * values, cell padding, the quantity box, the in-cart chip and the row caret.
+ */
+.catalog-table {
+  --table-scale: 1.1;
 }
 
 /* The customer catalog is scanned column-by-column, so its desktop headings
@@ -972,7 +993,7 @@ html[lang="fa"] .pill {
   border-radius: 3px;
   background: var(--color-navy-tint);
   color: var(--color-navy-deep);
-  font-size: var(--text-xxs);
+  font-size: calc(var(--text-xxs) * var(--table-scale, 1));
   line-height: 1.4;
   white-space: nowrap;
 }
@@ -988,13 +1009,49 @@ html[dir="rtl"] .in-cart {
   opacity: 0.75;
 }
 
+/*
+ * The quantity field and its + button.
+ *
+ * Both boxes come off one variable, which is the only version that is actually
+ * square and actually matches the field: a flex item is sized from its content
+ * first, so `aspect-square` alone let the button collapse to the width of a "+"
+ * however the ratio was declared. Sizing them here rather than in the markup is
+ * also what lets the catalog table's `--table-scale` reach them.
+ */
+.qty-add {
+  --qty-box: calc(28px * var(--table-scale, 1));
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+.qty-add input {
+  height: var(--qty-box);
+  /* Room for four digits beside the button's one glyph. */
+  width: calc(var(--qty-box) + 16px);
+  padding: 0 4px;
+  text-align: center;
+  font-size: calc(11px * var(--table-scale, 1));
+}
+.qty-add button {
+  height: var(--qty-box);
+  width: var(--qty-box);
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  font-size: calc(15px * var(--table-scale, 1));
+  line-height: 1;
+}
+
 .in-cart-x {
   border: none;
   background: transparent;
   color: inherit;
   opacity: 0.55;
   cursor: pointer;
-  font-size: 14px;
+  font-size: calc(14px * var(--table-scale, 1));
   line-height: 1;
   padding: 0 4px;
   border-radius: 2px;
