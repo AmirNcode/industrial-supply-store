@@ -269,18 +269,18 @@ they got there. Every row on one page makes both tools work on the whole family.
 It is not free, and the cost lands on the largest families. Both layouts render
 from the same data (see [Mobile](#mobile)), so each row is rendered twice:
 
-| Family | Rows | Server render | HTML | Over the wire (gzip) |
-|---|---|---|---|---|
-| Grinding Wheels | 126 | 33 ms | 0.8 MB | 113 KB |
-| Oil-Resistant Buna-N O-Rings | 1,374 | 361 ms | 10.1 MB | 1.2 MB |
-| Socket Head Cap Screws | 2,400 | 538 ms | 14.6 MB | 1.9 MB |
+| Family | Rows | Server render | Over the wire (gzip) |
+|---|---|---|---|
+| Grinding Wheels | 126 | 39 ms | 87 KB |
+| Oil-Resistant Buna-N O-Rings | 1,374 | 474 ms | 958 KB |
+| Socket Head Cap Screws | 2,400 | 722 ms | 1.43 MB |
 
-Measured against a warm local Postgres on a production build. Half a second and
-~2 MB is the worst case in this catalog, and a real one is unlikely to hold a
-2,400-part family — but it is the number to watch if one does. The sticky table
-head below is what makes a page that long readable; if the payload ever becomes
-the problem, rendering one layout per request instead of both is the lever, and
-[Mobile](#mobile) explains why that was not taken.
+Measured against a warm local Postgres on a production build, after the two
+layouts were merged into one (see [Mobile](#mobile)) — before that the same
+pages were 1.2 MB and 1.9 MB. Three quarters of a second and ~1.4 MB is the
+worst case in this catalog, and a real one is unlikely to hold a 2,400-part
+family, but it is the number to watch if one does. The sticky table head below
+is what makes a page that long readable.
 
 The category "list of products" view still pages at 100. It spans a whole
 subtree — 12,948 products at the top of this catalog — which is a different
@@ -431,13 +431,17 @@ Three details that are easy to get wrong and are handled explicitly:
   inside its own containing block, and the wrapper was exactly as tall as the
   bar, so it never pinned.
 
-Both layouts are rendered from the same data and one is hidden with CSS, which
-costs a second render per row. Sniffing the User-Agent to render only one layout
-would be faster, but it breaks resizing a desktop window to check the mobile
-view — which is how this actually gets reviewed.
+On the family page these are **one set of markup**, not two: the spec table's
+own rows fold into cards below `lg`, so a phone and a desktop download the same
+HTML and a resized window switches layout with no JavaScript. It used to be a
+second component rendering every product again with one copy hidden by CSS,
+which cost two renders and two add-to-cart islands per product — 113,809 DOM
+nodes on the largest family, half of them the layout the reader cannot see.
 
-That second render is what makes family size expensive, and the family page is
-no longer paginated: a family renders every one of its rows. See
+The category "list of products" view still uses the separate card component,
+and should: its rows span different families, so each card genuinely differs.
+
+The family page is also no longer paginated — it renders every row it has. See
 [The whole family on one page](#the-whole-family-on-one-page).
 
 ## Persian / RTL notes
@@ -503,8 +507,14 @@ Known gaps, stated plainly:
   a v1 and wrong once there is data worth keeping.
 - **No email.** A submitted RFQ lands in the database and nothing notifies
   anybody.
-- **Product imagery is in-house SVG line art** (`src/components/ProductIcon.tsx`),
-  not photography. Real photos are a sourcing problem, not a code problem.
+- **Product imagery is in-house SVG line art** (`src/components/ProductIcon.tsx`)
+  wherever no picture has been set — real photos are a sourcing problem, not a
+  code problem. Where one *has* been set, by upload or by pasting a supplier
+  URL, it is served through `next/image` at the size of the tile: the one real
+  external image in the catalog is a 650×975 file painted at 34px, and goes out
+  at 2.7 KB instead of 48.8 KB. `remotePatterns` allows every HTTPS host,
+  because an administrator can paste any supplier URL; the trade is written
+  down in `next.config.ts`.
 - **8 npm advisories**, all in `drizzle-kit`'s bundled esbuild toolchain — a dev
   dependency that never ships in the runtime image. Worth clearing, not urgent.
 

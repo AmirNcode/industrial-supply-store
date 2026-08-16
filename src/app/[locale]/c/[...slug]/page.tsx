@@ -5,30 +5,58 @@ import {
   getChildren,
   getAncestors,
   getFamiliesInSubtree,
-  getProductsInSubtree,
-  getSpecDefsForFamilies,
+  getTopCategories,
   type FamilyRow,
 } from "@/db/queries";
 import { CategorySidebar } from "@/components/CategorySidebar";
-import { Breadcrumb } from "@/components/Breadcrumb";
 import { CatalogImage } from "@/components/CatalogImage";
-import { ViewAsToggle } from "@/components/ViewAsToggle";
-import { ProductCardList } from "@/components/ProductCardList";
-import { isLocale, getDict, pick, type Locale } from "@/lib/i18n";
+import { isLocale, getDict, pick, locales, type Locale } from "@/lib/i18n";
 import { categorySpine } from "@/lib/categoryColor";
 import { formatInt } from "@/lib/money";
-import { getFxRate } from "@/lib/fx";
+import { CategoryHeader } from "./CategoryHeader";
 
 export const revalidate = 3600;
 
-const LIST_PAGE_SIZE = 100;
+/**
+ * The top-level categories, prerendered at build; everything deeper is
+ * generated on its first request and cached from then on.
+ *
+ * The list matters less than its existence. A dynamic segment with no
+ * `generateStaticParams` at all is treated as fully dynamic — served
+ * `no-store`, re-rendered per request, with `revalidate` above ignored, which
+ * is what the production logs were showing. Declaring even a short list opts
+ * the route into the static path, and `dynamicParams` (on by default) is what
+ * lets the ninety-odd deeper categories still resolve.
+ *
+ * Only the ten roots are listed because the build queries the live database
+ * for each entry, and the deep pages are cheap to fill in on demand — one
+ * visitor pays for one render, once an hour, per category.
+ */
+export async function generateStaticParams() {
+  const roots = await getTopCategories();
+  return locales.flatMap((locale) =>
+    roots.map((c) => ({ locale, slug: c.path.split("/") })),
+  );
+}
 
+/**
+ * The category view, and the only one of the two that is cacheable.
+ *
+ * It reads no `searchParams`, and that is the whole point rather than an
+ * accident. Awaiting `searchParams` in a route without Cache Components sets
+ * the render's revalidate to 0 — Next's own prerenderer throws to interrupt
+ * static generation — so the `?view=list` this page used to read was silently
+ * turning the most-visited route on the site into a full render per request,
+ * `revalidate = 3600` above notwithstanding. Production logs showed a 100%
+ * cache miss rate.
+ *
+ * The SKU list moved to `./list` for that reason. It genuinely needs a page
+ * number, so it stays dynamic; this page is now served from the CDN.
+ */
 export default async function CategoryPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ locale: string; slug: string[] }>;
-  searchParams: Promise<{ view?: string; page?: string }>;
 }) {
   const { locale, slug } = await params;
   if (!isLocale(locale)) notFound();
@@ -39,35 +67,11 @@ export default async function CategoryPage({
   const category = await getCategoryByPath(path);
   if (!category) notFound();
 
-  const sp = await searchParams;
-  const view = sp.view === "list" ? "list" : "categories";
-  const page = Math.max(1, Number(sp.page) || 1);
-  const base = `/${l}/c/${path}`;
-
-  const [children, ancestors, families, rate] = await Promise.all([
+  const [children, ancestors, families] = await Promise.all([
     getChildren(category.id),
     getAncestors(category.path),
     getFamiliesInSubtree(category.path),
-    getFxRate(),
   ]);
-
-  // Only pay for the SKU list when it is the view actually being rendered.
-  const listProducts =
-    view === "list"
-      ? await getProductsInSubtree(
-          category.path,
-          LIST_PAGE_SIZE,
-          (page - 1) * LIST_PAGE_SIZE,
-        )
-      : [];
-  const listPages =
-    view === "list" ? Math.ceil(category.productCount / LIST_PAGE_SIZE) : 0;
-
-  // One extra query for the whole page, keyed on the families actually shown.
-  const listDefs =
-    listProducts.length > 0
-      ? await getSpecDefsForFamilies([...new Set(listProducts.map((p) => p.familyId))])
-      : undefined;
 
   // Families are grouped by their declared heading, preserving catalog order.
   const groups: { name: string; items: FamilyRow[] }[] = [];
@@ -83,75 +87,13 @@ export default async function CategoryPage({
       <CategorySidebar locale={l} activePath={category.path} />
 
       <main className="min-w-0 flex-1">
-        <Breadcrumb
+        <CategoryHeader
           locale={l}
-          trail={ancestors}
-          current={pick(category, "name", l)}
-          count={category.productCount}
-          countLabel={`${formatInt(category.productCount, l)} ${t.products}`}
+          category={category}
+          ancestors={ancestors}
+          view="categories"
         />
 
-        <div className="mb-4 flex items-center justify-between gap-3 border-b border-[var(--color-rule)] pb-1">
-          <span className="flex min-w-0 items-center gap-2">
-            {category.imageUrl && (
-              <CatalogImage
-                imageUrl={category.imageUrl}
-                icon={category.icon}
-                alt=""
-                size={34}
-                className="h-[34px] w-[34px] shrink-0 object-contain"
-                eager
-              />
-            )}
-            <h1 className="text-[19px] font-bold text-[var(--color-navy)] lg:text-[21px]">
-              {pick(category, "name", l)}
-            </h1>
-          </span>
-          {category.productCount > 0 && (
-            <ViewAsToggle
-              locale={l}
-              categoriesHref={base}
-              listHref={`${base}?view=list`}
-              current={view}
-            />
-          )}
-        </div>
-
-        {view === "list" ? (
-          <>
-            <ProductCardList
-              locale={l}
-              products={listProducts}
-              defsByFamily={listDefs}
-              rate={rate}
-            />
-            {listPages > 1 && (
-              <nav className="mt-4 flex flex-wrap items-center gap-2 text-[13px]">
-                {Array.from({ length: listPages }, (_, i) => i + 1)
-                  .filter((p) => p === 1 || p === listPages || Math.abs(p - page) <= 2)
-                  .map((p, i, arr) => (
-                    <span key={p} className="flex items-center gap-2">
-                      {i > 0 && arr[i - 1] !== p - 1 && (
-                        <span className="text-[var(--color-ink-faint)]">…</span>
-                      )}
-                      {p === page ? (
-                        <span className="tech font-bold">{formatInt(p, l)}</span>
-                      ) : (
-                        <Link
-                          href={`${base}?view=list${p > 1 ? `&page=${p}` : ""}`}
-                          prefetch={false}
-                          className="tech tap px-1"
-                        >
-                          {formatInt(p, l)}
-                        </Link>
-                      )}
-                    </span>
-                  ))}
-              </nav>
-            )}
-          </>
-        ) : (
-          <>
         {children.length > 0 && (
           <ul className="mb-6 grid grid-cols-4 gap-x-2 gap-y-3 sm:grid-cols-6 lg:[grid-template-columns:repeat(auto-fill,108px)]">
             {children.map((c) => (
@@ -227,8 +169,6 @@ export default async function CategoryPage({
 
         {children.length === 0 && families.length === 0 && (
           <p className="text-[13px] text-[var(--color-ink-muted)]">{t.noResults}</p>
-        )}
-          </>
         )}
       </main>
     </div>

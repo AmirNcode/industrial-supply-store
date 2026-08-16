@@ -16,7 +16,6 @@ import { sql } from "@/db";
 import { FacetSidebar } from "@/components/FacetSidebar";
 import { MobileFilterBar } from "@/components/MobileFilterBar";
 import { ActiveFilterPills } from "@/components/ActiveFilterPills";
-import { ProductCardList } from "@/components/ProductCardList";
 import { Breadcrumb } from "@/components/Breadcrumb";
 import { AddToCartRow } from "@/components/AddToCartRow";
 import { InCartQty } from "@/components/InCartQty";
@@ -33,6 +32,7 @@ import {
 } from "@/lib/money";
 import { getFxRate } from "@/lib/fx";
 import { specValueLabel, isTechnicalValue } from "@/lib/specValues";
+import { summaryDefsFor, summaryParts } from "@/lib/cardSummary";
 import {
   parseFilters,
   clearAllHref,
@@ -279,30 +279,26 @@ export default async function FamilyPage({
                 </Link>
               </p>
             ) : (
-              <>
-                <div className="table-card hidden lg:block">
-                  <SpecTable
-                    locale={l}
-                    defs={defs}
-                    products={products}
-                    highlighted={highlighted}
-                    rate={rate}
-                    icon={family.icon}
-                  />
-                </div>
-
-                <div className="lg:hidden">
-                  <ProductCardList
-                    locale={l}
-                    products={products}
-                    defs={defs}
-                    familyName={pick(family, "name", l)}
-                    familyIcon={family.icon}
-                    familyImageUrl={family.imageUrl}
-                    rate={rate}
-                  />
-                </div>
-              </>
+              /*
+               * One table, two layouts.
+               *
+               * This used to be the table *and* a parallel card list, with one
+               * hidden by CSS — which meant every row was rendered twice and
+               * carried two add-to-cart islands, of which only one could ever
+               * be used. On the largest family that measured 113,809 DOM nodes,
+               * half of them the layout the reader cannot see. Below `lg` the
+               * stylesheet folds these same rows into cards instead.
+               */
+              <div className="table-card">
+                <SpecTable
+                  locale={l}
+                  defs={defs}
+                  products={products}
+                  highlighted={highlighted}
+                  rate={rate}
+                  icon={family.icon}
+                />
+              </div>
             )}
           </section>
         </div>
@@ -347,7 +343,15 @@ function SpecTable({
    */
   const tableDefs = defs.filter((d) => d.display === "table");
   const detailDefs = defs.filter((d) => d.display === "detail");
-  const columnCount = tableDefs.length + (hasBulk ? 6 : 5);
+  // +1 for the card cell, which is empty on desktop but still a column.
+  const columnCount = tableDefs.length + (hasBulk ? 7 : 6);
+
+  /*
+   * What the phone cards lead with. Computed here, once, from the same rows
+   * the table is about to render — the summary has to answer "how do these
+   * rows differ", which cannot be known one row at a time.
+   */
+  const cardDefs = summaryDefsFor(defs, products);
 
   return (
     <table className="spec-table catalog-table">
@@ -356,6 +360,7 @@ function SpecTable({
             exactly as on the reference site. */}
         <tr>
           <th className="!border-b-0" />
+          <th className="!border-b-0" data-cell="card" />
           {tableDefs.map((d) => (
             <th key={d.key} className="!border-b-0" />
           ))}
@@ -371,6 +376,9 @@ function SpecTable({
               types into Quick Order, so it should not be hiding past a dozen
               spec columns. */}
           <th>{t.partNumber}</th>
+          {/* Carries the phone card's summary line. Empty and hidden on a
+              desktop, which is why it has no heading. */}
+          <th data-cell="card" />
           {tableDefs.map((d) => (
             <th key={d.key} className={d.kind === "number" ? "num" : undefined}>
               {pick(d, "label", locale)}
@@ -404,7 +412,7 @@ function SpecTable({
                 // the pointer passing over it.
                 className={isHit ? "product-row row-hit" : "product-row"}
               >
-                <td>
+                <td data-cell="part">
                   {expandable ? (
                     // A checkbox and CSS rather than a client component: the
                     // detail content is server-rendered, and a hundred rows of
@@ -421,6 +429,27 @@ function SpecTable({
                   ) : (
                     <span className="part-no tech">{p.partNumber}</span>
                   )}
+                </td>
+                {/*
+                  The phone card's summary line, and the only content on the
+                  row that a desktop never shows. It is a few short values
+                  rather than a second copy of the row — the alternative was
+                  rendering the whole product again in a parallel card list.
+                */}
+                <td data-cell="card">
+                  <span className="card-summary">
+                    {summaryParts(p.specs, cardDefs, locale).map((part, i) => (
+                      <span key={i}>
+                        {i > 0 && <span className="text-[var(--color-ink-faint)]"> · </span>}
+                        {part.label && <span>{part.label} </span>}
+                        <bdi className={part.ltr ? "tech" : undefined}>{part.value}</bdi>
+                      </span>
+                    ))}
+                  </span>
+                  {/* The card has no "Pkg. Qty" column to read this from. */}
+                  <span className="card-pack">
+                    {p.packQty > 1 ? `${t.pkg} ${formatInt(p.packQty, locale)}` : t.each}
+                  </span>
                 </td>
                 {tableDefs.map((d, col) => {
                   const raw = p.specs[d.key];
@@ -465,11 +494,14 @@ function SpecTable({
                     </td>
                   );
                 })}
-                <td className="num tech tech-num">{p.packQty}</td>
+                <td className="num tech tech-num" data-cell="pack">
+                  {p.packQty}
+                </td>
                 {/* Bare amounts — the currency is named once in the group header.
                     Repeating "تومان" on 200 rows costs ~40px of table width and
                     tells the buyer nothing they don't already know. */}
                 <td
+                  data-cell="price"
                   className={
                     onRequest
                       ? "num price-col text-[11px] text-[var(--color-ink-muted)]"
@@ -479,16 +511,19 @@ function SpecTable({
                   {onRequest ? t.callForPriceShort : formatPriceBare(base, locale, rate)}
                 </td>
                 {hasBulk && (
-                  <td className="num tech tech-num price-col text-[var(--color-ink-muted)]">
+                  <td
+                    data-cell="bulk"
+                    className="num tech tech-num price-col text-[var(--color-ink-muted)]"
+                  >
                     {bulk !== undefined && !isPriceOnRequest(bulk)
                       ? formatPriceBare(bulk, locale, rate)
                       : ""}
                   </td>
                 )}
-                <td>
+                <td data-cell="qty">
                   <AddToCartRow productId={p.id} locale={locale} packQty={p.packQty} />
                 </td>
-                <td className="in-cart-col">
+                <td className="in-cart-col" data-cell="cart">
                   <InCartQty productId={p.id} locale={locale} />
                 </td>
               </tr>

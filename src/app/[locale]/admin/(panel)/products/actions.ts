@@ -90,8 +90,26 @@ export type ImportState =
       detail?: string;
     };
 
-const MAX_BYTES = 2_000_000;
-const MAX_ROWS = 5_000;
+/**
+ * Import ceilings.
+ *
+ * A supplier's catalog for one family runs to tens of thousands of parts, and
+ * the old 5,000-row cap meant splitting those by hand — which is not merely
+ * tedious: the second file has to be imported in `update` mode, because
+ * `replace` deletes every part the current file does not mention, so a split
+ * upload was one wrong radio button away from destroying the first half.
+ *
+ * The byte ceiling is the one that actually binds, and it binds unevenly: a
+ * five-column family averages 78 bytes a row, a forty-one-column one 631. At
+ * 24 MB, 20,000 rows fit even at the wide end with room over.
+ *
+ * These are what the whole file costs, not what the database costs. The text
+ * is posted twice — once to analyze, once to confirm — so it must also fit
+ * inside `serverActions.bodySizeLimit` in next.config.ts, and the write must
+ * fit inside the admin panel's `maxDuration`. All three move together.
+ */
+const MAX_BYTES = 24_000_000;
+const MAX_ROWS = 20_000;
 
 export async function importCsvAction(
   _prev: ImportState | null,

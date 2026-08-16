@@ -665,6 +665,143 @@ html[dir="rtl"] .admin-group[open] > summary::before {
   }
 }
 
+/* --------------------------------------------------------------------------
+   The catalog table as cards — phones
+
+   A fourteen-column spec table cannot be made usable at 375px; shrinking it
+   just produces a sideways grid nobody reads. The reference app switches to
+   cards leading with the identifying specs, with price and ADD under the thumb.
+
+   This used to be a second component rendering every product again, with one
+   copy hidden by CSS. That cost two renders and two add-to-cart islands per
+   product — 113,809 DOM nodes on the largest family, half of them unseen. The
+   rows below are the same `<tr>` elements the desktop table uses, laid out as
+   cards, so a phone downloads one copy and a desktop window that is resized
+   still switches layout with no JavaScript.
+
+   The `data-cell` attributes are the placement hooks. Everything without one —
+   the spec columns — is the detail a card does not lead with, and is folded
+   away; `[data-cell="card"]` is the summary line, which is the only content on
+   the row a desktop never shows.
+   -------------------------------------------------------------------------- */
+@media (max-width: 1023px) {
+  .catalog-table,
+  .catalog-table tbody,
+  .catalog-table tr.product-row,
+  .catalog-table tr.detail-row,
+  .catalog-table tr.product-row > td,
+  .catalog-table tr.detail-row > td {
+    display: block;
+    width: auto;
+  }
+  /* Column headings describe columns; a card has none. */
+  .catalog-table thead {
+    display: none;
+  }
+
+  .catalog-table tr.product-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "summary price"
+      "part    qty"
+      "open    cart";
+    align-items: center;
+    gap: 2px 10px;
+    padding: 10px 8px;
+    border-bottom: 1px solid var(--color-rule-light);
+  }
+  /*
+   * The desktop table centres its cells so headings and values share one axis,
+   * and rules each cell off from the one below. A card has neither headings nor
+   * a column below it, so both read as damage here.
+   */
+  .catalog-table tr.product-row > td {
+    text-align: start;
+    border-bottom: 0;
+    vertical-align: baseline;
+  }
+  /* The zebra and the hover wash are desktop scanning aids; on a card they
+     read as a state the row does not have. The in-cart wash stays. */
+  .catalog-table tbody tr.product-row:nth-child(4n + 3),
+  .catalog-table tbody:not(:has(.detail-row)) tr:nth-child(even),
+  .catalog-table tbody tr.product-row:hover {
+    background: none;
+  }
+  .catalog-table tbody tr.product-row:has(.in-cart) {
+    background: var(--color-in-cart-row);
+  }
+
+  /* The spec columns, the pack count and the bulk price: all present in the
+     row, none of them what a card leads with. */
+  .catalog-table tr.product-row > td:not([data-cell]),
+  .catalog-table tr.product-row > td[data-cell="pack"],
+  .catalog-table tr.product-row > td[data-cell="bulk"] {
+    display: none;
+  }
+
+  .catalog-table td[data-cell="card"] {
+    display: block;
+    grid-area: summary;
+    padding: 0;
+  }
+  .card-summary {
+    display: block;
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1.35;
+    color: var(--color-ink);
+  }
+  .card-pack {
+    display: block;
+    font-size: 10px;
+    color: var(--color-ink-faint);
+  }
+
+  .catalog-table td[data-cell="part"] {
+    grid-area: part;
+    padding: 0;
+    font-size: 12px;
+  }
+  .catalog-table td[data-cell="price"] {
+    grid-area: price;
+    padding: 0;
+    text-align: end;
+    font-size: 14px;
+    /* The amber wash marks a column. There is no column here. */
+    background: none;
+  }
+  .catalog-table td[data-cell="qty"] {
+    grid-area: qty;
+    padding: 0;
+    justify-self: end;
+  }
+  .catalog-table td[data-cell="cart"] {
+    grid-area: cart;
+    padding: 0;
+    justify-self: end;
+  }
+
+  /* The expander sits under the part number, where the card list had it. */
+  .catalog-table td[data-cell="part"] .row-expand {
+    gap: 6px;
+  }
+
+  /* The opened detail row. Matches the specificity of the rule that reveals it
+     so the card layout wins over `display: table-row`. */
+  .catalog-table tbody tr.product-row:has(.row-toggle:checked) + tr.detail-row {
+    display: block;
+  }
+  .catalog-table tr.detail-row > td {
+    padding: 0 8px 10px;
+  }
+  /* Sideways stickiness is for a table that scrolls sideways. */
+  .catalog-table .detail-sticky {
+    position: static;
+    max-width: none;
+  }
+}
+
 /* The card list's version of the same fold. */
 .card-details {
   display: none;
@@ -768,18 +905,31 @@ html[dir="rtl"] .admin-group[open] > summary::before {
   --table-scale: 1.1;
 }
 
+/* The card summary is phone-only content living in the desktop row. Hidden by
+   default and switched on in the card layout at the bottom of this file, so a
+   desktop never pays for it beyond the bytes. */
+.catalog-table [data-cell="card"] {
+  display: none;
+}
+
 /* The customer catalog is scanned column-by-column, so its desktop headings
    and values share one visual axis. Other `.spec-table` instances (admin,
    search, cart) keep their task-specific alignment. Expanded details remain
-   start-aligned because they are prose, not cells in the comparison grid. */
-.catalog-table thead th,
-.catalog-table tbody tr.product-row > td,
-html[dir="rtl"] .catalog-table thead th.tech-num,
-html[dir="rtl"] .catalog-table tbody tr.product-row > td.tech-num {
-  text-align: center;
-}
-.catalog-table tbody tr.product-row > td {
-  vertical-align: middle;
+   start-aligned because they are prose, not cells in the comparison grid.
+
+   Desktop only, and deliberately: below `lg` these same cells are a card, where
+   there is no column to share an axis with and centred text just reads as
+   sloppy. */
+@media (min-width: 1024px) {
+  .catalog-table thead th,
+  .catalog-table tbody tr.product-row > td,
+  html[dir="rtl"] .catalog-table thead th.tech-num,
+  html[dir="rtl"] .catalog-table tbody tr.product-row > td.tech-num {
+    text-align: center;
+  }
+  .catalog-table tbody tr.product-row > td {
+    vertical-align: middle;
+  }
 }
 
 .catalog-art {

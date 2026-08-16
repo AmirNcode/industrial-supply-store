@@ -20,14 +20,59 @@ const nextConfig: NextConfig = {
    * Development only. `next build` ignores this.
    */
   allowedDevOrigins: ["192.168.2.*", "192.168.2.48"],
+  /**
+   * Catalog artwork goes through the image optimiser.
+   *
+   * Every picture in this catalog is painted into a 34–64px tile, and the
+   * sources are supplier files: the one real external image is a 650×975 WebP,
+   * 48.8 KB, rendered at 34px — roughly forty times the pixels the tile uses.
+   * Uploads are accepted up to 5 MB and were served byte-for-byte, so a single
+   * photograph in an 88px tile could cost 5 MB for about 8 KB of visible
+   * pixels. A category page paints ~25 tiles; the arithmetic on a fully
+   * populated catalog is what made this worth doing before the pictures
+   * arrive rather than after.
+   *
+   * `hostname: "**"` rather than a list, and that is a real trade. An
+   * administrator can paste any supplier URL — that is the feature — so the
+   * host genuinely cannot be enumerated ahead of time, and the alternative is
+   * that pasted images stay unoptimised, which is the case that exists in the
+   * catalog today. The cost is that the optimiser will fetch any HTTPS URL an
+   * admin enters, and each distinct image and size is a transformation the
+   * platform bills for. Both are bounded by who can reach /admin.
+   *
+   * HTTPS only. `normalizeCatalogImageUrl` still accepts http, and
+   * `CatalogImage` serves those unoptimised rather than failing the render.
+   */
+  images: {
+    remotePatterns: [{ protocol: "https", hostname: "**" }],
+  },
   // Spec tables are huge; keep the server payload lean.
   experimental: {
     optimizePackageImports: ["drizzle-orm"],
-    // Five-megabyte catalog images plus multipart field overhead.
-    serverActions: { bodySizeLimit: "6mb" },
+    /**
+     * Sized for the catalog importer, which is the largest thing posted here:
+     * a 24 MB CSV (`MAX_BYTES` in the products actions) travels as a form
+     * field, and the analyze and confirm posts each carry the whole thing.
+     * Catalog images, the other upload, are capped at 5 MB apiece.
+     */
+    serverActions: { bodySizeLimit: "32mb" },
   },
   async redirects() {
-    return [{ source: "/", destination: "/en", permanent: false }];
+    return [
+      { source: "/", destination: "/en", permanent: false },
+      /**
+       * The SKU list used to be `?view=list` on the category page. Reading that
+       * param made the category page itself uncacheable, so the list moved to
+       * its own segment; this keeps links shared or bookmarked before the move
+       * landing on the view they asked for.
+       */
+      {
+        source: "/:locale/c/:slug*",
+        has: [{ type: "query", key: "view", value: "list" }],
+        destination: "/:locale/l/:slug*",
+        permanent: false,
+      },
+    ];
   },
 };
 

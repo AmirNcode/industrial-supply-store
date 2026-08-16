@@ -314,7 +314,7 @@ const en = {
   importRow: "Row",
   importColumn: "Column",
   importProblem: "Problem",
-  importTooLarge: "That file is too large. The limit is 2 MB and 5,000 rows.",
+  importTooLarge: "That file is too large. The limit is 24 MB and 20,000 rows.",
   importNoFile: "Choose a CSV file first.",
   importFamilyGone: "That family no longer exists.",
   importWrongFamily:
@@ -742,7 +742,7 @@ const fa: typeof en = {
   importRow: "سطر",
   importColumn: "ستون",
   importProblem: "اشکال",
-  importTooLarge: "حجم فایل بیش از حد مجاز است. حداکثر ۲ مگابایت و ۵٬۰۰۰ سطر.",
+  importTooLarge: "حجم فایل بیش از حد مجاز است. حداکثر ۲۴ مگابایت و ۲۰٬۰۰۰ سطر.",
   importNoFile: "ابتدا یک فایل CSV انتخاب کنید.",
   importFamilyGone: "این خانواده دیگر وجود ندارد.",
   importWrongFamily:

@@ -79,6 +79,25 @@ tracking payload.
 **Inventory is advisory.** Nothing blocks an order that exceeds
 `inventory_available`; the admin queue flags it. Counts are in packs.
 
+**Catalog artwork goes through `next/image`, and `remotePatterns` allows every
+HTTPS host.** Administrators paste arbitrary supplier URLs, so the host cannot
+be enumerated in advance; the consequence is that the optimiser will fetch any
+HTTPS URL entered in `/admin`, and each image and size is a billable
+transformation. `CatalogImage` passes `sizes` as the tile's literal width
+because these thumbnails never reflow, and falls back to a plain `<img>` for
+`http:` sources, which `remotePatterns` deliberately excludes. Uploads are
+still stored at full size — that is storage, not bandwidth, and nobody
+downloads the original.
+
+**The family page's phone cards are the table's own rows.** There is one set of
+markup; `globals.css` folds `.catalog-table` rows into cards below `lg` using
+the `data-cell` attributes on each `<td>`. A new cell needs a `data-cell` and a
+`grid-area`, or it will land in the card layout unplaced. The summary line is
+the one piece of phone-only content, computed per page by
+`src/lib/cardSummary.ts` because "which specs distinguish these rows" cannot be
+answered one row at a time. `ProductCardList` still exists and is still correct
+for the category list view, whose rows span different families.
+
 **`.table-card` must not be given `overflow`.** The catalog table's head is
 `position: sticky`, which binds to the nearest scroll container — so a wrapper
 that scrolls or clips pins the head to its own top edge instead of the window,

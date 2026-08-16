@@ -17,6 +17,17 @@ import { isLocale, getDict, type Locale } from "@/lib/i18n";
  * already means that, and hard-coding `left` would put it on the wrong side of
  * the Persian admin.
  */
+/**
+ * Overrides the 60s ceiling the locale layout sets for the public site.
+ *
+ * That ceiling exists so a wedged catalog page fails visibly instead of hanging
+ * for five minutes, and 60s is far more than any page needs. An import is the
+ * one thing here that legitimately runs long: 20,000 rows written in chunks of
+ * 800, each row also touching the facet index and the search document. A
+ * public page taking 60s is broken; an import taking two minutes is working.
+ */
+export const maxDuration = 300;
+
 export default async function AdminPanelLayout({
   children,
   params,
