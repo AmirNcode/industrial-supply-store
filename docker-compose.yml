@@ -24,10 +24,11 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      args:
+      secrets:
         # Build-time only. `docker build` has no access to the compose network,
-        # so the prerender step reaches the db through the host's published port.
-        DATABASE_URL: postgres://isupply:isupply@host.docker.internal:5433/isupply
+        # so this URL reaches the seeded db through the host's published port.
+        - database_url
+        - auth_secret
     container_name: isupply-app
     restart: unless-stopped
     depends_on:
@@ -35,14 +36,23 @@ services:
         condition: service_healthy
     environment:
       DATABASE_URL: postgres://isupply:isupply@db:5432/isupply
+      AUTH_SECRET_FILE: /run/secrets/auth_secret
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-changeme}
       USD_TO_TOMAN: ${USD_TO_TOMAN:-110000}
       SUPABASE_URL: ${SUPABASE_URL:-}
       SUPABASE_PUBLIC_URL: ${SUPABASE_PUBLIC_URL:-}
+      NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:-}
+      SUPABASE_PUBLISHABLE_KEY: ${SUPABASE_PUBLISHABLE_KEY:-}
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:-}
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY:-}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:-}
       SUPABASE_SECRET_KEY: ${SUPABASE_SECRET_KEY:-}
       SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
       SUPABASE_CATALOG_BUCKET: ${SUPABASE_CATALOG_BUCKET:-catalog-images}
+      SUPABASE_IMPORT_BUCKET: ${SUPABASE_IMPORT_BUCKET:-catalog-imports}
       NODE_ENV: production
+    secrets:
+      - auth_secret
     ports:
       - "3000:3000"
     profiles:
@@ -52,3 +62,12 @@ services:
 
 volumes:
   isupply-pgdata:
+
+secrets:
+  # Values come from the host environment (or Compose's `.env` interpolation
+  # environment), are never copied into the build context, and are granted only
+  # to the app/build stages that name them above.
+  database_url:
+    environment: DOCKER_BUILD_DATABASE_URL
+  auth_secret:
+    environment: AUTH_SECRET

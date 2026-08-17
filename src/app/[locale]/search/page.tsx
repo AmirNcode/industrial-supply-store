@@ -6,6 +6,7 @@ import { CatalogImage } from "@/components/CatalogImage";
 import { isLocale, getDict, pick, type Locale } from "@/lib/i18n";
 import { formatInt, formatPrice } from "@/lib/money";
 import { getFxRate } from "@/lib/fx";
+import { REQUEST_LIMITS, boundedString } from "@/lib/requestLimits";
 
 export default async function SearchPage({
   params,
@@ -19,7 +20,8 @@ export default async function SearchPage({
   const l = locale as Locale;
   const t = getDict(l);
 
-  const { q = "" } = await searchParams;
+  const submitted = (await searchParams).q;
+  const q = boundedString(submitted, REQUEST_LIMITS.searchChars, { allowEmpty: true }) ?? "";
   const results = await search(q);
   const rate = await getFxRate();
 

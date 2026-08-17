@@ -42,8 +42,8 @@ const nextConfig: NextConfig = {
    * Every picture in this catalog is painted into a 34–64px tile, and the
    * sources are supplier files: the one real external image is a 650×975 WebP,
    * 48.8 KB, rendered at 34px — roughly forty times the pixels the tile uses.
-   * Uploads are accepted up to 5 MB and were served byte-for-byte, so a single
-   * photograph in an 88px tile could cost 5 MB for about 8 KB of visible
+   * Uploads are accepted up to 4 MB and were served byte-for-byte, so a single
+   * photograph in an 88px tile could cost 4 MB for about 8 KB of visible
    * pixels. A category page paints ~25 tiles; the arithmetic on a fully
    * populated catalog is what made this worth doing before the pictures
    * arrive rather than after.
@@ -66,12 +66,12 @@ const nextConfig: NextConfig = {
   experimental: {
     optimizePackageImports: ["drizzle-orm"],
     /**
-     * Sized for the catalog importer, which is the largest thing posted here:
-     * a 24 MB CSV (`MAX_BYTES` in the products actions) travels as a form
-     * field, and the analyze and confirm posts each carry the whole thing.
-     * Catalog images, the other upload, are capped at 5 MB apiece.
+     * The 24 MB catalog importer now uploads directly to private Supabase
+     * Storage. The remaining large Server Action is catalog artwork: files are
+     * capped at 4,000,000 bytes, leaving multipart headroom under both this
+     * ceiling and Vercel's 4.5 MB Function payload limit.
      */
-    serverActions: { bodySizeLimit: "32mb" },
+    serverActions: { bodySizeLimit: "4.25mb" },
   },
   async redirects() {
     return [

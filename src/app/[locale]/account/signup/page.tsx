@@ -4,12 +4,15 @@ import { signUpAction } from "../actions";
 import { currentUser } from "@/lib/session";
 import { MIN_PASSWORD_LENGTH } from "@/lib/password";
 import { isLocale, getDict, type Locale } from "@/lib/i18n";
+import { REQUEST_LIMITS } from "@/lib/requestLimits";
 
 const MESSAGE = {
   incomplete: "signUpIncomplete",
   short: "passwordTooShort",
   mismatch: "passwordMismatch",
   taken: "emailTaken",
+  invalid: "invalidInput",
+  "rate-limit": "rateLimited",
 } as const;
 
 export default async function SignUpPage({
@@ -53,7 +56,15 @@ export default async function SignUpPage({
             {t.email}
             <span className="text-[var(--color-danger)]"> *</span>
           </span>
-          <input type="email" name="email" dir="ltr" required autoFocus className="w-full" />
+          <input
+            type="email"
+            name="email"
+            dir="ltr"
+            maxLength={REQUEST_LIMITS.emailChars}
+            required
+            autoFocus
+            className="w-full"
+          />
         </label>
 
         <div className="grid gap-3 sm:grid-cols-2">
@@ -67,6 +78,7 @@ export default async function SignUpPage({
               name="password"
               dir="ltr"
               minLength={MIN_PASSWORD_LENGTH}
+              maxLength={REQUEST_LIMITS.passwordChars}
               required
               className="w-full"
             />
@@ -81,6 +93,7 @@ export default async function SignUpPage({
               name="passwordConfirm"
               dir="ltr"
               minLength={MIN_PASSWORD_LENGTH}
+              maxLength={REQUEST_LIMITS.passwordChars}
               required
               className="w-full"
             />
@@ -92,7 +105,13 @@ export default async function SignUpPage({
             {t.company}
             <span className="text-[var(--color-danger)]"> *</span>
           </span>
-          <input type="text" name="company" required className="w-full" />
+          <input
+            type="text"
+            name="company"
+            maxLength={REQUEST_LIMITS.companyChars}
+            required
+            className="w-full"
+          />
         </label>
 
         <div className="grid gap-3 sm:grid-cols-2">
@@ -101,14 +120,27 @@ export default async function SignUpPage({
               {t.contactName}
               <span className="text-[var(--color-danger)]"> *</span>
             </span>
-            <input type="text" name="contactName" required className="w-full" />
+            <input
+              type="text"
+              name="contactName"
+              maxLength={REQUEST_LIMITS.contactNameChars}
+              required
+              className="w-full"
+            />
           </label>
           <label className="block text-[12px]">
             <span className="mb-0.5 block font-bold">
               {t.phone}
               <span className="text-[var(--color-danger)]"> *</span>
             </span>
-            <input type="tel" name="phone" dir="ltr" required className="w-full" />
+            <input
+              type="tel"
+              name="phone"
+              dir="ltr"
+              maxLength={REQUEST_LIMITS.phoneChars}
+              required
+              className="w-full"
+            />
           </label>
         </div>
 

@@ -4,6 +4,7 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { getDict, type Locale } from "@/lib/i18n";
 import type { Suggestion } from "@/db/queries";
+import { REQUEST_LIMITS } from "@/lib/requestLimits";
 
 /* Shared so the boundary's fallback is the same field, pixel for pixel, as the
    one that hydrates over it. */
@@ -51,6 +52,7 @@ function SearchField({ locale }: { locale: Locale }) {
           placeholder={t.searchPlaceholder}
           aria-label={t.search}
           autoComplete="off"
+          maxLength={REQUEST_LIMITS.searchChars}
           className={INPUT_CLASS}
         />
         <button type="submit" aria-label={t.search} className={SUBMIT_CLASS}>
@@ -71,22 +73,30 @@ function LiveSearchBar({ locale }: { locale: Locale }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const submittedQuery = searchParams.get("q") ?? "";
-  const [q, setQ] = useState(submittedQuery);
-  const [items, setItems] = useState<Suggestion[]>([]);
+  const [draft, setDraft] = useState(() => ({ source: submittedQuery, value: submittedQuery }));
+  const q = draft.source === submittedQuery ? draft.value : submittedQuery;
+  const [suggestions, setSuggestions] = useState<{ query: string; items: Suggestion[] }>({
+    query: "",
+    items: [],
+  });
+  const items =
+    q.trim().length >= 2 && suggestions.query === q ? suggestions.items : [];
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
   const boxRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  // The header layout persists across client-side navigation, so local state
-  // alone can drift from the URL. Treat the submitted query as the source of
-  // truth after navigation while still keeping keystrokes local before submit.
-  useEffect(() => setQ(submittedQuery), [submittedQuery]);
+  // The persistent header can outlive a navigation. Keying the draft to the
+  // submitted URL derives the reset during render, without a second render from
+  // a synchronous state-setting effect.
+  function setQ(value: string) {
+    setDraft({ source: submittedQuery, value });
+  }
 
   useEffect(() => {
     if (q.trim().length < 2) {
-      setItems([]);
+      abortRef.current?.abort();
       return;
     }
     const timer = setTimeout(async () => {
@@ -99,7 +109,7 @@ function LiveSearchBar({ locale }: { locale: Locale }) {
         });
         if (!res.ok) return;
         const data = (await res.json()) as Suggestion[];
-        setItems(data);
+        setSuggestions({ query: q, items: data });
         // A submitted query initializes `q` on the results page, which also
         // triggers this fetch. Keep the suggestions warm, but do not cover the
         // results unless the buyer is actively editing the field.
@@ -172,6 +182,7 @@ function LiveSearchBar({ locale }: { locale: Locale }) {
           onKeyDown={onKeyDown}
           placeholder={t.searchPlaceholder}
           autoComplete="off"
+          maxLength={REQUEST_LIMITS.searchChars}
           aria-label={t.search}
           // `min-w-0` is load-bearing: a flex item defaults to `min-width:
           // auto`, so without it this input refuses to shrink below the

@@ -67,7 +67,7 @@ export default async function AdminPage({
   const l = locale as Locale;
   const t = getDict(l);
   const sp = await searchParams;
-  const { error, fx, ok } = sp;
+  const { error, ok } = sp;
   // Read from a 30-second cookie the reset action set, so the credential never
   // travels in a URL or reaches an access log.
   const newPassword =

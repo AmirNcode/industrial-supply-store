@@ -15,13 +15,14 @@ postgres-js with raw SQL tagged templates, Tailwind v4, `node:test` via `tsx`.
 Drizzle is used **only** to define the schema and run `drizzle-kit push` — every
 query in the app is hand-written SQL. Bilingual English/Persian with RTL.
 
-Tests: `npm test` (128). Types: `npx tsc --noEmit`. Both must be clean.
+Tests: `npm test`. Types: `npx tsc --noEmit`. Both must be clean.
 
 ## Routes
 
 | Route | Who | Notes |
 | --- | --- | --- |
-| `/[locale]`, `/c/…`, `/f/…`, `/search` | public | catalog, statically rendered, `revalidate 3600` |
+| `/[locale]`, `/c/…` | public | catalog, prerendered/ISR with `revalidate 3600` |
+| `/f/…`, `/l/…`, `/search` | public | request-driven catalog results; family output is bounded by default |
 | `/[locale]/cart`, `/quote` | public | order submission |
 | `/[locale]/track` | public | guest tracking: reference **plus** email |
 | `/[locale]/account/**` | customer | signed cookie session |
@@ -29,6 +30,7 @@ Tests: `npm test` (128). Types: `npx tsc --noEmit`. Both must be clean.
 | `/[locale]/admin/login` | public | the only password form |
 | `/[locale]/admin/(panel)/{orders,products,settings}` | staff | gate lives in the panel layout |
 | `/api/admin/family/[id]/{template,export}` | staff | CSV, 404 when signed out |
+| `/api/admin/import` | staff | small signed-upload control messages; CSV bytes go to private Storage |
 
 `(panel)` is a route group — it does not appear in URLs. The sign-in gate is in
 its `layout.tsx`, which is why `/admin/login` sits **outside** it: a gate
@@ -38,9 +40,10 @@ wrapping the login page would redirect the login page to itself.
 
 They share nothing on purpose.
 
-- **Staff** — one shared password, HMAC cookie, `src/lib/admin.ts`. No accounts,
-  no rate limiting, no audit trail. `assertAdminWrite()` guards every write and
-  refuses under `DEMO_MODE`.
+- **Staff** — one shared password, HMAC cookie, `src/lib/admin.ts`. No named
+  accounts or audit trail. Login and write surfaces use the shared database
+  rate limiter. `assertAdminWrite()` guards every write and refuses under
+  `DEMO_MODE`.
 - **Customers** — per-account scrypt passwords, signed session cookie
   (`src/lib/session.ts`, `sessionToken.ts`). No sessions table; the cookie is
   an HMAC of `userId.expiry`.
@@ -147,6 +150,21 @@ error instead of a five-minute hang. A client-set `statement_timeout` does not
 survive the transaction pooler (tested), so the database's own 120s is the
 statement backstop.
 
+**Public request limits are centralized and database-backed.** Routes and
+Server Actions take their byte, field, line, filter and cart ceilings from
+`src/lib/requestLimits.ts`; do not introduce a one-off larger parser. Abuse
+counters go through `src/lib/rateLimit.ts`, whose atomic Postgres upsert works
+across function instances. Identities are HMACed before storage, and account
+writes consume both account and IP scopes where both are available.
+
+**The large CSV importer bypasses application request bodies, not validation.**
+`/api/admin/import` issues a path-specific signed upload URL for a private
+Supabase Storage bucket. The browser uploads directly, then the server validates
+the signed family/size/expiry claim, downloads at most 24 MB, and passes the CSV
+to `catalogImport.ts`. Review/apply still share the same parsing and atomic
+database-write path. Never make the import bucket public or reuse the public
+catalog-image bucket.
+
 ## Admin editing conventions
 
 Every editing screen in `/admin` follows the same four rules. They are listed
@@ -207,33 +225,43 @@ imports so it is testable standalone.
 ```
 src/
   app/[locale]/          pages; admin split under admin/(panel)/
-  app/api/               cart, suggest, admin CSV routes
+  app/api/               cart, suggest, admin CSV/export/import routes
   app/actions.ts         cart + order submission Server Actions
   components/            ConfirmSubmit, FxRatePanel, OrderTimeline, …
   db/schema.ts           Drizzle schema (definition only)
   db/extensions.sql      everything drizzle-kit cannot express — see below
   db/*Queries.ts         all reads and writes, raw SQL
-  lib/                   i18n, money, orders, fxRate, password, session, importCsv
+  lib/                   i18n, money, orders, auth, limits, imports, storage
   seed/                  taxonomy, generators, AS568 data
 ```
 
 Pure logic sits in `src/lib/*` with no database imports so it can be tested
 without one: `orders.ts`, `fxRate.ts`, `money.ts`, `invoice.ts`, `trackRef.ts`,
-`importCsv.ts`. That is where the tests are.
+`importCsv.ts`, `requestLimits.ts`, and signed import claims. That is where the
+tests are.
 
-## The one trap that keeps recurring
+## Schema changes and the trap that kept recurring
 
 `drizzle-kit push` deletes everything the schema file cannot express — the
 extension indexes, `invoice_seq`, the unique index on `lower(email)`, and
-**row-level security on every table**. `src/db/extensions.sql` holds all of it
-and both `db:push` and `db:push:remote` re-apply it automatically. If you ever
-run bare `drizzle-kit push`, run `npm run db:extensions` immediately after.
+**row-level security on every table**. `src/db/extensions.sql` holds all of it.
+`db:push` is therefore restricted to empty/local bootstrap and refuses remote
+hosts; there is no remote push command.
+
+Live schema changes are reviewed SQL files in `supabase/migrations`. `npm run
+db:migrate:check:remote` dry-runs them, `db:migrate:remote` applies only pending
+files and records each version in `supabase_migrations.schema_migrations`, and
+the write command requires a same-day backup/restore acknowledgement. A new
+empty database has its own bootstrap command that refuses any existing public
+table.
 
 Full detail, plus five other traps, in [`DEPLOYMENT.md`](DEPLOYMENT.md).
 
 ## Known gaps
 
 Recorded in `docs/superpowers/specs/2026-07-31-accounts-orders-admin-design.md`.
-The load-bearing ones: no email anywhere (staff send invoices by hand), no rate
-limiting, sessions cannot be revoked individually, and `/admin` has no named
-staff accounts — which is why `order_comments` has no author column.
+The load-bearing ones: no email anywhere (staff send invoices by hand), sessions
+cannot be revoked individually, and `/admin` has no named staff accounts —
+which is why `order_comments` has no author column. Rate limits mitigate abuse;
+they do not replace named staff authentication, MFA, revocation, or an audit
+trail.

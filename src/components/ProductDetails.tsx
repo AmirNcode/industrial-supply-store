@@ -52,9 +52,9 @@ export function ProductDetails({
     <div className="detail-sticky flex flex-wrap items-start gap-4 px-2 py-3">
       <div className="flex w-[120px] shrink-0 flex-col items-center gap-1">
         {imageUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element -- product images
-          // are supplier-hosted at arbitrary sizes; next/image would need every
-          // host allow-listed before a single one renders.
+          // Supplier images may use HTTP or arbitrary hosts, so Next's HTTPS
+          // optimiser cannot safely handle every value accepted by the admin.
+          // eslint-disable-next-line @next/next/no-img-element
           <img
             src={imageUrl}
             alt={imageAlt}

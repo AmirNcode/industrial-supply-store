@@ -1,6 +1,7 @@
 /** Shared rules for catalog artwork, used by both CSV import and file upload. */
 
-export const CATALOG_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
+// Leaves room for multipart framing under Vercel's 4.5 MB Function payload cap.
+export const CATALOG_IMAGE_MAX_BYTES = 4_000_000;
 
 export const CATALOG_IMAGE_MIME_TYPES = [
   "image/jpeg",

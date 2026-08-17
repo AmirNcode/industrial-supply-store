@@ -26,8 +26,17 @@ will not connect.
 docker compose up -d db
 ```
 
+For a new/empty local database:
+
 ```bash
-npm install && npm run db:push && npm run db:seed
+npm install && npm run db:bootstrap:local
+```
+
+For an existing local database after pulling code, apply only pending forward
+migrations:
+
+```bash
+npm install && npm run db:migrate
 ```
 
 ```bash
@@ -45,8 +54,13 @@ so bookmarks and screenshots survive a reset.
 The app image prerenders the home page at build time, so **the database must be
 up and seeded before you build**:
 
+Set `AUTH_SECRET` and `DOCKER_BUILD_DATABASE_URL` in `.env` (the example file
+documents both), then:
+
 ```bash
-docker compose up -d db && npm run db:seed && docker compose --profile full up -d --build
+docker compose up -d db
+npm run db:bootstrap:local
+docker compose --profile full up -d --build
 ```
 
 The `full` profile is opt-in precisely because host-side `npm run dev` is much
@@ -56,9 +70,11 @@ faster to iterate on.
 
 | Command | What it does |
 |---|---|
-| `npm run db:push` | Apply the schema (no migration files; this is a v1) |
+| `npm run db:migrate` | Apply pending forward migrations and record them in the ledger |
+| `npm run db:migrate:check` | Dry-run pending migrations without changing the database |
+| `npm run db:bootstrap:local` | Build and seed a genuinely empty local database |
 | `npm run db:seed` | Truncate and regenerate the catalog |
-| `npm run db:reset` | Drop the schema, re-push, reseed |
+| `npm run db:reset` | Destructively rebuild the local database (alias of local bootstrap) |
 | `npm run db:studio` | Drizzle Studio |
 | `npm run build` | Production build |
 
@@ -130,17 +146,27 @@ failure the Docker image hits, which is why `docker-compose` passes a build-time
    `src/db/index.ts` drops its pool to 2 connections when it detects `VERCEL` or
    `NETLIFY`, because otherwise the pool size multiplies by the instance count.
 
-4. **Push the schema and seed**, from your machine against the remote database:
+4. **Inspect and apply forward migrations**, from your machine against the
+   remote database. First verify a restorable backup/PITR recovery point and a
+   recent restore test. The write command requires today's UTC date so this
+   acknowledgement cannot become a permanent env-file bypass:
 
    ```bash
-   printf 'DATABASE_URL=<transaction-pooler-6543>\nDIRECT_DATABASE_URL=<session-pooler-5432>\n' > .env.production.local && npm run db:setup:remote
+   npm run db:migrate:check:remote
+   MIGRATION_BACKUP_VERIFIED=YYYY-MM-DD npm run db:migrate:remote
+   npm run db:verify:remote
    ```
 
-   The seeder makes a few hundred round trips, so expect a couple of minutes
-   over a WAN rather than the ~14 seconds it takes locally.
+   These commands never seed or reconcile the live schema. For a brand-new
+   database only, `EMPTY_DATABASE_CONFIRMED=1 npm run db:bootstrap:empty:remote`
+   first proves that `public` contains zero tables, then creates and seeds it.
+   It has no override for an initialized database.
 
 5. **Set the remaining environment variables** in the Vercel project:
-   `ADMIN_PASSWORD` (see the warning below) and `USD_TO_TOMAN`.
+   `ADMIN_PASSWORD` (see the warning below), `USD_TO_TOMAN`, and the Supabase
+   Storage variables documented in `.env.example` if administrators will upload
+   catalog images or CSV files. CSV imports need a browser-safe publishable/anon
+   key and a private import bucket in addition to the server secret.
 
 6. Deploy.
 
@@ -165,7 +191,7 @@ backend is invisible to the next.
 
 Netlify will very likely work — its Next runtime supports App Router SSR, ISR
 and Server Actions, and Netlify DB is Neon underneath. The reason this documents
-Vercel is version currency: the project is on **Next.js 16.2**, and Netlify's
+Vercel is version currency: the project is on **Next.js 16.3.1**, and Netlify's
 runtime is a separate adapter that has historically lagged a release or two on
 new Next features. This app leans on exactly that surface. If you deploy to
 Netlify, the same database steps apply; `next.config.ts` and `src/db/index.ts`
@@ -175,8 +201,10 @@ already check for `NETLIFY` alongside `VERCEL`.
 
 Deploying makes this internet-reachable, which changes the risk on two things:
 
-- **`/admin` is not authentication.** One shared password, no accounts, no rate
-  limiting, no audit trail — and it defaults to `changeme`. It exposes every
+- **`/admin` is minimal authentication.** It is one shared password with no
+  named accounts, MFA, revocation, or audit trail — and it defaults to
+  `changeme`. Database-backed throttling limits guesses but does not make this
+  suitable as a permanent staff identity system. It exposes every
   submitted RFQ with contact details. Set a strong `ADMIN_PASSWORD`, and put the
   whole deployment behind Vercel's Deployment Protection so the demo is not
   publicly reachable at all.
@@ -500,11 +528,12 @@ store, the seeder gets replaced by an importer against supplier data.
 
 Known gaps, stated plainly:
 
-- **`/admin` is not authentication.** One shared password from `.env`, no
-  accounts, no rate limiting, no audit trail. It exists so a demo of the RFQ
-  inbox is not world-readable. Replace it before exposing this anywhere.
-- **No migration files.** `db:push` diffs the schema directly, which is right for
-  a v1 and wrong once there is data worth keeping.
+- **`/admin` is only a shared credential.** Login is rate-limited, but there are
+  no named accounts, MFA, revocation, or audit trail. It exists so a demo of the
+  RFQ inbox is not world-readable. Replace it before a real staff rollout.
+- **Migration history starts at its 2026-08-17 adoption point.** Existing
+  databases are the baseline; every change after that is a reviewed SQL file in
+  `supabase/migrations` and is recorded in `supabase_migrations.schema_migrations`.
 - **No email.** A submitted RFQ lands in the database and nothing notifies
   anybody.
 - **Product imagery is in-house SVG line art** (`src/components/ProductIcon.tsx`)
@@ -515,8 +544,8 @@ Known gaps, stated plainly:
   at 2.7 KB instead of 48.8 KB. `remotePatterns` allows every HTTPS host,
   because an administrator can paste any supplier URL; the trade is written
   down in `next.config.ts`.
-- **8 npm advisories**, all in `drizzle-kit`'s bundled esbuild toolchain — a dev
-  dependency that never ships in the runtime image. Worth clearing, not urgent.
+- **Dependency advisories remain tracked in the full codebase review.** Run
+  `npm audit` before releases; do not assume findings are development-only.
 
 ---
 

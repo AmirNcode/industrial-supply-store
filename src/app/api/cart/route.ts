@@ -1,5 +1,17 @@
 import { NextResponse } from "next/server";
-import { addLine, removeLine, getCartCount, getCartQuantities } from "@/lib/cart";
+import {
+  CartCapacityError,
+  addLine,
+  removeLine,
+  getCartCount,
+  getCartQuantities,
+} from "@/lib/cart";
+import { RATE_LIMITS, consumeRateLimit } from "@/lib/rateLimit";
+import {
+  REQUEST_LIMITS,
+  RequestBodyTooLargeError,
+  readJsonWithin,
+} from "@/lib/requestLimits";
 
 const NO_STORE = { "cache-control": "no-store" };
 
@@ -21,10 +33,23 @@ function parseProductId(v: unknown): number | null {
 }
 
 export async function POST(request: Request) {
+  const limit = await consumeRateLimit("cart:write", RATE_LIMITS.cartWrite, {
+    headers: request.headers,
+  });
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { error: "rate limit" },
+      { status: 429, headers: { ...NO_STORE, "retry-after": String(limit.retryAfter) } },
+    );
+  }
+
   let body: unknown;
   try {
-    body = await request.json();
-  } catch {
+    body = await readJsonWithin(request, REQUEST_LIMITS.routeJsonBytes);
+  } catch (error) {
+    if (error instanceof RequestBodyTooLargeError) {
+      return NextResponse.json({ error: "body too large" }, { status: 413 });
+    }
     return NextResponse.json({ error: "invalid json" }, { status: 400 });
   }
 
@@ -39,7 +64,15 @@ export async function POST(request: Request) {
 
   // The resulting line quantity comes back so the row can show the running
   // total without a second round trip.
-  const lineQty = await addLine(id, quantity);
+  let lineQty: number;
+  try {
+    lineQty = await addLine(id, quantity);
+  } catch (error) {
+    if (error instanceof CartCapacityError) {
+      return NextResponse.json({ error: "cart full" }, { status: 409, headers: NO_STORE });
+    }
+    throw error;
+  }
   return NextResponse.json(
     { count: await getCartCount(), productId: id, qty: lineQty },
     { headers: NO_STORE },
@@ -48,10 +81,23 @@ export async function POST(request: Request) {
 
 /** Clears one line, for the × beside the "In Cart" quantity. */
 export async function DELETE(request: Request) {
+  const limit = await consumeRateLimit("cart:write", RATE_LIMITS.cartWrite, {
+    headers: request.headers,
+  });
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { error: "rate limit" },
+      { status: 429, headers: { ...NO_STORE, "retry-after": String(limit.retryAfter) } },
+    );
+  }
+
   let body: unknown;
   try {
-    body = await request.json();
-  } catch {
+    body = await readJsonWithin(request, REQUEST_LIMITS.routeJsonBytes);
+  } catch (error) {
+    if (error instanceof RequestBodyTooLargeError) {
+      return NextResponse.json({ error: "body too large" }, { status: 413 });
+    }
     return NextResponse.json({ error: "invalid json" }, { status: 400 });
   }
 

@@ -12,11 +12,14 @@ import {
 } from "./actions";
 import { isLocale, getDict, locales, type Locale } from "@/lib/i18n";
 import { formatPrice, formatInt } from "@/lib/money";
+import { REQUEST_LIMITS } from "@/lib/requestLimits";
 
 const ERROR_KEY = {
   "current-password": "currentPasswordWrong",
   short: "passwordTooShort",
   mismatch: "passwordMismatch",
+  invalid: "invalidInput",
+  "rate-limit": "rateLimited",
 } as const;
 
 export default async function AccountPage({
@@ -170,7 +173,13 @@ export default async function AccountPage({
             <input type="hidden" name="locale" value={l} />
             <label className="block text-[12px]">
               <span className="mb-0.5 block font-bold">{t.company}</span>
-              <input type="text" name="company" defaultValue={user.company} className="w-full" />
+              <input
+                type="text"
+                name="company"
+                maxLength={REQUEST_LIMITS.companyChars}
+                defaultValue={user.company}
+                className="w-full"
+              />
             </label>
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="block text-[12px]">
@@ -178,6 +187,7 @@ export default async function AccountPage({
                 <input
                   type="text"
                   name="contactName"
+                  maxLength={REQUEST_LIMITS.contactNameChars}
                   defaultValue={user.contactName}
                   className="w-full"
                 />
@@ -187,6 +197,7 @@ export default async function AccountPage({
                 <input
                   type="tel"
                   name="phone"
+                  maxLength={REQUEST_LIMITS.phoneChars}
                   dir="ltr"
                   defaultValue={user.phone}
                   className="w-full"
@@ -198,6 +209,7 @@ export default async function AccountPage({
               <input
                 type="text"
                 name="defaultPoNumber"
+                maxLength={REQUEST_LIMITS.poNumberChars}
                 dir="ltr"
                 defaultValue={user.defaultPoNumber}
                 className="w-full"
@@ -238,6 +250,7 @@ export default async function AccountPage({
                 type="password"
                 name="currentPassword"
                 dir="ltr"
+                maxLength={REQUEST_LIMITS.passwordChars}
                 autoComplete="current-password"
                 required
                 className="w-full"
@@ -252,6 +265,7 @@ export default async function AccountPage({
                   dir="ltr"
                   autoComplete="new-password"
                   minLength={MIN_PASSWORD_LENGTH}
+                  maxLength={REQUEST_LIMITS.passwordChars}
                   required
                   className="w-full"
                 />
@@ -264,6 +278,7 @@ export default async function AccountPage({
                   dir="ltr"
                   autoComplete="new-password"
                   minLength={MIN_PASSWORD_LENGTH}
+                  maxLength={REQUEST_LIMITS.passwordChars}
                   required
                   className="w-full"
                 />

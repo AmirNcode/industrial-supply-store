@@ -312,6 +312,11 @@ export const orders = pgTable(
   "orders",
   {
     id: serial("id").primaryKey(),
+    /**
+     * One browser submission, enforced by Postgres rather than a disabled
+     * button. Nullable only so orders that predate this field remain valid.
+     */
+    submissionKey: uuid("submission_key"),
     /** Human-facing reference, e.g. ORD-7Q4M2X. Read aloud on the phone. */
     ref: text("ref").notNull(),
     /** Null for a guest checkout, which stays supported. */
@@ -349,6 +354,7 @@ export const orders = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    uniqueIndex("orders_submission_key_key").on(t.submissionKey),
     uniqueIndex("orders_ref_key").on(t.ref),
     index("orders_created_idx").on(t.createdAt),
     index("orders_status_idx").on(t.status, t.createdAt),
@@ -468,4 +474,35 @@ export const users = pgTable(
     lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
   },
   (t) => [index("users_created_idx").on(t.createdAt)],
+);
+
+// ---------------------------------------------------------------------------
+// Request abuse controls
+// ---------------------------------------------------------------------------
+
+/**
+ * One fixed-window counter per protected operation and caller identity.
+ *
+ * The identity is an HMAC of the client address or account id. Raw addresses
+ * never enter the database, and one row is reused across windows so normal
+ * traffic does not create a row per minute forever. Direct application SQL is
+ * the only intended consumer; the migration enables RLS and grants no API
+ * policy because these counters must not be readable through Supabase REST.
+ */
+export const requestRateLimits = pgTable(
+  "request_rate_limits",
+  {
+    scope: text("scope").notNull(),
+    identityHash: text("identity_hash").notNull(),
+    windowStartedAt: timestamp("window_started_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    requestCount: integer("request_count").notNull().default(1),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.scope, t.identityHash] }),
+    index("request_rate_limits_expires_idx").on(t.expiresAt),
+    check("request_rate_limits_count_check", sql`${t.requestCount} > 0`),
+  ],
 );

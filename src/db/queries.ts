@@ -68,6 +68,13 @@ export type ProductDetailRow = ProductRow & {
 export type FacetValue = { value: string; num: number | null; count: number };
 export type Facet = { key: string; values: FacetValue[] };
 
+export type ProductSetSummary = {
+  total: number;
+  hasStock: boolean;
+  maxLeadDays: number;
+  standards: string[];
+};
+
 /** Active filters parsed from the query string: specKey -> selected values. */
 export type Filters = Record<string, string[]>;
 
@@ -248,24 +255,39 @@ function filterClause(familyId: number, filters: Filters) {
   return clause;
 }
 
-export async function countProducts(
+/** Whole-result facts used above a bounded family table. */
+export async function getProductSetSummary(
   familyId: number,
   filters: Filters,
-): Promise<number> {
-  const rows = await sql<{ n: number }[]>`
-    SELECT count(*)::int AS n FROM products p WHERE ${filterClause(familyId, filters)}
+): Promise<ProductSetSummary> {
+  const rows = await sql<ProductSetSummary[]>`
+    SELECT count(*)::int AS total,
+           COALESCE(bool_or(p.in_stock), false) AS "hasStock",
+           COALESCE(max(p.lead_days), 0)::int AS "maxLeadDays",
+           COALESCE(
+             array_agg(
+               DISTINCT NULLIF(p.specs->>'spec', '')
+               ORDER BY NULLIF(p.specs->>'spec', '')
+             ) FILTER (WHERE NULLIF(p.specs->>'spec', '') IS NOT NULL),
+             ARRAY[]::text[]
+           ) AS standards
+    FROM products p
+    WHERE ${filterClause(familyId, filters)}
   `;
-  return rows[0]?.n ?? 0;
+  return rows[0] ?? { total: 0, hasStock: false, maxLeadDays: 0, standards: [] };
 }
 
 /**
- * Every product in the family that matches the filters — the whole set, not a
- * page of it. A buyer comparing a family reads it as one table and finds a size
- * by scrolling or by filtering, not by guessing which of sixteen pages holds it.
+ * A bounded, server-filtered family window. Passing no limit is reserved for
+ * the route's explicit all-products mode. A part-number deep link is pinned to
+ * the first row so search/cart links still reach their product without forcing
+ * the other thousands of rows into the initial document.
  */
 export async function getProducts(
   familyId: number,
   filters: Filters,
+  limit: number | null,
+  pinnedPartNumber: string | null = null,
 ): Promise<ProductDetailRow[]> {
   return sql<ProductDetailRow[]>`
     SELECT p.id, p.part_number AS "partNumber", p.specs,
@@ -274,7 +296,13 @@ export async function getProducts(
            p.in_stock AS "inStock", p.image_url AS "imageUrl", p.documents
     FROM products p
     WHERE ${filterClause(familyId, filters)}
-    ORDER BY p.sort
+    ORDER BY CASE
+               WHEN ${pinnedPartNumber}::text IS NOT NULL
+                AND upper(p.part_number) = upper(${pinnedPartNumber})
+               THEN 0 ELSE 1
+             END,
+             p.sort
+    LIMIT ${limit}
   `;
 }
 

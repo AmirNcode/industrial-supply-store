@@ -17,6 +17,8 @@ import {
   setPassword,
   getPasswordHash,
 } from "@/db/userQueries";
+import { RATE_LIMITS, consumeRateLimit } from "@/lib/rateLimit";
+import { REQUEST_LIMITS, boundedString } from "@/lib/requestLimits";
 
 /**
  * None of these actions revalidate, deliberately.
@@ -34,15 +36,28 @@ import {
  */
 export async function signUpAction(formData: FormData): Promise<void> {
   const locale = safeLocale(formData);
-  const email = String(formData.get("email") ?? "").trim();
-  const password = String(formData.get("password") ?? "");
-  const confirm = String(formData.get("passwordConfirm") ?? "");
-  const company = String(formData.get("company") ?? "").trim();
-  const contactName = String(formData.get("contactName") ?? "").trim();
-  const phone = String(formData.get("phone") ?? "").trim();
+  const limit = await consumeRateLimit("account:sign-up", RATE_LIMITS.accountSignUp);
+  if (!limit.allowed) redirect(`/${locale}/account/signup?error=rate-limit`);
 
-  if (!email || !company || !contactName || !phone) {
+  const email = boundedString(formData.get("email"), REQUEST_LIMITS.emailChars)?.toLowerCase();
+  const password = boundedString(formData.get("password"), REQUEST_LIMITS.passwordChars, {
+    trim: false,
+  });
+  const confirm = boundedString(formData.get("passwordConfirm"), REQUEST_LIMITS.passwordChars, {
+    trim: false,
+  });
+  const company = boundedString(formData.get("company"), REQUEST_LIMITS.companyChars);
+  const contactName = boundedString(
+    formData.get("contactName"),
+    REQUEST_LIMITS.contactNameChars,
+  );
+  const phone = boundedString(formData.get("phone"), REQUEST_LIMITS.phoneChars);
+
+  if (!email || !password || !confirm || !company || !contactName || !phone) {
     redirect(`/${locale}/account/signup?error=incomplete`);
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    redirect(`/${locale}/account/signup?error=invalid`);
   }
   if (password.length < MIN_PASSWORD_LENGTH) {
     redirect(`/${locale}/account/signup?error=short`);
@@ -83,11 +98,16 @@ const DUMMY_HASH =
 
 export async function signInAction(formData: FormData): Promise<void> {
   const locale = safeLocale(formData);
-  const email = String(formData.get("email") ?? "").trim();
-  const password = String(formData.get("password") ?? "");
+  const limit = await consumeRateLimit("account:sign-in", RATE_LIMITS.accountSignIn);
+  if (!limit.allowed) redirect(`/${locale}/account/signin?error=rate-limit`);
 
-  const user = await findUserByEmail(email);
-  const ok = await verifyPassword(password, user ? user.passwordHash : DUMMY_HASH);
+  const email = boundedString(formData.get("email"), REQUEST_LIMITS.emailChars)?.toLowerCase();
+  const password = boundedString(formData.get("password"), REQUEST_LIMITS.passwordChars, {
+    trim: false,
+  });
+
+  const user = email ? await findUserByEmail(email) : null;
+  const ok = await verifyPassword(password ?? "", user ? user.passwordHash : DUMMY_HASH);
 
   if (!user || !ok) {
     redirect(`/${locale}/account/signin?error=failed`);
@@ -111,6 +131,10 @@ export async function updateProfileAction(formData: FormData): Promise<void> {
   const locale = safeLocale(formData);
   const id = await currentUserId();
   if (!id) redirect(`/${locale}/account/signin`);
+  const limit = await consumeRateLimit("account:write", RATE_LIMITS.accountWrite, {
+    accountId: id,
+  });
+  if (!limit.allowed) redirect(`/${locale}/account?error=rate-limit#profile`);
 
   // The preference comes from its own field, not from the page's locale.
   // Taking it from the URL meant saving the profile from an English page
@@ -118,11 +142,31 @@ export async function updateProfileAction(formData: FormData): Promise<void> {
   // never survive being edited from the "wrong" side of the site.
   const preferred = String(formData.get("preferredLocale") ?? "");
 
+  const company = boundedString(formData.get("company"), REQUEST_LIMITS.companyChars, {
+    allowEmpty: true,
+  });
+  const contactName = boundedString(
+    formData.get("contactName"),
+    REQUEST_LIMITS.contactNameChars,
+    { allowEmpty: true },
+  );
+  const phone = boundedString(formData.get("phone"), REQUEST_LIMITS.phoneChars, {
+    allowEmpty: true,
+  });
+  const defaultPoNumber = boundedString(
+    formData.get("defaultPoNumber"),
+    REQUEST_LIMITS.poNumberChars,
+    { allowEmpty: true },
+  );
+  if ([company, contactName, phone, defaultPoNumber].some((value) => value === null)) {
+    redirect(`/${locale}/account?error=invalid#profile`);
+  }
+
   await updateProfile(id, {
-    company: String(formData.get("company") ?? "").trim(),
-    contactName: String(formData.get("contactName") ?? "").trim(),
-    phone: String(formData.get("phone") ?? "").trim(),
-    defaultPoNumber: String(formData.get("defaultPoNumber") ?? "").trim(),
+    company: company!,
+    contactName: contactName!,
+    phone: phone!,
+    defaultPoNumber: defaultPoNumber!,
     locale: isLocale(preferred) ? (preferred as Locale) : locale,
   });
   redirect(`/${locale}/account?ok=profile#profile`);
@@ -143,10 +187,25 @@ export async function changePasswordAction(formData: FormData): Promise<void> {
   const locale = safeLocale(formData);
   const user = await currentUser();
   if (!user) redirect(`/${locale}/account/signin`);
+  const limit = await consumeRateLimit("account:write", RATE_LIMITS.accountWrite, {
+    accountId: user.id,
+  });
+  if (!limit.allowed) redirect(`/${locale}/account?error=rate-limit#profile`);
 
-  const current = String(formData.get("currentPassword") ?? "");
-  const next = String(formData.get("newPassword") ?? "");
-  const confirm = String(formData.get("newPasswordConfirm") ?? "");
+  const current = boundedString(formData.get("currentPassword"), REQUEST_LIMITS.passwordChars, {
+    trim: false,
+  });
+  const next = boundedString(formData.get("newPassword"), REQUEST_LIMITS.passwordChars, {
+    trim: false,
+  });
+  const confirm = boundedString(
+    formData.get("newPasswordConfirm"),
+    REQUEST_LIMITS.passwordChars,
+    { trim: false },
+  );
+  if (!current || !next || !confirm) {
+    redirect(`/${locale}/account?error=invalid#profile`);
+  }
 
   const hash = await getPasswordHash(user.id);
   if (!hash || !(await verifyPassword(current, hash))) {

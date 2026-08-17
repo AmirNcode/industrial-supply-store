@@ -15,7 +15,7 @@ test("catalog image URLs allow only normal web URLs", () => {
   assert.equal(normalizeCatalogImageUrl("   "), "");
 });
 
-test("catalog image files are JPG, PNG, or WebP and no larger than 5 MB", () => {
+test("catalog image files are JPG, PNG, or WebP and no larger than 4 MB", () => {
   assert.equal(catalogImageFileProblem({ type: "image/jpeg", size: 100 }), null);
   assert.equal(catalogImageFileProblem({ type: "image/png", size: 100 }), null);
   assert.equal(catalogImageFileProblem({ type: "image/webp", size: 100 }), null);

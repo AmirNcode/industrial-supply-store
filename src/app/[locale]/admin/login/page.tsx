@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { isAdmin } from "@/lib/admin";
 import { loginAction } from "../actions";
 import { isLocale, getDict, type Locale } from "@/lib/i18n";
+import { REQUEST_LIMITS } from "@/lib/requestLimits";
 
 /**
  * The admin password form, on its own route.
@@ -38,7 +39,11 @@ export default async function AdminLoginPage({
         {t.admin}
       </h1>
 
-      {error && <p className="mb-2 text-[12px] text-[#a3312a]">{t.wrongPassword}</p>}
+      {error && (
+        <p className="mb-2 text-[12px] text-[#a3312a]">
+          {error === "rate-limit" ? t.rateLimited : t.wrongPassword}
+        </p>
+      )}
 
       <form action={loginAction}>
         <input type="hidden" name="locale" value={l} />
@@ -47,6 +52,7 @@ export default async function AdminLoginPage({
           <input
             type="password"
             name="password"
+            maxLength={REQUEST_LIMITS.passwordChars}
             autoComplete="current-password"
             className="w-full"
             autoFocus

@@ -2,20 +2,14 @@ import type { CategorySeed, FamilySeed, FamilyGen } from "./types";
 import {
   ax,
   range,
-  ELASTOMERS,
-  HARDNESS,
   FASTENER_MATERIALS,
-  STRUCTURAL_MATERIALS,
   PLASTICS,
-  FINISHES,
-  COLORS,
   UNC_THREADS,
   METRIC_THREADS,
   PIPE_SIZES,
   SCREW_LENGTHS_IN,
   METRIC_LENGTHS_MM,
   BEARING_BORES,
-  TEMP_RANGES_F,
   materialAxis,
   finishAxis,
   colorAxis,
@@ -28,7 +22,7 @@ import {
   thicknessAxis,
   widthAxis,
 } from "./axes";
-import { ORING_SIZES, oringSize, dashValues, METRIC_ORING_IDS, METRIC_ORING_WIDTHS } from "./oring-data";
+import { oringSize, dashValues, METRIC_ORING_IDS, METRIC_ORING_WIDTHS } from "./oring-data";
 
 /** Terse family constructor. */
 function fam(

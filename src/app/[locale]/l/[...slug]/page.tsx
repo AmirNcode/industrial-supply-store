@@ -8,7 +8,7 @@ import {
 } from "@/db/queries";
 import { CategorySidebar } from "@/components/CategorySidebar";
 import { ProductCardList } from "@/components/ProductCardList";
-import { isLocale, pick, type Locale } from "@/lib/i18n";
+import { isLocale, type Locale } from "@/lib/i18n";
 import { formatInt } from "@/lib/money";
 import { getFxRate } from "@/lib/fx";
 import { CategoryHeader } from "../../c/[...slug]/CategoryHeader";
@@ -49,7 +49,11 @@ export default async function CategoryListPage({
   if (!category) notFound();
 
   const sp = await searchParams;
-  const page = Math.max(1, Number(sp.page) || 1);
+  const pages = Math.max(1, Math.ceil(category.productCount / LIST_PAGE_SIZE));
+  const requestedPage = Number(sp.page);
+  const page = Number.isSafeInteger(requestedPage)
+    ? Math.min(pages, Math.max(1, requestedPage))
+    : 1;
   const base = `/${l}/l/${path}`;
 
   const [ancestors, products, rate] = await Promise.all([
@@ -63,8 +67,6 @@ export default async function CategoryListPage({
     products.length > 0
       ? await getSpecDefsForFamilies([...new Set(products.map((p) => p.familyId))])
       : undefined;
-
-  const pages = Math.ceil(category.productCount / LIST_PAGE_SIZE);
 
   return (
     <div className="flex gap-4 px-3 pt-2">

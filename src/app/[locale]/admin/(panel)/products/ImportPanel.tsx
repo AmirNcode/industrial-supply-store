@@ -1,23 +1,25 @@
 "use client";
 
-import { useActionState, useState, useTransition } from "react";
+import { useState, useTransition, type FormEvent } from "react";
 import Link from "next/link";
+import { createClient } from "@supabase/supabase-js";
 import { getDict, type Locale } from "@/lib/i18n";
 import { formatInt } from "@/lib/money";
-import { importCsvAction, saveFamilyOrderAction, type ImportState } from "./actions";
+import { saveFamilyOrderAction } from "./actions";
+import type { ImportState } from "@/lib/catalogImport";
+import { IMPORT_MAX_BYTES } from "@/lib/importLimits";
 import { ColumnReview } from "./ColumnReview";
 import { DeleteControl } from "./DeleteControl";
 import { UnsavedOrderGuard } from "./UnsavedOrderGuard";
 import type { FamilyListRow } from "@/db/importQueries";
 
 /**
- * One `useActionState` for the whole page rather than one per family.
+ * One import state for the whole page rather than one per family.
  *
- * Every family's form posts to the same action, and the result carries the
- * family it came from, so it renders under the row that was submitted. A
- * hundred-odd families each holding their own state would be a hundred-odd
- * pieces of state to keep in step for a page where only one upload can be in
- * flight at a time.
+ * CSV bytes go directly from the browser to a private Supabase Storage object
+ * using a short-lived signed URL. Only small prepare/process JSON requests hit
+ * the Next.js function, so the import keeps its 24 MB ceiling without raising
+ * the Server Action body limit for every form in the application.
  */
 
 /** A long file can fail on thousands of rows; the first screenful is what
@@ -34,30 +36,136 @@ export function ImportPanel({
   demo: boolean;
 }) {
   const t = getDict(locale);
-  const [state, formAction, isPending] = useActionState<ImportState | null, FormData>(
-    importCsvAction,
-    null,
-  );
+  const [state, setState] = useState<ImportState | null>(null);
+  const [isPending, setImportPending] = useState(false);
+  const [uploadHandle, setUploadHandle] = useState<{
+    familyId: number;
+    handle: string;
+  } | null>(null);
 
   /**
-   * The chosen file's text, held here rather than left in the file input.
-   *
-   * The import is two posts — analyze, then confirm — and React resets a form
-   * once its action resolves, which empties the file input between them. So the
-   * file is read when it is picked and posted as a field both times. It also
-   * means nothing is stashed on the server waiting for a confirmation that may
-   * never come.
-   *
-   * One at a time: only one upload can be in flight, and holding a megabyte of
-   * CSV per family on a page listing a hundred of them would be pure waste.
+   * The chosen browser File, never a 24 MB string mirrored into a hidden input.
+   * One at a time: only one upload can be in flight, and the private object is
+   * deleted after a terminal result.
    */
   const [picked, setPicked] = useState<
-    { familyId: number; name: string; text: string } | null
+    { familyId: number; name: string; file: File } | null
   >(null);
 
-  async function pick(familyId: number, file: File | undefined) {
-    if (!file) return setPicked(null);
-    setPicked({ familyId, name: file.name, text: await file.text() });
+  function pick(familyId: number, file: File | undefined) {
+    setUploadHandle(null);
+    if (!file) {
+      setPicked(null);
+      return;
+    }
+    setPicked({ familyId, name: file.name, file });
+    if (file.size > IMPORT_MAX_BYTES) {
+      setState({ kind: "message", familyId, message: "too-large" });
+    } else {
+      setState(null);
+    }
+  }
+
+  type Prepared = {
+    browserUrl: string;
+    browserKey: string;
+    bucket: string;
+    path: string;
+    storageToken: string;
+    handle: string;
+  };
+
+  async function postImport(body: Record<string, unknown>): Promise<{
+    upload?: Prepared;
+    state?: ImportState;
+  }> {
+    const response = await fetch("/api/admin/import", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const result = (await response.json().catch(() => ({}))) as {
+      upload?: Prepared;
+      state?: ImportState;
+    };
+    if (result.state) return result;
+    if (!response.ok) throw new Error("Import request failed");
+    return result;
+  }
+
+  async function submitImport(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (isPending) return;
+    const form = event.currentTarget;
+    const submitter = (event.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null;
+    const applying = submitter?.name === "stage" && submitter.value === "apply";
+    const familyId = Number(new FormData(form).get("familyId"));
+
+    setImportPending(true);
+    try {
+      let handle = uploadHandle?.familyId === familyId ? uploadHandle.handle : null;
+      if (!applying) {
+        const selected = picked?.familyId === familyId ? picked.file : null;
+        if (!selected) {
+          setState({ kind: "message", familyId, message: "no-file" });
+          return;
+        }
+        if (selected.size > IMPORT_MAX_BYTES) {
+          setState({ kind: "message", familyId, message: "too-large" });
+          return;
+        }
+
+        const prepared = await postImport({
+          kind: "prepare",
+          familyId,
+          fileName: selected.name,
+          bytes: selected.size,
+        });
+        if (prepared.state) {
+          setState(prepared.state);
+          return;
+        }
+        if (!prepared.upload) throw new Error("No import upload was prepared");
+
+        const supabase = createClient(prepared.upload.browserUrl, prepared.upload.browserKey, {
+          auth: { autoRefreshToken: false, detectSessionInUrl: false, persistSession: false },
+        });
+        const { error } = await supabase.storage
+          .from(prepared.upload.bucket)
+          .uploadToSignedUrl(
+            prepared.upload.path,
+            prepared.upload.storageToken,
+            selected,
+            { contentType: "text/csv", cacheControl: "7200" },
+          );
+        if (error) {
+          setState({ kind: "message", familyId, message: "upload-failed" });
+          return;
+        }
+        handle = prepared.upload.handle;
+        setUploadHandle({ familyId, handle });
+      }
+
+      if (!handle) {
+        setState({ kind: "message", familyId, message: "no-file" });
+        return;
+      }
+      const fields = new FormData(form);
+      const processed = await postImport({
+        kind: "process",
+        familyId,
+        handle,
+        stage: applying ? "apply" : "review",
+        plan: applying ? String(fields.get("plan") ?? "") : undefined,
+      });
+      if (!processed.state) throw new Error("No import result returned");
+      setState(processed.state);
+      if (processed.state.kind !== "review") setUploadHandle(null);
+    } catch {
+      setState({ kind: "message", familyId, message: "upload-failed" });
+    } finally {
+      setImportPending(false);
+    }
   }
 
   /*
@@ -322,10 +430,10 @@ export function ImportPanel({
                     demo={demo}
                   />
 
-                  {/* The review panel lives inside this form on purpose:
-                      confirming posts the same CSV back with the decisions
-                      attached, rather than asking for the file a second time. */}
-                  <form action={formAction} className="ms-auto flex flex-1 flex-col items-end gap-2">
+                  {/* The review panel lives inside this form so confirmation
+                      carries its column plan. The CSV itself is represented by
+                      a short signed handle, never reposted through Next.js. */}
+                  <form onSubmit={submitImport} className="ms-auto flex flex-1 flex-col items-end gap-2">
                     <div className="flex items-center gap-2">
                       <input type="hidden" name="familyId" value={f.id} />
                       {/* A bare file input reads as plain text and gives no
@@ -334,9 +442,9 @@ export function ImportPanel({
                           input itself is visually hidden but still focusable —
                           the label is what gets clicked.
 
-                          Unnamed on purpose: the file is never posted. Its text
-                          is, in the field below, which survives the form reset
-                          React performs after each action. */}
+                          Unnamed on purpose: the file is uploaded directly to
+                          its short-lived private object; the form sends only
+                          the small column plan through the app. */}
                       <label className={`btn-file ${chosen ? "btn-file-set" : ""}`}>
                         <input
                           type="file"
@@ -347,11 +455,6 @@ export function ImportPanel({
                         <span className="btn-file-step">1</span>
                         <span className="btn-file-name">{chosen ?? t.chooseCsv}</span>
                       </label>
-                      <input
-                        type="hidden"
-                        name="csvText"
-                        value={picked?.familyId === f.id ? picked.text : ""}
-                      />
                       {/* Disabled until a file is chosen, so the order of the
                           two steps is enforced rather than merely implied. */}
                       <button
@@ -505,11 +608,17 @@ function Result({
         ? t.importNoFile
         : state.message === "too-large"
           ? t.importTooLarge
-          : state.message === "bad-plan"
-            ? t.importBadPlan
-            : state.message === "all-rows-skipped"
-              ? t.importAllSkipped
-              : t.importFamilyGone;
+          : state.message === "storage-missing"
+            ? t.importStorageMissing
+            : state.message === "upload-failed"
+              ? t.importUploadFailed
+              : state.message === "rate-limit"
+                ? t.rateLimited
+                : state.message === "bad-plan"
+                  ? t.importBadPlan
+                  : state.message === "all-rows-skipped"
+                    ? t.importAllSkipped
+                    : t.importFamilyGone;
     return <Problem>{text}</Problem>;
   }
 

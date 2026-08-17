@@ -815,8 +815,8 @@ html[dir="rtl"] .admin-group[open] > summary::before {
 /* A row already on the order carries a wash, so a buyer working down a
    hundred rows can see what they have taken without reading every quantity.
    `:has()` is what makes this possible without touching the row markup: the
-   cart lives in client state and only `InCartQty` knows it, but that element
-   renders `.in-cart` inside the row exactly when the quantity is above zero.
+   cart lives in client state and the row component/controller renders or adds
+   `.in-cart` exactly when the quantity is above zero.
    Placed after the zebra rule so it wins on even rows, and before `:hover`
    below so pointing at a row still highlights it. */
 .spec-table tbody tr:has(.in-cart),

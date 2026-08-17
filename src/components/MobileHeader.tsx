@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { getDict, type Locale } from "@/lib/i18n";
 import { SearchBar } from "./SearchBar";
 import { LocaleSwitch } from "./LocaleSwitch";
 import { CartBadge } from "./CartBadge";
 import type { SiteContact } from "@/lib/siteContactValues";
+import { useRouteDisclosure } from "@/lib/useRouteDisclosure";
 
 /**
  * The phone masthead.
@@ -35,15 +35,10 @@ export function MobileHeader({
   contact: SiteContact;
 }) {
   const t = getDict(locale);
-  const pathname = usePathname();
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useRouteDisclosure();
   const rootRef = useRef<HTMLDivElement>(null);
 
   const other: Locale = locale === "fa" ? "en" : "fa";
-
-  // Close the drawer on navigation — otherwise tapping a link leaves it open
-  // over the page the user just asked for.
-  useEffect(() => setMenuOpen(false), [pathname]);
 
   /*
    * Flags the masthead while the drawer is open, which does two jobs.
@@ -77,7 +72,7 @@ export function MobileHeader({
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && setMenuOpen(false);
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [menuOpen]);
+  }, [menuOpen, setMenuOpen]);
 
   // No "Your Order" here: the ORDER control sits in the bar above with its own
   // count badge, and two routes to the same page in one header is noise.

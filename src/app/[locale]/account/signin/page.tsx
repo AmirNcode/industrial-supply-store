@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { signInAction } from "../actions";
 import { currentUser } from "@/lib/session";
 import { isLocale, getDict, type Locale } from "@/lib/i18n";
+import { REQUEST_LIMITS } from "@/lib/requestLimits";
 
 export default async function SignInPage({
   params,
@@ -29,9 +30,9 @@ export default async function SignInPage({
       </h1>
       <p className="mb-4 text-[12px] text-[var(--color-ink-muted)]">{t.signInPrompt}</p>
 
-      {error === "failed" && (
+      {(error === "failed" || error === "rate-limit") && (
         <p className="mb-3 border border-[#e0b4b0] bg-[#fdf2f1] px-3 py-2 text-[12px] text-[var(--color-danger)]">
-          {t.signInFailed}
+          {error === "rate-limit" ? t.rateLimited : t.signInFailed}
         </p>
       )}
 
@@ -39,11 +40,26 @@ export default async function SignInPage({
         <input type="hidden" name="locale" value={l} />
         <label className="block text-[12px]">
           <span className="mb-0.5 block font-bold">{t.email}</span>
-          <input type="email" name="email" dir="ltr" required autoFocus className="w-full" />
+          <input
+            type="email"
+            name="email"
+            dir="ltr"
+            maxLength={REQUEST_LIMITS.emailChars}
+            required
+            autoFocus
+            className="w-full"
+          />
         </label>
         <label className="block text-[12px]">
           <span className="mb-0.5 block font-bold">{t.password}</span>
-          <input type="password" name="password" dir="ltr" required className="w-full" />
+          <input
+            type="password"
+            name="password"
+            dir="ltr"
+            maxLength={REQUEST_LIMITS.passwordChars}
+            required
+            className="w-full"
+          />
         </label>
         <button type="submit" className="btn-primary mt-1 w-full">
           {t.signInTitle}

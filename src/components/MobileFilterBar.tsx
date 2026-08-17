@@ -1,8 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import type { Facet, SpecDefRow, Filters } from "@/db/queries";
 import { getDict, pick, type Locale } from "@/lib/i18n";
 import { specValueLabel } from "@/lib/specValues";
@@ -13,6 +12,7 @@ import {
   countActiveFilters,
   type RawSearchParams,
 } from "@/lib/filters";
+import { useRouteDisclosure } from "@/lib/useRouteDisclosure";
 
 /**
  * Sticky filter bar plus full-height sheet, replacing the desktop facet rail on
@@ -42,13 +42,8 @@ export function MobileFilterBar({
   total: number;
 }) {
   const t = getDict(locale);
-  const [open, setOpen] = useState(false);
-  const pathname = usePathname();
+  const [open, setOpen] = useRouteDisclosure();
   const active = countActiveFilters(filters);
-
-  // The sheet stays open across filter taps so a buyer can narrow several specs
-  // in one pass, but must close when they navigate away entirely.
-  useEffect(() => setOpen(false), [pathname]);
 
   useEffect(() => {
     if (!open) return;

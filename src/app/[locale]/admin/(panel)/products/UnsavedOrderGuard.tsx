@@ -52,9 +52,11 @@ export function UnsavedOrderGuard({
    * Re-registering a capture-phase document listener on every keystroke of
    * state would mean a window, however small, where a click lands between the
    * remove and the add.
-   */
+  */
   const state = useRef({ dirtyCount, pendingHref });
-  state.current = { dirtyCount, pendingHref };
+  useEffect(() => {
+    state.current = { dirtyCount, pendingHref };
+  }, [dirtyCount, pendingHref]);
 
   useEffect(() => {
     const onClick = (event: MouseEvent) => {

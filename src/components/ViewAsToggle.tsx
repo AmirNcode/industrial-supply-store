@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { getDict, type Locale } from "@/lib/i18n";
+import { useRouteDisclosure } from "@/lib/useRouteDisclosure";
 
 /**
  * Switches a category page between browsing product families and listing the
@@ -22,11 +22,8 @@ export function ViewAsToggle({
   current: "categories" | "list";
 }) {
   const t = getDict(locale);
-  const [open, setOpen] = useState(false);
-  const pathname = usePathname();
+  const [open, setOpen] = useRouteDisclosure();
   const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => setOpen(false), [pathname]);
 
   useEffect(() => {
     function onDocClick(e: MouseEvent) {
@@ -34,7 +31,7 @@ export function ViewAsToggle({
     }
     document.addEventListener("mousedown", onDocClick);
     return () => document.removeEventListener("mousedown", onDocClick);
-  }, []);
+  }, [setOpen]);
 
   const options = [
     { key: "categories" as const, label: t.viewAsCategories, href: categoriesHref },

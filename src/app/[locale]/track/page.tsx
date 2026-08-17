@@ -5,6 +5,9 @@ import { findOrderForTracking } from "@/db/trackQueries";
 import { OrderStatusPill } from "@/components/OrderStatusPill";
 import { OrderTimeline } from "@/components/OrderTimeline";
 import { isLocale, getDict, type Locale } from "@/lib/i18n";
+import { headers } from "next/headers";
+import { RATE_LIMITS, consumeRateLimit } from "@/lib/rateLimit";
+import { REQUEST_LIMITS, boundedString } from "@/lib/requestLimits";
 
 /**
  * The form submits by GET, so a result survives a reload and can be
@@ -42,8 +45,16 @@ export default async function TrackPage({
   // A malformed reference takes the same path as a real miss. A distinct
   // "that is not a valid reference" message would tell someone probing which
   // of their two inputs to keep varying.
-  const normalised = asked ? normaliseRef(rawRef!) : null;
-  const order = normalised ? await findOrderForTracking(normalised, email!) : null;
+  const submittedRef = boundedString(rawRef, 20);
+  const submittedEmail = boundedString(email, REQUEST_LIMITS.emailChars)?.toLowerCase();
+  const normalised = asked && submittedRef ? normaliseRef(submittedRef) : null;
+  let order = null;
+  if (normalised && submittedEmail) {
+    const limit = await consumeRateLimit("tracking:guest", RATE_LIMITS.guestTracking, {
+      headers: await headers(),
+    });
+    if (limit.allowed) order = await findOrderForTracking(normalised, submittedEmail);
+  }
 
   return (
     <main className="mx-auto max-w-[560px] px-3 pt-8 pb-16">
@@ -61,6 +72,7 @@ export default async function TrackPage({
             dir="ltr"
             placeholder="ORD-XXXXXX"
             defaultValue={rawRef ?? ""}
+            maxLength={20}
             required
             // Only on a fresh visit. Once there is a result below, pulling
             // focus back up scrolls past it and opens the keyboard on mobile.
@@ -75,6 +87,7 @@ export default async function TrackPage({
             name="email"
             dir="ltr"
             defaultValue={email ?? ""}
+            maxLength={REQUEST_LIMITS.emailChars}
             required
             className="w-full"
           />

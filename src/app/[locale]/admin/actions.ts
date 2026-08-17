@@ -19,6 +19,8 @@ import {
 import { assertTransition, isOrderStatus } from "@/lib/orders";
 import { addComment } from "@/db/commentQueries";
 import { sellHeldStock, releaseHeldStock } from "@/db/inventoryQueries";
+import { RATE_LIMITS, consumeRateLimit } from "@/lib/rateLimit";
+import { REQUEST_LIMITS, boundedString } from "@/lib/requestLimits";
 
 /**
  * Signing in and out live here, alongside every other admin action, so
@@ -34,7 +36,12 @@ import { sellHeldStock, releaseHeldStock } from "@/db/inventoryQueries";
  */
 export async function loginAction(formData: FormData): Promise<void> {
   const locale = safeLocale(formData);
-  const ok = await signInAdmin(String(formData.get("password") ?? ""));
+  const limit = await consumeRateLimit("admin:sign-in", RATE_LIMITS.adminLogin);
+  if (!limit.allowed) redirect(`/${locale}/admin/login?error=rate-limit`);
+  const password = boundedString(formData.get("password"), REQUEST_LIMITS.passwordChars, {
+    trim: false,
+  });
+  const ok = password ? await signInAdmin(password) : false;
   // A failure returns to the form rather than to /admin, which would only
   // bounce straight back here and lose the error message on the way.
   redirect(ok ? `/${locale}/admin` : `/${locale}/admin/login?error=1`);

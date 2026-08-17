@@ -5,7 +5,7 @@ import {
   getFamilyBySlug,
   getSpecDefs,
   getProducts,
-  countProducts,
+  getProductSetSummary,
   getFacets,
   getCategoryByPath,
   getAncestors,
@@ -17,8 +17,7 @@ import { FacetSidebar } from "@/components/FacetSidebar";
 import { MobileFilterBar } from "@/components/MobileFilterBar";
 import { ActiveFilterPills } from "@/components/ActiveFilterPills";
 import { Breadcrumb } from "@/components/Breadcrumb";
-import { AddToCartRow } from "@/components/AddToCartRow";
-import { InCartQty } from "@/components/InCartQty";
+import { FamilyCartController } from "@/components/FamilyCartController";
 import { CatalogImage } from "@/components/CatalogImage";
 import { ProductDetails } from "@/components/ProductDetails";
 import { CatalogHeadReveal } from "@/components/CatalogHeadReveal";
@@ -36,25 +35,26 @@ import { summaryDefsFor, summaryParts } from "@/lib/cardSummary";
 import {
   parseFilters,
   clearAllHref,
+  familyWindowHref,
   countActiveFilters,
   type RawSearchParams,
 } from "@/lib/filters";
+import {
+  FAMILY_INITIAL_ROWS,
+  FAMILY_ROW_STEP,
+  nextFamilyRows,
+  parseFamilyWindow,
+  type FamilyWindow,
+} from "@/lib/familyWindow";
+import { boundedString } from "@/lib/requestLimits";
 
 /**
- * The whole family on one page.
+ * A bounded family table with an explicit whole-document escape hatch.
  *
- * It was paginated at 100 rows because the page renders the desktop table and
- * the mobile card list from the same data and hides one with CSS, so every row
- * costs two renders and two add-to-cart islands in the RSC payload. A buyer
- * reads a family as one table, though, and a 1,600-row family split across
- * sixteen pages means finding a size by guessing which page holds it. The
- * facets and the browser's own find-in-page both work on what is rendered, and
- * neither of them can see page 9.
- *
- * The cost is real and lands on the largest families, and this route is
- * dynamic — it reads `searchParams`, so every visit pays it. The 2,400-product
- * family in the seed measures ~540ms and 1.9MB over the wire; README has the
- * table. The sticky table head is what makes a page that long readable.
+ * The first response carries 100 products and can progressively grow to 500.
+ * Buyers who specifically need browser Find or printing can opt into all rows;
+ * that costly document is no longer the default for every visit. Search/cart
+ * part-number links pin their target into the bounded first window.
  */
 export default async function FamilyPage({
   params,
@@ -74,11 +74,13 @@ export default async function FamilyPage({
 
   const filters = parseFilters(sp);
   const base = `/${l}/f/${slug}`;
+  const window = parseFamilyWindow(sp);
+  const highlighted = boundedString(sp.pn, 120)?.toUpperCase() ?? null;
 
-  const [defs, total, products, facets, catRow, rate] = await Promise.all([
+  const [defs, summary, products, facets, catRow, rate] = await Promise.all([
     getSpecDefs(family.id),
-    countProducts(family.id, filters),
-    getProducts(family.id, filters),
+    getProductSetSummary(family.id, filters),
+    getProducts(family.id, filters, window.rows, highlighted),
     getFacets(family.id, filters),
     sql<{ path: string }[]>`SELECT path FROM categories WHERE id = ${family.categoryId}`,
     getFxRate(),
@@ -91,6 +93,7 @@ export default async function FamilyPage({
   ]);
 
   const trail = category ? [...ancestors, category] : ancestors;
+  const total = summary.total;
 
   /*
    * Standards and lead time are family-wide facts, so they are derived once
@@ -98,17 +101,14 @@ export default async function FamilyPage({
    * the seeder marks non-filterable and constant qualify — a value that varies
    * across the family is a column, not a badge.
    */
-  const specStandards = [...new Set(
-    products.map((p) => p.specs.spec).filter((v): v is string => typeof v === "string" && v !== ""),
-  )].slice(0, 2);
-  const maxLead = products.reduce((n, p) => Math.max(n, p.leadDays), 0);
+  const specStandards = summary.standards.slice(0, 2);
+  const maxLead = summary.maxLeadDays;
   const leadLabel =
     maxLead >= 7
       ? `${t.shipsIn} ${formatInt(Math.round(maxLead / 7), l)} ${t.weeks}`
       : maxLead > 0
         ? `${t.shipsIn} ${formatInt(maxLead, l)} ${t.days}`
         : null;
-  const highlighted = typeof sp.pn === "string" ? sp.pn.toUpperCase() : null;
   const activeFilterCount = countActiveFilters(filters);
 
   return (
@@ -178,7 +178,7 @@ export default async function FamilyPage({
                 {/* Availability and standards, surfaced once for the family
                     rather than repeated down every row. */}
                 <div className="mt-2 flex flex-wrap gap-1.5">
-                  {products.some((p) => p.inStock) && (
+                  {summary.hasStock && (
                     <span className="pill pill-ok">● {t.inStock}</span>
                   )}
                   {specStandards.map((s) => (
@@ -288,17 +288,27 @@ export default async function FamilyPage({
                * be used. On the largest family that measured 113,809 DOM nodes,
                * half of them the layout the reader cannot see. Below `lg` the
                * stylesheet folds these same rows into cards instead.
-               */
-              <div className="table-card">
-                <SpecTable
+              */
+              <>
+                <FamilyCartController locale={l}>
+                  <SpecTable
+                    locale={l}
+                    defs={defs}
+                    products={products}
+                    highlighted={highlighted}
+                    rate={rate}
+                    icon={family.icon}
+                  />
+                </FamilyCartController>
+                <FamilyWindowControls
                   locale={l}
-                  defs={defs}
-                  products={products}
-                  highlighted={highlighted}
-                  rate={rate}
-                  icon={family.icon}
+                  base={base}
+                  searchParams={sp}
+                  window={window}
+                  shown={products.length}
+                  total={total}
                 />
-              </div>
+              </>
             )}
           </section>
         </div>
@@ -314,6 +324,136 @@ export default async function FamilyPage({
         />
       </main>
     </div>
+  );
+}
+
+function FamilyWindowControls({
+  locale,
+  base,
+  searchParams,
+  window,
+  shown,
+  total,
+}: {
+  locale: Locale;
+  base: string;
+  searchParams: RawSearchParams;
+  window: FamilyWindow;
+  shown: number;
+  total: number;
+}) {
+  if (total <= FAMILY_INITIAL_ROWS && !window.showAll) return null;
+
+  const t = getDict(locale);
+  const currentRows = window.showAll ? null : window.rows;
+  const nextRows = currentRows === null ? null : nextFamilyRows(currentRows, total);
+  const nextCount = nextRows === null ? 0 : Math.min(FAMILY_ROW_STEP, total - shown);
+  const countText = window.showAll
+    ? t.showingAllProducts.replace("{total}", formatInt(total, locale))
+    : t.showingProducts
+        .replace("{shown}", formatInt(shown, locale))
+        .replace("{total}", formatInt(total, locale));
+
+  return (
+    <nav
+      className="no-print mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-[12px]"
+      aria-label={t.productDisplay}
+    >
+      <span className="text-[var(--color-ink-muted)]">{countText}</span>
+      {nextRows !== null && (
+        <Link
+          href={familyWindowHref(base, searchParams, nextRows)}
+          prefetch={false}
+          scroll={false}
+          className="btn-small inline-flex items-center hover:no-underline"
+        >
+          {t.loadMoreProducts.replace("{count}", formatInt(nextCount, locale))}
+        </Link>
+      )}
+      {!window.showAll && shown < total && (
+        <Link
+          href={familyWindowHref(base, searchParams, "all")}
+          prefetch={false}
+          rel="nofollow"
+          className="tap inline-flex items-center"
+        >
+          {t.viewAllProducts}
+        </Link>
+      )}
+      {window.showAll && total > FAMILY_INITIAL_ROWS && (
+        <Link
+          href={familyWindowHref(base, searchParams, null)}
+          prefetch={false}
+          className="tap inline-flex items-center"
+        >
+          {t.showFirstProducts.replace(
+            "{count}",
+            formatInt(FAMILY_INITIAL_ROWS, locale),
+          )}
+        </Link>
+      )}
+    </nav>
+  );
+}
+
+function FamilyAddControl({
+  productId,
+  locale,
+  packQty,
+}: {
+  productId: number;
+  locale: Locale;
+  packQty: number;
+}) {
+  const t = getDict(locale);
+  return (
+    <span className="qty-add" data-cart-line>
+      <input
+        type="number"
+        min={1}
+        data-cart-qty-input
+        aria-label={`${t.qty} — ${packQty > 1 ? `${t.pkg} ${packQty}` : ""}`}
+      />
+      <button
+        type="button"
+        className="btn-small"
+        data-cart-action="add"
+        data-product-id={productId}
+        aria-label={t.addToOrder}
+      >
+        +
+      </button>
+    </span>
+  );
+}
+
+function FamilyInCart({
+  productId,
+  locale,
+}: {
+  productId: number;
+  locale: Locale;
+}) {
+  const t = getDict(locale);
+  return (
+    <span data-cart-status data-product-id={productId} aria-live="polite">
+      <span data-cart-empty className="text-[var(--color-ink-faint)]">
+        —
+      </span>
+      <span data-cart-filled hidden>
+        <span className="tech font-semibold" data-cart-value />
+        <button
+          type="button"
+          data-cart-action="remove"
+          data-product-id={productId}
+          className="in-cart-x"
+          aria-label={t.remove}
+          title={t.remove}
+        >
+          ×
+        </button>
+      </span>
+    </span>
   );
 }
 
@@ -521,10 +661,14 @@ function SpecTable({
                   </td>
                 )}
                 <td data-cell="qty">
-                  <AddToCartRow productId={p.id} locale={locale} packQty={p.packQty} />
+                  <FamilyAddControl
+                    productId={p.id}
+                    locale={locale}
+                    packQty={p.packQty}
+                  />
                 </td>
                 <td className="in-cart-col" data-cell="cart">
-                  <InCartQty productId={p.id} locale={locale} />
+                  <FamilyInCart productId={p.id} locale={locale} />
                 </td>
               </tr>
               {expandable && (

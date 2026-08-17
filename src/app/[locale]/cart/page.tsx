@@ -10,13 +10,16 @@ import { getFxRate } from "@/lib/fx";
 
 export default async function CartPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ locale: string }>;
+  searchParams: Promise<{ error?: string }>;
 }) {
   const { locale } = await params;
   if (!isLocale(locale)) notFound();
   const l = locale as Locale;
   const t = getDict(l);
+  const { error } = await searchParams;
 
   const lines = await getCartLines();
   const rate = await getFxRate();
@@ -33,6 +36,11 @@ export default async function CartPage({
           </span>
         )}
       </h1>
+      {error === "rate-limit" && (
+        <p className="mb-3 border border-[#e0b4b0] bg-[#fdf2f1] px-3 py-2 text-[12px] text-[var(--color-danger)]">
+          {t.rateLimited}
+        </p>
+      )}
 
       {lines.length === 0 ? (
         <p className="py-8 text-[13px]">
@@ -86,6 +94,7 @@ export default async function CartPage({
                       className="ms-auto flex items-center gap-1.5"
                     >
                       <input type="hidden" name="productId" value={line.productId} />
+                      <input type="hidden" name="locale" value={l} />
                       <input
                         type="number"
                         name="qty"
@@ -100,6 +109,7 @@ export default async function CartPage({
                     </form>
                     <form action={removeLineAction}>
                       <input type="hidden" name="productId" value={line.productId} />
+                      <input type="hidden" name="locale" value={l} />
                       <button
                         type="submit"
                         className="tap cursor-pointer text-[12px] text-[var(--color-ink-muted)] underline"
@@ -159,6 +169,7 @@ export default async function CartPage({
                       <td>
                         <form action={updateQtyAction} className="flex items-center gap-1">
                           <input type="hidden" name="productId" value={line.productId} />
+                          <input type="hidden" name="locale" value={l} />
                           <input
                             type="number"
                             name="qty"
@@ -178,6 +189,7 @@ export default async function CartPage({
                       <td>
                         <form action={removeLineAction}>
                           <input type="hidden" name="productId" value={line.productId} />
+                          <input type="hidden" name="locale" value={l} />
                           <button
                             type="submit"
                             className="cursor-pointer text-[11px] text-[var(--color-ink-muted)] underline"

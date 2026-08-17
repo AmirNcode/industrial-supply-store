@@ -77,30 +77,18 @@ queries. A fresh container spends a few seconds at `(health: starting)` while it
 initialises the data directory — connecting during that window fails with
 "connection refused", which looks alarming and simply means you were early.
 
-**4. Create the tables.**
+**4. Bootstrap the empty local database.**
 
 ```bash
-npm run db:push
+npm run db:bootstrap:local
 ```
 
-Reads `src/db/schema.ts` and makes the real database match it. Then it
-automatically re-applies `src/db/extensions.sql`, which restores the search
-indexes, the invoice sequence and row-level security — things `drizzle-kit push`
-deletes every time it runs because it cannot see them in the schema file. That
-re-apply is why you run the npm script and never bare `drizzle-kit push`.
-`docs/DEPLOYMENT.md` has the full story; it has bitten this project four times.
+This local-only command creates the schema, restores the search indexes,
+invoice sequence and RLS, records every forward migration in the migration
+ledger, and generates the demo catalog. It refuses remote targets. Seeding is
+deterministic, so bookmarks and screenshots keep working across a rebuild.
 
-**5. Fill it with data.**
-
-```bash
-npm run db:seed
-```
-
-Generates about 34,000 demo products across 97 categories. Takes roughly 14
-seconds. It is deterministic — reseeding produces byte-identical part numbers,
-so your bookmarks and screenshots keep working.
-
-**6. Start the site.**
+**5. Start the site.**
 
 ```bash
 npm run dev
@@ -112,6 +100,12 @@ is at `/en/admin` with the password from `ADMIN_PASSWORD` in `.env`, defaulting
 to `changeme` in development.
 
 Leave this running. It watches your files and reloads on save.
+
+The Docker service here is PostgreSQL only, not the full Supabase platform.
+Everything except catalog file uploads works with that local database alone.
+To exercise the 24 MB CSV-import flow, configure the Supabase URL, a
+publishable/anon key, the server secret, and a distinct private import bucket as
+shown in `.env.example`; the browser then uploads directly to Supabase Storage.
 
 ---
 
@@ -296,18 +290,10 @@ Then either stop that container or change the port in
 `docker-compose.override.yml`, remembering to update `.env` to match.
 
 **A query fails on a column that should exist.** Your database is older than the
-code. Bring it up to date:
+code. Apply the pending forward migrations:
 
 ```bash
-npm run db:push
-```
-
-On the `feature/dynamic-product-columns` branch specifically there is also a
-targeted, additive migration that only adds the five new columns and touches
-nothing else — safer than a full push when that is all you need:
-
-```bash
-npm run db:column-tiers
+npm run db:migrate
 ```
 
 **The site is slow, or you suspect emulation.** Run the three ARM64 checks
@@ -318,7 +304,9 @@ container.
 it from scratch in about twenty seconds:
 
 ```bash
-docker compose down -v && docker compose up -d db && npm run db:push && npm run db:seed
+docker compose down -v
+docker compose up -d db
+npm run db:bootstrap:local
 ```
 
 ---
@@ -330,9 +318,22 @@ actually builds. The app image prerenders the home page during the build, so the
 database must be up *and seeded* before you build it, or the build fails on an
 empty catalog:
 
+Set `AUTH_SECRET` and `DOCKER_BUILD_DATABASE_URL` in `.env`, then:
+
 ```bash
-docker compose up -d db && npm run db:seed && docker compose --profile full up -d --build
+docker compose up -d db
+npm run db:bootstrap:local
+docker compose --profile full up -d --build
 ```
+
+The Docker build receives the database URL and signing key as ephemeral
+BuildKit secrets. At runtime the signing key is mounted as a Compose secret
+file; no `.env*` file is sent in the build context.
+
+If you also exercise catalog image or CSV uploads from the container, set the
+Supabase Storage variables from `.env.example`. Compose forwards both the
+server-only secret and the browser-safe publishable/anon key; only the latter is
+returned with a path-specific signed CSV upload token.
 
 `--profile full` is what opts the `app` service in; without the flag Compose
 ignores it entirely, which is why step 2 above only ever starts the database.

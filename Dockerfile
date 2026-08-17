@@ -1,5 +1,3 @@
-# syntax=docker/dockerfile:1
-
 FROM node:24-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json* ./
@@ -12,12 +10,13 @@ COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 
 # The home page is prerendered at build time, so the build needs a reachable,
-# seeded database. Compose points this at the host's published port, which means
-# `docker compose up -d db` must have run (and been seeded) before building the
-# app image. At runtime the container uses the compose-internal `db:5432`.
-ARG DATABASE_URL
-ENV DATABASE_URL=$DATABASE_URL
-RUN npm run build
+# seeded database and the account pages need their signing key. Both arrive as
+# ephemeral BuildKit mounts: unlike ARG/ENV, neither value is retained in image
+# metadata or a cached layer. At runtime the container uses compose secrets and
+# the compose-internal `db:5432` connection instead.
+RUN --mount=type=secret,id=database_url,env=DATABASE_URL,required=true \
+    --mount=type=secret,id=auth_secret,env=AUTH_SECRET,required=true \
+    npm run build
 
 FROM node:24-alpine AS runner
 WORKDIR /app

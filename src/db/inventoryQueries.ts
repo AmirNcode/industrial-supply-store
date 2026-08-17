@@ -73,25 +73,56 @@ export async function releaseHeldStock(tx: Tx, orderId: number): Promise<void> {
 export type ShortfallLine = { orderId: number; partNumber: string; qty: number; available: number };
 
 /**
- * Order lines asking for more than is on the shelf.
+ * Pending order lines whose turn in the reservation sequence found too little
+ * shelf stock.
+ *
+ * `inventory_available` is already reduced by every pending hold, so comparing
+ * an order's quantity with that number double-counts its own reservation. To
+ * reconstruct the truthful pre-hold amount, add all current holds back, then
+ * allocate them in order creation sequence. Payment and cancellation both
+ * remove a hold, so the same calculation naturally reallocates the remainder.
  *
  * Read for the whole queue in one query so the warning costs one round trip
  * rather than one per order.
  */
 export async function findShortfalls(
   orderIds: readonly number[],
+  query: Tx | typeof sql = sql,
 ): Promise<Map<number, ShortfallLine[]>> {
   const byOrder = new Map<number, ShortfallLine[]>();
   if (orderIds.length === 0) return byOrder;
 
-  const rows = await sql<ShortfallLine[]>`
-    SELECT i.order_id AS "orderId", i.part_number AS "partNumber", i.qty,
-           p.inventory_available AS "available"
-    FROM order_items i
-    JOIN products p ON p.id = i.product_id
-    WHERE i.order_id = ANY(${orderIds as number[]}::int[])
-      AND i.qty > p.inventory_available
-    ORDER BY i.order_id, i.part_number
+  const rows = await query<ShortfallLine[]>`
+    WITH pending AS (
+      SELECT o.id AS order_id, o.created_at, i.product_id,
+             min(i.part_number) AS part_number, sum(i.qty)::int AS qty
+      FROM orders o
+      JOIN order_items i ON i.order_id = o.id
+      WHERE o.status IN ('received', 'invoiced')
+        AND i.product_id IS NOT NULL
+      GROUP BY o.id, o.created_at, i.product_id
+    ), allocated AS (
+      SELECT h.order_id, h.part_number, h.qty,
+             (
+               p.inventory_available + p.inventory_on_hold
+               - COALESCE(
+                   sum(h.qty) OVER (
+                     PARTITION BY h.product_id
+                     ORDER BY h.created_at, h.order_id
+                     ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+                   ),
+                   0
+                 )
+             )::int AS available_before_order
+      FROM pending h
+      JOIN products p ON p.id = h.product_id
+    )
+    SELECT order_id AS "orderId", part_number AS "partNumber", qty,
+           greatest(available_before_order, 0)::int AS "available"
+    FROM allocated
+    WHERE order_id = ANY(${orderIds as number[]}::int[])
+      AND qty > greatest(available_before_order, 0)
+    ORDER BY order_id, part_number
   `;
   for (const r of rows) {
     if (!byOrder.has(r.orderId)) byOrder.set(r.orderId, []);

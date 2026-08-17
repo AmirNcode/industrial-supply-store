@@ -3,6 +3,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import {
+  CATALOG_IMAGE_MAX_BYTES,
   CATALOG_IMAGE_MIME_TYPES,
   catalogImageExtension,
   isCatalogImageMime,
@@ -95,7 +96,7 @@ async function ensurePublicBucket(
     const options = {
       public: true,
       allowedMimeTypes: [...CATALOG_IMAGE_MIME_TYPES],
-      fileSizeLimit: "5MB",
+      fileSizeLimit: CATALOG_IMAGE_MAX_BYTES,
     };
 
     if (data.some((item) => item.id === bucket || item.name === bucket)) {

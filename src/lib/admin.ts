@@ -6,10 +6,10 @@ import { DEMO_MODE } from "./demo";
 /**
  * Single shared password for the local admin view.
  *
- * This is deliberately minimal and is NOT an authentication system: there are no
- * accounts, no rate limiting, and no audit trail. It exists so a demo of the RFQ
- * inbox is not world-readable on a shared network. Anything beyond local
- * evaluation needs real auth before this page is exposed.
+ * This is deliberately minimal and is NOT a full staff identity system: there
+ * are no named accounts, MFA, revocation, or audit trail. Login attempts are
+ * rate-limited at the action boundary, but anything beyond evaluation still
+ * needs real staff authentication before this page is broadly exposed.
  */
 const COOKIE = "isupply_admin";
 

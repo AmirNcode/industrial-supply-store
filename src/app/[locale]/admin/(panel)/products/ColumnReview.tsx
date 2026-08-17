@@ -23,9 +23,8 @@ import type { ImportError } from "@/lib/importCsv";
  * a form control per column: a 47-column file would otherwise need close to two
  * hundred named inputs, and the server would be reassembling them by index.
  *
- * The file itself is not re-chosen. It is still sitting in the file input of the
- * form this renders inside, so confirming posts the same bytes with the
- * decisions attached — no copy of it is held anywhere between the two stages.
+ * The file itself is not re-chosen. It is held in a short-lived private object,
+ * and confirmation posts only the signed handle plus these decisions.
  */
 
 type MissingRow = MissingColumn & { productCount: number };

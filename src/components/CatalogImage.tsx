@@ -40,8 +40,8 @@ export function CatalogImage({
 
   if (!imageUrl.startsWith("https://")) {
     return (
-      // eslint-disable-next-line @next/next/no-img-element -- see above: the
-      // optimiser is HTTPS-only and refusing the URL would fail the render.
+      // The optimiser is HTTPS-only and refusing the URL would fail the render.
+      // eslint-disable-next-line @next/next/no-img-element
       <img
         src={imageUrl}
         alt={alt}

@@ -2,12 +2,25 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { sql } from "@/db";
-import { addLine, setLineQty, removeLine, clearCart, getCartLines, unitPriceAt } from "@/lib/cart";
+import {
+  CartCapacityError,
+  addLines,
+  setLineQty,
+  removeLine,
+  getCartId,
+} from "@/lib/cart";
 import { findByPartNumbers } from "@/db/queries";
 import { safeLocale } from "@/lib/i18n";
 import { currentUserId } from "@/lib/session";
-import { holdStockForOrder } from "@/db/inventoryQueries";
+import { AUTH_SECRET } from "@/lib/authSecret";
+import { verifyQuoteSubmissionToken } from "@/lib/quoteSubmission";
+import { submitOrderFromCart, type QuoteContact } from "@/db/orderSubmissionQueries";
+import { RATE_LIMITS, consumeRateLimit } from "@/lib/rateLimit";
+import {
+  REQUEST_LIMITS,
+  boundedString,
+  parseQuickOrder,
+} from "@/lib/requestLimits";
 
 /**
  * Revalidation is scoped to the cart page only.
@@ -26,24 +39,25 @@ import { holdStockForOrder } from "@/db/inventoryQueries";
  * /api/cart. The cart page is dynamic (it reads the cart cookie), so this
  * revalidate purges no prerendered page.
  */
-export async function addToCartAction(formData: FormData) {
-  const productId = Number(formData.get("productId"));
-  const qty = Math.max(1, Math.min(99999, Number(formData.get("qty")) || 1));
-  if (!Number.isFinite(productId) || productId <= 0) return;
-  await addLine(productId, qty);
-}
-
 export async function updateQtyAction(formData: FormData) {
+  const locale = safeLocale(formData);
+  const limit = await consumeRateLimit("cart:write", RATE_LIMITS.cartWrite);
+  if (!limit.allowed) redirect(`/${locale}/cart?error=rate-limit`);
+
   const productId = Number(formData.get("productId"));
   const qty = Number(formData.get("qty"));
-  if (!Number.isFinite(productId)) return;
+  if (!Number.isSafeInteger(productId) || productId <= 0 || !Number.isFinite(qty)) return;
   await setLineQty(productId, Math.min(99999, qty));
   revalidatePath("/[locale]/cart", "page");
 }
 
 export async function removeLineAction(formData: FormData) {
+  const locale = safeLocale(formData);
+  const limit = await consumeRateLimit("cart:write", RATE_LIMITS.cartWrite);
+  if (!limit.allowed) redirect(`/${locale}/cart?error=rate-limit`);
+
   const productId = Number(formData.get("productId"));
-  if (!Number.isFinite(productId)) return;
+  if (!Number.isSafeInteger(productId) || productId <= 0) return;
   await removeLine(productId);
   revalidatePath("/[locale]/cart", "page");
 }
@@ -51,6 +65,7 @@ export async function removeLineAction(formData: FormData) {
 export type QuickOrderResult = {
   added: { partNumber: string; qty: number }[];
   notFound: string[];
+  error?: "too-large" | "rate-limit" | "cart-full";
 };
 
 /**
@@ -62,127 +77,131 @@ export async function quickOrderAction(
   _prev: QuickOrderResult | null,
   formData: FormData,
 ): Promise<QuickOrderResult> {
-  const raw = String(formData.get("lines") ?? "");
-  const parsed: { pn: string; qty: number }[] = [];
+  const limit = await consumeRateLimit("quick-order:submit", RATE_LIMITS.quickOrder);
+  if (!limit.allowed) return { added: [], notFound: [], error: "rate-limit" };
 
-  for (const line of raw.split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
-    const parts = trimmed.split(/[,\t]+|\s{2,}|\s+(?=\d+$)/).map((p) => p.trim()).filter(Boolean);
-    const pn = parts[0];
-    if (!pn) continue;
-    const qty = Math.max(1, Math.min(99999, Number(parts[1]) || 1));
-    parsed.push({ pn, qty });
+  const parsed = parseQuickOrder(formData.get("lines"));
+  if (!parsed.ok) return { added: [], notFound: [], error: parsed.reason };
+  if (parsed.lines.length === 0) return { added: [], notFound: [] };
+
+  // Repeated part numbers from a pasted sheet are one cart mutation and one
+  // result row, with their requested quantities accumulated safely.
+  const requested = new Map<string, { partNumber: string; qty: number }>();
+  for (const line of parsed.lines) {
+    const key = line.partNumber.toUpperCase();
+    const previous = requested.get(key);
+    requested.set(key, {
+      partNumber: previous?.partNumber ?? line.partNumber,
+      qty: Math.min(99_999, (previous?.qty ?? 0) + line.qty),
+    });
   }
 
-  if (parsed.length === 0) return { added: [], notFound: [] };
-
-  const found = await findByPartNumbers(parsed.map((p) => p.pn));
+  const found = await findByPartNumbers([...requested.values()].map((line) => line.partNumber));
   const byPn = new Map(found.map((f) => [f.partNumber.toUpperCase(), f]));
 
   const added: { partNumber: string; qty: number }[] = [];
   const notFound: string[] = [];
+  const writes: { productId: number; qty: number }[] = [];
 
-  for (const { pn, qty } of parsed) {
-    const hit = byPn.get(pn.toUpperCase());
+  for (const [key, line] of requested) {
+    const hit = byPn.get(key);
     if (!hit) {
-      notFound.push(pn);
+      notFound.push(line.partNumber);
       continue;
     }
-    await addLine(hit.id, qty);
-    added.push({ partNumber: hit.partNumber, qty });
+    writes.push({ productId: hit.id, qty: line.qty });
+    added.push({ partNumber: hit.partNumber, qty: line.qty });
+  }
+
+  try {
+    await addLines(writes);
+  } catch (error) {
+    if (error instanceof CartCapacityError) {
+      return { added: [], notFound, error: "cart-full" };
+    }
+    throw error;
   }
 
   return { added, notFound };
 }
 
-/** Six characters from an unambiguous alphabet — no O/0 or I/1 to misread aloud. */
-function quoteRef(): string {
-  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let out = "";
-  for (let i = 0; i < 6; i++) {
-    out += alphabet[Math.floor(Math.random() * alphabet.length)];
-  }
-  return `ORD-${out}`;
-}
-
 export async function submitQuoteAction(formData: FormData) {
   const locale = safeLocale(formData);
-  const lines = await getCartLines();
-  if (lines.length === 0) redirect(`/${locale}/cart`);
+  const userId = await currentUserId();
+  const limit = await consumeRateLimit("quote:submit", RATE_LIMITS.quoteSubmit, {
+    accountId: userId,
+  });
+  if (!limit.allowed) redirect(`/${locale}/quote?error=rate-limit`);
 
-  // Phone is required too: sales chases quotes by phone, and the HTML
-  // `required` attribute is trivially bypassed, so the check has to live here.
-  const required = ["company", "contactName", "email", "phone"];
-  for (const field of required) {
-    if (!String(formData.get(field) ?? "").trim()) {
-      redirect(`/${locale}/quote?error=missing`);
-    }
+  const submittedToken = boundedString(formData.get("submissionToken"), 2_000);
+  const token = verifyQuoteSubmissionToken(
+    submittedToken ?? "",
+    AUTH_SECRET,
+  );
+  const cartId = await getCartId();
+  if (!cartId) redirect(`/${locale}/cart`);
+  if (!token || token.cartId !== cartId) {
+    redirect(`/${locale}/quote?error=expired`);
   }
 
-  const totalCents = lines.reduce((sum, l) => sum + unitPriceAt(l, l.qty) * l.qty, 0);
-  const ref = quoteRef();
+  const company = boundedString(formData.get("company"), REQUEST_LIMITS.companyChars);
+  const contactName = boundedString(
+    formData.get("contactName"),
+    REQUEST_LIMITS.contactNameChars,
+  );
+  const email = boundedString(formData.get("email"), REQUEST_LIMITS.emailChars)?.toLowerCase();
+  const phone = boundedString(formData.get("phone"), REQUEST_LIMITS.phoneChars);
+  if (!company || !contactName || !email || !phone) {
+    redirect(`/${locale}/quote?error=missing`);
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    redirect(`/${locale}/quote?error=invalid`);
+  }
+
+  const optional = (name: string, maxChars: number) =>
+    boundedString(formData.get(name), maxChars, { allowEmpty: true });
+  const poNumber = optional("poNumber", REQUEST_LIMITS.poNumberChars);
+  const address = optional("address", REQUEST_LIMITS.addressChars);
+  const city = optional("city", REQUEST_LIMITS.cityChars);
+  const country = optional("country", REQUEST_LIMITS.countryChars);
+  const notes = optional("notes", REQUEST_LIMITS.notesChars);
+  if ([poNumber, address, city, country, notes].some((value) => value === null)) {
+    redirect(`/${locale}/quote?error=invalid`);
+  }
+
   // Guest checkout stays supported, so this is nullable. A guest's typed
   // address is deliberately NOT matched against an existing account: without
   // email verification that would let anyone attach a stranger's order to
   // themselves by typing their address.
-  const userId = await currentUserId();
+  const contact: QuoteContact = {
+    company,
+    contactName,
+    email,
+    phone,
+    poNumber: poNumber!,
+    address: address!,
+    city: city!,
+    country: country!,
+    notes: notes!,
+  };
 
-  // Header and line items go in one transaction. Without it, a failure partway
-  // through leaves a quote whose line items are missing while the cart is still
-  // full — the buyer resubmits and sales receives two conflicting requests for
-  // the same order.
-  await sql.begin(async (tx) => {
-    const [order] = await tx<{ id: number }[]>`
-      INSERT INTO orders (ref, company, contact_name, email, phone, po_number,
-                          address, city, country, notes, locale, currency,
-                          total_cents, requested_total_cents, status, user_id)
-      VALUES (
-        ${ref},
-        ${String(formData.get("company") ?? "")},
-        ${String(formData.get("contactName") ?? "")},
-        ${String(formData.get("email") ?? "")},
-        ${String(formData.get("phone") ?? "")},
-        ${String(formData.get("poNumber") ?? "")},
-        ${String(formData.get("address") ?? "")},
-        ${String(formData.get("city") ?? "")},
-        ${String(formData.get("country") ?? "")},
-        ${String(formData.get("notes") ?? "")},
-        ${locale},
-        ${locale === "fa" ? "IRT" : "USD"},
-        ${totalCents},
-        ${totalCents},
-        'received',
-        ${userId}
-      )
-      RETURNING id
-    `;
-
-    // Snapshot names, specs and prices so a later catalog edit cannot rewrite an
-    // order that has already been sent to the buyer.
-    for (const l of lines) {
-      await tx`
-        INSERT INTO order_items (order_id, product_id, part_number, family_name,
-                                 specs_snapshot, qty, unit_price_cents,
-                                 requested_unit_price_cents)
-        VALUES (${order.id}, ${l.productId}, ${l.partNumber},
-                ${locale === "fa" ? l.familyFa : l.familyEn},
-                -- Serialise explicitly and cast: passing the object straight
-                -- through leaves postgres-js guessing at the parameter type.
-                ${JSON.stringify(l.specs)}::jsonb,
-                ${l.qty}, ${unitPriceAt(l, l.qty)}, ${unitPriceAt(l, l.qty)})
-      `;
-    }
-
-    // Inside the same transaction as the lines it reserves against. A hold
-    // recorded without its order, or an order without its hold, is worse than
-    // either failing outright.
-    await holdStockForOrder(tx, order.id);
+  const result = await submitOrderFromCart({
+    cartId,
+    cartFingerprint: token.cartFingerprint,
+    submissionKey: token.submissionKey,
+    locale,
+    userId,
+    contact,
   });
 
-  await clearCart();
-  // No revalidation here either: the hold this places changes inventory, and
-  // inventory appears only on /admin/products, which is rendered on demand.
-  // redirect() throws to unwind, so it must sit outside the transaction.
-  redirect(`/${locale}/quote/submitted?ref=${ref}`);
+  if (result.kind === "cart-changed") {
+    redirect(`/${locale}/quote?error=cart-changed`);
+  }
+  if (result.kind === "empty-cart" || result.kind === "missing-cart") {
+    redirect(`/${locale}/cart`);
+  }
+
+  // The order, item snapshots, stock hold and cart clear have all committed at
+  // this point. A replay returns the same reference through the same redirect.
+  redirect(`/${locale}/quote/submitted?ref=${result.ref}`);
 }

@@ -11,7 +11,7 @@ import { useSyncExternalStore } from "react";
  * So the cart is fetched once per navigation by CartSync and read from here.
  */
 
-type State = {
+export type CartSnapshot = {
   /** Number of distinct lines, which is what the header badge shows. */
   count: number;
   qtys: Record<number, number>;
@@ -19,7 +19,8 @@ type State = {
   hydrated: boolean;
 };
 
-let state: State = { count: 0, qtys: {}, hydrated: false };
+const serverSnapshot: CartSnapshot = { count: 0, qtys: {}, hydrated: false };
+let state: CartSnapshot = serverSnapshot;
 
 const subscribers = new Set<() => void>();
 
@@ -92,6 +93,15 @@ export function useCartQty(productId: number): number {
     // The server cannot know the cart without making the page dynamic, so the
     // first paint is always empty and the real value arrives on hydration.
     () => 0,
+  );
+}
+
+/** One subscription for a controller that owns many catalog rows. */
+export function useCartSnapshot(): CartSnapshot {
+  return useSyncExternalStore(
+    subscribe,
+    () => state,
+    () => serverSnapshot,
   );
 }
 

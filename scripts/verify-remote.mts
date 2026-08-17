@@ -1,5 +1,6 @@
 /**
- * Sanity-checks a deployed database after `db:setup:remote`.
+ * Sanity-checks a deployed database after `db:migrate:remote` (or a one-time
+ * `db:bootstrap:empty:remote` for a genuinely blank database).
  *
  * Run: npm run db:verify:remote
  *
@@ -30,7 +31,7 @@ const sql = postgres(url, { prepare: false, max: 2 });
 const TABLES = [
   "categories", "product_families", "products", "product_spec_values",
   "spec_defs", "carts", "cart_items", "orders", "order_items", "users",
-  "app_settings", "order_comments",
+  "app_settings", "order_comments", "request_rate_limits",
 ] as const;
 
 /**
@@ -48,6 +49,7 @@ const COLUMNS: readonly (readonly [string, string])[] = [
   ["orders", "fx_rate_to_toman"],
   ["orders", "invoice_number"],
   ["orders", "user_id"],
+  ["orders", "submission_key"],
   // Added 2026-08-12 by `db:column-tiers`. Every family page selects
   // spec_defs.display and products.documents, so a build that ships before the
   // script has run errors on the whole catalog, not just on admin.
@@ -115,6 +117,45 @@ console.log(
   } ${missingObjs.length === 0 ? "✓" : `✗ MISSING ${missingObjs.join(", ")}`}`,
 );
 
+const hasSubmissionIndex = haveObjs.has("orders_submission_key_key");
+console.log(`submission key ${hasSubmissionIndex ? "unique index ✓" : "✗ UNIQUE INDEX MISSING"}`);
+
+const rateLimitIndexes = ["request_rate_limits_pkey", "request_rate_limits_expires_idx"];
+const missingRateLimitIndexes = rateLimitIndexes.filter((index) => !haveObjs.has(index));
+console.log(
+  `rate limits  ${
+    missingRateLimitIndexes.length === 0
+      ? "indexes ✓"
+      : `✗ MISSING ${missingRateLimitIndexes.join(", ")}`
+  }`,
+);
+
+const [{ hasMigrationLedger }] = await sql<{ hasMigrationLedger: boolean }[]>`
+  SELECT to_regclass('supabase_migrations.schema_migrations') IS NOT NULL
+    AS "hasMigrationLedger"
+`;
+const REQUIRED_MIGRATIONS = ["20260817010000", "20260817020000"] as const;
+let recordedMigrations = new Set<string>();
+if (hasMigrationLedger) {
+  const rows = await sql<{ version: string }[]>`
+    SELECT version FROM supabase_migrations.schema_migrations
+    WHERE version = ANY(${[...REQUIRED_MIGRATIONS]})
+  `;
+  recordedMigrations = new Set(rows.map((row) => row.version));
+}
+const missingMigrations = REQUIRED_MIGRATIONS.filter(
+  (version) => !recordedMigrations.has(version),
+);
+console.log(
+  `migration ledger ${
+    missingMigrations.length === 0
+      ? `${REQUIRED_MIGRATIONS.join(", ")} ✓`
+      : hasMigrationLedger
+        ? `✗ not recorded: ${missingMigrations.join(", ")}`
+        : "✗ MISSING"
+  }`,
+);
+
 const [{ hasSeq }] = await sql<{ hasSeq: boolean }[]>`
   SELECT to_regclass('public.invoice_seq') IS NOT NULL AS "hasSeq"
 `;
@@ -158,7 +199,7 @@ console.log(
 // Everything below reads the catalog tables, which is only meaningful once
 // they exist.
 if (missingTables.length > 0) {
-  console.log("\n✗ schema incomplete — run db:push:remote before anything else");
+  console.log("\n✗ schema incomplete — only an empty database may use db:bootstrap:empty:remote");
   await sql.end();
   process.exit(1);
 }
@@ -221,6 +262,9 @@ const ok =
   missingObjs.length === 0 &&
   missingFns.length === 0 &&
   missingCols.length === 0 &&
+  hasSubmissionIndex &&
+  missingRateLimitIndexes.length === 0 &&
+  missingMigrations.length === 0 &&
   hasSeq &&
   rlsOff.length === 0 &&
   !have.has("quotes");
