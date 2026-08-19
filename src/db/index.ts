@@ -56,13 +56,39 @@ const isServerless = Boolean(process.env.VERCEL || process.env.NETLIFY) && !isBu
  * production, and `next build` loads `.env.local`. Without this guard a local
  * `npm run build` would quietly prerender every page against the live
  * database.
+ *
+ * `sameTenant` is the second guard, and it is not theoretical: this project
+ * has had two Supabase projects, and the integration left a
+ * `POSTGRES_URL_NON_POOLING` behind pointing at the retired one. Taking it on
+ * trust failed the 2026-08-19 build with `tenant/user postgres.<ref> not
+ * found`. A direct URL is only the same database as `DATABASE_URL` if both the
+ * host and the user agree — Supabase encodes the project ref in the user, so
+ * the hostname alone matches a stale tenant perfectly well.
  */
 const isHostedBuild = isBuild && Boolean(process.env.VERCEL);
+
+function sameTenant(candidate: string | undefined, pooled: string | undefined): string | undefined {
+  if (!candidate || !pooled) return undefined;
+  try {
+    const direct = new URL(candidate);
+    const via = new URL(pooled);
+    return direct.hostname === via.hostname && direct.username === via.username
+      ? candidate
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+const pooledUrl = process.env.DATABASE_URL;
 const connectionString =
   (isHostedBuild
-    ? process.env.DIRECT_DATABASE_URL ?? process.env.POSTGRES_URL_NON_POOLING
+    ? sameTenant(
+        process.env.DIRECT_DATABASE_URL ?? process.env.POSTGRES_URL_NON_POOLING,
+        pooledUrl,
+      )
     : undefined) ??
-  process.env.DATABASE_URL ??
+  pooledUrl ??
   "postgres://isupply:isupply@localhost:5433/isupply";
 
 /**
