@@ -10,6 +10,7 @@ import {
   sellHeldStock,
 } from "./inventoryQueries";
 import { submitOrderFromCart, type SubmitOrderInput } from "./orderSubmissionQueries";
+import { updateOrderItemPrices } from "./invoiceQueries";
 import { quoteCartFingerprint } from "@/lib/quoteSubmission";
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
@@ -80,12 +81,29 @@ test("quote replay and reservation allocation stay correct through the order lif
         VALUES (${partNumber}, ${family.id}, '{}'::jsonb, 100, 100, 0, 0)
         RETURNING id
       `;
+      const secondPartNumber = `INT-BATCH-${suffix}`;
+      const [secondProduct] = await tx<{ id: number }[]>`
+        INSERT INTO products (part_number, family_id, specs, price_cents,
+                              inventory_available, inventory_on_hold, inventory_sold)
+        VALUES (${secondPartNumber}, ${family.id},
+                '{"material":"Viton","durometer":75}'::jsonb,
+                250, 50, 0, 0)
+        RETURNING id
+      `;
       await tx`INSERT INTO carts (id) VALUES (${cartId})`;
       await tx`
         INSERT INTO cart_items (cart_id, product_id, qty)
-        VALUES (${cartId}, ${product.id}, 60)
+        VALUES (${cartId}, ${product.id}, 60),
+               (${cartId}, ${secondProduct.id}, 20)
       `;
-      return { categoryId: category.id, familyId: family.id, productId: product.id, partNumber };
+      return {
+        categoryId: category.id,
+        familyId: family.id,
+        productId: product.id,
+        partNumber,
+        secondProductId: secondProduct.id,
+        secondPartNumber,
+      };
     });
     categoryId = setup.categoryId;
 
@@ -93,6 +111,7 @@ test("quote replay and reservation allocation stay correct through the order lif
       cartId,
       cartFingerprint: quoteCartFingerprint([
         { productId: setup.productId, qty: 60, unitPriceCents: 100 },
+        { productId: setup.secondProductId, qty: 20, unitPriceCents: 250 },
       ]),
       submissionKey,
       locale: "en",
@@ -131,14 +150,62 @@ test("quote replay and reservation allocation stay correct through the order lif
       WHERE o.submission_key = ${submissionKey}
     `;
     assert.equal(created.orders, 1);
-    assert.equal(created.items, 1);
+    assert.equal(created.items, 2);
 
-    const [afterSubmit] = await sql<{ available: number; onHold: number; cartLines: number }[]>`
-      SELECT p.inventory_available AS available, p.inventory_on_hold AS "onHold",
-             (SELECT count(*)::int FROM cart_items WHERE cart_id = ${cartId}) AS "cartLines"
-      FROM products p WHERE p.id = ${setup.productId}
+    const snapshots = await sql<
+      {
+        id: number;
+        partNumber: string;
+        specsSnapshot: Record<string, unknown>;
+        qty: number;
+        unitPriceCents: number;
+      }[]
+    >`
+      SELECT id, part_number AS "partNumber", specs_snapshot AS "specsSnapshot", qty,
+             unit_price_cents AS "unitPriceCents"
+      FROM order_items
+      WHERE order_id = ${created.id}
+      ORDER BY product_id
     `;
-    assert.deepEqual(afterSubmit, { available: 40, onHold: 60, cartLines: 0 });
+    assert.deepEqual([...snapshots], [
+      {
+        id: snapshots[0].id,
+        partNumber: setup.partNumber,
+        specsSnapshot: {},
+        qty: 60,
+        unitPriceCents: 100,
+      },
+      {
+        id: snapshots[1].id,
+        partNumber: setup.secondPartNumber,
+        specsSnapshot: { material: "Viton", durometer: 75 },
+        qty: 20,
+        unitPriceCents: 250,
+      },
+    ]);
+    const pricesUpdated = await sql.begin((tx) =>
+      updateOrderItemPrices(
+        tx,
+        created.id,
+        snapshots.map((item) => ({ id: item.id, cents: item.unitPriceCents })),
+      ),
+    );
+    assert.equal(pricesUpdated, 2);
+
+    const inventoryAfterSubmit = await sql<{ id: number; available: number; onHold: number }[]>`
+      SELECT id, inventory_available AS available, inventory_on_hold AS "onHold"
+      FROM products
+      WHERE id = ANY(${[setup.productId, setup.secondProductId]}::int[])
+      ORDER BY id
+    `;
+    assert.deepEqual([...inventoryAfterSubmit], [
+      { id: setup.productId, available: 40, onHold: 60 },
+      { id: setup.secondProductId, available: 30, onHold: 20 },
+    ]);
+    const [cartAfterSubmit] = await sql<{ cartLines: number }[]>`
+      SELECT count(*)::int AS "cartLines" FROM cart_items WHERE cart_id = ${cartId}
+    `;
+    assert.equal(cartAfterSubmit.cartLines, 0);
     assert.equal((await findShortfalls([created.id])).size, 0, "60 of 100 is sufficient");
 
     const { secondId, thirdId } = await sql.begin(async (tx) => ({
@@ -155,7 +222,12 @@ test("quote replay and reservation allocation stay correct through the order lif
     // Paying the first order consumes its hold but does not manufacture stock;
     // the final order still has only ten packs available in sequence.
     await sql.begin(async (tx) => {
-      await tx`UPDATE orders SET status = 'preparing' WHERE id = ${created.id}`;
+      await tx`
+        UPDATE orders
+        SET status = 'preparing', invoice_number = ${`INV-TEST-${suffix}`},
+            fx_rate_to_toman = 1000, invoiced_at = now(), paid_at = now()
+        WHERE id = ${created.id}
+      `;
       await sellHeldStock(tx, created.id);
     });
     assert.deepEqual((await findShortfalls([secondId, thirdId])).get(thirdId), [

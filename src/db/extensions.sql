@@ -126,6 +126,12 @@ CREATE INDEX IF NOT EXISTS products_normalized_fts_idx
 CREATE INDEX IF NOT EXISTS products_part_number_trgm_idx
   ON products USING GIN (part_number gin_trgm_ops);
 
+-- A SKU is case-insensitive at every application entry point. Keep the raw
+-- unique index in schema.ts for the importer's ON CONFLICT(part_number), and
+-- close the direct/concurrent-write gap with this expression index.
+CREATE UNIQUE INDEX IF NOT EXISTS products_part_number_upper_key
+  ON products (upper(part_number));
+
 -- Autocomplete over family and category names, both locales.
 CREATE INDEX IF NOT EXISTS families_name_en_trgm_idx
   ON product_families USING GIN (name_en gin_trgm_ops);

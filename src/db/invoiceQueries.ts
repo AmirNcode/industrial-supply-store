@@ -1,5 +1,30 @@
 import "server-only";
+import type { TransactionSql } from "postgres";
 import { sql } from "./index";
+
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
+type Tx = TransactionSql<{}>;
+
+export type OrderItemPrice = { id: number; cents: number };
+
+/** Apply all prices from one submitted invoice form in one guarded update. */
+export async function updateOrderItemPrices(
+  tx: Tx,
+  orderId: number,
+  prices: readonly OrderItemPrice[],
+): Promise<number> {
+  if (prices.length === 0) return 0;
+  const result = await tx`
+    UPDATE order_items i
+    SET unit_price_cents = submitted.cents
+    FROM unnest(
+      ${prices.map((item) => item.id)}::int[],
+      ${prices.map((item) => item.cents)}::int[]
+    ) AS submitted(id, cents)
+    WHERE i.id = submitted.id AND i.order_id = ${orderId}
+  `;
+  return result.count;
+}
 
 export type InvoiceOrder = {
   id: number;

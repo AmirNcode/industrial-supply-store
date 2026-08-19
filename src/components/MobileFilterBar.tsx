@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useId, useRef } from "react";
 import Link from "next/link";
 import type { Facet, SpecDefRow, Filters } from "@/db/queries";
 import { getDict, pick, type Locale } from "@/lib/i18n";
@@ -13,6 +13,7 @@ import {
   type RawSearchParams,
 } from "@/lib/filters";
 import { useRouteDisclosure } from "@/lib/useRouteDisclosure";
+import { useModalFocus } from "@/lib/useModalFocus";
 
 /**
  * Sticky filter bar plus full-height sheet, replacing the desktop facet rail on
@@ -44,6 +45,11 @@ export function MobileFilterBar({
   const t = getDict(locale);
   const [open, setOpen] = useRouteDisclosure();
   const active = countActiveFilters(filters);
+  const openerRef = useRef<HTMLButtonElement>(null);
+  const sheetRef = useRef<HTMLDivElement>(null);
+  const sheetId = useId();
+
+  useModalFocus(open, sheetRef, openerRef, () => setOpen(false));
 
   useEffect(() => {
     if (!open) return;
@@ -70,8 +76,11 @@ export function MobileFilterBar({
       */}
       <div className="fixed inset-x-0 bottom-0 z-40 border-t border-[var(--color-rule)] bg-white px-3 py-2 shadow-[0_-2px_8px_rgba(0,0,0,0.08)]">
         <button
+          ref={openerRef}
           type="button"
           onClick={() => setOpen(true)}
+          aria-expanded={open}
+          aria-controls={open ? sheetId : undefined}
           className="flex w-full items-center justify-between gap-3 text-start"
         >
           <span>
@@ -91,7 +100,15 @@ export function MobileFilterBar({
       </div>
 
       {open && (
-        <div className="sheet" role="dialog" aria-modal="true" aria-label={t.filterBy}>
+        <div
+          ref={sheetRef}
+          id={sheetId}
+          className="sheet"
+          role="dialog"
+          aria-modal="true"
+          aria-label={t.filterBy}
+          tabIndex={-1}
+        >
           <div className="flex items-start justify-between border-b border-[var(--color-rule)] px-4 py-3">
             <div>
               <h2 className="text-[17px] font-bold uppercase tracking-wide text-[var(--color-navy)]">
@@ -115,6 +132,7 @@ export function MobileFilterBar({
                 </Link>
               )}
               <button
+                data-dialog-initial-focus
                 type="button"
                 onClick={() => setOpen(false)}
                 aria-label={t.done}

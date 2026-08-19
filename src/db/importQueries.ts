@@ -4,6 +4,7 @@ import { sql } from "./index";
 import type { ImportSpecDef, ImportRow } from "@/lib/importCsv";
 import { plannedAliases, plannedDefs, type ImportPlan } from "@/lib/columnPlan";
 import type { FieldAliases, SpecDisplay } from "./schema";
+import { reconcileInventoryForProducts } from "./dataIntegrity";
 
 /**
  * A family's spec column, in full.
@@ -38,22 +39,24 @@ export type FamilyForImport = {
 export async function getFamilyForImport(id: number): Promise<FamilyForImport | null> {
   if (!Number.isInteger(id) || id <= 0) return null;
 
-  const [family] = await sql<Omit<FamilyForImport, "defs">[]>`
-    SELECT f.id, f.slug, f.name_en AS "nameEn", f.name_fa AS "nameFa",
-           f.field_aliases AS "fieldAliases",
-           c.id AS "categoryId", c.name_en AS "categoryNameEn",
-           c.name_fa AS "categoryNameFa", c.path AS "categoryPath"
-    FROM product_families f
-    JOIN categories c ON c.id = f.category_id
-    WHERE f.id = ${id}
-  `;
+  const [families, defs] = await Promise.all([
+    sql<Omit<FamilyForImport, "defs">[]>`
+      SELECT f.id, f.slug, f.name_en AS "nameEn", f.name_fa AS "nameFa",
+             f.field_aliases AS "fieldAliases",
+             c.id AS "categoryId", c.name_en AS "categoryNameEn",
+             c.name_fa AS "categoryNameFa", c.path AS "categoryPath"
+      FROM product_families f
+      JOIN categories c ON c.id = f.category_id
+      WHERE f.id = ${id}
+    `,
+    sql<FamilySpecDef[]>`
+      SELECT key, label_en AS "labelEn", label_fa AS "labelFa", unit, kind,
+             filterable, display, csv_alias AS "csvAlias"
+      FROM spec_defs WHERE family_id = ${id} ORDER BY sort, id
+    `,
+  ]);
+  const family = families[0];
   if (!family) return null;
-
-  const defs = await sql<FamilySpecDef[]>`
-    SELECT key, label_en AS "labelEn", label_fa AS "labelFa", unit, kind,
-           filterable, display, csv_alias AS "csvAlias"
-    FROM spec_defs WHERE family_id = ${id} ORDER BY sort, id
-  `;
   return { ...family, defs };
 }
 
@@ -616,8 +619,10 @@ export async function writeImport(
         WHERE id = ${familyId}
       `;
 
-      // The seeder's roll-up, unchanged. Every ancestor of the family's
-      // category has to move, not just the leaf.
+      // Every ancestor of the family's category has to move, not just the
+      // leaf. Clear first so replacing the last product in a branch sets its
+      // count to zero rather than leaving the previous non-zero value behind.
+      await tx`UPDATE categories SET product_count = 0`;
       await tx`
         UPDATE categories c SET product_count = COALESCE(sub.n, 0)
         FROM (
@@ -635,9 +640,10 @@ export async function writeImport(
        * What the order flow says on_hold and sold should be.
        *
        * `on_hold` is everything ordered but not yet paid for; `sold` is
-       * everything paid. Cancelled orders count as neither — the goods were
-       * never taken and never shipped. This is the same split the status
-       * lifecycle already encodes, read back out of it.
+       * everything paid. A pre-payment cancellation counts as neither. A paid
+       * order cancelled before shipping remains sold because this version has
+       * no refund/restock transition; `paid_at` preserves that history after
+       * the status changes to cancelled.
        */
       const computed = await tx<
         { partNumber: string; onHold: number; sold: number }[]
@@ -646,7 +652,7 @@ export async function writeImport(
                COALESCE(SUM(i.qty) FILTER (
                  WHERE o.status IN ('received', 'invoiced')), 0)::int AS "onHold",
                COALESCE(SUM(i.qty) FILTER (
-                 WHERE o.status IN ('preparing', 'shipped', 'delivered')), 0)::int AS "sold"
+                 WHERE o.paid_at IS NOT NULL), 0)::int AS "sold"
         FROM products p
         LEFT JOIN order_items i ON i.product_id = p.id
         LEFT JOIN orders o ON o.id = i.order_id
@@ -676,6 +682,11 @@ export async function writeImport(
           });
         }
       }
+
+      // Orders are the source of truth for held and sold quantities. Preserve
+      // the total stock the operator uploaded, but move it between the three
+      // buckets according to the ledger so an import cannot reintroduce drift.
+      await reconcileInventoryForProducts(tx, touched);
 
       return { inserted, updated, removed, conflicts: [], caseVariants: [], mismatches };
     });

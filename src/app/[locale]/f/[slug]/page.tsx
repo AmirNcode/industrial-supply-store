@@ -12,7 +12,6 @@ import {
   type SpecDefRow,
   type ProductDetailRow,
 } from "@/db/queries";
-import { sql } from "@/db";
 import { FacetSidebar } from "@/components/FacetSidebar";
 import { MobileFilterBar } from "@/components/MobileFilterBar";
 import { ActiveFilterPills } from "@/components/ActiveFilterPills";
@@ -77,19 +76,14 @@ export default async function FamilyPage({
   const window = parseFamilyWindow(sp);
   const highlighted = boundedString(sp.pn, 120)?.toUpperCase() ?? null;
 
-  const [defs, summary, products, facets, catRow, rate] = await Promise.all([
+  const [defs, summary, products, facets, category, ancestors, rate] = await Promise.all([
     getSpecDefs(family.id),
     getProductSetSummary(family.id, filters),
     getProducts(family.id, filters, window.rows, highlighted),
     getFacets(family.id, filters),
-    sql<{ path: string }[]>`SELECT path FROM categories WHERE id = ${family.categoryId}`,
+    getCategoryByPath(family.categoryPath),
+    getAncestors(family.categoryPath),
     getFxRate(),
-  ]);
-
-  const catPath = catRow[0]?.path ?? "";
-  const [category, ancestors] = await Promise.all([
-    getCategoryByPath(catPath),
-    getAncestors(catPath),
   ]);
 
   const trail = category ? [...ancestors, category] : ancestors;

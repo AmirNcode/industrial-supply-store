@@ -8,33 +8,44 @@ The site still feels sluggish for a concrete reason that is independent of datab
 
 No P0/critical defect was found. Seven P1/high-priority findings should be addressed before treating the application as production-hardened: the unbounded family page, missing abuse controls and input ceilings, an incorrect inventory-shortfall warning, Docker secret/build defects, current production dependency advisories, migration/deployment hazards, and non-idempotent quote submission.
 
-At the time of the review, no application or database data was changed and this report was the only repository change. Subsequent remediation is recorded below; it remains local until explicitly committed or deployed.
+At the time of the review, no application or database data was changed and this report was the only repository change. P1 was subsequently pushed, its two migrations are recorded in the live Supabase ledger, and the user confirmed the Vercel redeploy on 2026-08-17. Phase 2 is now implemented and verified locally. Its invariant migration, reconciliation decision, and application/query changes remain unapplied or undeployed in production.
 
 ## Remediation status
 
-- **P1-01 — completed locally on 2026-08-17; not committed or deployed.** The default family document is bounded to 100 server-filtered rows, progressive expansion is capped at 500, and an explicit no-follow “view all for Find / Print” mode preserves whole-document workflows. One delegated family cart controller replaces per-row client state and cart-store subscriptions. Five warm final samples measured 57.3 ms median TTFB, 69.0 ms median total, and a 93.6 KB compressed response; browser QA measured 3,790 DOM elements and one table controller for the initial 100 rows. Full evidence is attached to P1-01.
-- **P1-02 — completed locally on 2026-08-17; not committed or deployed.** Public auth, cart, quick-order, quote, suggestion, tracking, and importer entry points now have explicit rate policies and semantic input ceilings. Counters use an atomic shared Postgres table and HMAC identities. Quick order performs one bounded batch write, carts cap distinct lines, hostile facets/list offsets are bounded, and the 24 MB CSV importer uploads directly to a private Supabase Storage object through a short-lived signed URL. The global Server Action ceiling is 4.25 MB instead of 32 MB. The direct Storage leg was not exercised against production because doing so would create a bucket/object; its claim logic, auth rejection, build, and client/server integration were verified locally/statically.
-- **P1-03 — completed locally on 2026-08-17; not committed or deployed.** Shortfalls are reconstructed from pre-hold stock and allocated in order sequence, rather than comparing each line against availability after its own hold. A local transaction-level suite covers sufficient, exact, insufficient, multiple-order, paid, cancelled, and concurrent quote-replay behavior.
-- **P1-04 — completed locally on 2026-08-17; not committed or deployed.** Docker excludes every `.env*` variant except the example file. Database and signing values use required BuildKit secret mounts; the signing key is a runtime Compose secret. A clean production image built as `linux/arm64` and passed local runtime smoke checks.
-- **P1-05 — completed for the production dependency tree on 2026-08-17; not committed or deployed.** Next is 16.3.1 and Drizzle ORM is 0.45.2; `npm audit --omit=dev` reports zero vulnerabilities. ESLint 9 replaces the removed `next lint` command. The full development tree still reports seven upstream toolchain findings (four moderate, three high) in `drizzle-kit`'s retired development-server dependency and `@vercel/config`'s routing parser; neither chain is installed in the standalone runtime image.
-- **P1-06 — completed locally on 2026-08-17; not committed or deployed.** Reviewed forward SQL migrations now use Supabase's applied ledger, a read-only dry-run, a same-day backup/restore acknowledgement for remote writes, and a separately gated zero-table bootstrap. Remote schema push/seed shortcuts were removed. The live read-only dry-run currently shows exactly two pending migrations: order submission idempotency and shared request-rate-limit storage.
-- **P1-07 — completed locally on 2026-08-17; not committed or deployed.** A signed one-time key commits to the cart identity, contents, displayed prices, and expiry. A unique database index and cart-row lock make order creation, item snapshots, stock hold, and cart clear one replay-safe transaction; retries return the original reference. The submit UI also prevents repeat clicks, but database uniqueness remains the correctness boundary.
+- **P1-01 — deployed on 2026-08-17.** The default family document is bounded to 100 server-filtered rows, progressive expansion is capped at 500, and an explicit no-follow “view all for Find / Print” mode preserves whole-document workflows. One delegated family cart controller replaces per-row client state and cart-store subscriptions. Five warm final samples measured 57.3 ms median TTFB, 69.0 ms median total, and a 93.6 KB compressed response; browser QA measured 3,790 DOM elements and one table controller for the initial 100 rows. Full evidence is attached to P1-01.
+- **P1-02 — deployed on 2026-08-17.** Public auth, cart, quick-order, quote, suggestion, tracking, and importer entry points now have explicit rate policies and semantic input ceilings. Counters use an atomic shared Postgres table and HMAC identities. Quick order performs one bounded batch write, carts cap distinct lines, hostile facets/list offsets are bounded, and the 24 MB CSV importer uploads directly to a private Supabase Storage object through a short-lived signed URL. The global Server Action ceiling is 4.25 MB instead of 32 MB. The direct Storage leg was not exercised against production because doing so would create a bucket/object; its claim logic, auth rejection, build, and client/server integration were verified locally/statically.
+- **P1-03 — deployed on 2026-08-17.** Shortfalls are reconstructed from pre-hold stock and allocated in order sequence, rather than comparing each line against availability after its own hold. A local transaction-level suite covers sufficient, exact, insufficient, multiple-order, paid, cancelled, and concurrent quote-replay behavior.
+- **P1-04 — deployed on 2026-08-17.** Docker excludes every `.env*` variant except the example file. Database and signing values use required BuildKit secret mounts; the signing key is a runtime Compose secret. A clean production image built as `linux/arm64` and passed local runtime smoke checks.
+- **P1-05 — deployed for the production dependency tree on 2026-08-17.** Next is 16.3.1 and Drizzle ORM is 0.45.2; `npm audit --omit=dev` reports zero vulnerabilities. ESLint 9 replaces the removed `next lint` command. The full development tree still reports seven upstream toolchain findings (four moderate, three high) in `drizzle-kit`'s retired development-server dependency and `@vercel/config`'s routing parser; neither chain is installed in the standalone runtime image.
+- **P1-06 — deployed on 2026-08-17.** Reviewed forward SQL migrations use Supabase's applied ledger, a read-only dry-run, a same-day backup/restore acknowledgement for remote writes, and a separately gated zero-table bootstrap. Remote schema push/seed shortcuts were removed. The live ledger records both P1 migrations.
+- **P1-07 — deployed on 2026-08-17.** A signed one-time key commits to the cart identity, contents, displayed prices, and expiry. A unique database index and cart-row lock make order creation, item snapshots, stock hold, and cart clear one replay-safe transaction; retries return the original reference. The submit UI also prevents repeat clicks, but database uniqueness remains the correctness boundary.
+- **P2-01/P2-02 — completed locally on 2026-08-18; production decisions pending.** The constraint migration, shared verifier, and audited reconciliation path pass fresh-schema and legacy-upgrade checks. Production still has the one pending invariant migration and the nine documented inventory-ledger mismatches; neither was changed.
+- **P2-03/P2-04 — completed locally on 2026-08-18; not deployed.** Facets now scope their indexed working set to the requested family. Independent dynamic-route reads run concurrently, quote/invoice/column writes are set-based, and the importer starts its independent metadata reads together. No migration is required for these query/application changes.
+- **P2-09/P2-10 — completed locally on 2026-08-18; hosted CI run pending push.** Search and all three modal overlays now implement tested accessible focus/ARIA patterns. Playwright and axe cover EN/FA desktop/mobile flows, and a GitHub workflow runs the full gate against disposable PostgreSQL rather than a hosted database.
 
-### Current local remediation verification — 2026-08-17
+### Current remediation verification — 2026-08-18 UTC
 
 | Check | Result |
 | --- | --- |
-| `npm test` | Pass — 147/147 tests |
+| `npm test` | Pass — 148/148 tests |
 | `npx tsc --noEmit` | Pass |
 | `npm run lint` | Pass |
-| `npm run test:db:orders` | Pass — concurrent replay plus stock lifecycle |
+| `npm run test:db:integrity` | Pass on a clean isolated ARM64 database — deliberate count/facet/inventory/ownership/total/invoice corruption plus constraint and repair coverage |
+| `npm run test:db:orders` | Pass — concurrent replay, two-line set insert, JSON snapshots, set-based invoice pricing, and stock lifecycle |
 | `npm run test:db:rate-limits` | Pass — atomic shared-counter concurrency |
-| `npm run db:migrate:check` | Pass — local ledger current |
-| `npm run db:migrate:check:remote` | Read-only pass — two expected migrations pending; nothing applied |
+| `npm run db:migrate:check` | Pass — isolated ARM64 ledger current after both fresh-schema and legacy-upgrade paths |
+| `npm run db:verify` | Pass — 34,210-product isolated database, 20/20 constraints, 13/13 extension indexes, zero integrity drift |
+| `npm run db:migrate:check:remote` | Read-only pass — P1 migrations applied; only `20260818025101` pending |
+| `npm run db:reconcile:check:remote` | Expected non-zero — only nine inventory ledger mismatches; every canonical/count/facet/lifecycle check is zero |
+| `npm run test:e2e -- --workers=1` | Pass — 12 EN/FA desktop/mobile browser + axe checks; 4 project-inapplicable cases skipped intentionally |
 | `npm audit --omit=dev` | Pass — zero vulnerabilities |
+| `npm run audit:prod` | Pass — zero vulnerabilities; CI fails on future high/critical production advisories |
 | Full `npm audit` | Seven development-only toolchain findings remain: 4 moderate, 3 high |
-| Production build | Pass — Next.js 16.3.1, 36 generated routes/pages |
+| Production build | Pass — Next.js 16.3.1 Webpack fallback, 36 generated routes/pages; Turbopack worker socket is blocked by the Codex sandbox |
 | ARM64 Docker production image | Pass — `linux/arm64`; clean BuildKit secret path; Compose runtime secret file served the account route |
+| Facet plan | 40.3 ms / 166,680 facet rows before; 9.4 ms / 12,000 rows after; indexed `family_id` bitmap scan |
+| Phase 2 route smoke | Pass — largest family warm median 31.9 ms TTFB / 32.3 ms total; search 103.6 ms cold; cart 11.2 ms cold; no server errors |
+| Existing shared local data | Read-only report still finds 2 category-count, 2 inventory-ledger, and 1 lifecycle mismatch; no repair was applied |
 | Runtime smoke | `/en`, sign-in, quick order, and suggest return 200; oversized cart 413; malformed cart 400; unauthenticated import 403; no runtime errors |
 | Supabase Storage import | Not mutated — production bucket creation/upload deliberately left for deployment verification |
 
@@ -103,7 +114,7 @@ The route intentionally fetches and renders every matching product. On the large
 
 **Recommendation:** Make the initial document bounded. Preserve whole-family filtering on the server, but initially render a measured tranche (for example 100–200 rows) and progressively reveal/fetch more. Replace per-row cart islands with one table-level delegated controller/store subscriber. Keep a separate explicit “show all for browser find/print” option if whole-document search is a hard requirement. Target an initial compressed response below 300 KB, fewer than 10,000 DOM nodes, and no O(number-of-products) cart subscribers.
 
-**Implementation status (2026-08-17): completed locally; not committed or deployed.**
+**Implementation status (2026-08-17): deployed.**
 
 - `src/lib/familyWindow.ts` bounds the initial document to 100 rows, grows in normalized 100-row steps, caps ordinary expansion at 500, rejects invalid/repeated/non-finite window parameters, and reserves unbounded rendering for explicit `?view=all`.
 - `src/db/queries.ts` applies the limit after whole-result server filtering. Aggregate count/stock/lead-time/standards remain whole-result facts, and a `?pn=` deep link pins even the last SKU into the bounded first window rather than rendering all 2,400 rows.
@@ -133,7 +144,7 @@ There is no rate limiting on admin login, customer sign-in/sign-up, cart mutatio
 
 **Recommendation:** Add layered per-IP and per-account limits at the edge/application boundary, with stricter limits for authentication and durable writes. Add explicit byte, field-length, filter-count, cart-line, and quick-order-line ceilings in every action/route. Move the large CSV importer to a dedicated upload/route path so public Server Actions can return to a small body limit. Add spam controls for account and RFQ creation.
 
-**Implementation status (2026-08-17): completed locally; not committed or deployed.**
+**Implementation status (2026-08-17): deployed.**
 
 - `src/lib/requestLimits.ts` centralizes body, field, query, filter, quick-order, and cart ceilings. Route JSON is streamed and rejected above 8 KB before unbounded buffering; quick order is 32 KB/200 submitted lines; a cart holds at most 250 distinct products.
 - `src/lib/rateLimit.ts` applies named policies through an atomic Postgres upsert. Raw IP/account identifiers are HMACed, known accounts consume both IP and account scopes, expired rows are indexed and probabilistically swept, and the table denies Supabase API roles through RLS/no grants.
@@ -151,7 +162,7 @@ Example: with 100 packs available, an order for 60 is fully coverable. Reservati
 
 **Recommendation:** Define the intended allocation rule explicitly. For aggregate advisory stock, a warning based on negative post-hold availability is the simplest accurate signal. If the UI must attribute shortages to individual orders, calculate allocation in order sequence or store the shortage at reservation time. Add transaction-level tests for sufficient, exact, insufficient, multiple-order, cancel, and paid transitions.
 
-**Implementation status (2026-08-17): completed locally; not committed or deployed.** `findShortfalls` adds current holds back to reconstruct stock available before the pending reservation sequence, then uses a window allocation ordered by `created_at, order_id`. The integration suite proves 60 of 100 is sufficient, exact stock is sufficient, the later line in an overcommitted sequence gets the warning, payment preserves the truthful shortage, and cancellation reallocates stock to the next order.
+**Implementation status (2026-08-17): deployed.** `findShortfalls` adds current holds back to reconstruct stock available before the pending reservation sequence, then uses a window allocation ordered by `created_at, order_id`. The integration suite proves 60 of 100 is sufficient, exact stock is sufficient, the later line in an overcommitted sequence gets the warning, payment preserves the truthful shortage, and cancellation reallocates stock to the next order.
 
 ### P1-04 — Docker sends local environment variants into the build context and the full-stack image lacks a reliable `AUTH_SECRET`
 
@@ -161,7 +172,7 @@ Local environment variants are therefore sent to Docker and copied into the buil
 
 **Recommendation:** Ignore `.env*` and explicitly re-include only `.env.example`. Provide `AUTH_SECRET` to both build and runtime through an appropriate BuildKit/runtime secret mechanism, not a copied file or persistent Docker `ARG`. Add a clean-context ARM64 Docker build/start smoke test that opens an account route.
 
-**Implementation status (2026-08-17): completed locally; not committed or deployed.** `.dockerignore` now excludes `.env*` and re-includes only `.env.example`. The Dockerfile consumes required `database_url` and `auth_secret` BuildKit secrets without `ARG`/persistent `ENV`; Compose mounts the runtime signing key as `/run/secrets/auth_secret`. The resulting standalone image is `linux/arm64`, built without an environment file in its final 356.83 KB context, and served the public/account routes successfully. A separate Compose smoke proved the non-root app could read the runtime secret file and serve `/en/account/signin`; both temporary containers were stopped and auto-removed afterward.
+**Implementation status (2026-08-17): deployed.** `.dockerignore` now excludes `.env*` and re-includes only `.env.example`. The Dockerfile consumes required `database_url` and `auth_secret` BuildKit secrets without `ARG`/persistent `ENV`; Compose mounts the runtime signing key as `/run/secrets/auth_secret`. The resulting standalone image is `linux/arm64`, built without an environment file in its final 356.83 KB context, and served the public/account routes successfully. A separate Compose smoke proved the non-root app could read the runtime secret file and serve `/en/account/signin`; both temporary containers were stopped and auto-removed afterward.
 
 ### P1-05 — The installed production dependency tree has five high-severity advisories
 
@@ -178,7 +189,7 @@ The full audit reports 12 findings (8 high, 4 moderate), including development-o
 
 **Recommendation:** Upgrade in controlled groups, beginning with Drizzle ORM and the Next/Sharp/PostCSS line; run the full test/build/runtime/database suite after each group. Do not apply `npm audit fix --force` blindly because the suggested Drizzle transition is semver-significant for a 0.x package.
 
-**Implementation status (2026-08-17): production exposure completed locally; not committed or deployed.** Drizzle ORM is pinned to 0.45.2 and Next to 16.3.1, which refreshes the affected Sharp/PostCSS/Nanoid paths. `npm audit --omit=dev` now reports zero vulnerabilities. The full audit's seven remaining findings belong to development-only CLI/config packages and are documented rather than “fixed” through the audit tool's breaking downgrade suggestions. TypeScript, 147 unit tests, both database integration suites, the production build, and Docker runtime smoke all pass on the upgraded tree.
+**Implementation status (2026-08-17): production dependency update deployed.** Drizzle ORM is pinned to 0.45.2 and Next to 16.3.1, which refreshes the affected Sharp/PostCSS/Nanoid paths. `npm audit --omit=dev` now reports zero vulnerabilities. The full audit's seven remaining findings belong to development-only CLI/config packages and are documented rather than “fixed” through the audit tool's breaking downgrade suggestions. TypeScript, 147 unit tests, both database integration suites, the production build, and Docker runtime smoke all pass on the upgraded tree.
 
 ### P1-06 — The live-data deployment process has no migration ledger and documentation promotes a destructive remote command
 
@@ -188,7 +199,7 @@ This is no longer a disposable v1 database: it contains users, orders, invoices,
 
 **Recommendation:** Adopt reviewed forward-only SQL migrations with an applied-migration ledger, pre-migration backup/restore verification, and separate empty-database bootstrap from live upgrades. Remove `db:setup:remote` from normal deployment instructions, rename it to make destruction unmistakable, and require an explicit empty-database acknowledgement.
 
-**Implementation status (2026-08-17): completed locally; not committed or deployed.** Timestamped SQL in `supabase/migrations` is applied through the Supabase migration ledger. Remote writes require `MIGRATION_BACKUP_VERIFIED` to equal today's UTC date; dry-runs need no write acknowledgement. `db:bootstrap:empty:remote` requires `EMPTY_DATABASE_CONFIRMED=1` and still refuses unless `public` has zero tables. Remote push/seed/setup scripts and instructions were removed, while the verifier now requires both P1 migration versions and their indexes. The local ledger is current; the live read-only dry-run reports both new migrations pending and no migration was applied.
+**Implementation status (2026-08-17): deployed.** Timestamped SQL in `supabase/migrations` is applied through the Supabase migration ledger. Remote writes require `MIGRATION_BACKUP_VERIFIED` to equal today's UTC date; dry-runs need no write acknowledgement. `db:bootstrap:empty:remote` requires `EMPTY_DATABASE_CONFIRMED=1` and still refuses unless `public` has zero tables. Remote push/seed/setup scripts and instructions were removed. The live ledger now records both P1 migrations; the 2026-08-18 read-only dry-run reports only the P2 invariant migration pending.
 
 ### P1-07 — Quote submission is not idempotent and can create duplicate orders
 
@@ -198,7 +209,7 @@ A double-click, client retry, function retry, or successful transaction followed
 
 **Recommendation:** Generate and persist a one-time submission token tied to the cart revision, enforce uniqueness in the database, and make the server return the already-created reference on replay. Disable repeat UI submission as a usability measure, but do not rely on the button as the correctness boundary.
 
-**Implementation status (2026-08-17): completed locally; not committed or deployed.** The quote page signs a 24-hour submission key, cart UUID, and stable fingerprint over product/quantity/displayed price. Migration `20260817010000_add_order_submission_key.sql` adds the nullable UUID and unique index without rewriting historical orders. Submission locks the cart parent, rechecks replay after the lock, verifies the current fingerprint, then creates the order/items, reserves stock, and clears the cart in one transaction. Concurrent integration requests produce one `created`, one `replayed`, the same reference, one order/item set, one hold, and an empty cart.
+**Implementation status (2026-08-17): deployed.** The quote page signs a 24-hour submission key, cart UUID, and stable fingerprint over product/quantity/displayed price. Migration `20260817010000_add_order_submission_key.sql` adds the nullable UUID and unique index without rewriting historical orders. Submission locks the cart parent, rechecks replay after the lock, verifies the current fingerprint, then creates the order/items, reserves stock, and clears the cart in one transaction. Concurrent integration requests produce one `created`, one `replayed`, the same reference, one order/item set, one hold, and an empty cart.
 
 ### P2-01 — Important business invariants are enforced only in application code
 
@@ -210,6 +221,10 @@ A double-click, client retry, function retry, or successful transaction followed
 - The current local data has no case-variant SKUs or orphan user IDs, so these are prevention gaps rather than active corruption.
 
 **Recommendation:** Add an extension-managed unique index on `upper(part_number)` (after duplicate verification), a considered user foreign key/delete policy, and check constraints for quantities/prices/ranges. Validate UUIDs at the application edge and compare UUID-to-UUID.
+
+**Implementation status (2026-08-18 UTC): completed locally; production migration pending.** Migration `20260818025101_enforce_business_invariants.sql` performs read-only blocker checks, creates the case-insensitive SKU unique index, and adds/validates named constraints for category/family counts, product ranges, cart/order quantities and prices, user ownership, invoice field consistency, and lifecycle timestamp order. `orders.user_id` now uses `ON DELETE SET NULL`; negative `inventory_available` remains valid by design, while held/sold counts cannot be negative. The expression index also lives in `extensions.sql` so a later local `drizzle-kit push` restores it. Signed customer sessions reject malformed UUIDs before account/ownership queries compare UUID-to-UUID.
+
+The live preflight found zero case-variant SKU groups, orphan user IDs, invalid numeric/domain rows, itemless orders, total mismatches, and invoice/lifecycle violations. Both a fresh-schema bootstrap and a simulated legacy-schema upgrade passed in an isolated PostgreSQL 17 `linux/arm64` container. The read-only remote migration dry-run reports only this migration pending; it has not been applied.
 
 ### P2-02 — The database verifier gives a false green while denormalized counts and inventory disagree
 
@@ -226,6 +241,26 @@ Public category counts are recomputed by `CATEGORY_COLS`, so customers currently
 
 **Recommendation:** Extend verification with actual-vs-denormalized family/category counts, facet-vs-JSON consistency, inventory-vs-order-ledger reconciliation, orphan checks, and status/timestamp/invoice invariants. Provide an explicit audited reconciliation command rather than silently accepting drift.
 
+**Implementation status (2026-08-18 UTC): completed locally; production reconciliation pending.** `src/db/dataIntegrity.ts` is now one shared read-only definition used by deployment verification, the reconciliation command, and the integration suite. It checks canonical ranges/ownership/order totals/lifecycle state plus family/category counts, facet rows (including the importer's four-decimal numeric display rule), and inventory versus order history. `scripts/verify-remote.mts` now requires all 20 named constraints, 13 extension-managed indexes, all three ledger entries, and zero integrity problems.
+
+`db:reconcile:check[:remote]` emits a structured report and never writes. `db:reconcile:apply[:remote]` repairs only deterministic derived fields inside one locked transaction, preserves each product's total stock while reallocating available/held/sold, verifies the result before commit, and refuses when canonical data is invalid. Local apply requires `RECONCILIATION_APPLY_CONFIRMED=1`; remote apply requires both the same-day backup acknowledgement and a separate same-day reconciliation acknowledgement. Future catalog imports now clear zero-count branches and reconcile touched inventory against orders while preserving uploaded total stock, so the same drift is not immediately reintroduced. The corruption suite proves detection of bad counts, facets, inventory, orphan ownership, line totals, and invoice state, proves the new constraints reject invalid writes, and proves deterministic drift is repaired.
+
+The 2026-08-18 read-only production run found zero problems in every category except **nine inventory ledger mismatches**. Reconciliation would preserve total stock and set the affected products' availability negative to represent already-accepted shortages:
+
+| SKU | Stored available / held / sold | Ledger held / sold | Reconciled available |
+| --- | ---: | ---: | ---: |
+| `1000A1` | 0 / 0 / 0 | 0 / 30 | -30 |
+| `3724V1` | 0 / 0 / 0 | 24 / 0 | -24 |
+| `3724V2` | -3 / 3 / 0 | 16 / 0 | -16 |
+| `3724V3` | 0 / 0 / 0 | 12 / 0 | -12 |
+| `3724V4` | 0 / 0 / 0 | 11 / 0 | -11 |
+| `3724V5` | 0 / 0 / 0 | 10 / 0 | -10 |
+| `4341W1` | 0 / 0 / 0 | 0 / 25 | -25 |
+| `4341W100` | 0 / 0 / 0 | 2 / 0 | -2 |
+| `4341W2` | 0 / 0 / 0 | 4 / 90 | -94 |
+
+No production repair or migration was executed.
+
 ### P2-03 — Facet aggregation ignores its denormalized family key and scans far more data than necessary
 
 **Evidence:** `src/db/queries.ts:286-302`; `product_spec_values.family_id` and composite indexes exist at `src/db/schema.ts:258-278`.
@@ -233,6 +268,8 @@ Public category counts are recomputed by `CATEGORY_COLS`, so customers currently
 For the 2,400-row family, the current local plan scanned the 166,590-row facet table and took about 29.3 ms. Adding `v.family_id = 21` reduced the working set to roughly 12,000 rows and execution to about 9.6 ms. This is not the largest family-page cost, but it scales with the whole catalog instead of the family.
 
 **Recommendation:** Add the family predicate and confirm the plan uses the family/spec indexes. Keep the matched-product join for active filters.
+
+**Implementation status (2026-08-18 UTC): completed locally; not deployed.** `getFacets` now retains the matched-product join and adds the denormalized family predicate. On the clean 34,210-product ARM64 verification database, the unscoped control plan sequentially scanned all 166,680 facet rows and finished in 40.3 ms; the implemented plan used `psv_family_key_text_idx`, read the family's 12,000 rows, and finished in 9.4 ms. Shared buffers fell from 1,350 to 258. This is application SQL only and needs no migration.
 
 ### P2-04 — Several avoidable queries and serial waterfalls remain on dynamic routes
 
@@ -245,6 +282,15 @@ For the 2,400-row family, the current local plan scanned the 166,590-row facet t
 - Quote submission: `src/app/actions.ts:161-175` inserts each order item one at a time.
 
 **Recommendation:** Remove the redundant family count (`products.length` is the total), join/cache immutable family/category metadata, start independent reads together, batch cart upserts/order-item inserts with `unnest`, and update the cart once per quick-order request.
+
+**Implementation status (2026-08-18 UTC): completed locally; not deployed.** P1 changed the family product list from unbounded to a 100-row window, so the original `products.length` recommendation is no longer correct; the separate whole-result summary is intentionally retained. The remaining work is complete:
+
+- The family lookup returns the owning category path from its existing join, removes the extra path query, and starts specs, summary, products, facets, category, ancestors, and FX together after the family is known.
+- Search, cart, quote, invoice authorization/contact, and the admin queue now start independent reads together. The admin queue has one parallel rate/orders stage followed by one parallel items/accounts/comments/shortfalls stage.
+- P1 already changed quick order to one guarded cart upsert. Quote submission now inserts every bounded cart line with one `jsonb_to_recordset` statement, and invoice pricing updates all submitted lines with one guarded `unnest` update. The two-line integration case verifies both JSON snapshots, both holds, idempotent replay, and the invoice price batch.
+- Multi-column facet refresh now performs one delete and one set-based rebuild instead of two statements per changed column. Import family metadata and spec definitions are also read concurrently.
+
+The clean ARM64 database passed all three integration suites and the full verifier after these changes. A fresh production build generated all 36 routes; local production smoke measured the largest-family warm median at 31.9 ms TTFB and 32.3 ms total. No production write, migration, reconciliation, or deployment was performed for this batch.
 
 ### P2-05 — Admin session cookies are replayable beyond their browser expiry and omit `Secure`
 
@@ -291,6 +337,22 @@ Uploads occur sequentially under a new random object name. If a later upload fai
 
 **Recommendation:** Implement established accessible combobox/dialog patterns, preferably with small tested primitives. Add keyboard and screen-reader-oriented component/E2E tests in both directions/locales.
 
+**Implementation status (2026-08-18 UTC): completed locally; not deployed.** The
+autocomplete now exposes a combobox/listbox/option relationship with expanded,
+controls, selected-option, and active-descendant state; stale suggestion
+requests are aborted as soon as the query changes. One shared modal-focus hook
+moves focus into the mobile navigation, mobile filter sheet, and staff
+confirmation dialog, contains Tab/Shift+Tab, closes on Escape, and restores the
+actual opener. Openers expose their controlled dialog while it exists.
+
+The new Playwright projects exercise EN/FA desktop and Pixel-sized layouts.
+They verify search keyboard selection/navigation, navigation and filter focus
+wrapping/restoration, the cart-to-quote flow, staff confirmation behavior, and
+axe WCAG A/AA scans. Axe also exposed the shared faint-text token at roughly
+3:1 contrast across 146 small labels; the corrected token measures 4.97:1 on
+white and 4.80:1 on the near-white panel background. The final serial run was
+12 passed with four layout-inapplicable skips.
+
 ### P2-10 — The quality gate is incomplete: lint is broken, CI is absent, and tests cover only pure helpers
 
 **Evidence:** `package.json` defines `"lint": "next lint"`; there is no ESLint configuration/package and no `.github` CI workflow. All 13 test files are under `src/lib`; `npm test` glob is `src/lib/*.test.ts`.
@@ -298,6 +360,18 @@ Uploads occur sequentially under a new random object name. If a later upload fai
 The 128 tests are valuable but do not cover SQL queries, transactions, Server Actions, auth/ownership, import integration, route status behavior, browser flows, accessibility, or performance budgets. The broken lint command can appear to be a quality gate while never linting anything.
 
 **Recommendation:** Install/configure a supported ESLint invocation, add CI for clean install, lint, typecheck, unit/integration tests, production build, and dependency audit policy. Add disposable-Postgres integration tests and a focused Playwright suite for EN/FA desktop/mobile critical flows.
+
+**Implementation status (2026-08-18 UTC): completed locally; hosted run pending
+push.** `.github/workflows/ci.yml` runs on pull requests and `main`, with
+read-only repository permissions and cancellation of superseded runs. It uses
+a clean PostgreSQL 17 service, applies the schema and migration ledger, seeds
+all 34,210 products, then runs lint, typecheck, 148 unit tests, all three
+database integration suites, the full verifier, a production-only audit policy,
+the production build, and the Playwright/axe gate. Browser failure traces,
+screenshots, video, and the HTML report are retained for 14 days. The workflow
+contains only CI-local credentials and has no Vercel/Supabase secret or remote
+write path. Its YAML and complete command sequence were verified locally; it
+cannot produce a hosted green run until these changes are pushed.
 
 ### P2-11 — Category-list pagination accepts non-finite/fractional/out-of-range pages
 
@@ -338,6 +412,8 @@ The repository contains detailed incident comments but no durable telemetry to d
 Casting indexed `uuid` columns to text prevents normal use of the UUID indexes. Current user/order counts are tiny, so this is not a present bottleneck.
 
 **Recommendation:** Validate/parse the signed token's user ID as UUID at the application edge, then compare UUID values directly.
+
+**Implementation status (2026-08-18 UTC): completed locally as part of P2-01.** Correctly signed tokens carrying malformed IDs are rejected, the new regression test covers that boundary, and user/order ownership queries no longer cast indexed UUID columns to text.
 
 ### P3-03 — Shared and latent product imagery can add avoidable transfer cost
 
@@ -398,7 +474,7 @@ The cart page can make two identical refresh requests on arrival. A year-long an
 
 ### Phase 1 — Protect the current system and fix the user-visible bottleneck
 
-All seven P1 items below are implemented and verified locally. They remain uncommitted and undeployed.
+All seven P1 items below were implemented, pushed, migrated where required, and redeployed on 2026-08-17.
 
 1. Add failing regression/performance tests for inventory shortfall, list pagination, quote replay, family payload/DOM budget, and public input limits.
 2. Bound/progressively render family results and consolidate row-level cart state into one controller.
@@ -410,14 +486,14 @@ All seven P1 items below are implemented and verified locally. They remain uncom
 
 ### Phase 2 — Make data changes safe and self-verifying
 
-1. **Completed locally:** introduce migration files/ledger and a verified backup/restore gate.
-2. Add database uniqueness/FK/check constraints after a read-only production preflight.
-3. Extend verification and reconcile denormalized counts/inventory with an auditable command.
-4. Add the facet family predicate and batch the remaining N+1 writes/waterfalls.
+1. **Deployed:** introduce migration files/ledger and a verified backup/restore gate.
+2. **Completed locally; production migration pending:** add database uniqueness/FK/check constraints after a read-only production preflight.
+3. **Completed locally; production reconciliation pending:** extend verification and provide auditable denormalized-count/facet/inventory reconciliation.
+4. **Completed locally; application deploy pending:** add the facet family predicate and batch the remaining N+1 writes/waterfalls.
 
 ### Phase 3 — Close quality, accessibility, and operational gaps
 
-1. **Partially completed locally:** lint is restored and focused database integration tests exist; CI, browser E2E, and automated accessibility checks remain.
+1. **Completed locally; hosted CI run pending push:** lint, typecheck, unit and disposable-database integration tests, production build/audit policy, EN/FA desktop/mobile browser E2E, and automated WCAG A/AA checks are wired into CI.
 2. Replace admin/customer session limitations according to the desired production auth model.
 3. Make media updates transactional with object cleanup.
 4. Add production Web Vitals/error/query telemetry and enforce performance budgets.
@@ -436,7 +512,7 @@ All seven P1 items below are implemented and verified locally. They remain uncom
 
 ## Limitations
 
-- The hosted production database was inspected only through a read-only migration dry-run. Supabase Storage contents/policies, Vercel deployment logs, and production traffic were not mutated or deeply inspected. The new signed Storage importer was reviewed statically and through unit/build/auth-boundary checks because the local Docker service is PostgreSQL only, not a complete Supabase stack.
+- The hosted production database was inspected through read-only SQL/integrity checks and a migration dry-run; no P2 migration or reconciliation was applied. Supabase Storage contents/policies, Vercel deployment logs, and production traffic were not mutated or deeply inspected. The signed Storage importer was reviewed statically and through unit/build/auth-boundary checks because the local Docker service is PostgreSQL only, not a complete Supabase stack.
 - Dependency advisories are current as of the audit date and can change; reachability notes above are code-review judgments, not proof that every upstream vulnerable path is exploitable here.
 - Performance numbers are local warm production-server measurements intended to compare application paths. They deliberately exclude the database/server geographic latency requested out of scope.
-- Manual browser/static accessibility review is not a substitute for assistive-technology user testing.
+- Automated axe and keyboard checks are not a substitute for assistive-technology user testing.

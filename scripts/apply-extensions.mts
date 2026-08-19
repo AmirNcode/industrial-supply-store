@@ -8,7 +8,7 @@ import { sql, targetHost } from "@/db/script-client";
  * Re-applies `src/db/extensions.sql`.
  *
  * `drizzle-kit push` drops every object in that file on every run — the
- * full-text and trigram indexes behind search, two expression indexes, the
+ * full-text and trigram indexes behind search, three expression indexes, the
  * partial unique index on `invoice_number`, and `invoice_seq`. drizzle-kit
  * cannot express any of them, so it reads them as drift.
  *
@@ -36,13 +36,14 @@ async function main() {
     SELECT count(*)::int AS n FROM pg_indexes
     WHERE indexname IN (
       'products_fts_idx','products_normalized_fts_idx','products_part_number_trgm_idx',
+      'products_part_number_upper_key',
       'families_name_en_trgm_idx','families_name_fa_trgm_idx',
       'categories_name_en_trgm_idx','categories_name_fa_trgm_idx',
       'categories_path_prefix_idx','psv_product_idx',
       'orders_invoice_number_key','orders_email_ref_idx','users_email_lower_key'
     )
   `;
-  console.log(`✓ ${n}/12 extension indexes present, invoice_seq at ${next}`);
+  console.log(`✓ ${n}/13 extension indexes present, invoice_seq at ${next}`);
 
   // Search calls these directly from queries.ts; a database without them 500s
   // on /[locale]/search and /api/suggest, which is how their absence was found.
@@ -69,7 +70,7 @@ async function main() {
       : `✗ RLS OFF on: ${unprotected.map((r) => r.tablename).join(", ")}`,
   );
 
-  if (n !== 12 || fns !== 4) {
+  if (n !== 13 || fns !== 4) {
     console.error("✗ an extension index or function is missing — search or account uniqueness is broken");
     process.exit(1);
   }

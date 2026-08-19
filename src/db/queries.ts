@@ -34,6 +34,9 @@ export type FamilyRow = {
   productCount: number;
 };
 
+/** Family-page metadata that is already available from the owning category join. */
+export type FamilyDetailRow = FamilyRow & { categoryPath: string };
+
 export type SpecDefRow = {
   key: string;
   labelEn: string;
@@ -213,9 +216,9 @@ export async function getFeaturedFamilies(
   `;
 }
 
-export async function getFamilyBySlug(slug: string): Promise<FamilyRow | null> {
-  const rows = await sql<FamilyRow[]>`
-    SELECT ${FAMILY_COLS}
+export async function getFamilyBySlug(slug: string): Promise<FamilyDetailRow | null> {
+  const rows = await sql<FamilyDetailRow[]>`
+    SELECT ${FAMILY_COLS}, c.path AS "categoryPath"
     FROM product_families f
     JOIN categories c ON c.id = f.category_id
     WHERE f.slug = ${slug} AND ${FAMILY_VISIBLE}
@@ -325,6 +328,7 @@ export async function getFacets(
            v.val_num AS "valNum", count(*)::int AS n
     FROM product_spec_values v
     JOIN matched m ON m.id = v.product_id
+    WHERE v.family_id = ${familyId}
     GROUP BY 1, 2, 3
     ORDER BY v.spec_key, v.val_num NULLS LAST, v.val_text
   `;

@@ -336,7 +336,7 @@ const en = {
   importCaseVariant:
     "These part numbers already exist with different capitalisation. Use the catalog's spelling exactly, or nothing will match:",
   importInventoryMismatch:
-    "Imported, but these on-hold or sold counts disagree with what the orders say:",
+    "Imported. These uploaded on-hold or sold counts were reconciled to the order ledger (total stock was preserved):",
   importFromOrders: "from orders",
   // Reviewing an uploaded file's columns
   reviewTitle: "Check the columns before importing",
@@ -778,7 +778,7 @@ const fa: typeof en = {
   importCaseVariant:
     "این شماره فنی‌ها با حروف بزرگ و کوچک متفاوت از قبل وجود دارند. دقیقاً از املای موجود در کاتالوگ استفاده کنید:",
   importInventoryMismatch:
-    "ثبت شد، اما این مقادیر رزرو یا فروش با سفارش‌ها همخوانی ندارد:",
+    "ثبت شد. این مقادیر بارگذاری‌شدهٔ رزرو یا فروش با دفتر سفارش‌ها تطبیق داده شد (مجموع موجودی حفظ شد):",
   importFromOrders: "طبق سفارش‌ها",
   // Reviewing an uploaded file's columns
   reviewTitle: "پیش از ثبت، ستون‌ها را بررسی کنید",

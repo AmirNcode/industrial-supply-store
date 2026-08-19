@@ -94,6 +94,8 @@ export const categories = pgTable(
     uniqueIndex("categories_path_key").on(t.path),
     index("categories_parent_idx").on(t.parentId, t.sort),
     index("categories_depth_idx").on(t.depth),
+    check("categories_depth_check", sql`${t.depth} >= 0`),
+    check("categories_product_count_check", sql`${t.productCount} >= 0`),
   ],
 );
 
@@ -139,6 +141,7 @@ export const productFamilies = pgTable(
   (t) => [
     uniqueIndex("families_slug_key").on(t.slug),
     index("families_category_idx").on(t.categoryId, t.sort),
+    check("product_families_product_count_check", sql`${t.productCount} >= 0`),
   ],
 );
 
@@ -247,6 +250,25 @@ export const products = pgTable(
   (t) => [
     uniqueIndex("products_part_number_key").on(t.partNumber),
     index("products_family_sort_idx").on(t.familyId, t.sort),
+    check(
+      "products_part_number_check",
+      sql`${t.partNumber} = btrim(${t.partNumber}) AND ${t.partNumber} <> ''`,
+    ),
+    check("products_price_cents_check", sql`${t.priceCents} >= 0`),
+    check(
+      "products_price_tiers_check",
+      sql`jsonb_typeof(${t.priceTiers}) = 'array'
+        AND NOT jsonb_path_exists(
+          ${t.priceTiers},
+          '$[*] ? (@.type() != "object" || !(exists(@.minQty)) || !(exists(@.priceCents)) || @.minQty.type() != "number" || @.priceCents.type() != "number" || @.minQty <= 0 || @.priceCents < 0)'
+        )`,
+    ),
+    check("products_pack_qty_check", sql`${t.packQty} > 0`),
+    check("products_lead_days_check", sql`${t.leadDays} >= 0`),
+    // Negative available stock represents an advisory shortfall and is valid.
+    // Held and sold quantities, however, are cumulative physical quantities.
+    check("products_inventory_on_hold_check", sql`${t.inventoryOnHold} >= 0`),
+    check("products_inventory_sold_check", sql`${t.inventorySold} >= 0`),
   ],
 );
 
@@ -301,7 +323,10 @@ export const cartItems = pgTable(
     qty: integer("qty").notNull().default(1),
     addedAt: timestamp("added_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [primaryKey({ columns: [t.cartId, t.productId] })],
+  (t) => [
+    primaryKey({ columns: [t.cartId, t.productId] }),
+    check("cart_items_qty_check", sql`${t.qty} > 0`),
+  ],
 );
 
 // ---------------------------------------------------------------------------
@@ -320,7 +345,7 @@ export const orders = pgTable(
     /** Human-facing reference, e.g. ORD-7Q4M2X. Read aloud on the phone. */
     ref: text("ref").notNull(),
     /** Null for a guest checkout, which stays supported. */
-    userId: uuid("user_id"),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
     /** See lib/orders.ts. A CHECK constraint mirrors this in the database. */
     status: text("status").notNull().default("received"),
     company: text("company").notNull(),
@@ -368,6 +393,42 @@ export const orders = pgTable(
       "orders_status_check",
       sql`${t.status} IN ('received','invoiced','preparing','shipped','delivered','cancelled')`,
     ),
+    check(
+      "orders_totals_check",
+      sql`${t.requestedTotalCents} >= 0 AND ${t.totalCents} >= 0`,
+    ),
+    check(
+      "orders_invoice_fields_check",
+      sql`(
+        ${t.invoiceNumber} IS NULL
+        AND ${t.fxRateToToman} IS NULL
+        AND ${t.invoicedAt} IS NULL
+      ) OR (
+        ${t.invoiceNumber} IS NOT NULL
+        AND btrim(${t.invoiceNumber}) <> ''
+        AND ${t.fxRateToToman} > 0
+        AND ${t.invoicedAt} IS NOT NULL
+      )`,
+    ),
+    check(
+      "orders_timestamp_chain_check",
+      sql`(${t.invoicedAt} IS NULL OR ${t.invoicedAt} >= ${t.createdAt})
+        AND (${t.paidAt} IS NULL OR (${t.invoicedAt} IS NOT NULL AND ${t.paidAt} >= ${t.invoicedAt}))
+        AND (${t.shippedAt} IS NULL OR (${t.paidAt} IS NOT NULL AND ${t.shippedAt} >= ${t.paidAt}))
+        AND (${t.deliveredAt} IS NULL OR (${t.shippedAt} IS NOT NULL AND ${t.deliveredAt} >= ${t.shippedAt}))`,
+    ),
+    check(
+      "orders_status_timestamps_check",
+      sql`(${t.status} <> 'received' OR ${t.invoicedAt} IS NULL)
+        AND (${t.status} NOT IN ('invoiced','preparing','shipped','delivered') OR ${t.invoicedAt} IS NOT NULL)
+        AND (${t.status} NOT IN ('preparing','shipped','delivered') OR ${t.paidAt} IS NOT NULL)
+        AND (${t.status} NOT IN ('shipped','delivered') OR ${t.shippedAt} IS NOT NULL)
+        AND (${t.status} <> 'delivered' OR ${t.deliveredAt} IS NOT NULL)
+        AND (${t.status} <> 'invoiced' OR ${t.paidAt} IS NULL)
+        AND (${t.status} <> 'preparing' OR ${t.shippedAt} IS NULL)
+        AND (${t.status} <> 'shipped' OR ${t.deliveredAt} IS NULL)
+        AND (${t.status} <> 'cancelled' OR (${t.shippedAt} IS NULL AND ${t.deliveredAt} IS NULL))`,
+    ),
   ],
 );
 
@@ -394,7 +455,14 @@ export const orderItems = pgTable(
     /** What staff finally quoted. */
     unitPriceCents: integer("unit_price_cents").notNull(),
   },
-  (t) => [index("order_items_order_idx").on(t.orderId)],
+  (t) => [
+    index("order_items_order_idx").on(t.orderId),
+    check("order_items_qty_check", sql`${t.qty} > 0`),
+    check(
+      "order_items_prices_check",
+      sql`${t.requestedUnitPriceCents} >= 0 AND ${t.unitPriceCents} >= 0`,
+    ),
+  ],
 );
 
 /**

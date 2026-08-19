@@ -24,6 +24,19 @@ servers**, so neither of these is the eventual production database. Anything
 written here about Supabase specifics (poolers, IPv6, the REST API) applies to
 the demo, not to the self-hosted target.
 
+## Pre-deploy quality gate
+
+`.github/workflows/ci.yml` runs on pull requests and pushes to `main`. It uses a
+fresh PostgreSQL 17 service and CI-only credentials, bootstraps the schema and
+full seed, then runs lint, typecheck, unit and database integration tests, the
+production dependency audit policy, the production build, and EN/FA
+desktop/mobile Playwright plus axe checks. It does not read Vercel or Supabase
+secrets and cannot migrate or reconcile either hosted database.
+
+Do not treat a green CI run as database-release approval. The forward migration
+and reconciliation gates below are separate precisely because CI's database is
+disposable while the hosted one is not.
+
 ## Environment variables
 
 Set in Vercel → Settings → Environment Variables → Production.
@@ -69,9 +82,14 @@ order**:
 ```bash
 npm run db:verify:remote        # what state is it in?
 npm run db:migrate:check:remote # dry-run: prints the exact pending files
+npm run db:reconcile:check:remote # read-only canonical/derived-data report
 # Verify a restorable backup/PITR recovery point and a recent restore test.
 MIGRATION_BACKUP_VERIFIED=YYYY-MM-DD npm run db:migrate:remote
-npm run db:verify:remote        # confirm
+# Only when the check reported derived drift and its output was reviewed:
+MIGRATION_BACKUP_VERIFIED=YYYY-MM-DD \
+RECONCILIATION_APPLY_CONFIRMED=YYYY-MM-DD \
+  npm run db:reconcile:apply:remote
+npm run db:verify:remote        # final schema + data confirmation
 ```
 
 `YYYY-MM-DD` must be today's UTC date. The migration command refuses a remote
@@ -79,18 +97,29 @@ write without it, which prevents a forgotten value in an env file becoming a
 permanent bypass. Migration files are applied in timestamp order and recorded
 in `supabase_migrations.schema_migrations`; a second run is a no-op.
 
+Reconciliation is deliberately separate from migration. The check is read-only
+and exits non-zero when canonical or derived data disagrees. `--apply` repairs
+only mechanically derived family/category counts, facet rows, and inventory
+ledger columns; it refuses to guess if SKU, ownership, amount, line-item, or
+invoice/lifecycle data is invalid. On a remote host it requires both dated
+acknowledgements above, locks the participating tables, preserves each SKU's
+total stock while reallocating available/held/sold, verifies the result, and
+commits all-or-nothing. Keep its JSON output with the release record.
+
 A healthy result:
 
 ```
 tables      13/13 ✓
 columns     17/17 ✓
-extensions.sql 12/12 ✓
+extensions.sql 13/13 ✓
 submission key unique index ✓
-migration ledger 20260817010000 ✓
-migration ledger 20260817020000 ✓
+constraints 20/20 validated ✓
+rate limits  indexes ✓
+migration ledger 20260817010000, 20260817020000, 20260818025101 ✓
 invoice_seq ✓
 search fns  4/4 ✓
 row-level security ✓ on every table
+integrity   canonical and derived data agree ✓
 ✓ database looks correct
 ```
 
@@ -105,7 +134,9 @@ already contain the earlier inventory, order-comments, dynamic-column and
 catalog-media work, so those objects form the baseline rather than migrations
 that would be replayed over live data. The first tracked forward migration is
 `20260817010000_add_order_submission_key.sql`; the request-rate-limit table is
-the next migration, `20260817020000_add_request_rate_limits.sql`.
+the next migration, `20260817020000_add_request_rate_limits.sql`. Business
+constraints and the case-insensitive SKU index begin with
+`20260818025101_enforce_business_invariants.sql`.
 
 Do not manufacture old ledger entries or replay the historical one-off scripts.
 If a verifier reports baseline drift, stop and compare the actual schema before
@@ -133,7 +164,7 @@ The mitigation: everything push cannot model lives in `src/db/extensions.sql`.
 `db:push` is now an empty/local-bootstrap wrapper that refuses a remote host and
 re-applies this file automatically. There is no `db:push:remote`; initialized
 databases use `db:migrate:remote` only.
-`scripts/apply-extensions.mts` then verifies 12/12 index objects plus the four catalog_* search functions, realigns
+`scripts/apply-extensions.mts` then verifies 13/13 index objects plus the four catalog_* search functions, realigns
 `invoice_seq` past whatever has been issued, and fails if any table lost RLS.
 
 **Never run bare `drizzle-kit push` against live data.** If it was run locally,

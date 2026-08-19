@@ -311,6 +311,36 @@ npm run db:bootstrap:local
 
 ---
 
+## Running the quality gate
+
+The checks GitHub runs are available locally in the same order:
+
+```bash
+npm run lint
+npm run typecheck
+npm test
+npm run test:db
+npm run audit:prod
+npm run build
+npx playwright install chromium # one-time browser download
+npm run test:e2e
+```
+
+`test:e2e` serves the production build on port 3100 and runs Chromium in
+desktop and phone-sized projects. It covers English and Persian search, the
+mobile navigation/filter dialogs, cart and quote submission, the admin
+confirmation dialog, and automated WCAG A/AA checks. Run `npm run build` first;
+the suite reuses an existing server on port 3100 if one is already running.
+
+The database tests use transactions, but the browser suite deliberately creates
+two identifiable `E2E-*` quote requests. Point these commands only at a local,
+disposable database — never export a hosted `DATABASE_URL` for this workflow.
+GitHub avoids that risk by creating and seeding a new PostgreSQL 17 service for
+every run. Failed browser diagnostics are retained in `test-results/` and the
+HTML report in `playwright-report/`; both directories are ignored by Git.
+
+---
+
 ## Running the whole site in Docker
 
 Rarely useful, but it exists — it is how you check that the production image

@@ -10,7 +10,9 @@
  * succeeds while `gin_trgm_ops` may still fail to resolve — which would leave
  * autocomplete and fuzzy part-number search quietly unindexed.
  */
+import "dotenv/config";
 import postgres from "postgres";
+import { inspectDatabaseIntegrity, integrityProblems } from "@/db/dataIntegrity";
 
 const url = process.env.DIRECT_DATABASE_URL ?? process.env.DATABASE_URL;
 if (!url) {
@@ -99,6 +101,7 @@ console.log(
 /** The objects `drizzle-kit push` drops on every run and cannot re-create. */
 const EXTENSION_OBJECTS = [
   "products_fts_idx", "products_normalized_fts_idx", "products_part_number_trgm_idx",
+  "products_part_number_upper_key",
   "families_name_en_trgm_idx", "families_name_fa_trgm_idx",
   "categories_name_en_trgm_idx", "categories_name_fa_trgm_idx",
   "categories_path_prefix_idx", "psv_product_idx",
@@ -120,13 +123,61 @@ console.log(
 const hasSubmissionIndex = haveObjs.has("orders_submission_key_key");
 console.log(`submission key ${hasSubmissionIndex ? "unique index ✓" : "✗ UNIQUE INDEX MISSING"}`);
 
-const rateLimitIndexes = ["request_rate_limits_pkey", "request_rate_limits_expires_idx"];
-const missingRateLimitIndexes = rateLimitIndexes.filter((index) => !haveObjs.has(index));
+const REQUIRED_CONSTRAINTS = [
+  "categories_depth_check", "categories_product_count_check",
+  "product_families_product_count_check",
+  "products_part_number_check", "products_price_cents_check",
+  "products_price_tiers_check", "products_pack_qty_check",
+  "products_lead_days_check", "products_inventory_on_hold_check",
+  "products_inventory_sold_check", "cart_items_qty_check",
+  "orders_user_id_users_id_fk", "orders_status_check", "orders_totals_check",
+  "orders_invoice_fields_check", "orders_timestamp_chain_check",
+  "orders_status_timestamps_check", "order_items_qty_check", "order_items_prices_check",
+  "request_rate_limits_count_check",
+] as const;
+const constraintRows = await sql<{ conname: string; convalidated: boolean }[]>`
+  SELECT c.conname, c.convalidated
+  FROM pg_constraint c
+  JOIN pg_namespace ns ON ns.oid = c.connamespace
+  WHERE ns.nspname = 'public' AND c.conname = ANY(${[...REQUIRED_CONSTRAINTS]})
+`;
+const constraintState = new Map(
+  constraintRows.map((row) => [row.conname, row.convalidated]),
+);
+const missingConstraints = REQUIRED_CONSTRAINTS.filter(
+  (name) => !constraintState.has(name),
+);
+const unvalidatedConstraints = REQUIRED_CONSTRAINTS.filter(
+  (name) => constraintState.get(name) === false,
+);
+console.log(
+  `constraints ${REQUIRED_CONSTRAINTS.length - missingConstraints.length}/${REQUIRED_CONSTRAINTS.length} ${
+    missingConstraints.length > 0
+      ? `✗ MISSING ${missingConstraints.join(", ")}`
+      : unvalidatedConstraints.length > 0
+        ? `✗ NOT VALIDATED ${unvalidatedConstraints.join(", ")}`
+        : "validated ✓"
+  }`,
+);
+
+const [{ hasRateLimitPrimaryKey }] = await sql<{ hasRateLimitPrimaryKey: boolean }[]>`
+  SELECT EXISTS (
+    SELECT 1
+    FROM pg_constraint c
+    WHERE c.conrelid = to_regclass('public.request_rate_limits')
+      AND c.contype = 'p'
+      AND pg_get_constraintdef(c.oid) = 'PRIMARY KEY (scope, identity_hash)'
+  ) AS "hasRateLimitPrimaryKey"
+`;
+const hasRateLimitExpiryIndex = haveObjs.has("request_rate_limits_expires_idx");
 console.log(
   `rate limits  ${
-    missingRateLimitIndexes.length === 0
+    hasRateLimitPrimaryKey && hasRateLimitExpiryIndex
       ? "indexes ✓"
-      : `✗ MISSING ${missingRateLimitIndexes.join(", ")}`
+      : `✗ MISSING ${[
+          !hasRateLimitPrimaryKey && "primary key (scope, identity_hash)",
+          !hasRateLimitExpiryIndex && "request_rate_limits_expires_idx",
+        ].filter(Boolean).join(", ")}`
   }`,
 );
 
@@ -134,7 +185,11 @@ const [{ hasMigrationLedger }] = await sql<{ hasMigrationLedger: boolean }[]>`
   SELECT to_regclass('supabase_migrations.schema_migrations') IS NOT NULL
     AS "hasMigrationLedger"
 `;
-const REQUIRED_MIGRATIONS = ["20260817010000", "20260817020000"] as const;
+const REQUIRED_MIGRATIONS = [
+  "20260817010000",
+  "20260817020000",
+  "20260818025101",
+] as const;
 let recordedMigrations = new Set<string>();
 if (hasMigrationLedger) {
   const rows = await sql<{ version: string }[]>`
@@ -198,7 +253,7 @@ console.log(
 
 // Everything below reads the catalog tables, which is only meaningful once
 // they exist.
-if (missingTables.length > 0) {
+if (missingTables.length > 0 || missingCols.length > 0) {
   console.log("\n✗ schema incomplete — only an empty database may use db:bootstrap:empty:remote");
   await sql.end();
   process.exit(1);
@@ -215,6 +270,14 @@ const [counts] = await sql<
 
 console.log(
   `rows        categories=${counts.c} families=${counts.f} products=${counts.p} facets=${counts.v}`,
+);
+
+const integrity = await inspectDatabaseIntegrity(sql);
+const integrityIssues = integrityProblems(integrity);
+console.log(
+  integrityIssues.length === 0
+    ? "integrity   canonical and derived data agree ✓"
+    : `integrity   ✗ ${integrityIssues.join("; ")}`,
 );
 
 const idx = await sql<{ indexname: string }[]>`
@@ -262,11 +325,15 @@ const ok =
   missingObjs.length === 0 &&
   missingFns.length === 0 &&
   missingCols.length === 0 &&
+  missingConstraints.length === 0 &&
+  unvalidatedConstraints.length === 0 &&
   hasSubmissionIndex &&
-  missingRateLimitIndexes.length === 0 &&
+  hasRateLimitPrimaryKey &&
+  hasRateLimitExpiryIndex &&
   missingMigrations.length === 0 &&
   hasSeq &&
   rlsOff.length === 0 &&
+  integrityIssues.length === 0 &&
   !have.has("quotes");
 console.log(ok ? "\n✓ database looks correct" : "\n✗ something is wrong above");
 

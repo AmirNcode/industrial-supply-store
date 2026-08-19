@@ -13,6 +13,9 @@ import { createHmac, timingSafeEqual } from "node:crypto";
  */
 export const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function signature(payload: string, secret: string): string {
   return createHmac("sha256", secret).update(payload).digest("base64url");
 }
@@ -35,7 +38,7 @@ export function verifySessionToken(
   const parts = token.split(".");
   if (parts.length !== 3) return null;
   const [userId, expRaw, provided] = parts;
-  if (!userId) return null;
+  if (!UUID_PATTERN.test(userId)) return null;
 
   const expiresAt = Number(expRaw);
   if (!Number.isFinite(expiresAt)) return null;

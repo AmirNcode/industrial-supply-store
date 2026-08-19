@@ -579,9 +579,8 @@ function Result({
         )}
         {state.mismatches.length > 0 && (
           <div className="mt-1.5 border border-[var(--color-warn-line)] bg-[var(--color-warn-soft)] px-2.5 py-1.5">
-            {/* The upload was applied — it is the operator's stated intent, and
-                refusing it would make a stale export impossible to correct.
-                This is so the disagreement is noticed rather than absorbed. */}
+            {/* The catalog values were applied, but held/sold are derived from
+                orders. Show the adjustment instead of silently absorbing it. */}
             <p className="mb-1 text-[12px] font-bold">{t.importInventoryMismatch}</p>
             <ul className="grid gap-0.5 text-[11px]">
               {state.mismatches.slice(0, MAX_SHOWN).map((m, i) => (

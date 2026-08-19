@@ -85,8 +85,10 @@ export default async function InvoicePage({
    *
    * 404 rather than 403: a 403 would confirm the reference exists.
    */
-  const staff = DEMO_MODE || (await isAdmin());
-  const uid = await currentUserId();
+  const [staff, uid] = await Promise.all([
+    DEMO_MODE ? Promise.resolve(true) : isAdmin(),
+    currentUserId(),
+  ]);
 
   // Refused before any query, so an anonymous request costs the same whether
   // the reference exists or not. Checking after the fetch would make the 404
@@ -95,14 +97,13 @@ export default async function InvoicePage({
   // unauthenticated traffic drive unbounded database load.
   if (!staff && !uid) notFound();
 
-  const found = await getInvoiceByRef(ref);
+  const [found, contact] = await Promise.all([getInvoiceByRef(ref), getSiteContact()]);
   if (!found) notFound();
   const { order, items } = found;
 
   if (!staff && (order.userId === null || order.userId !== uid)) notFound();
 
   const rate = order.fxRateToToman;
-  const contact = await getSiteContact();
   const seller = { ...getSeller(l), email: contact.email, phone: contact.phone };
   const subtotal = subtotalCents(items);
   const issued = new Date(order.invoicedAt).toISOString().slice(0, 10);

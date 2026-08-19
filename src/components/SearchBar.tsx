@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useId, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { getDict, type Locale } from "@/lib/i18n";
 import type { Suggestion } from "@/db/queries";
@@ -86,6 +86,7 @@ function LiveSearchBar({ locale }: { locale: Locale }) {
   const boxRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const listboxId = useId();
 
   // The persistent header can outlive a navigation. Keying the draft to the
   // submitted URL derives the reset during render, without a second render from
@@ -95,12 +96,14 @@ function LiveSearchBar({ locale }: { locale: Locale }) {
   }
 
   useEffect(() => {
+    // Cleanup runs as soon as the query changes, not after the next debounce.
+    // That prevents a slow response for the old value from reopening the list
+    // while the buyer is already typing a new one.
+    abortRef.current?.abort();
     if (q.trim().length < 2) {
-      abortRef.current?.abort();
       return;
     }
     const timer = setTimeout(async () => {
-      abortRef.current?.abort();
       const ctl = new AbortController();
       abortRef.current = ctl;
       try {
@@ -119,7 +122,10 @@ function LiveSearchBar({ locale }: { locale: Locale }) {
         /* aborted or offline — leave the previous list in place */
       }
     }, 130);
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      abortRef.current?.abort();
+    };
   }, [q]);
 
   useEffect(() => {
@@ -184,6 +190,13 @@ function LiveSearchBar({ locale }: { locale: Locale }) {
           autoComplete="off"
           maxLength={REQUEST_LIMITS.searchChars}
           aria-label={t.search}
+          role="combobox"
+          aria-autocomplete="list"
+          aria-expanded={open && items.length > 0}
+          aria-controls={open && items.length > 0 ? listboxId : undefined}
+          aria-activedescendant={
+            open && active >= 0 ? `${listboxId}-option-${active}` : undefined
+          }
           // `min-w-0` is load-bearing: a flex item defaults to `min-width:
           // auto`, so without it this input refuses to shrink below the
           // intrinsic width of its placeholder and pushes the submit button
@@ -197,12 +210,22 @@ function LiveSearchBar({ locale }: { locale: Locale }) {
       </form>
 
       {open && items.length > 0 && (
-        <ul className="absolute z-30 inset-x-0 top-full bg-white border border-[var(--color-rule)] shadow-lg max-h-96 overflow-y-auto">
+        <ul
+          id={listboxId}
+          role="listbox"
+          aria-label={t.search}
+          className="absolute z-30 inset-x-0 top-full bg-white border border-[var(--color-rule)] shadow-lg max-h-96 overflow-y-auto"
+        >
           {items.map((s, i) => (
-            <li key={`${s.type}-${i}`}>
+            <li key={`${s.type}-${i}`} role="presentation">
               <button
+                id={`${listboxId}-option-${i}`}
+                role="option"
+                aria-selected={i === active}
+                tabIndex={-1}
                 type="button"
                 onMouseEnter={() => setActive(i)}
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={() => go(s)}
                 className={`flex w-full items-baseline gap-2 px-3 py-1.5 text-start text-[13px] ${
                   i === active ? "bg-[var(--color-panel)]" : ""

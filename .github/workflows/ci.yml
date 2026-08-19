@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CI: "true"
+      NEXT_TELEMETRY_DISABLED: "1"
+      DATABASE_URL: postgres://isupply:isupply@127.0.0.1:5432/isupply
+      DIRECT_DATABASE_URL: postgres://isupply:isupply@127.0.0.1:5432/isupply
+      AUTH_SECRET: ci-only-auth-secret-at-least-32-characters
+      ADMIN_PASSWORD: ci-admin-password
+      E2E_ADMIN_PASSWORD: ci-admin-password
+      USD_TO_TOMAN: "110000"
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: isupply
+          POSTGRES_PASSWORD: isupply
+          POSTGRES_DB: isupply
+          POSTGRES_INITDB_ARGS: --locale=C --encoding=UTF8
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U isupply -d isupply"
+          --health-interval 3s
+          --health-timeout 3s
+          --health-retries 20
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps --only-shell chromium
+
+      - name: Build isolated database
+        run: npm run db:bootstrap:local
+
+      - name: Static and unit checks
+        run: |
+          npm run lint
+          npm run typecheck
+          npm test
+          npm run audit:prod
+
+      - name: Database checks
+        run: |
+          npm run test:db
+          npm run db:verify
+
+      - name: Production build
+        run: npm run build
+
+      - name: Browser and accessibility checks
+        run: npm run test:e2e
+
+      - name: Upload browser diagnostics
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v5
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 14

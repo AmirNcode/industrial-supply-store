@@ -15,7 +15,11 @@ postgres-js with raw SQL tagged templates, Tailwind v4, `node:test` via `tsx`.
 Drizzle is used **only** to define the schema and run `drizzle-kit push` — every
 query in the app is hand-written SQL. Bilingual English/Persian with RTL.
 
-Tests: `npm test`. Types: `npx tsc --noEmit`. Both must be clean.
+The local gate is `npm run lint`, `npm run typecheck`, `npm test`,
+`npm run test:db`, a production build, and `npm run test:e2e`. The browser suite
+uses Playwright plus axe in EN/FA desktop/mobile projects. GitHub CI repeats the
+same checks against a freshly seeded disposable PostgreSQL service; it never
+connects to either hosted Supabase project.
 
 ## Routes
 
@@ -46,7 +50,8 @@ They share nothing on purpose.
   `DEMO_MODE`.
 - **Customers** — per-account scrypt passwords, signed session cookie
   (`src/lib/session.ts`, `sessionToken.ts`). No sessions table; the cookie is
-  an HMAC of `userId.expiry`.
+  an HMAC of `userId.expiry`. Verification accepts only canonical UUID-shaped
+  user IDs, so ownership queries compare UUID to UUID and retain their indexes.
 
 ## Invariants that will bite you
 
@@ -69,6 +74,25 @@ currency picks the unit, locale still picks the script.
 facet index — filters read this, not `products.specs`), `products.search_text`,
 `product_families.product_count` and `categories.product_count` all move
 together in one transaction. See `writeImport` in `src/db/importQueries.ts`.
+Imports preserve the uploaded three-bucket stock total but always derive held
+and sold quantities from orders; an uploaded stale ledger value is reported and
+adjusted, not committed as a new source of truth.
+
+**The database is a correctness boundary, not just storage.** Product SKUs are
+unique both raw and under `upper(part_number)`; orders point to users with
+`ON DELETE SET NULL`; quantities, monetary values, pack/lead ranges, inventory
+hold/sold values, invoice fields, and lifecycle timestamps have named checked
+constraints. `inventory_available` is intentionally allowed below zero because
+it represents an advisory shortfall. Keep `src/db/schema.ts`, the timestamped
+migration, `src/db/extensions.sql`, and the required-object list in
+`scripts/verify-remote.mts` synchronized when changing one of these rules.
+
+**Derived data must be proved, not trusted.** `src/db/dataIntegrity.ts` is the
+shared definition used by deployment verification, corruption integration
+tests, and `db:reconcile:*`. It compares family/category counts, filter facets,
+inventory, ownership, order line totals, and invoice/status timestamps. The
+apply command repairs only values with a deterministic source and rolls back if
+anything remains; it never repairs canonical order or ownership data by guess.
 
 **Order status transitions are guarded twice**: `assertTransition` for legality,
 and `WHERE id = $1 AND status = <source>` with a row-count check for
@@ -80,7 +104,9 @@ admin queue and in none of the invoice, account order page, account list or
 tracking payload.
 
 **Inventory is advisory.** Nothing blocks an order that exceeds
-`inventory_available`; the admin queue flags it. Counts are in packs.
+`inventory_available`; the admin queue flags it. Counts are in packs. Received
+and invoiced lines are held; a line with `paid_at` is sold, including an order
+cancelled after payment because no refund/restock transition exists yet.
 
 **`generateStaticParams` must stay cheap, and the category route deliberately
 returns `[]`.** Two facts collide here. A dynamic segment with *no*

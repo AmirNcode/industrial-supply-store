@@ -37,6 +37,11 @@ test("an expired token does not verify even though it is correctly signed", () =
   assert.equal(verifySessionToken(token, SECRET, NOW), null);
 });
 
+test("a correctly signed token with a malformed user id does not verify", () => {
+  const token = signSessionToken("not-a-uuid", NOW + SESSION_TTL_MS, SECRET);
+  assert.equal(verifySessionToken(token, SECRET, NOW), null);
+});
+
 test("garbage does not verify and does not throw", () => {
   assert.equal(verifySessionToken("", SECRET, NOW), null);
   assert.equal(verifySessionToken("a.b", SECRET, NOW), null);

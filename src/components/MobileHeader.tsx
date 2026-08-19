@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useId, useRef } from "react";
 import Link from "next/link";
 import { getDict, type Locale } from "@/lib/i18n";
 import { SearchBar } from "./SearchBar";
@@ -8,6 +8,7 @@ import { LocaleSwitch } from "./LocaleSwitch";
 import { CartBadge } from "./CartBadge";
 import type { SiteContact } from "@/lib/siteContactValues";
 import { useRouteDisclosure } from "@/lib/useRouteDisclosure";
+import { useModalFocus } from "@/lib/useModalFocus";
 
 /**
  * The phone masthead.
@@ -37,6 +38,11 @@ export function MobileHeader({
   const t = getDict(locale);
   const [menuOpen, setMenuOpen] = useRouteDisclosure();
   const rootRef = useRef<HTMLDivElement>(null);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLElement>(null);
+  const menuId = useId();
+
+  useModalFocus(menuOpen, menuRef, menuButtonRef, () => setMenuOpen(false));
 
   const other: Locale = locale === "fa" ? "en" : "fa";
 
@@ -65,14 +71,6 @@ export function MobileHeader({
     header.setAttribute("data-menu-open", "true");
     return () => header.removeAttribute("data-menu-open");
   }, [menuOpen]);
-
-  // Escape is the keyboard equivalent of tapping the backdrop.
-  useEffect(() => {
-    if (!menuOpen) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setMenuOpen(false);
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [menuOpen, setMenuOpen]);
 
   // No "Your Order" here: the ORDER control sits in the bar above with its own
   // count badge, and two routes to the same page in one header is noise.
@@ -156,9 +154,11 @@ export function MobileHeader({
             inside the line box, which is what made the burger look low against
             the order link; a path is positioned by geometry instead. */}
         <button
+          ref={menuButtonRef}
           type="button"
           onClick={() => setMenuOpen((v) => !v)}
           aria-expanded={menuOpen}
+          aria-controls={menuOpen ? menuId : undefined}
           aria-label={t.browseCatalog}
           className="tap flex h-[35px] w-[35px] shrink-0 items-center justify-center text-white"
         >
@@ -187,7 +187,15 @@ export function MobileHeader({
           value the two would read as one block and the menu would look like
           part of the header rather than a layer over the catalog. */}
       {menuOpen && (
-        <nav className="relative z-10 bg-[var(--color-navy-deep)]">
+        <nav
+          ref={menuRef}
+          id={menuId}
+          role="dialog"
+          aria-modal="true"
+          aria-label={t.browseCatalog}
+          tabIndex={-1}
+          className="relative z-10 bg-[var(--color-navy-deep)]"
+        >
           <ul>
             {menuLinks.map((l) => (
               <li

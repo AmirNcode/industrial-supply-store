@@ -26,7 +26,7 @@ export async function listOrdersForUser(userId: string): Promise<AccountOrderRow
            o.payment_url AS "paymentUrl",
            (SELECT count(*)::int FROM order_items i WHERE i.order_id = o.id) AS "itemCount"
     FROM orders o
-    WHERE o.user_id::text = ${userId}
+    WHERE o.user_id = ${userId}
     ORDER BY o.created_at DESC
   `;
 }
@@ -75,7 +75,7 @@ export async function getOrderForUser(
            o.shipped_at AS "shippedAt", o.delivered_at AS "deliveredAt",
            (SELECT count(*)::int FROM order_items i WHERE i.order_id = o.id) AS "itemCount"
     FROM orders o
-    WHERE o.ref = ${ref} AND o.user_id::text = ${userId}
+    WHERE o.ref = ${ref} AND o.user_id = ${userId}
     LIMIT 1
   `;
   const order = rows[0];

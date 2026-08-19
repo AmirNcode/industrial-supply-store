@@ -21,6 +21,7 @@ import { addComment } from "@/db/commentQueries";
 import { sellHeldStock, releaseHeldStock } from "@/db/inventoryQueries";
 import { RATE_LIMITS, consumeRateLimit } from "@/lib/rateLimit";
 import { REQUEST_LIMITS, boundedString } from "@/lib/requestLimits";
+import { updateOrderItemPrices } from "@/db/invoiceQueries";
 
 /**
  * Signing in and out live here, alongside every other admin action, so
@@ -270,9 +271,12 @@ export async function issueInvoiceAction(formData: FormData): Promise<void> {
   }
   assertTransition(order.status, "invoiced");
 
-  const itemRows = await sql<{ id: number }[]>`
-    SELECT id FROM order_items WHERE order_id = ${id} ORDER BY id
-  `;
+  const [itemRows, rate] = await Promise.all([
+    sql<{ id: number }[]>`
+      SELECT id FROM order_items WHERE order_id = ${id} ORDER BY id
+    `,
+    getFxRate(),
+  ]);
 
   // Parse every price before writing anything, so a bad value on the last line
   // cannot leave the order half-priced.
@@ -285,8 +289,6 @@ export async function issueInvoiceAction(formData: FormData): Promise<void> {
     }
     priced.push({ id: row.id, cents: Math.round(dollars * 100) });
   }
-
-  const rate = await getFxRate();
 
   // The order UPDATE repeats `AND o.status = 'received'` rather than trusting
   // the SELECT above, for the same reason setOrderStatusAction's UPDATEs do:
@@ -301,9 +303,9 @@ export async function issueInvoiceAction(formData: FormData): Promise<void> {
   // function carry on and commit a half-applied invoice.
   try {
     await sql.begin(async (tx) => {
-      for (const p of priced) {
-        await tx`UPDATE order_items SET unit_price_cents = ${p.cents} WHERE id = ${p.id}`;
-      }
+      const pricesUpdated = await updateOrderItemPrices(tx, id, priced);
+      if (pricesUpdated !== priced.length) throw new OrderConflict();
+
       const result = await tx`
         UPDATE orders o
         SET status = 'invoiced',

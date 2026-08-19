@@ -15,10 +15,10 @@ const COLS = sql`id, email, company, contact_name AS "contactName", phone,
                  default_po_number AS "defaultPoNumber", locale`;
 
 export async function getUserById(id: string): Promise<UserRow | null> {
-  // Compared as text, not cast to uuid: this value comes from a cookie, and a
-  // malformed uuid makes Postgres raise rather than return no rows.
+  // Session token verification rejects malformed UUIDs before this query, so
+  // keeping both sides as uuid preserves the users primary-key index.
   const rows = await sql<UserRow[]>`
-    SELECT ${COLS} FROM users WHERE id::text = ${id} LIMIT 1
+    SELECT ${COLS} FROM users WHERE id = ${id} LIMIT 1
   `;
   return rows[0] ?? null;
 }
@@ -97,12 +97,12 @@ export async function updateProfile(
     SET company = ${input.company}, contact_name = ${input.contactName},
         phone = ${input.phone}, default_po_number = ${input.defaultPoNumber},
         locale = ${input.locale}
-    WHERE id::text = ${id}
+    WHERE id = ${id}
   `;
 }
 
 export async function setPassword(userId: string, passwordHash: string): Promise<void> {
-  await sql`UPDATE users SET password_hash = ${passwordHash} WHERE id::text = ${userId}`;
+  await sql`UPDATE users SET password_hash = ${passwordHash} WHERE id = ${userId}`;
 }
 
 /**
@@ -115,11 +115,11 @@ export async function setPassword(userId: string, passwordHash: string): Promise
  */
 export async function getPasswordHash(userId: string): Promise<string | null> {
   const [row] = await sql<{ passwordHash: string }[]>`
-    SELECT password_hash AS "passwordHash" FROM users WHERE id::text = ${userId}
+    SELECT password_hash AS "passwordHash" FROM users WHERE id = ${userId}
   `;
   return row?.passwordHash ?? null;
 }
 
 export async function touchLastLogin(userId: string): Promise<void> {
-  await sql`UPDATE users SET last_login_at = now() WHERE id::text = ${userId}`;
+  await sql`UPDATE users SET last_login_at = now() WHERE id = ${userId}`;
 }

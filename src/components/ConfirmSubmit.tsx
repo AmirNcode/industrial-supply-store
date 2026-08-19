@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
+import { useModalFocus } from "@/lib/useModalFocus";
 
 /**
  * A confirmation step in front of a form that is already filled in.
@@ -50,15 +51,9 @@ export function ConfirmSubmit({
   const [live, setLive] = useState<ConfirmDetail[]>([]);
   const [total, setTotal] = useState<string | null>(null);
   const openerRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open]);
+  useModalFocus(open, dialogRef, openerRef, () => setOpen(false));
 
   const review = () => {
     const form = openerRef.current?.form;
@@ -105,9 +100,11 @@ export function ConfirmSubmit({
           onClick={() => setOpen(false)}
         >
           <div
+            ref={dialogRef}
             role="dialog"
             aria-modal="true"
             aria-label={title}
+            tabIndex={-1}
             className="max-h-[80vh] w-full max-w-[460px] overflow-auto border border-[var(--color-ink)] bg-white p-4 text-start"
             onClick={(e) => e.stopPropagation()}
           >
@@ -135,7 +132,12 @@ export function ConfirmSubmit({
             </dl>
 
             <div className="mt-4 flex justify-end gap-2 border-t border-[var(--color-rule)] pt-3">
-              <button type="button" className="btn-small" onClick={() => setOpen(false)}>
+              <button
+                data-dialog-initial-focus
+                type="button"
+                className="btn-small"
+                onClick={() => setOpen(false)}
+              >
                 {discardLabel}
               </button>
               {/* An ordinary submit button for the enclosing form — this is

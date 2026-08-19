@@ -129,7 +129,9 @@
 
   --color-ink: #14181f;
   --color-ink-muted: #57606f;
-  --color-ink-faint: #8b93a1;
+  /* Small metadata uses this token throughout the catalog. Keep it visually
+     secondary, but not below WCAG AA: 4.97:1 on white and 4.80:1 on panel-alt. */
+  --color-ink-faint: #667085;
 
   --color-rule: #d8dde5;
   --color-rule-light: #eceff4;

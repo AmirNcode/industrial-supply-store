@@ -22,8 +22,7 @@ export default async function SearchPage({
 
   const submitted = (await searchParams).q;
   const q = boundedString(submitted, REQUEST_LIMITS.searchChars, { allowEmpty: true }) ?? "";
-  const results = await search(q);
-  const rate = await getFxRate();
+  const [results, rate] = await Promise.all([search(q), getFxRate()]);
 
   return (
     <div className="flex gap-4 px-3 pt-2">

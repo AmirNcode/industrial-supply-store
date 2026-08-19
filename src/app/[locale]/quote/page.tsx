@@ -29,9 +29,13 @@ export default async function QuotePage({
   const t = getDict(l);
   const { error } = await searchParams;
 
-  const lines = await getCartLines();
+  const [lines, rate, user, cartId] = await Promise.all([
+    getCartLines(),
+    getFxRate(),
+    currentUser(),
+    getCartId(),
+  ]);
   if (lines.length === 0) redirect(`/${l}/cart`);
-  const [rate, user, cartId] = await Promise.all([getFxRate(), currentUser(), getCartId()]);
   if (!cartId) redirect(`/${l}/cart`);
   const subtotal = lines.reduce((sum, x) => sum + unitPriceAt(x, x.qty) * x.qty, 0);
   const fingerprint = quoteCartFingerprint(

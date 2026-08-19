@@ -153,19 +153,37 @@ export async function submitOrderFromCartInTransaction(
   if (!order) throw new Error("Could not allocate a unique order reference");
 
   // Snapshot names, specs and prices so a later catalog edit cannot rewrite an
-  // order that has already been sent to the buyer.
-  for (const line of lines) {
+  // order that has already been sent to the buyer. Submit the bounded cart as
+  // one set instead of paying one database round trip per line.
+  const itemSnapshots = lines.map((line) => {
     const unitPriceCents = unitPriceAt(line, line.qty);
-    await tx`
-      INSERT INTO order_items (order_id, product_id, part_number, family_name,
-                               specs_snapshot, qty, unit_price_cents,
-                               requested_unit_price_cents)
-      VALUES (${order.id}, ${line.productId}, ${line.partNumber},
-              ${input.locale === "fa" ? line.familyFa : line.familyEn},
-              ${JSON.stringify(line.specs)}::jsonb, ${line.qty},
-              ${unitPriceCents}, ${unitPriceCents})
-    `;
-  }
+    return {
+      product_id: line.productId,
+      part_number: line.partNumber,
+      family_name: input.locale === "fa" ? line.familyFa : line.familyEn,
+      specs_snapshot: line.specs,
+      qty: line.qty,
+      unit_price_cents: unitPriceCents,
+      requested_unit_price_cents: unitPriceCents,
+    };
+  });
+  await tx`
+    INSERT INTO order_items (order_id, product_id, part_number, family_name,
+                             specs_snapshot, qty, unit_price_cents,
+                             requested_unit_price_cents)
+    SELECT ${order.id}, item.product_id, item.part_number, item.family_name,
+           item.specs_snapshot, item.qty, item.unit_price_cents,
+           item.requested_unit_price_cents
+    FROM jsonb_to_recordset(${JSON.stringify(itemSnapshots)}::jsonb) AS item(
+      product_id int,
+      part_number text,
+      family_name text,
+      specs_snapshot jsonb,
+      qty int,
+      unit_price_cents int,
+      requested_unit_price_cents int
+    )
+  `;
 
   await holdStockForOrder(tx, order.id);
   await tx`DELETE FROM cart_items WHERE cart_id = ${input.cartId}`;

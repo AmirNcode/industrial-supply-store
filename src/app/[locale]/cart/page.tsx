@@ -21,8 +21,7 @@ export default async function CartPage({
   const t = getDict(l);
   const { error } = await searchParams;
 
-  const lines = await getCartLines();
-  const rate = await getFxRate();
+  const [lines, rate] = await Promise.all([getCartLines(), getFxRate()]);
   const subtotal = lines.reduce((sum, x) => sum + unitPriceAt(x, x.qty) * x.qty, 0);
 
   return (

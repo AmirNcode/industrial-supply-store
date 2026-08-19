@@ -76,43 +76,48 @@ export default async function AdminPage({
     ? sp.status
     : null;
 
-  // The sign-in gate lives in the panel layout, which wraps this page.
-  const rate = await getFxRate();
+  // The sign-in gate lives in the panel layout, which wraps this page. FX and
+  // the queue have no dependency, so do not spend one database round trip
+  // waiting to start the other.
+  const [rate, orders] = await Promise.all([
+    getFxRate(),
+    sql<OrderRow[]>`
+      SELECT q.id, q.ref, q.company, q.contact_name AS "contactName", q.email,
+             q.phone, q.po_number AS "poNumber", q.city, q.country, q.notes,
+             q.status, q.locale, q.currency, q.total_cents AS "totalCents",
+             q.created_at AS "createdAt", q.courier,
+             q.tracking_number AS "trackingNumber",
+             q.invoice_number AS "invoiceNumber",
+             q.fx_rate_to_toman AS "fxRateToToman",
+             q.payment_url AS "paymentUrl",
+             (SELECT count(*)::int FROM order_items i WHERE i.order_id = q.id) AS "itemCount"
+      FROM orders q
+      ${statusFilter ? sql`WHERE q.status = ${statusFilter}` : sql`WHERE q.status <> 'delivered' AND q.status <> 'cancelled'`}
+      ORDER BY q.created_at DESC LIMIT 200
+    `,
+  ]);
 
-  const orders = await sql<OrderRow[]>`
-    SELECT q.id, q.ref, q.company, q.contact_name AS "contactName", q.email,
-           q.phone, q.po_number AS "poNumber", q.city, q.country, q.notes,
-           q.status, q.locale, q.currency, q.total_cents AS "totalCents",
-           q.created_at AS "createdAt", q.courier,
-           q.tracking_number AS "trackingNumber",
-           q.invoice_number AS "invoiceNumber",
-           q.fx_rate_to_toman AS "fxRateToToman",
-           q.payment_url AS "paymentUrl",
-           (SELECT count(*)::int FROM order_items i WHERE i.order_id = q.id) AS "itemCount"
-    FROM orders q
-    ${statusFilter ? sql`WHERE q.status = ${statusFilter}` : sql`WHERE q.status <> 'delivered' AND q.status <> 'cancelled'`}
-    ORDER BY q.created_at DESC LIMIT 200
-  `;
-
-  const items = orders.length
-    ? await sql<OrderItemRow[]>`
+  const orderIds = orders.map((order) => order.id);
+  const [items, withAccounts, commentsByOrder, shortfalls] = await Promise.all([
+    orders.length
+      ? sql<OrderItemRow[]>`
         SELECT id, order_id AS "orderId", part_number AS "partNumber",
                family_name AS "familyName", qty,
                unit_price_cents AS "unitPriceCents",
                requested_unit_price_cents AS "requestedUnitPriceCents",
                specs_snapshot AS "specsSnapshot"
-        FROM order_items WHERE order_id = ANY(${orders.map((q) => q.id)})
+        FROM order_items WHERE order_id = ANY(${orderIds})
         ORDER BY id
       `
-    : [];
-
-  // One query for the whole page rather than a lookup per row: staff can only
-  // reset a password for an address that actually has an account.
-  const withAccounts = await emailsWithAccounts(orders.map((o) => o.email));
-  const commentsByOrder = await listCommentsForOrders(orders.map((o) => o.id));
-  // Advisory, not blocking: the order already exists. This is so staff see the
-  // shortfall before they price it on the phone, not after.
-  const shortfalls = await findShortfalls(orders.map((o) => o.id));
+      : Promise.resolve([] as OrderItemRow[]),
+    // One query for the whole page rather than a lookup per row: staff can only
+    // reset a password for an address that actually has an account.
+    emailsWithAccounts(orders.map((order) => order.email)),
+    listCommentsForOrders(orderIds),
+    // Advisory, not blocking: the order already exists. This is so staff see
+    // the shortfall before they price it on the phone, not after.
+    findShortfalls(orderIds),
+  ]);
 
   const byOrder = new Map<number, OrderItemRow[]>();
   for (const i of items) {

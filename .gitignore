@@ -1,6 +1,8 @@
 node_modules
 .next
 out
+playwright-report
+test-results
 # Holds secrets and connection strings — copy .env.example to .env locally.
 # .env.example is the only one committed.
 .env*
