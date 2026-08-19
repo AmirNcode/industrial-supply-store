@@ -2,9 +2,6 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as schema from "./schema";
 
-const connectionString =
-  process.env.DATABASE_URL ?? "postgres://isupply:isupply@localhost:5433/isupply";
-
 /**
  * Serverless changes the pooling maths completely.
  *
@@ -34,6 +31,39 @@ const connectionString =
  */
 const isBuild = process.env.NEXT_PHASE === "phase-production-build";
 const isServerless = Boolean(process.env.VERCEL || process.env.NETLIFY) && !isBuild;
+
+/**
+ * The build goes direct; requests go through the pooler.
+ *
+ * Transaction pooling exists for many short-lived function instances. A build
+ * is the opposite — one long-lived process prerendering every page — and on
+ * 2026-08-19 two consecutive deploys stalled there for exactly 120s at the
+ * same point, both cancelled by the database's own `statement_timeout`. The
+ * Postgres logs for that window show an idle server: two scheduled
+ * checkpoints, no lock waits, no connection errors. The work was not the
+ * problem and the pool was not the problem, so what stalled was the path
+ * between `iad1` and `eu-central-1` — the extra pooler hop being the part of
+ * it this repository can remove.
+ *
+ * `POSTGRES_URL_NON_POOLING` is set by the Vercel/Supabase integration in
+ * every environment; `DIRECT_DATABASE_URL` is what the repository's own remote
+ * scripts use. Either is the direct 5432 endpoint. Falling through to
+ * `DATABASE_URL` means a missing direct URL costs nothing but the old
+ * behaviour, and request-time pooling is deliberately left exactly as it was.
+ *
+ * `VERCEL` is load-bearing here, not belt-and-braces. `.env.local` is a
+ * `vercel env pull`, so it holds `POSTGRES_URL_NON_POOLING` pointing at
+ * production, and `next build` loads `.env.local`. Without this guard a local
+ * `npm run build` would quietly prerender every page against the live
+ * database.
+ */
+const isHostedBuild = isBuild && Boolean(process.env.VERCEL);
+const connectionString =
+  (isHostedBuild
+    ? process.env.DIRECT_DATABASE_URL ?? process.env.POSTGRES_URL_NON_POOLING
+    : undefined) ??
+  process.env.DATABASE_URL ??
+  "postgres://isupply:isupply@localhost:5433/isupply";
 
 /**
  * Next dev reloads modules on every edit; without a global the pool would leak
