@@ -30,6 +30,11 @@ export const REQUEST_LIMITS = {
   cityChars: 120,
   countryChars: 120,
   notesChars: 4_000,
+  /**
+   * One locale of a category or family description. Admin-only, but it lives
+   * here with every other ceiling so there is one place to read them from.
+   */
+  catalogDescriptionChars: 2_000,
 } as const;
 
 export function utf8ByteLength(value: string): number {

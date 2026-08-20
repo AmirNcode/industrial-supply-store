@@ -198,6 +198,42 @@ should print `0.0.0.0:5434`. It should always agree with the port in `.env`.
 
 ---
 
+## `npm run build` and `npm run start` are not local
+
+Both run with `NODE_ENV=production`, so Next loads `.env.production.local` —
+and that file **outranks `.env.local` and `.env`**. It exists for the
+`db:*:remote` scripts; Next picks it up as a side effect. The result is that a
+local production build, and the server `npm run start` gives you, both talk to
+the **live Supabase project**, not the Docker database:
+
+```
+[probe] isBuild=true VERCEL=false host=aws-0-eu-central-1.pooler.supabase.com:6543
+```
+
+That matters in three ways. A "local smoke test" on `localhost:3000` is reading
+production data, so it proves nothing about local state. A local build can be
+slowed or broken by production. And anything that **writes** goes to
+production — the Playwright suite would create real orders and issue real
+invoices this way, so never point it at a server started with `npm run start`
+unless you have checked which database that server is on.
+
+`npm run dev` is unaffected — development loads `.env.local` and `.env`, not
+`.env.production.local`. So is every `db:*` and `test:db:*` script: they pin
+`DATABASE_URL` explicitly with `dotenv -e .env`, which is why the verifier and
+the integration tests really are local.
+
+To check rather than assume:
+
+```bash
+node -e 'require("dotenv").config({path:".env.production.local"});console.log(new URL(process.env.DATABASE_URL).host)'
+```
+
+The clean fix is to rename `.env.production.local` to something Next does not
+auto-load, such as `.env.remote`, and update the `db:*:remote` scripts in
+`package.json` to match. Not done yet.
+
+---
+
 ## Everyday commands
 
 | What you want | Command |

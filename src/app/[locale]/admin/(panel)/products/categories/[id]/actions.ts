@@ -7,6 +7,7 @@ import {
   normalizeCatalogImageUrl,
 } from "@/lib/catalogImages";
 import { CatalogStorageError, uploadCatalogImage } from "@/lib/catalogStorage";
+import { REQUEST_LIMITS, boundedString } from "@/lib/requestLimits";
 import {
   updateCatalogCategory,
   updateCatalogFamily,
@@ -18,13 +19,24 @@ export type CatalogMediaMessage =
   | "bad-url"
   | "bad-file-type"
   | "too-large"
+  | "too-long"
   | "storage-missing"
   | "upload-failed"
   | "not-found";
 
+/**
+ * Which of the card's two image slots the message is about.
+ *
+ * Both slots take the same URL and file checks, so they produce the same
+ * messages; without this a card showing "that image is larger than 4 MB" would
+ * not say which of the two files to replace.
+ */
+export type CatalogMediaField = "card" | "diagram";
+
 export type CatalogMediaFailure = {
   entity: "category" | "family";
   id: number;
+  field: CatalogMediaField;
   message: CatalogMediaMessage;
 };
 
@@ -59,16 +71,24 @@ export async function saveCatalogMediaAction(
   }
   if (count === 0) return { kind: "saved", count: 0 };
 
+  /** One image slot's submitted intent, before anything has been uploaded. */
+  type PendingImage = {
+    file: File | null;
+    remove: boolean;
+    /** Set when the URL field alone decides the image. */
+    url: string | null;
+  };
+
   type Pending = {
     entity: "category" | "family";
     id: number;
     nameEn: string;
     nameFa: string;
+    aboutEn: string;
+    aboutFa: string;
     isVisible: boolean;
-    file: File | null;
-    removeImage: boolean;
-    /** Set when the URL field alone decides the image. */
-    url: string | null;
+    card: PendingImage;
+    diagram: PendingImage;
   };
 
   const pending: Pending[] = [];
@@ -78,7 +98,8 @@ export async function saveCatalogMediaAction(
   for (let i = 0; i < count; i++) {
     const entity = formData.get(`entity_${i}`) === "family" ? "family" : "category";
     const id = Number(formData.get(`id_${i}`));
-    const fail = (message: CatalogMediaMessage) => failures.push({ entity, id, message });
+    const fail = (message: CatalogMediaMessage, field: CatalogMediaField = "card") =>
+      failures.push({ entity, id, field, message });
 
     if (!Number.isInteger(id) || id <= 0) {
       fail("not-found");
@@ -92,41 +113,76 @@ export async function saveCatalogMediaAction(
       continue;
     }
 
-    const selected = formData.get(`imageFile_${i}`);
-    const file = selected instanceof File && selected.size > 0 ? selected : null;
-    if (file) {
-      const problem = catalogImageFileProblem(file);
-      if (problem === "file-type") {
-        fail("bad-file-type");
-        continue;
-      }
-      if (problem === "file-too-large") {
-        fail("too-large");
-        continue;
-      }
+    // Persian is optional: an empty value renders the English text rather than
+    // an empty callout, so only the length is checked here.
+    const aboutEn = boundedString(
+      formData.get(`aboutEn_${i}`) ?? "",
+      REQUEST_LIMITS.catalogDescriptionChars,
+      { allowEmpty: true },
+    );
+    const aboutFa = boundedString(
+      formData.get(`aboutFa_${i}`) ?? "",
+      REQUEST_LIMITS.catalogDescriptionChars,
+      { allowEmpty: true },
+    );
+    if (aboutEn === null || aboutFa === null) {
+      fail("too-long");
+      continue;
     }
 
-    const removeImage = formData.get(`removeImage_${i}`) === "on";
-    const rawUrl = String(formData.get(`imageUrl_${i}`) ?? "").trim();
-    let url: string | null = null;
-    if (!file && !removeImage && rawUrl) {
-      const normalized = normalizeCatalogImageUrl(rawUrl);
-      if (normalized === null) {
-        fail("bad-url");
-        continue;
+    /**
+     * Both slots take the same file, MIME and URL rules, so they are read by
+     * one function — a second slot validated by a near-copy is how the two
+     * quietly drift apart.
+     */
+    const readImage = (
+      prefix: "image" | "diagram",
+      field: CatalogMediaField,
+    ): PendingImage | null => {
+      const selected = formData.get(`${prefix}File_${i}`);
+      const file = selected instanceof File && selected.size > 0 ? selected : null;
+      if (file) {
+        const problem = catalogImageFileProblem(file);
+        if (problem === "file-type") {
+          fail("bad-file-type", field);
+          return null;
+        }
+        if (problem === "file-too-large") {
+          fail("too-large", field);
+          return null;
+        }
       }
-      url = normalized;
-    }
+
+      const remove = formData.get(`remove${prefix === "image" ? "Image" : "Diagram"}_${i}`) === "on";
+      const rawUrl = String(formData.get(`${prefix}Url_${i}`) ?? "").trim();
+      let url: string | null = null;
+      if (!file && !remove && rawUrl) {
+        const normalized = normalizeCatalogImageUrl(rawUrl);
+        if (normalized === null) {
+          fail("bad-url", field);
+          return null;
+        }
+        url = normalized;
+      }
+      return { file, remove, url };
+    };
+
+    const card = readImage("image", "card");
+    const diagram = readImage("diagram", "diagram");
+    // Both are read before either is abandoned, so one press reports every
+    // problem on the card rather than only the first.
+    if (!card || !diagram) continue;
 
     pending.push({
       entity,
       id,
       nameEn,
       nameFa,
+      aboutEn,
+      aboutFa,
       isVisible: formData.get(`isVisible_${i}`) === "on",
-      file,
-      removeImage,
-      url,
+      card,
+      diagram,
     });
   }
 
@@ -135,22 +191,37 @@ export async function saveCatalogMediaAction(
   // Pass two: the uploads, now that nothing else can turn out to be wrong.
   const updates: (CatalogEntityUpdate & { entity: "category" | "family" })[] = [];
   for (const p of pending) {
+    /** Undefined preserves what the row holds; "" clears it. */
+    const resolve = async (slot: PendingImage): Promise<string | undefined> => {
+      if (slot.file) return uploadCatalogImage(p.entity, p.id, slot.file);
+      if (slot.remove) return "";
+      return slot.url ?? undefined;
+    };
+
     let imageUrl: string | undefined;
-    if (p.file) {
-      try {
-        imageUrl = await uploadCatalogImage(p.entity, p.id, p.file);
-      } catch (uploadError) {
-        const problem =
-          uploadError instanceof CatalogStorageError &&
-          uploadError.problem === "not-configured"
-            ? "storage-missing"
-            : "upload-failed";
-        return { kind: "error", failures: [{ entity: p.entity, id: p.id, message: problem }] };
-      }
-    } else if (p.removeImage) {
-      imageUrl = "";
-    } else if (p.url !== null) {
-      imageUrl = p.url;
+    let diagramUrl: string | undefined;
+    try {
+      // Sequential, not concurrent: a second upload starting after the first
+      // has failed is one more object to orphan for no gain.
+      imageUrl = await resolve(p.card);
+      diagramUrl = await resolve(p.diagram);
+    } catch (uploadError) {
+      const problem =
+        uploadError instanceof CatalogStorageError &&
+        uploadError.problem === "not-configured"
+          ? "storage-missing"
+          : "upload-failed";
+      return {
+        kind: "error",
+        failures: [
+          {
+            entity: p.entity,
+            id: p.id,
+            field: imageUrl === undefined && p.card.file ? "card" : "diagram",
+            message: problem,
+          },
+        ],
+      };
     }
 
     updates.push({
@@ -158,7 +229,10 @@ export async function saveCatalogMediaAction(
       id: p.id,
       nameEn: p.nameEn,
       nameFa: p.nameFa,
+      aboutEn: p.aboutEn,
+      aboutFa: p.aboutFa,
       imageUrl,
+      diagramUrl,
       isVisible: p.isVisible,
     });
   }
@@ -167,11 +241,12 @@ export async function saveCatalogMediaAction(
   for (const u of updates) {
     const saved =
       u.entity === "category" ? await updateCatalogCategory(u) : await updateCatalogFamily(u);
-    if (!saved) failures.push({ entity: u.entity, id: u.id, message: "not-found" });
+    if (!saved) failures.push({ entity: u.entity, id: u.id, field: "card", message: "not-found" });
   }
 
-  // Names, images and visibility are baked into every catalog page, so this
-  // one is deliberately the coarse purge — but it is paid once per press.
+  // Names, images, descriptions and visibility are baked into every catalog
+  // page, so this one is deliberately the coarse purge — but it is paid once
+  // per press.
   revalidatePath("/", "layout");
 
   if (failures.length > 0) return { kind: "error", failures };

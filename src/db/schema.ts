@@ -84,6 +84,20 @@ export const categories = pgTable(
     icon: text("icon").notNull().default("box"),
     /** Optional catalog artwork. The SVG icon remains the empty-state fallback. */
     imageUrl: text("image_url").notNull().default(""),
+    /**
+     * Long body of the callout above the category listing, in both views.
+     * Persian is optional: an empty `aboutFa` renders `aboutEn`, because a
+     * blank callout serves a Persian reader worse than an English paragraph.
+     */
+    aboutEn: text("about_en").notNull().default(""),
+    aboutFa: text("about_fa").notNull().default(""),
+    /**
+     * Second image slot, for a labelled dimension diagram beside the
+     * description. Separate from `imageUrl` because the two are not
+     * interchangeable — one identifies the products, the other explains what
+     * their measurements mean. Falls back to `imageUrl` at thumbnail size.
+     */
+    diagramUrl: text("diagram_url").notNull().default(""),
     /** Hidden categories also hide their complete descendant subtree publicly. */
     isVisible: boolean("is_visible").notNull().default(true),
     sort: integer("sort").notNull().default(0),
@@ -123,6 +137,8 @@ export const productFamilies = pgTable(
     icon: text("icon").notNull().default("box"),
     /** Optional family artwork shown anywhere the generic icon used to appear. */
     imageUrl: text("image_url").notNull().default(""),
+    /** See `categories.diagramUrl`. Same slot, same fallback. */
+    diagramUrl: text("diagram_url").notNull().default(""),
     /** Admin-controlled catalog visibility; products and search inherit it. */
     isVisible: boolean("is_visible").notNull().default(true),
     sort: integer("sort").notNull().default(0),

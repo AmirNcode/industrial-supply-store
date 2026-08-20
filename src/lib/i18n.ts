@@ -424,6 +424,18 @@ const en = {
     "JPG, PNG or WebP, up to 4 MB. A selected file takes priority over the URL.",
   catalogEditVisible: "Show in catalog",
   catalogEditRemoveImage: "Remove current image",
+  catalogEditDescription: "Description & diagram",
+  catalogEditDescriptionSet: "filled in",
+  catalogEditAboutEn: "Description (English)",
+  catalogEditAboutFa: "Description (Persian)",
+  catalogEditAboutFaHint: "Leave empty to show the English description.",
+  catalogEditAboutHelp:
+    "Plain text, up to 2,000 characters. Leave a blank line between paragraphs.",
+  catalogEditDiagramUrl: "Diagram URL",
+  catalogEditDiagramFile: "Upload diagram",
+  catalogEditDiagramHelp:
+    "A labelled dimension drawing, shown beside the description. Without one, the catalog image appears there as a thumbnail.",
+  catalogEditRemoveDiagram: "Remove current diagram",
   catalogEditSave: "Save",
   catalogEditSaved: "Saved.",
   catalogEditNothingSaved:
@@ -432,6 +444,9 @@ const en = {
   catalogEditBadUrl: "Enter a complete HTTP or HTTPS image URL.",
   catalogEditBadFileType: "Choose a JPG, PNG, or WebP image. SVG is not accepted.",
   catalogEditTooLarge: "That image is larger than 4 MB.",
+  catalogEditTooLong: "A description is longer than the 2,000-character limit.",
+  /** Prefixed to any of the messages above when the second image slot is at fault. */
+  catalogEditDiagramProblem: "Diagram: {problem}",
   catalogEditStorageMissing:
     "Image storage is not configured. Add a URL, or configure the Supabase storage variables.",
   catalogEditUploadFailed: "The image could not be uploaded. Try again.",
@@ -866,6 +881,18 @@ const fa: typeof en = {
     "فایل JPG، PNG یا WebP تا ۴ مگابایت. فایل انتخاب‌شده بر نشانی وب اولویت دارد.",
   catalogEditVisible: "نمایش در کاتالوگ",
   catalogEditRemoveImage: "حذف تصویر فعلی",
+  catalogEditDescription: "توضیحات و نقشهٔ ابعاد",
+  catalogEditDescriptionSet: "تکمیل‌شده",
+  catalogEditAboutEn: "توضیحات (انگلیسی)",
+  catalogEditAboutFa: "توضیحات (فارسی)",
+  catalogEditAboutFaHint: "اگر خالی بماند، توضیحات انگلیسی نمایش داده می‌شود.",
+  catalogEditAboutHelp:
+    "متن ساده، حداکثر ۲۰۰۰ نویسه. برای شروع پاراگراف تازه یک خط خالی بگذارید.",
+  catalogEditDiagramUrl: "نشانی نقشهٔ ابعاد",
+  catalogEditDiagramFile: "بارگذاری نقشهٔ ابعاد",
+  catalogEditDiagramHelp:
+    "نقشهٔ ابعاد با برچسب، که کنار توضیحات نمایش داده می‌شود. اگر نباشد، تصویر کاتالوگ در همان جا کوچک نمایش داده می‌شود.",
+  catalogEditRemoveDiagram: "حذف نقشهٔ فعلی",
   catalogEditSave: "ذخیره",
   catalogEditSaved: "ذخیره شد.",
   catalogEditNothingSaved:
@@ -874,6 +901,8 @@ const fa: typeof en = {
   catalogEditBadUrl: "یک نشانی کامل HTTP یا HTTPS برای تصویر وارد کنید.",
   catalogEditBadFileType: "یک تصویر JPG، PNG یا WebP انتخاب کنید. SVG پذیرفته نمی‌شود.",
   catalogEditTooLarge: "حجم تصویر بیش از ۴ مگابایت است.",
+  catalogEditTooLong: "طول توضیحات از حد ۲۰۰۰ نویسه بیشتر است.",
+  catalogEditDiagramProblem: "نقشهٔ ابعاد: {problem}",
   catalogEditStorageMissing:
     "فضای ذخیره‌سازی تصویر تنظیم نشده است. نشانی وب وارد کنید یا متغیرهای Supabase را تنظیم کنید.",
   catalogEditUploadFailed: "بارگذاری تصویر انجام نشد. دوباره تلاش کنید.",

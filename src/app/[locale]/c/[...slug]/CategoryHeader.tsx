@@ -1,9 +1,10 @@
 import { Breadcrumb } from "@/components/Breadcrumb";
 import { CatalogImage } from "@/components/CatalogImage";
 import { ViewAsToggle } from "@/components/ViewAsToggle";
+import { CatalogCallout } from "@/components/CatalogCallout";
 import { getDict, pick, type Locale } from "@/lib/i18n";
 import { formatInt } from "@/lib/money";
-import type { CategoryRow } from "@/db/queries";
+import type { CategoryDetailRow, CategoryRow } from "@/db/queries";
 
 /**
  * Breadcrumb, title and the view toggle — everything both category views share.
@@ -19,7 +20,7 @@ export function CategoryHeader({
   view,
 }: {
   locale: Locale;
-  category: CategoryRow;
+  category: CategoryDetailRow;
   ancestors: CategoryRow[];
   view: "categories" | "list";
 }) {
@@ -60,6 +61,12 @@ export function CategoryHeader({
           />
         )}
       </div>
+
+      {/* Under the title rather than above it, as the reference site places it:
+          the description explains the heading it follows. The family page keeps
+          its callout above its own heading because there the heading lives
+          inside the table section, not at the top of the page. */}
+      <CatalogCallout locale={locale} entity={category} />
     </>
   );
 }

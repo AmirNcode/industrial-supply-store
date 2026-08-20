@@ -18,6 +18,7 @@ import { ActiveFilterPills } from "@/components/ActiveFilterPills";
 import { Breadcrumb } from "@/components/Breadcrumb";
 import { FamilyCartController } from "@/components/FamilyCartController";
 import { CatalogImage } from "@/components/CatalogImage";
+import { CatalogCallout } from "@/components/CatalogCallout";
 import { ProductDetails } from "@/components/ProductDetails";
 import { CatalogHeadReveal } from "@/components/CatalogHeadReveal";
 import { isLocale, getDict, pick, type Locale } from "@/lib/i18n";
@@ -121,27 +122,7 @@ export default async function FamilyPage({
           countLabel={`${formatInt(total, l)} ${t.products}`}
         />
 
-        {(family.aboutEn || family.aboutFa) && (
-          <div className="mb-4 flex items-start gap-3 rounded-[4px] border border-[var(--color-rule)] border-s-[3px] border-s-[var(--color-navy)] bg-[var(--color-navy-tint)] p-3.5">
-            <span className="shrink-0">
-              <CatalogImage
-                imageUrl={family.imageUrl}
-                icon={family.icon}
-                alt=""
-                size={46}
-                className="h-[46px] w-[46px] object-contain"
-              />
-            </span>
-            <div className="min-w-0">
-              <h2 className="text-[15px] font-bold text-[var(--color-navy)]">
-                {t.aboutPrefix} {pick(family, "name", l)}
-              </h2>
-              <p className="mt-0.5 text-[12px] leading-snug text-[var(--color-ink)]">
-                {pick(family, "about", l)}
-              </p>
-            </div>
-          </div>
-        )}
+        <CatalogCallout locale={l} entity={family} />
 
         <div className="flex gap-5">
           {/*

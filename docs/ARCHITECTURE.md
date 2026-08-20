@@ -120,6 +120,28 @@ added 52 pages, pushed several past the 60-second page ceiling, and failed the
 the route stays cacheable and the build pays nothing. `staticPageGenerationTimeout`
 is raised to 120 for the pages that still prerender.
 
+**A category or family has two image slots, and their sizes mean different
+things.** `image_url` is the catalog thumbnail: it identifies the entity in a
+tile, a card, a breadcrumb. `diagram_url` is the second slot, for a labelled
+dimension drawing, and it renders at 240×160 in the description callout. When
+no diagram is set the callout falls back to `image_url` — but at the 46px
+thumbnail size, deliberately, because a product photograph blown up to the
+diagram's box asserts that it explains a measurement. `calloutArt` in
+`src/lib/catalogCallout.ts` is the whole rule and is tested there. The box is
+reserved rather than shrink-wrapped so an image of unknown proportions cannot
+reflow the page as it loads; the cost is letterboxing for a drawing that is not
+roughly 3:2.
+
+**Descriptions live in `about_en`/`about_fa` on both tables, and Persian is
+optional.** `pick()` already falls back to English for an empty Persian field,
+so a Persian reader gets the English paragraph rather than an empty box — a
+Latin paragraph inside an RTL page is the accepted cost. The text is plain: a
+blank line starts a paragraph, a single newline is a soft wrap, and there is no
+markup, no renderer and nothing to sanitise. Only `getCategoryByPath` reads a
+category's description; `CATEGORY_COLS` is shared with the child, ancestor and
+search reads, and putting 2,000 characters × 2 locales in it would ship ~100 KB
+per page for cards that render none of it.
+
 **Catalog artwork goes through `next/image`, and `remotePatterns` allows every
 HTTPS host.** Administrators paste arbitrary supplier URLs, so the host cannot
 be enumerated in advance; the consequence is that the optimiser will fetch any

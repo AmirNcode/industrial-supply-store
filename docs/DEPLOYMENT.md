@@ -44,6 +44,7 @@ Set in Vercel → Settings → Environment Variables → Production.
 | Variable | Needed at | Missing → |
 | --- | --- | --- |
 | `DATABASE_URL` | **build and runtime** | build fails |
+| `DIRECT_DATABASE_URL` | **build** | build stalls 120s and usually fails — see trap 7 |
 | `AUTH_SECRET` | **build and runtime** | **build fails** |
 | `ADMIN_PASSWORD` | runtime | build fine, `/admin` throws |
 | `USD_TO_TOMAN` | runtime | falls back to a hardcoded rate |
@@ -65,7 +66,9 @@ and the example value, because `/admin` exposes every customer's name, email,
 phone and address, issues invoices, resets customer passwords, exports the full
 price list and can overwrite the catalog.
 
-`DATABASE_URL` must be the **transaction pooler** (port `6543`).
+`DATABASE_URL` must be the **transaction pooler** (port `6543`). The build uses
+`DIRECT_DATABASE_URL` (**session pooler**, port `5432`) instead — trap 7 below
+is why, and it is not optional.
 
 ## Database setup
 
@@ -257,3 +260,45 @@ access check. Check the rendered HTML, not just the row.
 Related: `grep -c` counts *lines*. Rendered HTML is one line, so every count is
 `1` and means nothing. Use `grep -o … | wc -l`, or grep for a marker that only
 appears in the case you are testing.
+
+### 7. The build must not use the transaction pooler
+
+`DIRECT_DATABASE_URL` is required in Vercel → Production. Without it the build
+falls back to `DATABASE_URL`, stalls for exactly 120 seconds at
+`Generating static pages (9/36)`, and dies on `canceling statement due to
+statement timeout` (`57014`).
+
+It looks intermittent — three deploys on 2026-08-19 failed on a different page
+each time (`/en`, `/en/quick-order`, `/fa/admin/login`, `/en/admin/products`)
+and one survived only because Next's retry happened to land somewhere it could
+redo. It is not intermittent: it always stalls at 9/36, and a retry is a coin
+flip rather than a fix.
+
+The database is not the problem, so do not go looking there. Postgres logs for
+the failing window show an idle server — two scheduled checkpoints, no lock
+waits, no connection errors, one statement cancelled at exactly 120s. Neither
+was it post-migration vacuum (the migration had finished four minutes earlier)
+nor a starved pool (`NEXT_PHASE` does reach Turbopack's page worker, so the
+build pool really is 12). What stalls is the pooler hop between the `iad1`
+build machine and `eu-central-1`. Transaction pooling is built for many
+short-lived function instances; a build is one long-lived process, which is the
+workload it handles worst.
+
+Switching the build to the session pooler took static generation from
+**2.1 minutes to 2.4 seconds** and the whole build from 2m to 19s.
+
+Two rules when setting this up:
+
+- **Never point it at `POSTGRES_URL_NON_POOLING`.** Vercel's Supabase
+  integration variables belong to the retired scratch project, and using one
+  failed a deploy with `tenant/user postgres.<ref> not found`.
+- The hostname alone does not tell you which project a URL belongs to — both
+  projects live on `aws-0-eu-central-1.pooler.supabase.com`. Supabase encodes
+  the ref in the **username** (`postgres.<ref>`). `src/db/index.ts` enforces
+  this: a direct URL is used only if its host *and* username match
+  `DATABASE_URL`, otherwise it is ignored and the build quietly goes back to
+  the pooler.
+
+Request-time serving is unchanged and still uses the transaction pooler. This
+is a build-only concern — a stalled build never affects the running site,
+because Vercel keeps serving the last good deployment.

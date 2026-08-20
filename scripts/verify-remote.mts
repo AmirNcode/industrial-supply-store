@@ -65,6 +65,13 @@ const COLUMNS: readonly (readonly [string, string])[] = [
   ["product_families", "image_url"],
   ["product_families", "is_visible"],
   ["products", "documents"],
+  // Added 2026-08-20 by `20260820093000_add_catalog_descriptions.sql`. Every
+  // category and family page selects these to draw the description callout, so
+  // a database without them fails at prerender, not only in admin.
+  ["categories", "about_en"],
+  ["categories", "about_fa"],
+  ["categories", "diagram_url"],
+  ["product_families", "diagram_url"],
 ];
 
 const present = await sql<{ name: string }[]>`
@@ -189,6 +196,7 @@ const REQUIRED_MIGRATIONS = [
   "20260817010000",
   "20260817020000",
   "20260818025101",
+  "20260820093000",
 ] as const;
 let recordedMigrations = new Set<string>();
 if (hasMigrationLedger) {

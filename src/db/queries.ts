@@ -16,6 +16,20 @@ export type CategoryRow = {
   productCount: number;
 };
 
+/**
+ * One category, read on its own, carrying the description callout's content.
+ *
+ * Deliberately not part of `CategoryRow`. `CATEGORY_COLS` is shared by the
+ * child, ancestor and search reads, and a 2,000-character description in two
+ * locales would ship up to ~100 KB per category page for cards that render
+ * none of it. Anything that needs the description reads the single row.
+ */
+export type CategoryDetailRow = CategoryRow & {
+  aboutEn: string;
+  aboutFa: string;
+  diagramUrl: string;
+};
+
 export type FamilyRow = {
   id: number;
   slug: string;
@@ -30,6 +44,8 @@ export type FamilyRow = {
   groupFa: string;
   icon: string;
   imageUrl: string;
+  /** Second image slot; empty means the callout falls back to `imageUrl`. */
+  diagramUrl: string;
   isVisible: boolean;
   productCount: number;
 };
@@ -132,9 +148,15 @@ export async function getTopCategories(): Promise<CategoryRow[]> {
   `;
 }
 
-export async function getCategoryByPath(path: string): Promise<CategoryRow | null> {
-  const rows = await sql<CategoryRow[]>`
-    SELECT ${CATEGORY_COLS}
+/**
+ * The one category read that also carries the description and its diagram.
+ * Every other category query stays lean — see `CategoryDetailRow`.
+ */
+export async function getCategoryByPath(path: string): Promise<CategoryDetailRow | null> {
+  const rows = await sql<CategoryDetailRow[]>`
+    SELECT ${CATEGORY_COLS},
+           c.about_en AS "aboutEn", c.about_fa AS "aboutFa",
+           c.diagram_url AS "diagramUrl"
     FROM categories c
     WHERE c.path = ${path} AND ${CATEGORY_VISIBLE}
     LIMIT 1
@@ -174,7 +196,8 @@ const FAMILY_COLS = sql`
   f.desc_en AS "descEn", f.desc_fa AS "descFa",
   f.about_en AS "aboutEn", f.about_fa AS "aboutFa",
   f.group_en AS "groupEn", f.group_fa AS "groupFa",
-  f.icon, f.image_url AS "imageUrl", f.is_visible AS "isVisible",
+  f.icon, f.image_url AS "imageUrl", f.diagram_url AS "diagramUrl",
+  f.is_visible AS "isVisible",
   f.product_count AS "productCount"
 `;
 
@@ -449,7 +472,7 @@ export async function search(q: string): Promise<SearchResults> {
       )
       SELECT id, slug, "categoryId", "nameEn", "nameFa", "descEn", "descFa",
              "aboutEn", "aboutFa", "groupEn", "groupFa", icon, "imageUrl",
-             "isVisible",
+             "diagramUrl", "isVisible",
              "productCount", "categoryPath"
       FROM ranked
       WHERE relevance > 0

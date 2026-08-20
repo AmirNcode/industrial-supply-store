@@ -19,7 +19,22 @@ export type CategoryChoice = {
   nameFa: string;
 };
 
-export type CatalogCategoryEditorRow = {
+/**
+ * The description callout's editable content, identical on both entity types.
+ *
+ * Split out because the admin *index* reads every category in the taxonomy and
+ * has no use for the prose — keeping it off `CatalogCategoryListRow` stops that
+ * page from carrying two locales of description for 97 rows it renders as
+ * one-line links.
+ */
+export type CatalogDescriptionFields = {
+  aboutEn: string;
+  aboutFa: string;
+  /** Empty means the callout falls back to `imageUrl` at thumbnail size. */
+  diagramUrl: string;
+};
+
+type CatalogCategoryBaseRow = {
   id: number;
   path: string;
   nameEn: string;
@@ -29,7 +44,9 @@ export type CatalogCategoryEditorRow = {
   isVisible: boolean;
 };
 
-export type CatalogCategoryListRow = CatalogCategoryEditorRow & {
+export type CatalogCategoryEditorRow = CatalogCategoryBaseRow & CatalogDescriptionFields;
+
+export type CatalogCategoryListRow = CatalogCategoryBaseRow & {
   depth: number;
   productCount: number;
 };
@@ -42,7 +59,7 @@ export type CatalogFamilyEditorRow = {
   icon: string;
   imageUrl: string;
   isVisible: boolean;
-};
+} & CatalogDescriptionFields;
 
 export type CatalogCategoryEditor = {
   category: CatalogCategoryEditorRow;
@@ -69,7 +86,9 @@ export async function getCatalogCategoryEditor(
 
   const [category] = await sql<CatalogCategoryEditorRow[]>`
     SELECT id, path, name_en AS "nameEn", name_fa AS "nameFa", icon,
-           image_url AS "imageUrl", is_visible AS "isVisible"
+           image_url AS "imageUrl", is_visible AS "isVisible",
+           about_en AS "aboutEn", about_fa AS "aboutFa",
+           diagram_url AS "diagramUrl"
     FROM categories WHERE id = ${categoryId}
   `;
   if (!category) return null;
@@ -77,13 +96,17 @@ export async function getCatalogCategoryEditor(
   const [children, families] = await Promise.all([
     sql<CatalogCategoryEditorRow[]>`
       SELECT id, path, name_en AS "nameEn", name_fa AS "nameFa", icon,
-             image_url AS "imageUrl", is_visible AS "isVisible"
+             image_url AS "imageUrl", is_visible AS "isVisible",
+             about_en AS "aboutEn", about_fa AS "aboutFa",
+             diagram_url AS "diagramUrl"
       FROM categories WHERE parent_id = ${categoryId} ORDER BY sort, id
     `,
     sql<CatalogFamilyEditorRow[]>`
       SELECT id, category_id AS "categoryId", name_en AS "nameEn",
              name_fa AS "nameFa", icon, image_url AS "imageUrl",
-             is_visible AS "isVisible"
+             is_visible AS "isVisible",
+             about_en AS "aboutEn", about_fa AS "aboutFa",
+             diagram_url AS "diagramUrl"
       FROM product_families WHERE category_id = ${categoryId} ORDER BY sort, id
     `,
   ]);
@@ -97,15 +120,22 @@ export type CatalogEntityUpdate = {
   nameFa: string;
   /** Undefined preserves the current image; an empty string explicitly clears it. */
   imageUrl: string | undefined;
+  /** Same rule as `imageUrl`, for the second slot. */
+  diagramUrl: string | undefined;
+  aboutEn: string;
+  aboutFa: string;
   isVisible: boolean;
 };
 
 export async function updateCatalogCategory(input: CatalogEntityUpdate): Promise<boolean> {
   const preserveImage = input.imageUrl === undefined;
+  const preserveDiagram = input.diagramUrl === undefined;
   const rows = await sql<{ id: number }[]>`
     UPDATE categories
     SET name_en = ${input.nameEn}, name_fa = ${input.nameFa},
+        about_en = ${input.aboutEn}, about_fa = ${input.aboutFa},
         image_url = CASE WHEN ${preserveImage} THEN image_url ELSE ${input.imageUrl ?? ""} END,
+        diagram_url = CASE WHEN ${preserveDiagram} THEN diagram_url ELSE ${input.diagramUrl ?? ""} END,
         is_visible = ${input.isVisible}
     WHERE id = ${input.id}
     RETURNING id
@@ -115,10 +145,13 @@ export async function updateCatalogCategory(input: CatalogEntityUpdate): Promise
 
 export async function updateCatalogFamily(input: CatalogEntityUpdate): Promise<boolean> {
   const preserveImage = input.imageUrl === undefined;
+  const preserveDiagram = input.diagramUrl === undefined;
   const rows = await sql<{ id: number }[]>`
     UPDATE product_families
     SET name_en = ${input.nameEn}, name_fa = ${input.nameFa},
+        about_en = ${input.aboutEn}, about_fa = ${input.aboutFa},
         image_url = CASE WHEN ${preserveImage} THEN image_url ELSE ${input.imageUrl ?? ""} END,
+        diagram_url = CASE WHEN ${preserveDiagram} THEN diagram_url ELSE ${input.diagramUrl ?? ""} END,
         is_visible = ${input.isVisible}
     WHERE id = ${input.id}
     RETURNING id

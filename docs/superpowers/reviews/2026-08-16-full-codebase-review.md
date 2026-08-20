@@ -19,9 +19,47 @@ At the time of the review, no application or database data was changed and this 
 - **P1-05 — deployed for the production dependency tree on 2026-08-17.** Next is 16.3.1 and Drizzle ORM is 0.45.2; `npm audit --omit=dev` reports zero vulnerabilities. ESLint 9 replaces the removed `next lint` command. The full development tree still reports seven upstream toolchain findings (four moderate, three high) in `drizzle-kit`'s retired development-server dependency and `@vercel/config`'s routing parser; neither chain is installed in the standalone runtime image.
 - **P1-06 — deployed on 2026-08-17.** Reviewed forward SQL migrations use Supabase's applied ledger, a read-only dry-run, a same-day backup/restore acknowledgement for remote writes, and a separately gated zero-table bootstrap. Remote schema push/seed shortcuts were removed. The live ledger records both P1 migrations.
 - **P1-07 — deployed on 2026-08-17.** A signed one-time key commits to the cart identity, contents, displayed prices, and expiry. A unique database index and cart-row lock make order creation, item snapshots, stock hold, and cart clear one replay-safe transaction; retries return the original reference. The submit UI also prevents repeat clicks, but database uniqueness remains the correctness boundary.
-- **P2-01/P2-02 — completed locally on 2026-08-18; production decisions pending.** The constraint migration, shared verifier, and audited reconciliation path pass fresh-schema and legacy-upgrade checks. Production still has the one pending invariant migration and the nine documented inventory-ledger mismatches; neither was changed.
-- **P2-03/P2-04 — completed locally on 2026-08-18; not deployed.** Facets now scope their indexed working set to the requested family. Independent dynamic-route reads run concurrently, quote/invoice/column writes are set-based, and the importer starts its independent metadata reads together. No migration is required for these query/application changes.
-- **P2-09/P2-10 — completed locally on 2026-08-18; hosted CI run pending push.** Search and all three modal overlays now implement tested accessible focus/ARIA patterns. Playwright and axe cover EN/FA desktop/mobile flows, and a GitHub workflow runs the full gate against disposable PostgreSQL rather than a hosted database.
+- **P2-01/P2-02 — deployed on 2026-08-19.** The constraint migration applied to production; all 20 constraints validated. The nine inventory-ledger mismatches were repaired by a targeted update that restored `inventory_on_hold`/`inventory_sold` from the order ledger and left `inventory_available` alone — `reconcileDerivedData` was deliberately **not** used, because it preserves the uploaded total and those nine had a corrupted total of `0`, which would have driven `inventory_available` to as low as `-94`. The reconciliation path remains correct for its intended case (a stale operator export) and is unchanged.
+- **P2-03/P2-04 — deployed on 2026-08-19.** Facets now scope their indexed working set to the requested family. Independent dynamic-route reads run concurrently, quote/invoice/column writes are set-based, and the importer starts its independent metadata reads together. No migration is required for these query/application changes. Verified on a 34,210-product database: `psv_family_key_text_idx` bitmap scan, 12,000 rows, 258 shared buffers, 7.3 ms.
+- **P2-09/P2-10 — deployed on 2026-08-19, with one defect outstanding.** All three modal overlays implement tested accessible focus/ARIA patterns. Playwright and axe cover EN/FA desktop/mobile flows, and a GitHub workflow runs the full gate against disposable PostgreSQL rather than a hosted database. **The search combobox work does not reach users on the routes that matter**: on `/[locale]/f/[slug]`, `/[locale]/l/[...slug]` and `/[locale]/search`, the visible header input is the `<Suspense>` fallback while the hydrated `LiveSearchBar` sits in a `display:none` container, so typing produces no suggestions and none of the ARIA is present. Confirmed pre-existing on `44fa582` — not introduced by this work — and tracked separately.
+
+### Deployment — 2026-08-19 UTC
+
+Phase 2 and the Phase 3 quality gate are live. Order of operations was migration
+first, then data repair, then verification, then code.
+
+Two defects were found during the rollout and fixed before the push:
+
+- **The verifier and the facet writer disagreed.** `inspectDatabaseIntegrity`
+  decided numeric-ness from `jsonb_typeof`, while `saveColumns` decides it from
+  the value's text. Any spec column switched from `text` to `number` would
+  therefore read as facet drift, and the offered reconciliation would strip the
+  `val_num` that makes the new range filter work. Both now share one definition,
+  `NUMERIC_SPEC_PATTERN` and `expectedFacetRows` in `src/db/dataIntegrity.ts`,
+  covered by a regression test that drives the real writer and the real verifier
+  inside one rollback. Fixing it also closed a live bug: the pattern was written
+  inline in a template literal, which eats the backslash in `\.`, so `10x5`
+  matched and reached `::numeric` — aborting the admin column editor's save.
+- **Vercel builds stalled for 120 seconds.** Unrelated to this work; see trap 7
+  in `docs/DEPLOYMENT.md`. The build now uses `DIRECT_DATABASE_URL`, taking
+  static generation from 2.1 minutes to 2.4 seconds.
+
+Two pre-existing defects were found and deliberately **not** fixed here, to keep
+this change reviewable:
+
+- Search autocomplete is dead on family, category-list and search routes (see
+  P2-09 above).
+- `src/lib/importCsv.ts` treats an absent inventory column as `0`, so any upload
+  omitting `inventory_available`/`on_hold`/`sold` zeroes all three — the exact
+  failure `image_url` and `documents` are guarded against a few lines later.
+  This is the likely origin of the nine ledger mismatches, and it now matters
+  more: with P2-01 deployed, `writeImport` reconciles after that zeroing, so a
+  partial upload will drive `inventory_available` negative rather than merely
+  wrong, while the UI reports "total stock was preserved".
+
+Also unresolved: `inventory_available` for those nine products was left at `0`
+(or `-3`), which asserts stock levels nobody has verified against the warehouse.
+It affects only the admin shortfall banner; nothing customer-facing reads it.
 
 ### Current remediation verification — 2026-08-18 UTC
 

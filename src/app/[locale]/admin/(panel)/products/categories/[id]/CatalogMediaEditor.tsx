@@ -3,8 +3,10 @@
 import { useActionState, useEffect, useRef, useState } from "react";
 import { CatalogImage } from "@/components/CatalogImage";
 import { getDict, type Locale } from "@/lib/i18n";
+import { REQUEST_LIMITS } from "@/lib/requestLimits";
 import {
   saveCatalogMediaAction,
+  type CatalogMediaFailure,
   type CatalogMediaMessage,
   type CatalogMediaState,
 } from "./actions";
@@ -15,8 +17,15 @@ export type CatalogMediaEntity = {
   nameFa: string;
   icon: string;
   imageUrl: string;
+  /** Second image slot — the dimension diagram beside the description. */
+  diagramUrl: string;
+  aboutEn: string;
+  aboutFa: string;
   isVisible: boolean;
 };
+
+/** The two image slots a card carries, named the way the action reads them. */
+type ImageSlot = "image" | "diagram";
 
 export type CatalogMediaSection = {
   title: string;
@@ -29,11 +38,17 @@ type Edit = Partial<{
   nameEn: string;
   nameFa: string;
   imageUrl: string;
+  diagramUrl: string;
+  aboutEn: string;
+  aboutFa: string;
   isVisible: boolean;
   removeImage: boolean;
+  removeDiagram: boolean;
 }>;
 
 const cardKey = (kind: string, id: number) => `${kind}-${id}`;
+/** A chosen file belongs to one slot of one card, so both name it. */
+const fileKey = (key: string, slot: ImageSlot) => `${slot}-${key}`;
 
 /**
  * The whole category page, saved by one button.
@@ -98,13 +113,16 @@ export function CatalogMediaEditor({
 
   function changed(kind: string, entity: CatalogMediaEntity): boolean {
     const key = cardKey(kind, entity.id);
-    if (files[key]) return true;
+    if (files[fileKey(key, "image")] || files[fileKey(key, "diagram")]) return true;
     const edit = edits[key];
     if (!edit) return false;
-    if (edit.removeImage) return true;
+    if (edit.removeImage || edit.removeDiagram) return true;
     if (edit.nameEn !== undefined && edit.nameEn !== entity.nameEn) return true;
     if (edit.nameFa !== undefined && edit.nameFa !== entity.nameFa) return true;
     if (edit.imageUrl !== undefined && edit.imageUrl !== entity.imageUrl) return true;
+    if (edit.diagramUrl !== undefined && edit.diagramUrl !== entity.diagramUrl) return true;
+    if (edit.aboutEn !== undefined && edit.aboutEn !== entity.aboutEn) return true;
+    if (edit.aboutFa !== undefined && edit.aboutFa !== entity.aboutFa) return true;
     if (edit.isVisible !== undefined && edit.isVisible !== entity.isVisible) return true;
     return false;
   }
@@ -124,8 +142,12 @@ export function CatalogMediaEditor({
       nameEn: edit.nameEn ?? entity.nameEn,
       nameFa: edit.nameFa ?? entity.nameFa,
       imageUrl: edit.imageUrl ?? entity.imageUrl,
+      diagramUrl: edit.diagramUrl ?? entity.diagramUrl,
+      aboutEn: edit.aboutEn ?? entity.aboutEn,
+      aboutFa: edit.aboutFa ?? entity.aboutFa,
       isVisible: edit.isVisible ?? entity.isVisible,
       removeImage: edit.removeImage ?? false,
+      removeDiagram: edit.removeDiagram ?? false,
     };
   };
 
@@ -146,28 +168,36 @@ export function CatalogMediaEditor({
       formData.set(`nameEn_${i}`, edit.nameEn ?? entity.nameEn);
       formData.set(`nameFa_${i}`, edit.nameFa ?? entity.nameFa);
       formData.set(`imageUrl_${i}`, edit.imageUrl ?? entity.imageUrl);
+      formData.set(`diagramUrl_${i}`, edit.diagramUrl ?? entity.diagramUrl);
+      formData.set(`aboutEn_${i}`, edit.aboutEn ?? entity.aboutEn);
+      formData.set(`aboutFa_${i}`, edit.aboutFa ?? entity.aboutFa);
       if ((edit.isVisible ?? entity.isVisible) === true) formData.set(`isVisible_${i}`, "on");
       if (edit.removeImage) formData.set(`removeImage_${i}`, "on");
+      if (edit.removeDiagram) formData.set(`removeDiagram_${i}`, "on");
 
       // React has already collected the file inputs, which are the only named
       // controls on the page — everything else is React state.
-      const chosen = formData.get(`file-${key}`);
-      if (chosen instanceof File && chosen.size > 0) formData.set(`imageFile_${i}`, chosen);
+      for (const slot of ["image", "diagram"] as const) {
+        const chosen = formData.get(fileKey(key, slot));
+        if (chosen instanceof File && chosen.size > 0) {
+          formData.set(`${slot}File_${i}`, chosen);
+        }
+      }
     });
 
     // The per-card file entries have been copied to the numbered slots the
     // action reads; sending them as well would be the same image twice.
     for (const name of [...formData.keys()]) {
-      if (name.startsWith("file-")) formData.delete(name);
+      if (name.startsWith("image-") || name.startsWith("diagram-")) formData.delete(name);
     }
 
     action(formData);
   }
 
-  const failureFor = (kind: string, id: number) =>
+  const failuresFor = (kind: string, id: number): CatalogMediaFailure[] =>
     state?.kind === "error"
-      ? state.failures.find((f) => f.entity === kind && f.id === id)
-      : undefined;
+      ? state.failures.filter((f) => f.entity === kind && f.id === id)
+      : [];
 
   return (
     <form action={submit}>
@@ -210,12 +240,12 @@ export function CatalogMediaEditor({
                 locale={locale}
                 generation={generation}
                 changed={changed(section.kind, entity)}
-                failure={failureFor(section.kind, entity.id)?.message}
+                failures={failuresFor(section.kind, entity.id)}
                 {...view(section.kind, entity)}
                 onChange={(patch) => set(section.kind, entity.id, patch)}
-                onFile={(name) =>
+                onFile={(slot, name) =>
                   setFiles((prev) => {
-                    const key = cardKey(section.kind, entity.id);
+                    const key = fileKey(cardKey(section.kind, entity.id), slot);
                     const next = { ...prev };
                     if (name) next[key] = name;
                     else delete next[key];
@@ -237,12 +267,16 @@ function Card({
   locale,
   generation,
   changed,
-  failure,
+  failures,
   nameEn,
   nameFa,
   imageUrl,
+  diagramUrl,
+  aboutEn,
+  aboutFa,
   isVisible,
   removeImage,
+  removeDiagram,
   onChange,
   onFile,
 }: {
@@ -251,17 +285,27 @@ function Card({
   locale: Locale;
   generation: number;
   changed: boolean;
-  failure: CatalogMediaMessage | undefined;
+  failures: CatalogMediaFailure[];
   nameEn: string;
   nameFa: string;
   imageUrl: string;
+  diagramUrl: string;
+  aboutEn: string;
+  aboutFa: string;
   isVisible: boolean;
   removeImage: boolean;
+  removeDiagram: boolean;
   onChange: (patch: Edit) => void;
-  onFile: (name: string | null) => void;
+  onFile: (slot: ImageSlot, name: string | null) => void;
 }) {
   const t = getDict(locale);
   const key = cardKey(kind, entity.id);
+  const described = Boolean(aboutEn || aboutFa || diagramUrl);
+  // A rejected description or diagram is inside the fold, so the fold has to
+  // open or the operator is told to fix something they cannot see.
+  const problemInside = failures.some(
+    (f) => f.field === "diagram" || f.message === "too-long",
+  );
 
   return (
     <div
@@ -321,12 +365,12 @@ function Card({
           <label className="grid gap-0.5 text-[11px]">
             {t.catalogEditImageFile}
             <input
-              key={`${key}-${generation}`}
+              key={`${key}-image-${generation}`}
               className="catalog-image-file text-[11px]"
-              name={`file-${key}`}
+              name={fileKey(key, "image")}
               type="file"
               accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
-              onChange={(e) => onFile(e.target.files?.[0]?.name ?? null)}
+              onChange={(e) => onFile("image", e.target.files?.[0]?.name ?? null)}
             />
           </label>
         </div>
@@ -356,14 +400,122 @@ function Card({
           )}
         </div>
 
-        {failure && (
-          <p className="border border-[#e0b4b0] bg-[#fdf2f1] px-2.5 py-1.5 text-[11px] text-[var(--color-danger)]">
-            {errorText(failure, t)}
+        {/*
+          The description and its diagram fold away: a category page carries a
+          dozen families, and four more controls on every card would treble the
+          height of a page nobody has typed into yet.
+
+          A click inside a <summary> cancels the click's default action, so a
+          control in there can never submit. Nothing is in the summary but the
+          label and its marker; the page's one Save button stays in the header.
+        */}
+        <details className="admin-group" open={problemInside || undefined}>
+          <summary className="flex cursor-pointer items-center gap-2 text-[11px] font-semibold">
+            <span>{t.catalogEditDescription}</span>
+            {described && (
+              <span className="font-normal text-[var(--color-ink-muted)]">
+                ({t.catalogEditDescriptionSet})
+              </span>
+            )}
+          </summary>
+
+          <div className="grid gap-2 pt-2">
+            <label className="grid gap-0.5 text-[11px]">
+              {t.catalogEditAboutEn}
+              <textarea
+                className="admin-input w-full"
+                name={`card-aboutEn-${key}`}
+                rows={4}
+                dir="ltr"
+                maxLength={REQUEST_LIMITS.catalogDescriptionChars}
+                value={aboutEn}
+                onChange={(e) => onChange({ aboutEn: e.target.value })}
+              />
+            </label>
+            <label className="grid gap-0.5 text-[11px]">
+              {t.catalogEditAboutFa}
+              <textarea
+                className="admin-input w-full"
+                name={`card-aboutFa-${key}`}
+                rows={4}
+                dir="rtl"
+                maxLength={REQUEST_LIMITS.catalogDescriptionChars}
+                placeholder={t.catalogEditAboutFaHint}
+                value={aboutFa}
+                onChange={(e) => onChange({ aboutFa: e.target.value })}
+              />
+            </label>
+            <p className="text-[10.5px] text-[var(--color-ink-muted)]">
+              {t.catalogEditAboutHelp}
+            </p>
+
+            <div className="grid gap-2 md:grid-cols-2">
+              <label className="grid gap-0.5 text-[11px]">
+                {t.catalogEditDiagramUrl}
+                <input
+                  className="admin-input w-full"
+                  name={`card-diagramUrl-${key}`}
+                  type="url"
+                  inputMode="url"
+                  placeholder="https://…"
+                  dir="ltr"
+                  value={diagramUrl}
+                  onChange={(e) => onChange({ diagramUrl: e.target.value })}
+                />
+              </label>
+              <label className="grid gap-0.5 text-[11px]">
+                {t.catalogEditDiagramFile}
+                <input
+                  key={`${key}-diagram-${generation}`}
+                  className="catalog-image-file text-[11px]"
+                  name={fileKey(key, "diagram")}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
+                  onChange={(e) => onFile("diagram", e.target.files?.[0]?.name ?? null)}
+                />
+              </label>
+            </div>
+
+            <p className="text-[10.5px] text-[var(--color-ink-muted)]">
+              {t.catalogEditDiagramHelp}
+            </p>
+
+            {entity.diagramUrl && (
+              <label className="inline-flex items-center gap-1.5 text-[11px] text-[var(--color-ink-muted)]">
+                <input
+                  name={`card-removeDiagram-${key}`}
+                  type="checkbox"
+                  checked={removeDiagram}
+                  onChange={(e) => onChange({ removeDiagram: e.target.checked })}
+                />
+                {t.catalogEditRemoveDiagram}
+              </label>
+            )}
+          </div>
+        </details>
+
+        {failures.map((failure, index) => (
+          <p
+            key={index}
+            className="border border-[#e0b4b0] bg-[#fdf2f1] px-2.5 py-1.5 text-[11px] text-[var(--color-danger)]"
+          >
+            {failureText(failure, t)}
           </p>
-        )}
+        ))}
       </div>
     </div>
   );
+}
+
+/** The same message, said about whichever of the two image slots was at fault. */
+function failureText(
+  failure: CatalogMediaFailure,
+  t: ReturnType<typeof getDict>,
+): string {
+  const problem = errorText(failure.message, t);
+  return failure.field === "diagram"
+    ? t.catalogEditDiagramProblem.replace("{problem}", problem)
+    : problem;
 }
 
 function errorText(message: CatalogMediaMessage, t: ReturnType<typeof getDict>): string {
@@ -371,6 +523,7 @@ function errorText(message: CatalogMediaMessage, t: ReturnType<typeof getDict>):
   if (message === "bad-url") return t.catalogEditBadUrl;
   if (message === "bad-file-type") return t.catalogEditBadFileType;
   if (message === "too-large") return t.catalogEditTooLarge;
+  if (message === "too-long") return t.catalogEditTooLong;
   if (message === "storage-missing") return t.catalogEditStorageMissing;
   if (message === "upload-failed") return t.catalogEditUploadFailed;
   return t.catalogEditNotFound;
