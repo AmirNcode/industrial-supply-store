@@ -8,6 +8,7 @@ import { formatInt } from "@/lib/money";
 import { saveFamilyOrderAction } from "./actions";
 import type { ImportState } from "@/lib/catalogImport";
 import { IMPORT_MAX_BYTES } from "@/lib/importLimits";
+import { csvFileForUpload } from "@/lib/importUploadClient";
 import { ColumnReview } from "./ColumnReview";
 import { DeleteControl } from "./DeleteControl";
 import { UnsavedOrderGuard } from "./UnsavedOrderGuard";
@@ -130,15 +131,20 @@ export function ImportPanel({
         const supabase = createClient(prepared.upload.browserUrl, prepared.upload.browserKey, {
           auth: { autoRefreshToken: false, detectSessionInUrl: false, persistSession: false },
         });
+        const uploadFile = csvFileForUpload(selected);
         const { error } = await supabase.storage
           .from(prepared.upload.bucket)
           .uploadToSignedUrl(
             prepared.upload.path,
             prepared.upload.storageToken,
-            selected,
+            uploadFile,
             { contentType: "text/csv", cacheControl: "7200" },
           );
         if (error) {
+          console.error("Catalog CSV upload failed before review.", {
+            name: error.name,
+            message: error.message,
+          });
           setState({ kind: "message", familyId, message: "upload-failed" });
           return;
         }
@@ -161,7 +167,11 @@ export function ImportPanel({
       if (!processed.state) throw new Error("No import result returned");
       setState(processed.state);
       if (processed.state.kind !== "review") setUploadHandle(null);
-    } catch {
+    } catch (error) {
+      console.error("Catalog CSV import request failed.", {
+        name: error instanceof Error ? error.name : "UnknownError",
+        message: error instanceof Error ? error.message : "Unknown import error",
+      });
       setState({ kind: "message", familyId, message: "upload-failed" });
     } finally {
       setImportPending(false);

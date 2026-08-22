@@ -56,6 +56,13 @@ Set in Vercel → Settings → Environment Variables → Production.
 | `SUPABASE_CATALOG_BUCKET` | runtime image upload | defaults to public `catalog-images` |
 | `SUPABASE_IMPORT_BUCKET` | runtime CSV import | defaults to private `catalog-imports` |
 
+CSV imports deliberately read only the unprefixed runtime Supabase variables
+in this table. The authenticated import route returns the public URL and
+publishable/anon key only with a short-lived, path-specific upload token. Do not
+add `NEXT_PUBLIC_SUPABASE_*` copies: Next.js freezes them into the build, so a
+stale value can send the browser to a different Supabase project even while the
+server is connected to the correct one.
+
 `AUTH_SECRET` is the surprising one. `src/lib/session.ts` resolves it at module
 import, so `next build` needs it during "Collecting page data" — not only the
 running server. That is deliberate: a deploy that fails is better than a
@@ -238,7 +245,9 @@ result. A later prepare request sweeps abandoned objects older than three hours.
 The browser receives only the publishable/anon key and a path-specific signed
 upload token. The secret/service-role key stays server-side. Keep the import
 bucket distinct from the public catalog-image bucket; startup validation rejects
-a shared name. The importer accepts at most 24 MB and 20,000 data rows.
+a shared name. Startup validation also rejects hosted Supabase URLs and legacy
+JWT keys that identify different projects. The importer accepts at most 24 MB
+and 20,000 data rows.
 
 ### 5. Supabase's direct host is IPv6-only
 

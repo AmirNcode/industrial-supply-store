@@ -33,7 +33,12 @@ function sameOrigin(request: Request): boolean {
   }
 }
 
-function storageFailure(error: unknown, familyId: number) {
+function storageFailure(error: unknown, familyId: number, phase: "prepare" | "process") {
+  console.error("Catalog import storage operation failed.", {
+    phase,
+    problem: error instanceof ImportStorageError ? error.problem : "unexpected",
+    name: error instanceof Error ? error.name : "UnknownError",
+  });
   const message =
     error instanceof ImportStorageError && error.problem === "not-configured"
       ? "storage-missing"
@@ -103,7 +108,7 @@ export async function POST(request: Request) {
         { headers: NO_STORE },
       );
     } catch (error) {
-      return storageFailure(error, familyId);
+      return storageFailure(error, familyId, "prepare");
     }
   }
 
@@ -151,7 +156,7 @@ export async function POST(request: Request) {
       }
       return NextResponse.json({ state }, { headers: NO_STORE });
     } catch (error) {
-      return storageFailure(error, familyId);
+      return storageFailure(error, familyId, "process");
     }
   }
 

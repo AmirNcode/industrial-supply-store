@@ -5,75 +5,26 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { AUTH_SECRET } from "./authSecret";
 import { IMPORT_MAX_BYTES } from "./importLimits";
 import {
+  ImportStorageError,
+  resolveImportStorageConfig,
+  type ImportStorageConfig,
+} from "./importStorageConfig";
+import {
   signImportUploadClaim,
   verifyImportUploadClaim,
   type ImportUploadClaim,
 } from "./importUploadToken";
 
-const DEFAULT_BUCKET = "catalog-imports";
 const TWO_HOURS = 2 * 60 * 60 * 1_000;
 
-export class ImportStorageError extends Error {
-  constructor(
-    readonly problem: "not-configured" | "upload-failed" | "invalid-upload",
-    message: string,
-  ) {
-    super(message);
-    this.name = "ImportStorageError";
-  }
-}
-
-type Config = {
-  apiUrl: string;
-  browserUrl: string;
-  browserKey: string;
-  secret: string;
-  bucket: string;
-};
-
-function config(): Config {
-  const apiUrl = process.env.SUPABASE_URL?.trim() ?? "";
-  const browserUrl =
-    process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() ||
-    process.env.SUPABASE_PUBLIC_URL?.trim() ||
-    apiUrl;
-  const browserKey =
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY?.trim() ||
-    process.env.SUPABASE_PUBLISHABLE_KEY?.trim() ||
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim() ||
-    process.env.SUPABASE_ANON_KEY?.trim() ||
-    "";
-  const secret =
-    process.env.SUPABASE_SECRET_KEY?.trim() ||
-    process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() ||
-    "";
-  const bucket = process.env.SUPABASE_IMPORT_BUCKET?.trim() || DEFAULT_BUCKET;
-  const catalogBucket = process.env.SUPABASE_CATALOG_BUCKET?.trim() || "catalog-images";
-
-  if (!apiUrl || !browserUrl || !browserKey || !secret) {
-    throw new ImportStorageError(
-      "not-configured",
-      "Supabase URL, publishable key, and server secret are required for catalog imports.",
-    );
-  }
-  if (!/^[a-z0-9][a-z0-9._-]{2,62}$/i.test(bucket) || bucket === catalogBucket) {
-    throw new ImportStorageError("not-configured", "Invalid or shared import bucket name.");
-  }
-  try {
-    new URL(apiUrl);
-    new URL(browserUrl);
-  } catch {
-    throw new ImportStorageError("not-configured", "Invalid Supabase URL.");
-  }
-  return { apiUrl, browserUrl, browserKey, secret, bucket };
-}
+export { ImportStorageError } from "./importStorageConfig";
 
 let cachedKey = "";
 let cachedClient: SupabaseClient | null = null;
 let readyBucket = "";
 let bucketPromise: Promise<void> | null = null;
 
-function client(storage: Config): SupabaseClient {
+function client(storage: ImportStorageConfig): SupabaseClient {
   const key = `${storage.apiUrl}\n${storage.secret}`;
   if (cachedClient && cachedKey === key) return cachedClient;
   cachedKey = key;
@@ -166,7 +117,7 @@ export async function prepareImportUpload(
   }
 
   try {
-    const storage = config();
+    const storage = resolveImportStorageConfig();
     const supabase = client(storage);
     await ensurePrivateBucket(supabase, storage.bucket);
     await cleanupAbandonedUploads(supabase, storage.bucket);
@@ -209,7 +160,7 @@ export async function downloadImportUpload(
   }
 
   try {
-    const storage = config();
+    const storage = resolveImportStorageConfig();
     const { data, error } = await client(storage).storage.from(storage.bucket).download(claim.path);
     if (error || !data) throw error ?? new Error("Import object was not found");
     if (data.size !== claim.bytes || data.size > IMPORT_MAX_BYTES) {
@@ -226,7 +177,7 @@ export async function downloadImportUpload(
 }
 
 export async function removeImportUpload(path: string): Promise<void> {
-  const storage = config();
+  const storage = resolveImportStorageConfig();
   const { error } = await client(storage).storage.from(storage.bucket).remove([path]);
   if (error) throw new ImportStorageError("upload-failed", error.message);
 }
