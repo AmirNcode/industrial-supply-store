@@ -456,8 +456,8 @@ function SpecTable({
    * gate valve file is 47. Only the ones marked `table` become columns here;
    * the rest are the expanded row, reached from the part number.
    */
-  const tableDefs = defs.filter((d) => d.display === "table");
-  const detailDefs = defs.filter((d) => d.display === "detail");
+  const tableDefs = defs.filter((d) => d.inTable);
+  const detailDefs = defs.filter((d) => d.inDetail);
   // +1 for the card cell, which is empty on desktop but still a column.
   const columnCount = tableDefs.length + (hasBulk ? 7 : 6);
 

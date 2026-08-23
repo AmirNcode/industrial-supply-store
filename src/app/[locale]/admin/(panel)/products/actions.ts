@@ -2,16 +2,28 @@
 
 import { revalidatePath } from "next/cache";
 import { assertAdminWrite } from "@/lib/admin";
+import { catalogImageFileProblem } from "@/lib/catalogImages";
+import { CatalogStorageError, uploadCatalogImage } from "@/lib/catalogStorage";
+import { categoryNodeKey, familyNodeKey, type TaxonomyNodeKey } from "@/lib/adminTaxonomy";
+import { isLocale, safeLocale, type Locale } from "@/lib/i18n";
+import { REQUEST_LIMITS, boundedString, utf8ByteLength } from "@/lib/requestLimits";
 import {
+  createCategory,
   createFamily,
   deleteCategory,
   deleteFamily,
+  saveAdminTaxonomyChanges,
   saveFamilyOrder,
+  type TaxonomyContentChange,
+  type TaxonomyOrderChange,
 } from "@/db/familyQueries";
 
 export type NewFamilyState =
   | { kind: "created"; name: string }
-  | { kind: "error"; message: "no-name" | "no-category" };
+  | {
+      kind: "error";
+      message: "no-name" | "no-category" | "has-subcategories" | "duplicate-name";
+    };
 
 /**
  * Create an empty family for an upload to target.
@@ -34,6 +46,210 @@ export async function createFamilyAction(
 
   revalidatePath("/", "layout");
   return { kind: "created", name: String(formData.get("nameEn") ?? "").trim() };
+}
+
+export type TaxonomyCreateInput = {
+  kind: "category" | "family";
+  parentId: number | null;
+  name: string;
+  locale: Locale;
+};
+
+export type TaxonomyCreateResult =
+  | {
+      kind: "created";
+      createdKey: TaxonomyNodeKey;
+      selectionKey: TaxonomyNodeKey;
+    }
+  | {
+      kind: "error";
+      message:
+        | "no-name"
+        | "no-parent"
+        | "has-families"
+        | "has-subcategories"
+        | "duplicate-name";
+    };
+
+/** Create one taxonomy node immediately; the sticky Save never claims to undo it. */
+export async function createTaxonomyNodeAction(
+  input: TaxonomyCreateInput,
+): Promise<TaxonomyCreateResult> {
+  await assertAdminWrite();
+
+  if (
+    !input ||
+    (input.kind !== "category" && input.kind !== "family")
+  ) {
+    return { kind: "error", message: "no-parent" };
+  }
+  const locale = isLocale(input.locale) ? input.locale : "en";
+  const name = boundedString(input.name, 160);
+  if (!name) return { kind: "error", message: "no-name" };
+  const parentId = input.parentId;
+  if (
+    parentId !== null &&
+    (!Number.isInteger(parentId) || parentId <= 0)
+  ) {
+    return { kind: "error", message: "no-parent" };
+  }
+
+  // The accepted design has one name field. Until a translator supplies the
+  // second locale, a legible duplicate is better than a blank public heading.
+  const nameEn = name;
+  const nameFa = name;
+
+  if (input.kind === "family") {
+    if (parentId === null) return { kind: "error", message: "no-parent" };
+    const result = await createFamily(parentId, nameEn, nameFa);
+    if (!result.ok) {
+      return {
+        kind: "error",
+        message: result.reason === "no-category" ? "no-parent" : result.reason,
+      };
+    }
+    revalidatePath(`/${locale}/admin/products`);
+    revalidatePath("/[locale]/c/[...slug]", "page");
+    return {
+      kind: "created",
+      createdKey: familyNodeKey(result.id),
+      // The handoff keeps the owning category in the work pane so the new row
+      // and its import affordance are visible in context.
+      selectionKey: categoryNodeKey(parentId),
+    };
+  }
+
+  const result = await createCategory(parentId, nameEn, nameFa);
+  if (!result.ok) return { kind: "error", message: result.reason };
+  revalidatePath(`/${locale}/admin/products`);
+  return {
+    kind: "created",
+    createdKey: categoryNodeKey(result.id),
+    selectionKey: categoryNodeKey(result.id),
+  };
+}
+
+type TaxonomySavePayload = {
+  orders: TaxonomyOrderChange[];
+  content: Array<Omit<TaxonomyContentChange, "imageUrl"> & { imageIndex?: number }>;
+};
+
+export type TaxonomySaveResult =
+  | "saved"
+  | "stale"
+  | "bad-data"
+  | "bad-file-type"
+  | "too-large"
+  | "storage-missing"
+  | "upload-failed";
+
+/** Save all reversible workbench changes in one validated database transaction. */
+export async function saveTaxonomyWorkbenchAction(
+  formData: FormData,
+): Promise<TaxonomySaveResult> {
+  await assertAdminWrite();
+  const locale = safeLocale(formData);
+  const raw = String(formData.get("payload") ?? "");
+  if (utf8ByteLength(raw) > REQUEST_LIMITS.importerControlBytes) return "bad-data";
+
+  let payload: TaxonomySavePayload;
+  try {
+    payload = JSON.parse(raw) as TaxonomySavePayload;
+  } catch {
+    return "bad-data";
+  }
+  if (!Array.isArray(payload.orders) || !Array.isArray(payload.content)) return "bad-data";
+  if (payload.orders.length > 120 || payload.content.length > 220) return "bad-data";
+
+  const orders: TaxonomyOrderChange[] = [];
+  const orderScopes = new Set<string>();
+  for (const order of payload.orders) {
+    if (order?.kind !== "category" && order?.kind !== "family") return "bad-data";
+    if (!Array.isArray(order.orderedIds) || order.orderedIds.length > 240) return "bad-data";
+    if (!order.orderedIds.every((id) => Number.isInteger(id) && id > 0)) return "bad-data";
+    if (order.kind === "category") {
+      if (
+        order.parentId !== null &&
+        (!Number.isInteger(order.parentId) || order.parentId <= 0)
+      ) return "bad-data";
+    } else if (!Number.isInteger(order.parentId) || order.parentId <= 0) {
+      return "bad-data";
+    }
+    const scope = `${order.kind}:${order.parentId ?? "root"}`;
+    if (orderScopes.has(scope)) return "bad-data";
+    orderScopes.add(scope);
+    orders.push(order);
+  }
+
+  const content: TaxonomyContentChange[] = [];
+  const contentKeys = new Set<string>();
+  const uploads: Array<{ edit: TaxonomyContentChange; file: File }> = [];
+  for (const submitted of payload.content) {
+    if (submitted?.kind !== "category" && submitted?.kind !== "family") return "bad-data";
+    if (!Number.isInteger(submitted.id) || submitted.id <= 0) return "bad-data";
+    const aboutEn = boundedString(
+      submitted.aboutEn,
+      REQUEST_LIMITS.catalogDescriptionChars,
+      { allowEmpty: true, trim: false },
+    );
+    const aboutFa = boundedString(
+      submitted.aboutFa,
+      REQUEST_LIMITS.catalogDescriptionChars,
+      { allowEmpty: true, trim: false },
+    );
+    if (aboutEn === null || aboutFa === null) return "bad-data";
+    const key = `${submitted.kind}:${submitted.id}`;
+    if (contentKeys.has(key)) return "bad-data";
+    contentKeys.add(key);
+
+    const edit: TaxonomyContentChange = {
+      kind: submitted.kind,
+      id: submitted.id,
+      aboutEn,
+      aboutFa,
+    };
+    if (submitted.imageIndex !== undefined) {
+      if (!Number.isInteger(submitted.imageIndex) || submitted.imageIndex < 0) {
+        return "bad-data";
+      }
+      const candidate = formData.get(`image_${submitted.imageIndex}`);
+      if (!(candidate instanceof File) || candidate.size === 0) return "bad-data";
+      const problem = catalogImageFileProblem(candidate);
+      if (problem === "file-type") return "bad-file-type";
+      if (problem === "file-too-large") return "too-large";
+      uploads.push({ edit, file: candidate });
+    }
+    content.push(edit);
+  }
+
+  // Upload only after every field and every file is valid. Object storage
+  // cannot join a Postgres transaction, so a later DB-staleness refusal can
+  // still orphan an immutable object; the existing media editor has the same
+  // unavoidable boundary.
+  for (const upload of uploads) {
+    try {
+      upload.edit.imageUrl = await uploadCatalogImage(
+        upload.edit.kind,
+        upload.edit.id,
+        upload.file,
+      );
+    } catch (error) {
+      if (error instanceof CatalogStorageError && error.problem === "not-configured") {
+        return "storage-missing";
+      }
+      return "upload-failed";
+    }
+  }
+
+  if (!(await saveAdminTaxonomyChanges(orders, content))) return "stale";
+
+  if (content.length > 0) revalidatePath("/", "layout");
+  else {
+    revalidatePath("/[locale]", "page");
+    revalidatePath("/[locale]/c/[...slug]", "page");
+  }
+  revalidatePath(`/${locale}/admin/products`);
+  return "saved";
 }
 
 export type FamilyOrderResult = "saved" | "stale";

@@ -1,6 +1,6 @@
 import "server-only";
 import { sql } from "./index";
-import type { SpecBag, PriceTier, ProductDocument, SpecDisplay } from "./schema";
+import type { SpecBag, PriceTier, ProductDocument } from "./schema";
 
 export type CategoryRow = {
   id: number;
@@ -62,7 +62,8 @@ export type SpecDefRow = {
   filterable: boolean;
   sort: number;
   /** `table` is a spec-table column; `detail` shows only in the expanded row. */
-  display: SpecDisplay;
+  inTable: boolean;
+  inDetail: boolean;
   /** Shown on the collapsed phone card. */
   mobile: boolean;
 };
@@ -253,7 +254,7 @@ export async function getFamilyBySlug(slug: string): Promise<FamilyDetailRow | n
 export async function getSpecDefs(familyId: number): Promise<SpecDefRow[]> {
   return sql<SpecDefRow[]>`
     SELECT key, label_en AS "labelEn", label_fa AS "labelFa", unit, kind,
-           filterable, sort, display, mobile
+           filterable, sort, in_table AS "inTable", in_detail AS "inDetail", mobile
     FROM spec_defs WHERE family_id = ${familyId} ORDER BY sort
   `;
 }
@@ -598,7 +599,8 @@ export async function getSpecDefsForFamilies(
   if (familyIds.length === 0) return out;
   const rows = await sql<(SpecDefRow & { familyId: number })[]>`
     SELECT family_id AS "familyId", key, label_en AS "labelEn",
-           label_fa AS "labelFa", unit, kind, filterable, sort, display, mobile
+           label_fa AS "labelFa", unit, kind, filterable, sort,
+           in_table AS "inTable", in_detail AS "inDetail", mobile
     FROM spec_defs WHERE family_id = ANY(${familyIds}) ORDER BY family_id, sort
   `;
   for (const r of rows) {

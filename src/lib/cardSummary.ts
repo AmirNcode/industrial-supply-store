@@ -19,16 +19,16 @@ export type SummaryPart = { label: string | null; value: string; ltr: boolean };
  * The columns a card is allowed to lead with.
  *
  * `mobile` is the family's explicit answer and is honoured as given. Failing
- * that, `table`/filterable is the family's implicit answer to "which columns
- * identify a product", which is the same question a card asks — and it is the
- * only answer available for a family whose columns came from a supplier file,
- * where nothing is filterable until somebody says so.
+ * that, "in the table, or filterable" is the family's implicit answer to
+ * "which columns identify a product", which is the same question a card asks —
+ * and it is the only answer available for a family whose columns came from a
+ * supplier file, where nothing is filterable until somebody says so.
  */
 export function identifyingDefs(defs: readonly SpecDefRow[]): SpecDefRow[] {
   const mobile = defs.filter((d) => d.mobile);
   return mobile.length > 0
     ? mobile
-    : defs.filter((d) => d.display === "table" || d.filterable);
+    : defs.filter((d) => d.inTable || d.filterable);
 }
 
 /**

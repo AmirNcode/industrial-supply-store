@@ -120,6 +120,28 @@ added 52 pages, pushed several past the 60-second page ceiling, and failed the
 the route stays cacheable and the build pays nothing. `staticPageGenerationTimeout`
 is raised to 120 for the pages that still prerender.
 
+**A spec column's placement is two independent booleans, and `spec_defs.display`
+is dead.** `in_table` puts the column in the catalog spec table; `in_detail`
+puts it in the expanded product row. Either, both, or neither — neither means it
+renders nowhere while keeping its values, its facet rows and its place in
+`search_text`, which is what makes hiding reversible and distinct from deleting.
+The enum they replace could express only the first two combinations, so every
+column taken out of the table was silently pushed into the expanded row instead.
+`display` is still on the table, still defaulted, and **read by nothing**; it is
+retained for one release so a rollback needs no restore, and a follow-up
+migration must drop it. The dependency rules between the four checkboxes live in
+`src/lib/columnVisibility.ts` with tests — not in an `onChange`.
+
+**Nothing on this page may carry state in a hidden input.** React does not
+update `<input type="hidden" value={…}>` after mount, and React 19 resets a form
+once a `<form action={…}>` action settles, which returns controlled inputs to
+the values the server rendered. Together those made the column editor unable to
+save anything: the payload posted was the page's first render, and the display
+then snapped back so the failure looked like a caching problem. Build the
+payload in an `onSubmit` handler from current state, as `ColumnEditor` and
+`CatalogMediaEditor` both now do. `ColumnReview`/`ImportPanel` still carry the
+hidden-input version of this defect and are tracked separately.
+
 **A category or family has two image slots, and their sizes mean different
 things.** `image_url` is the catalog thumbnail: it identifies the entity in a
 tile, a card, a breadcrumb. `diagram_url` is the second slot, for a labelled
@@ -174,6 +196,16 @@ from the order the operator arranged rather than swapping two rows, because
 swapping two zeros changes nothing. It refuses any list that is not exactly the
 category's own families — no partial orders from a page drawn before something
 else changed.
+
+**Taxonomy children are one kind per category, at any depth.** A category may
+hold subcategories or product families, never both. A family may therefore hang
+directly under a top-level category, or several levels down, provided its parent
+has no subcategories. `/admin/products` disables the illegal action in the UI,
+and `createCategory` / `createFamily` repeat the check inside the insert
+transaction under the same advisory lock. Ordering remains sibling-scoped:
+category runs are keyed by `parent_id`, family runs by `category_id`, and the
+workbench's page-level Save exact-membership checks every changed run before the
+first write.
 
 **A click inside a `<summary>` cannot submit a form.** The admin group headers
 cancel the click's default action so pressing a control does not also collapse

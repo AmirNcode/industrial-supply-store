@@ -72,6 +72,10 @@ const COLUMNS: readonly (readonly [string, string])[] = [
   ["categories", "about_fa"],
   ["categories", "diagram_url"],
   ["product_families", "diagram_url"],
+  // Added 2026-08-20 by `20260820154500_split_column_display.sql`. Every
+  // catalog route selects these to decide where a spec column renders.
+  ["spec_defs", "in_table"],
+  ["spec_defs", "in_detail"],
 ];
 
 const present = await sql<{ name: string }[]>`
@@ -197,6 +201,7 @@ const REQUIRED_MIGRATIONS = [
   "20260817020000",
   "20260818025101",
   "20260820093000",
+  "20260820154500",
 ] as const;
 let recordedMigrations = new Set<string>();
 if (hasMigrationLedger) {

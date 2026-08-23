@@ -115,8 +115,8 @@ export const categories = pgTable(
 
 /**
  * A product family is one heading in the spec table view — "Oil-Resistant
- * Buna-N O-Rings". It always hangs off a leaf category and owns its own spec
- * column definitions.
+ * Buna-N O-Rings". It hangs off a category at any depth, provided that category
+ * has no subcategories, and owns its own spec column definitions.
  */
 export const productFamilies = pgTable(
   "product_families",
@@ -184,13 +184,26 @@ export const specDefs = pgTable(
     filterable: boolean("filterable").notNull().default(false),
     sort: integer("sort").notNull().default(0),
     /**
-     * `table` renders as a spec-table column; `detail` renders only in a
-     * product's expanded row. Defaults to `table` so every column that existed
-     * before tiering keeps rendering exactly where it did.
+     * Superseded by `inTable`/`inDetail` on 2026-08-20 and no longer read.
+     *
+     * Kept for one release so a restore is possible without one; a later
+     * migration drops it. Its default is what keeps an insert that still names
+     * the old column valid.
      */
     display: text("display", { enum: ["table", "detail"] })
       .notNull()
       .default("table"),
+    /**
+     * Where the column renders, as two independent flags.
+     *
+     * The enum they replace could say "table" or "detail" but never both and
+     * never neither, so there was no way to hide a column: everything taken out
+     * of the table was pushed into the expanded row instead. A family may hold
+     * far more columns than a table can show — the first gate valve file has 45
+     * — and some of them are worth neither place.
+     */
+    inTable: boolean("in_table").notNull().default(true),
+    inDetail: boolean("in_detail").notNull().default(false),
     /**
      * Show this column on the collapsed phone card.
      *

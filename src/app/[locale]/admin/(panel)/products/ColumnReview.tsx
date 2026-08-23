@@ -86,7 +86,8 @@ export function ColumnReview({
               labelFa: label,
               unit: "",
               specKind: "text",
-              display: "detail",
+              inTable: false,
+              inDetail: true,
               filterable: false,
             },
       );
@@ -121,8 +122,8 @@ export function ColumnReview({
    */
   const tableColumns =
     1 +
-    plans.filter((p) => p.role === "spec" && p.display === "table").length +
-    missing.filter((m) => m.display === "table" && !dropKeys.includes(m.key)).length;
+    plans.filter((p) => p.role === "spec" && p.inTable).length +
+    missing.filter((m) => m.inTable && !dropKeys.includes(m.key)).length;
 
   const plan = JSON.stringify({ headers: plans, dropKeys, mode, skipBadRows });
   const badRowCount = new Set(rowProblems.map((e) => e.row)).size;
@@ -293,9 +294,17 @@ export function ColumnReview({
                         {p.role === "spec" ? (
                           <input
                             type="checkbox"
-                            checked={p.display === "table"}
+                            checked={p.inTable}
+                            /* One tick, two flags: the review screen still
+                               offers "in the catalog table or in the expanded
+                               row", exactly as before. The four-way choice
+                               lives in the column editor. */
                             onChange={(e) =>
-                              update(i, { ...p, display: e.target.checked ? "table" : "detail" })
+                              update(i, {
+                                ...p,
+                                inTable: e.target.checked,
+                                inDetail: !e.target.checked,
+                              })
                             }
                           />
                         ) : (

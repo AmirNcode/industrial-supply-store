@@ -67,7 +67,7 @@ export function ProductCardList({
   const identifying =
     mobileDefs.length > 0
       ? mobileDefs
-      : (defs ?? []).filter((d) => d.display === "table" || d.filterable);
+      : (defs ?? []).filter((d) => d.inTable || d.filterable);
 
   /**
    * Summarise the specs that actually differ across the visible rows.
@@ -95,7 +95,7 @@ export function ProductCardList({
    * a summary that wraps to a third line.
    */
   const summaryDefs = (varying.length > 0 ? varying : identifying).slice(0, 6);
-  const detailDefs = (defs ?? []).filter((d) => d.display === "detail");
+  const detailDefs = (defs ?? []).filter((d) => d.inDetail);
 
   type SummaryPart = { label: string | null; value: string; ltr: boolean };
 
@@ -117,7 +117,7 @@ export function ProductCardList({
             const mob = forFamily.filter((d) => d.mobile);
             return (mob.length > 0
               ? mob
-              : forFamily.filter((d) => d.display === "table" || d.filterable)
+              : forFamily.filter((d) => d.inTable || d.filterable)
             ).slice(0, 3);
           })()
         : summaryDefs;

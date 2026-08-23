@@ -142,7 +142,7 @@ test("new spec columns land in the expanded row, not the table", () => {
   const specs = a.headers.filter((h) => h.plan.role === "spec");
   assert.ok(specs.length > 30);
   assert.ok(
-    specs.every((h) => h.plan.role === "spec" && h.plan.display === "detail"),
+    specs.every((h) => h.plan.role === "spec" && !h.plan.inTable && h.plan.inDetail),
     "a 47-column table would be unreadable on the first upload",
   );
 });
@@ -184,7 +184,8 @@ const def = (over: Partial<ExistingDef> & { key: string }): ExistingDef => ({
   unit: "",
   kind: "text",
   filterable: false,
-  display: "table",
+  inTable: true,
+  inDetail: false,
   csvAlias: null,
   ...over,
 });
@@ -200,7 +201,8 @@ test("a header matching an existing column keeps that column's settings", () => 
   assert.equal(found?.isNew, false);
   assert.equal(found?.plan.role === "spec" && found.plan.labelFa, "اندازه شیر");
   assert.equal(found?.plan.role === "spec" && found.plan.filterable, true);
-  assert.equal(found?.plan.role === "spec" && found.plan.display, "table");
+  assert.equal(found?.plan.role === "spec" && found.plan.inTable, true);
+  assert.equal(found?.plan.role === "spec" && found.plan.inDetail, false);
   assert.equal(a.missing.length, 0);
 });
 
@@ -209,7 +211,7 @@ test("a column the file has stopped carrying is reported as missing", () => {
   const a = analyzeCsv(GATE_VALVE, defs);
   assert.equal(a.ok, true);
   if (!a.ok) return;
-  assert.deepEqual(a.missing, [{ key: "durometer", labelEn: "Durometer", display: "table" }]);
+  assert.deepEqual(a.missing, [{ key: "durometer", labelEn: "Durometer", inTable: true }]);
 });
 
 test("a remembered alias matches a header the supplier spells differently", () => {
@@ -264,7 +266,8 @@ const spec = (key: string, over: Partial<Extract<HeaderPlan, { role: "spec" }>> 
     labelFa: key,
     unit: "",
     specKind: "text" as const,
-    display: "detail" as const,
+    inTable: false as boolean,
+    inDetail: true as boolean,
     filterable: false,
     ...over,
   });
@@ -341,14 +344,14 @@ test("the plan from the real file validates once a part number is mapped", () =>
 // Turning a plan into rows to write
 // ---------------------------------------------------------------------------
 
-test("table columns sort before detail columns", () => {
+test("table columns sort before the ones the table does not show", () => {
   const plan: ImportPlan = {
     headers: [
       partNo,
-      spec("bore_size", { display: "detail" }),
-      spec("valve_size", { display: "table" }),
-      spec("psl", { display: "detail" }),
-      spec("pressure_rating", { display: "table" }),
+      spec("bore_size", { inTable: false, inDetail: true }),
+      spec("valve_size", { inTable: true, inDetail: false }),
+      spec("psl", { inTable: false, inDetail: true }),
+      spec("pressure_rating", { inTable: true, inDetail: false }),
     ],
     dropKeys: [],
     mode: "update",

@@ -3,23 +3,24 @@ import type { TransactionSql } from "postgres";
 import { sql } from "./index";
 import type { ImportSpecDef, ImportRow } from "@/lib/importCsv";
 import { plannedAliases, plannedDefs, type ImportPlan } from "@/lib/columnPlan";
-import type { FieldAliases, SpecDisplay } from "./schema";
+import type { FieldAliases } from "./schema";
 import { reconcileInventoryForProducts } from "./dataIntegrity";
 
 /**
  * A family's spec column, in full.
  *
  * `filterable` is what the write half needs — only a filterable spec becomes a
- * row in `product_spec_values`, which is the facet index. The labels and
- * `display` are what the analyzer needs, so a header matching an existing
- * column can keep the settings someone already chose for it.
+ * row in `product_spec_values`, which is the facet index. The labels and the
+ * two placement flags are what the analyzer needs, so a header matching an
+ * existing column can keep the settings someone already chose for it.
  */
 export type FamilySpecDef = ImportSpecDef & {
   labelEn: string;
   labelFa: string;
   unit: string;
   filterable: boolean;
-  display: SpecDisplay;
+  inTable: boolean;
+  inDetail: boolean;
   csvAlias: string | null;
 };
 
@@ -51,7 +52,8 @@ export async function getFamilyForImport(id: number): Promise<FamilyForImport | 
     `,
     sql<FamilySpecDef[]>`
       SELECT key, label_en AS "labelEn", label_fa AS "labelFa", unit, kind,
-             filterable, display, csv_alias AS "csvAlias"
+             filterable, in_table AS "inTable", in_detail AS "inDetail",
+             csv_alias AS "csvAlias"
       FROM spec_defs WHERE family_id = ${id} ORDER BY sort, id
     `,
   ]);
@@ -295,9 +297,10 @@ async function syncColumns(tx: Tx, family: FamilyForImport, plan: ImportPlan) {
     const chunk = defs.slice(i, i + CHUNK);
     await tx`
       INSERT INTO spec_defs (family_id, key, label_en, label_fa, unit, kind,
-                             filterable, sort, display, csv_alias)
+                             filterable, sort, in_table, in_detail, csv_alias)
       SELECT ${familyId}, u.key, u.label_en, u.label_fa, u.unit, u.kind,
-             u.filterable::boolean, u.sort, u.display, NULLIF(u.csv_alias, '')
+             u.filterable::boolean, u.sort, u.in_table::boolean,
+             u.in_detail::boolean, NULLIF(u.csv_alias, '')
       FROM unnest(
         ${chunk.map((d) => d.key)}::text[],
         ${chunk.map((d) => d.labelEn)}::text[],
@@ -307,9 +310,11 @@ async function syncColumns(tx: Tx, family: FamilyForImport, plan: ImportPlan) {
         -- Text then cast, as elsewhere: postgres-js infers no boolean array.
         ${chunk.map((d) => (d.filterable ? "t" : "f"))}::text[],
         ${chunk.map((d) => d.sort)}::int[],
-        ${chunk.map((d) => d.display)}::text[],
+        ${chunk.map((d) => (d.inTable ? "t" : "f"))}::text[],
+        ${chunk.map((d) => (d.inDetail ? "t" : "f"))}::text[],
         ${chunk.map((d) => d.csvAlias ?? "")}::text[]
-      ) AS u(key, label_en, label_fa, unit, kind, filterable, sort, display, csv_alias)
+      ) AS u(key, label_en, label_fa, unit, kind, filterable, sort, in_table,
+             in_detail, csv_alias)
       ON CONFLICT (family_id, key) DO UPDATE SET
         label_en = EXCLUDED.label_en,
         label_fa = EXCLUDED.label_fa,
@@ -317,7 +322,8 @@ async function syncColumns(tx: Tx, family: FamilyForImport, plan: ImportPlan) {
         kind = EXCLUDED.kind,
         filterable = EXCLUDED.filterable,
         sort = EXCLUDED.sort,
-        display = EXCLUDED.display,
+        in_table = EXCLUDED.in_table,
+        in_detail = EXCLUDED.in_detail,
         csv_alias = EXCLUDED.csv_alias
     `;
   }

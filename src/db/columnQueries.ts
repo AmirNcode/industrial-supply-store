@@ -2,7 +2,6 @@ import "server-only";
 import type { TransactionSql } from "postgres";
 import { sql } from "./index";
 import { NUMERIC_SPEC_PATTERN } from "./dataIntegrity";
-import type { SpecDisplay } from "./schema";
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 type Tx = TransactionSql<{}>;
@@ -23,8 +22,11 @@ export type EditableDef = {
   unit: string;
   kind: "number" | "text";
   filterable: boolean;
-  display: SpecDisplay;
-  /** Shown on the collapsed phone card. */
+  /** A column in the catalog spec table. */
+  inTable: boolean;
+  /** A row in the expanded product detail. Independent of `inTable`. */
+  inDetail: boolean;
+  /** Shown on the collapsed phone card. Only meaningful while `inTable`. */
   mobile: boolean;
   sort: number;
   /** How many products hold a value, so deleting one is an informed decision. */
@@ -34,7 +36,8 @@ export type EditableDef = {
 export async function getEditableDefs(familyId: number): Promise<EditableDef[]> {
   return sql<EditableDef[]>`
     SELECT d.key, d.label_en AS "labelEn", d.label_fa AS "labelFa", d.unit,
-           d.kind, d.filterable, d.display, d.mobile, d.sort,
+           d.kind, d.filterable, d.in_table AS "inTable",
+           d.in_detail AS "inDetail", d.mobile, d.sort,
            COALESCE(v.n, 0)::int AS "productCount"
     FROM spec_defs d
     -- One pass over the family's products rather than a subquery per column:
@@ -57,7 +60,8 @@ export type ColumnEdit = {
   unit: string;
   kind: "number" | "text";
   filterable: boolean;
-  display: SpecDisplay;
+  inTable: boolean;
+  inDetail: boolean;
   mobile: boolean;
 };
 
@@ -110,7 +114,8 @@ export async function saveColumnsInTransaction(
         unit = u.unit,
         kind = u.kind,
         filterable = u.filterable::boolean,
-        display = u.display,
+        in_table = u.in_table::boolean,
+        in_detail = u.in_detail::boolean,
         mobile = u.mobile::boolean,
         sort = u.sort
       FROM unnest(
@@ -120,10 +125,11 @@ export async function saveColumnsInTransaction(
         ${edits.map((e) => e.unit)}::text[],
         ${edits.map((e) => e.kind)}::text[],
         ${edits.map((e) => (e.filterable ? "t" : "f"))}::text[],
-        ${edits.map((e) => e.display)}::text[],
+        ${edits.map((e) => (e.inTable ? "t" : "f"))}::text[],
+        ${edits.map((e) => (e.inDetail ? "t" : "f"))}::text[],
         ${edits.map((e) => (e.mobile ? "t" : "f"))}::text[]
       ) WITH ORDINALITY AS u(key, label_en, label_fa, unit, kind, filterable,
-                             display, mobile, sort)
+                             in_table, in_detail, mobile, sort)
       WHERE d.family_id = ${familyId} AND d.key = u.key
     `;
   }

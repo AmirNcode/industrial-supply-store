@@ -18,3 +18,6 @@ docker-compose.override.yml
 
 # `vercel env pull` output — carries real project keys.
 venv.txt
+
+# Local design prototype retained as implementation reference.
+docs/design_handoff_admin_products_taxonomy/

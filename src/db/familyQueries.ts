@@ -1,5 +1,11 @@
 import "server-only";
 import { sql } from "./index";
+import {
+  categoryNodeKey,
+  familyNodeKey,
+  normalizeTaxonomyName,
+  type AdminTaxonomyNode,
+} from "@/lib/adminTaxonomy";
 
 /**
  * Creating a product family from the admin panel.
@@ -66,6 +72,78 @@ export type CatalogCategoryEditor = {
   children: CatalogCategoryEditorRow[];
   families: CatalogFamilyEditorRow[];
 };
+
+/**
+ * The complete admin tree in one database round trip.
+ *
+ * Category product counts are already denormalised subtree totals. Family
+ * counts and stock are aggregated once here, rather than queried per row by
+ * the client workbench.
+ */
+export async function getAdminTaxonomyNodes(): Promise<AdminTaxonomyNode[]> {
+  type RawNode = Omit<AdminTaxonomyNode, "key" | "kind"> & {
+    kind: "category" | "family";
+  };
+
+  const rows = await sql<RawNode[]>`
+    WITH ordered AS (
+      SELECT p.family_id, count(DISTINCT p.id)::int AS product_count
+      FROM products p
+      JOIN order_items i ON i.product_id = p.id
+      GROUP BY p.family_id
+    ), family_rollup AS (
+      SELECT anc.id AS category_id, count(f.id)::int AS family_count,
+             COALESCE(sum(o.product_count), 0)::int AS ordered_products
+      FROM categories anc
+      LEFT JOIN categories child
+        ON child.path = anc.path OR child.path LIKE anc.path || '/%'
+      LEFT JOIN product_families f ON f.category_id = child.id
+      LEFT JOIN ordered o ON o.family_id = f.id
+      GROUP BY anc.id
+    ), inventory AS (
+      SELECT family_id,
+             COALESCE(sum(inventory_available), 0)::int AS available,
+             COALESCE(sum(inventory_on_hold), 0)::int AS on_hold,
+             COALESCE(sum(inventory_sold), 0)::int AS sold
+      FROM products
+      GROUP BY family_id
+    )
+    SELECT 'category'::text AS kind, c.id, c.parent_id AS "parentId",
+           c.depth, c.slug, c.path, c.sort,
+           c.name_en AS "nameEn", c.name_fa AS "nameFa",
+           c.image_url AS "imageUrl", c.about_en AS "aboutEn",
+           c.about_fa AS "aboutFa", c.is_visible AS "isVisible",
+           c.product_count AS "productCount",
+           COALESCE(fr.family_count, 0)::int AS "familyCount",
+           0::int AS "inventoryAvailable", 0::int AS "inventoryOnHold",
+           0::int AS "inventorySold",
+           COALESCE(fr.ordered_products, 0)::int AS "orderedProducts"
+    FROM categories c
+    LEFT JOIN family_rollup fr ON fr.category_id = c.id
+
+    UNION ALL
+
+    SELECT 'family'::text AS kind, f.id, f.category_id AS "parentId",
+           c.depth + 1 AS depth, f.slug, c.path || '/' || f.slug AS path,
+           f.sort, f.name_en AS "nameEn", f.name_fa AS "nameFa",
+           f.image_url AS "imageUrl", f.about_en AS "aboutEn",
+           f.about_fa AS "aboutFa", f.is_visible AS "isVisible",
+           f.product_count AS "productCount", 0::int AS "familyCount",
+           COALESCE(i.available, 0)::int AS "inventoryAvailable",
+           COALESCE(i.on_hold, 0)::int AS "inventoryOnHold",
+           COALESCE(i.sold, 0)::int AS "inventorySold",
+           COALESCE(o.product_count, 0)::int AS "orderedProducts"
+    FROM product_families f
+    JOIN categories c ON c.id = f.category_id
+    LEFT JOIN inventory i ON i.family_id = f.id
+    LEFT JOIN ordered o ON o.family_id = f.id
+  `;
+
+  return rows.map((row) => ({
+    ...row,
+    key: row.kind === "category" ? categoryNodeKey(row.id) : familyNodeKey(row.id),
+  }));
+}
 
 /** Every taxonomy node, including branch categories that own no family rows. */
 export async function getCatalogCategoriesForAdmin(): Promise<CatalogCategoryListRow[]> {
@@ -159,13 +237,7 @@ export async function updateCatalogFamily(input: CatalogEntityUpdate): Promise<b
   return rows.length > 0;
 }
 
-/**
- * Categories a family may hang off — the leaves.
- *
- * A family under a branch category would sit alongside that branch's
- * subcategories in the navigation, which has no meaning: the taxonomy's
- * invariant is that products live at the bottom.
- */
+/** Childless categories used by the legacy family picker. Any depth is valid. */
 export async function getLeafCategories(): Promise<CategoryChoice[]> {
   return sql<CategoryChoice[]>`
     SELECT c.id, c.path, c.name_en AS "nameEn", c.name_fa AS "nameFa"
@@ -185,6 +257,82 @@ export function familySlug(name: string): string {
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-+|-+$/g, "") || "family"
   );
+}
+
+export type CreateCategoryResult =
+  | { ok: true; id: number; path: string }
+  | {
+      ok: false;
+      reason: "no-name" | "no-parent" | "has-families" | "duplicate-name";
+    };
+
+/**
+ * Append a category at one sibling scope while enforcing the no-mixed-children
+ * rule in the same transaction as the insert.
+ */
+export async function createCategory(
+  parentId: number | null,
+  nameEn: string,
+  nameFa: string,
+): Promise<CreateCategoryResult> {
+  const en = nameEn.trim().replace(/\s+/g, " ");
+  if (!en) return { ok: false, reason: "no-name" };
+  const fa = nameFa.trim().replace(/\s+/g, " ") || en;
+  const normalized = normalizeTaxonomyName(en);
+
+  return sql.begin(async (tx) => {
+    // Serialise taxonomy creation so slug/path selection and the R2/R3 check
+    // cannot race another category/family insert.
+    await tx`SELECT pg_advisory_xact_lock(hashtext('admin-taxonomy-create'))`;
+
+    let parent: { id: number; path: string; depth: number } | null = null;
+    if (parentId !== null) {
+      [parent] = await tx<{ id: number; path: string; depth: number }[]>`
+        SELECT id, path, depth FROM categories WHERE id = ${parentId}
+      `;
+      if (!parent) return { ok: false as const, reason: "no-parent" as const };
+
+      const [family] = await tx<{ id: number }[]>`
+        SELECT id FROM product_families WHERE category_id = ${parentId} LIMIT 1
+      `;
+      if (family) return { ok: false as const, reason: "has-families" as const };
+    }
+
+    const [duplicate] = await tx<{ id: number }[]>`
+      SELECT id FROM categories
+      WHERE parent_id IS NOT DISTINCT FROM ${parentId}::int
+        AND lower(regexp_replace(btrim(name_en), '\\s+', ' ', 'g')) = ${normalized}
+      LIMIT 1
+    `;
+    if (duplicate) return { ok: false as const, reason: "duplicate-name" as const };
+
+    const base = familySlug(en);
+    const pathBase = parent ? `${parent.path}/${base}` : base;
+    const existing = await tx<{ path: string }[]>`
+      SELECT path FROM categories
+      WHERE path = ${pathBase} OR path LIKE ${pathBase + "-%"}
+    `;
+    const paths = new Set(existing.map((row) => row.path));
+    let suffix = 1;
+    let path = pathBase;
+    while (paths.has(path)) path = `${pathBase}-${++suffix}`;
+    const slug = path.slice(path.lastIndexOf("/") + 1);
+
+    const [row] = await tx<{ id: number; path: string }[]>`
+      INSERT INTO categories (
+        slug, parent_id, path, depth, name_en, name_fa, is_visible, sort
+      ) VALUES (
+        ${slug}, ${parentId}, ${path}, ${parent ? parent.depth + 1 : 0},
+        ${en}, ${fa}, false,
+        (
+          SELECT COALESCE(max(sort), 0) + 1 FROM categories
+          WHERE parent_id IS NOT DISTINCT FROM ${parentId}::int
+        )
+      )
+      RETURNING id, path
+    `;
+    return { ok: true as const, id: row.id, path: row.path };
+  });
 }
 
 /**
@@ -334,44 +482,167 @@ export async function saveFamilyOrder(
   });
 }
 
+export type TaxonomyOrderChange =
+  | { kind: "category"; parentId: number | null; orderedIds: number[] }
+  | { kind: "family"; parentId: number; orderedIds: number[] };
+
+export type TaxonomyContentChange = {
+  kind: "category" | "family";
+  id: number;
+  aboutEn: string;
+  aboutFa: string;
+  /** Undefined preserves the current object; a string replaces it. */
+  imageUrl?: string;
+};
+
+/**
+ * Commit every reversible workbench edit atomically.
+ *
+ * Every sibling list is exact-membership checked before the first write. A
+ * stale tree therefore refuses the whole page-level Save rather than landing
+ * some groups and leaving the operator to discover which ones moved.
+ */
+export async function saveAdminTaxonomyChanges(
+  orders: readonly TaxonomyOrderChange[],
+  content: readonly TaxonomyContentChange[],
+): Promise<boolean> {
+  return sql.begin(async (tx) => {
+    for (const change of orders) {
+      if (
+        change.orderedIds.length === 0 ||
+        new Set(change.orderedIds).size !== change.orderedIds.length
+      ) {
+        return false;
+      }
+
+      const current =
+        change.kind === "category"
+          ? await tx<{ id: number }[]>`
+              SELECT id FROM categories
+              WHERE parent_id IS NOT DISTINCT FROM ${change.parentId}::int
+            `
+          : await tx<{ id: number }[]>`
+              SELECT id FROM product_families WHERE category_id = ${change.parentId}
+            `;
+      const actual = new Set(current.map((row) => row.id));
+      if (actual.size !== change.orderedIds.length) return false;
+      if (!change.orderedIds.every((id) => actual.has(id))) return false;
+    }
+
+    for (const edit of content) {
+      const found =
+        edit.kind === "category"
+          ? await tx<{ id: number }[]>`SELECT id FROM categories WHERE id = ${edit.id}`
+          : await tx<{ id: number }[]>`SELECT id FROM product_families WHERE id = ${edit.id}`;
+      if (found.length !== 1) return false;
+    }
+
+    for (const change of orders) {
+      const ids = [...change.orderedIds];
+      if (change.kind === "category") {
+        await tx`
+          UPDATE categories c SET sort = u.sort
+          FROM unnest(${ids}::int[]) WITH ORDINALITY AS u(id, sort)
+          WHERE c.id = u.id
+            AND c.parent_id IS NOT DISTINCT FROM ${change.parentId}::int
+        `;
+      } else {
+        await tx`
+          UPDATE product_families f SET sort = u.sort
+          FROM unnest(${ids}::int[]) WITH ORDINALITY AS u(id, sort)
+          WHERE f.id = u.id AND f.category_id = ${change.parentId}
+        `;
+      }
+    }
+
+    for (const edit of content) {
+      const preserveImage = edit.imageUrl === undefined;
+      if (edit.kind === "category") {
+        await tx`
+          UPDATE categories
+          SET about_en = ${edit.aboutEn}, about_fa = ${edit.aboutFa},
+              image_url = CASE WHEN ${preserveImage}
+                THEN image_url ELSE ${edit.imageUrl ?? ""} END
+          WHERE id = ${edit.id}
+        `;
+      } else {
+        await tx`
+          UPDATE product_families
+          SET about_en = ${edit.aboutEn}, about_fa = ${edit.aboutFa},
+              image_url = CASE WHEN ${preserveImage}
+                THEN image_url ELSE ${edit.imageUrl ?? ""} END
+          WHERE id = ${edit.id}
+        `;
+      }
+    }
+
+    return true;
+  });
+}
+
 export type CreateFamilyResult =
   | { ok: true; id: number; slug: string }
-  | { ok: false; reason: "no-category" | "no-name" };
+  | {
+      ok: false;
+      reason: "no-category" | "no-name" | "has-subcategories" | "duplicate-name";
+    };
 
 export async function createFamily(
   categoryId: number,
   nameEn: string,
   nameFa: string,
 ): Promise<CreateFamilyResult> {
-  const en = nameEn.trim();
+  const en = nameEn.trim().replace(/\s+/g, " ");
   // A family with no English name has no slug and no table heading.
   if (en === "") return { ok: false, reason: "no-name" };
+  const fa = nameFa.trim().replace(/\s+/g, " ") || en;
+  const normalized = normalizeTaxonomyName(en);
 
-  const [category] = await sql<{ id: number }[]>`
-    SELECT id FROM categories WHERE id = ${categoryId}
-  `;
-  if (!category) return { ok: false, reason: "no-category" };
+  return sql.begin(async (tx) => {
+    await tx`SELECT pg_advisory_xact_lock(hashtext('admin-taxonomy-create'))`;
 
-  const base = familySlug(en);
+    const [category] = await tx<{ id: number }[]>`
+      SELECT id FROM categories WHERE id = ${categoryId}
+    `;
+    if (!category) return { ok: false as const, reason: "no-category" as const };
 
-  const [row] = await sql<{ id: number; slug: string }[]>`
-    INSERT INTO product_families (slug, category_id, name_en, name_fa, sort)
-    SELECT
-      -- The slug is unique across the whole catalog, so a second "Gate Valve"
-      -- under a different category needs a suffix rather than a failed insert.
-      CASE WHEN NOT EXISTS (SELECT 1 FROM product_families WHERE slug = ${base})
-           THEN ${base}
-           ELSE ${base} || '-' || (
-             SELECT count(*) + 1 FROM product_families WHERE slug LIKE ${base + "%"}
-           )::text
-      END,
-      ${categoryId}, ${en},
-      -- An empty Persian name would render as a blank heading on the Persian
-      -- site; the English one is wrong but legible, and editable afterwards.
-      ${nameFa.trim() || en},
-      (SELECT COALESCE(MAX(sort), 0) + 1 FROM product_families WHERE category_id = ${categoryId})
-    RETURNING id, slug
-  `;
+    const [child] = await tx<{ id: number }[]>`
+      SELECT id FROM categories WHERE parent_id = ${categoryId} LIMIT 1
+    `;
+    if (child) {
+      return { ok: false as const, reason: "has-subcategories" as const };
+    }
 
-  return { ok: true, id: row.id, slug: row.slug };
+    const [duplicate] = await tx<{ id: number }[]>`
+      SELECT id FROM product_families
+      WHERE category_id = ${categoryId}
+        AND lower(regexp_replace(btrim(name_en), '\\s+', ' ', 'g')) = ${normalized}
+      LIMIT 1
+    `;
+    if (duplicate) {
+      return { ok: false as const, reason: "duplicate-name" as const };
+    }
+
+    const base = familySlug(en);
+    const existing = await tx<{ slug: string }[]>`
+      SELECT slug FROM product_families
+      WHERE slug = ${base} OR slug LIKE ${base + "-%"}
+    `;
+    const slugs = new Set(existing.map((row) => row.slug));
+    let suffix = 1;
+    let slug = base;
+    while (slugs.has(slug)) slug = `${base}-${++suffix}`;
+
+    const [row] = await tx<{ id: number; slug: string }[]>`
+      INSERT INTO product_families (slug, category_id, name_en, name_fa, sort)
+      VALUES (
+        ${slug}, ${categoryId}, ${en}, ${fa},
+        (SELECT COALESCE(max(sort), 0) + 1
+         FROM product_families WHERE category_id = ${categoryId})
+      )
+      RETURNING id, slug
+    `;
+
+    return { ok: true as const, id: row.id, slug: row.slug };
+  });
 }

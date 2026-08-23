@@ -34,6 +34,7 @@ export function UnsavedOrderGuard({
   locale,
   onSave,
   onDiscard,
+  copy,
 }: {
   /** How many categories hold an unsaved arrangement. */
   dirtyCount: number;
@@ -41,6 +42,8 @@ export function UnsavedOrderGuard({
   /** Resolves once every pending category is written, or false if any failed. */
   onSave: () => Promise<boolean>;
   onDiscard: () => void;
+  /** Taxonomy work also includes descriptions/images, not only ordering. */
+  copy?: { title: string; body: string; scope: string };
 }) {
   const t = getDict(locale);
   const router = useRouter();
@@ -111,9 +114,12 @@ export function UnsavedOrderGuard({
   };
 
   const scope =
-    dirtyCount === 1
+    copy?.scope ??
+    (dirtyCount === 1
       ? t.orderUnsavedOne
-      : t.orderUnsavedMany.replace("{n}", formatInt(dirtyCount, locale));
+      : t.orderUnsavedMany.replace("{n}", formatInt(dirtyCount, locale)));
+  const title = copy?.title ?? t.orderUnsavedTitle;
+  const body = (copy?.body ?? t.orderUnsavedBody).replace("{n}", scope);
 
   return (
     <div
@@ -123,14 +129,14 @@ export function UnsavedOrderGuard({
       <div
         role="dialog"
         aria-modal="true"
-        aria-label={t.orderUnsavedTitle}
+        aria-label={title}
         className="w-full max-w-[440px] border border-[var(--color-ink)] bg-white p-4 text-start"
         onClick={(e) => e.stopPropagation()}
       >
         <h2 className="mb-2 border-b border-[var(--color-rule)] pb-1 text-[14px] font-bold">
-          {t.orderUnsavedTitle}
+          {title}
         </h2>
-        <p className="text-[12px]">{t.orderUnsavedBody.replace("{n}", scope)}</p>
+        <p className="text-[12px]">{body}</p>
 
         <div className="mt-4 flex flex-wrap justify-end gap-2 border-t border-[var(--color-rule)] pt-3">
           <button

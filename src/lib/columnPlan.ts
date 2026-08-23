@@ -1,5 +1,4 @@
 import { parse } from "csv-parse/sync";
-import type { SpecDisplay } from "@/db/schema";
 
 /**
  * Deciding what a spreadsheet's columns mean.
@@ -65,7 +64,8 @@ export type HeaderPlan =
       labelFa: string;
       unit: string;
       specKind: "number" | "text";
-      display: SpecDisplay;
+      inTable: boolean;
+      inDetail: boolean;
       filterable: boolean;
     };
 
@@ -109,7 +109,8 @@ export type ExistingDef = {
   unit: string;
   kind: "number" | "text";
   filterable: boolean;
-  display: SpecDisplay;
+  inTable: boolean;
+  inDetail: boolean;
   csvAlias: string | null;
 };
 
@@ -124,7 +125,7 @@ export type AnalyzedHeader = {
 export type MissingColumn = {
   key: string;
   labelEn: string;
-  display: SpecDisplay;
+  inTable: boolean;
 };
 
 export type Analysis =
@@ -354,7 +355,8 @@ export function analyzeCsv(
           labelFa: existing.labelFa,
           unit: existing.unit,
           specKind: existing.kind,
-          display: existing.display,
+          inTable: existing.inTable,
+          inDetail: existing.inDetail,
           filterable: existing.filterable,
         },
         isNew: false,
@@ -385,10 +387,12 @@ export function analyzeCsv(
         labelFa: label,
         unit: "",
         specKind: inferKind(values),
-        // New columns land in the expanded row. A file with forty of them would
-        // otherwise produce a table nobody can read, and promoting the six that
-        // matter is a smaller job than demoting thirty-nine.
-        display: "detail",
+        // New columns land in the expanded row and nowhere else. A file with
+        // forty of them would otherwise produce a table nobody can read, and
+        // promoting the six that matter is a smaller job than demoting
+        // thirty-nine.
+        inTable: false,
+        inDetail: true,
         filterable: false,
       },
       isNew: true,
@@ -398,7 +402,7 @@ export function analyzeCsv(
 
   const missing: MissingColumn[] = defs
     .filter((d) => !matchedKeys.has(d.key))
-    .map((d) => ({ key: d.key, labelEn: d.labelEn, display: d.display }));
+    .map((d) => ({ key: d.key, labelEn: d.labelEn, inTable: d.inTable }));
 
   return { ok: true, headers, missing, rowCount: dataRows.length };
 }
@@ -454,7 +458,7 @@ export function parsePlanJson(raw: unknown): ImportPlan | null {
     } else if (o.role === "spec") {
       if (typeof o.key !== "string" || !KEY_SHAPE.test(o.key)) return null;
       if (o.specKind !== "number" && o.specKind !== "text") return null;
-      if (o.display !== "table" && o.display !== "detail") return null;
+      if (typeof o.inTable !== "boolean" || typeof o.inDetail !== "boolean") return null;
       if (typeof o.labelEn !== "string" || typeof o.labelFa !== "string") return null;
       if (typeof o.unit !== "string") return null;
       if (typeof o.filterable !== "boolean") return null;
@@ -468,7 +472,8 @@ export function parsePlanJson(raw: unknown): ImportPlan | null {
         labelFa: o.labelFa.trim() || o.labelEn.trim() || o.key,
         unit: o.unit.trim(),
         specKind: o.specKind,
-        display: o.display,
+        inTable: o.inTable,
+        inDetail: o.inDetail,
         filterable: o.filterable,
       });
     } else {
@@ -541,11 +546,11 @@ export function validatePlan(plan: ImportPlan): string[] {
 }
 
 /**
- * The `spec_defs` rows a plan implies, in table-then-detail order.
+ * The `spec_defs` rows a plan implies, table columns first.
  *
- * Sort is assigned here rather than carried in the plan so the two tiers stay
- * contiguous: a table column can never sort after a detail column, which is
- * what lets the spec table render `display === "table"` as a plain prefix.
+ * Sort is assigned here rather than carried in the plan so the tiers stay
+ * contiguous: a table column can never sort after one the table does not show,
+ * which is what lets the spec table read its columns as a plain prefix.
  */
 export type PlannedDef = {
   key: string;
@@ -554,7 +559,8 @@ export type PlannedDef = {
   unit: string;
   kind: "number" | "text";
   filterable: boolean;
-  display: SpecDisplay;
+  inTable: boolean;
+  inDetail: boolean;
   csvAlias: string | null;
   sort: number;
 };
@@ -562,8 +568,8 @@ export type PlannedDef = {
 export function plannedDefs(plan: ImportPlan): PlannedDef[] {
   const specs = plan.headers.filter((h) => h.role === "spec");
   const ordered = [
-    ...specs.filter((h) => h.display === "table"),
-    ...specs.filter((h) => h.display === "detail"),
+    ...specs.filter((h) => h.inTable),
+    ...specs.filter((h) => !h.inTable),
   ];
   return ordered.map((h, i) => ({
     key: h.key,
@@ -572,7 +578,8 @@ export function plannedDefs(plan: ImportPlan): PlannedDef[] {
     unit: h.unit,
     kind: h.specKind,
     filterable: h.filterable,
-    display: h.display,
+    inTable: h.inTable,
+    inDetail: h.inDetail,
     csvAlias: h.header === h.key ? null : h.header,
     sort: i,
   }));
