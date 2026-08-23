@@ -939,6 +939,114 @@ html[dir="rtl"] .admin-group[open] > summary::before {
   object-fit: contain;
 }
 
+/* A callout diagram opens as the original stored asset. The ordinary tile is
+   still the optimised thumbnail; the original is requested only after the
+   reader asks for it, which keeps the catalog's initial image payload small. */
+.catalog-image-zoom {
+  position: relative;
+  display: inline-flex;
+  cursor: zoom-in;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  padding: 0;
+  color: #fff;
+  line-height: 0;
+}
+.catalog-image-zoom:focus-visible {
+  outline: 3px solid var(--color-navy-lift);
+  outline-offset: 3px;
+}
+.catalog-image-zoom-badge {
+  position: absolute;
+  inset-inline-end: 4px;
+  bottom: 4px;
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.75);
+  border-radius: 999px;
+  background: rgba(11, 34, 73, 0.88);
+  box-shadow: 0 1px 4px rgba(11, 34, 73, 0.28);
+  opacity: 0;
+  transform: scale(0.88);
+  transition: opacity 0.12s, transform 0.12s;
+}
+.catalog-image-zoom:hover .catalog-image-zoom-badge,
+.catalog-image-zoom:focus-visible .catalog-image-zoom-badge {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.catalog-image-dialog {
+  box-sizing: border-box;
+  width: 100vw;
+  height: 100dvh;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  padding: clamp(16px, 4vw, 48px);
+  overflow: auto;
+}
+.catalog-image-dialog::backdrop {
+  background: rgba(3, 12, 28, 0.9);
+  backdrop-filter: blur(2px);
+}
+.catalog-image-dialog[open] {
+  display: grid;
+  place-items: center;
+}
+.catalog-image-dialog-frame {
+  position: relative;
+  display: grid;
+  max-width: 100%;
+  min-height: calc(100dvh - clamp(32px, 8vw, 96px));
+  margin: auto;
+  place-items: center;
+}
+.catalog-image-dialog-image {
+  display: block;
+  width: min(960px, calc(100vw - clamp(32px, 8vw, 96px)));
+  height: auto;
+  max-width: calc(100vw - clamp(32px, 8vw, 96px));
+  max-height: calc(100dvh - clamp(32px, 8vw, 96px));
+  object-fit: contain;
+  background: #fff;
+  box-shadow: 0 16px 56px rgba(0, 0, 0, 0.48);
+}
+.catalog-image-dialog-close {
+  position: fixed;
+  z-index: 1;
+  top: max(12px, env(safe-area-inset-top));
+  inset-inline-end: max(12px, env(safe-area-inset-right));
+  display: grid;
+  width: 44px;
+  height: 44px;
+  cursor: pointer;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.52);
+  border-radius: 999px;
+  background: rgba(11, 34, 73, 0.92);
+  color: #fff;
+}
+.catalog-image-dialog-close:hover {
+  background: var(--color-navy-lift);
+}
+.catalog-image-dialog-close:focus-visible {
+  outline: 3px solid #fff;
+  outline-offset: 3px;
+}
+
+@media (pointer: coarse) {
+  .catalog-image-zoom-badge {
+    opacity: 0.9;
+    transform: scale(1);
+  }
+}
+
 /* Ink, not a link colour, and no `:visited` — this is a `<span>`, so the blue it
    used to wear dressed a dead identifier up as something clickable. The two
    cart tables are the only place a part number is a real anchor, and those get

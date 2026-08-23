@@ -21,3 +21,6 @@ venv.txt
 
 # Local design prototype retained as implementation reference.
 docs/design_handoff_admin_products_taxonomy/
+
+# Local files for testing and debugging. Not part of the project.
+other_ignore/

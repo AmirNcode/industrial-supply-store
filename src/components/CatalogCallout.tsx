@@ -1,4 +1,4 @@
-import { CatalogImage } from "./CatalogImage";
+import { CatalogImageLightbox } from "./CatalogImageLightbox";
 import { calloutArt, paragraphs } from "@/lib/catalogCallout";
 import { getDict, pick, type Locale } from "@/lib/i18n";
 
@@ -60,14 +60,14 @@ export function CatalogCallout({
         does. `CatalogImage` alone cannot: it declares a square from one `size`,
         and a wide drawing would either distort or reserve height it never uses.
       */}
-      <span
+      <div
         className={
           art.isDiagram
             ? "flex h-[160px] w-[240px] shrink-0 items-center justify-center"
             : "shrink-0"
         }
       >
-        <CatalogImage
+        <CatalogImageLightbox
           imageUrl={art.imageUrl}
           icon={art.icon}
           /*
@@ -80,12 +80,15 @@ export function CatalogCallout({
           size={art.size}
           className={
             art.isDiagram
-              ? "max-h-[160px] max-w-[240px] object-contain"
+              ? "object-contain"
               : "h-[46px] w-[46px] object-contain"
           }
           eager={art.isDiagram}
+          openLabel={`${t.viewImageFullSize} ${name}`}
+          closeLabel={t.closeImage}
+          fillThumbnail={art.isDiagram}
         />
-      </span>
+      </div>
       <div className="min-w-0">
         <h2 className="text-[15px] font-bold text-[var(--color-navy)]">
           {t.aboutPrefix} {name}

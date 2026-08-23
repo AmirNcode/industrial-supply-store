@@ -26,6 +26,7 @@ export function CatalogImage({
   size,
   className = "",
   eager = false,
+  fill = false,
 }: {
   imageUrl: string;
   icon: string;
@@ -33,6 +34,7 @@ export function CatalogImage({
   size: number;
   className?: string;
   eager?: boolean;
+  fill?: boolean;
 }) {
   if (!imageUrl) {
     return <ProductIcon name={icon} size={size} className={className} />;
@@ -45,10 +47,23 @@ export function CatalogImage({
       <img
         src={imageUrl}
         alt={alt}
-        width={size}
-        height={size}
+        width={fill ? undefined : size}
+        height={fill ? undefined : size}
         loading={eager ? "eager" : "lazy"}
         decoding="async"
+        className={`catalog-art ${fill ? "absolute inset-0 h-full w-full " : ""}${className}`}
+      />
+    );
+  }
+
+  if (fill) {
+    return (
+      <Image
+        src={imageUrl}
+        alt={alt}
+        fill
+        sizes={`${size}px`}
+        loading={eager ? "eager" : "lazy"}
         className={`catalog-art ${className}`}
       />
     );
