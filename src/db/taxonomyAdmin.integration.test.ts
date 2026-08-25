@@ -72,6 +72,10 @@ test("taxonomy creation rules and page-level save are enforced transactionally",
           aboutEn: "Saved together",
           aboutFa: "",
         }],
+        [
+          { kind: "category", id: root.id, isVisible: true },
+          { kind: "family", id: first.id, isVisible: false },
+        ],
       ),
       true,
     );
@@ -79,9 +83,17 @@ test("taxonomy creation rules and page-level save are enforced transactionally",
       SELECT id FROM product_families WHERE category_id = ${root.id} ORDER BY sort, id
     `;
     assert.deepEqual(ordered.map((row) => row.id), [second.id, first.id]);
+    const [savedRoot] = await sql<{ isVisible: boolean }[]>`
+      SELECT is_visible AS "isVisible" FROM categories WHERE id = ${root.id}
+    `;
+    const [savedFamily] = await sql<{ isVisible: boolean }[]>`
+      SELECT is_visible AS "isVisible" FROM product_families WHERE id = ${first.id}
+    `;
+    assert.equal(savedRoot.isVisible, true);
+    assert.equal(savedFamily.isVisible, false);
 
-    // One missing sibling makes the whole transaction stale; the content edit
-    // beside it must not land either.
+    // One missing sibling makes the whole transaction stale; the content and
+    // visibility edits beside it must not land either.
     assert.equal(
       await saveAdminTaxonomyChanges(
         [{ kind: "family", parentId: root.id, orderedIds: [first.id] }],
@@ -91,13 +103,23 @@ test("taxonomy creation rules and page-level save are enforced transactionally",
           aboutEn: "MUST NOT LAND",
           aboutFa: "",
         }],
+        [
+          { kind: "category", id: root.id, isVisible: false },
+          { kind: "family", id: first.id, isVisible: true },
+        ],
       ),
       false,
     );
-    const [afterStale] = await sql<{ aboutEn: string }[]>`
-      SELECT about_en AS "aboutEn" FROM categories WHERE id = ${root.id}
+    const [afterStale] = await sql<{ aboutEn: string; isVisible: boolean }[]>`
+      SELECT about_en AS "aboutEn", is_visible AS "isVisible"
+      FROM categories WHERE id = ${root.id}
+    `;
+    const [familyAfterStale] = await sql<{ isVisible: boolean }[]>`
+      SELECT is_visible AS "isVisible" FROM product_families WHERE id = ${first.id}
     `;
     assert.equal(afterStale.aboutEn, "Saved together");
+    assert.equal(afterStale.isVisible, true);
+    assert.equal(familyAfterStale.isVisible, false);
   } finally {
     if (rootId !== null) {
       // Exact test-owned root; its empty families cascade with it.

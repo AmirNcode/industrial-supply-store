@@ -1658,14 +1658,18 @@ html[lang="fa"] .taxonomy-kind-chip {
   gap: 4px;
 }
 .taxonomy-move-buttons button {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
   border: 1px solid var(--color-rule);
   border-radius: 3px;
   background: #fff;
-  padding: 0 4px;
+  padding: 0;
   color: var(--color-ink);
   font-size: 10px;
   font-weight: 600;
-  line-height: 17px;
+  line-height: 1;
 }
 .taxonomy-move-buttons button:hover:not(:disabled) {
   border-color: var(--color-navy-lift);
@@ -1673,6 +1677,14 @@ html[lang="fa"] .taxonomy-kind-chip {
 }
 .taxonomy-move-buttons button:disabled {
   color: #a3aec2;
+}
+.taxonomy-visibility-button.is-hidden {
+  border-color: #aeb8c8;
+  background: var(--color-panel-alt);
+  color: var(--color-ink-muted);
+}
+.taxonomy-visibility-button svg {
+  display: block;
 }
 .taxonomy-add-root {
   align-self: flex-start;

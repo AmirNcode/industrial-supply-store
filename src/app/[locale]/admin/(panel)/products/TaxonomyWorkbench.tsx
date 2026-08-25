@@ -9,9 +9,11 @@ import {
   moveSibling,
   parseTaxonomyNodeKey,
   reconcileSiblingOrder,
+  setVisibilityDraft,
   sameOrder,
   type AdminTaxonomyNode,
   type TaxonomyNodeKey,
+  type TaxonomyVisibilityDraft,
 } from "@/lib/adminTaxonomy";
 import { getDict, type Locale } from "@/lib/i18n";
 import { formatInt } from "@/lib/money";
@@ -103,6 +105,7 @@ export function TaxonomyWorkbench({
   const [categoryOrders, setCategoryOrders] = useState<OrderMap>({});
   const [familyOrders, setFamilyOrders] = useState<OrderMap>({});
   const [content, setContent] = useState<ContentMap>({});
+  const [visibility, setVisibility] = useState<TaxonomyVisibilityDraft>({});
   const [adding, setAdding] = useState<Adding | null>(null);
   const [newName, setNewName] = useState("");
   const [createError, setCreateError] = useState<TaxonomyCreateResult | null>(null);
@@ -258,6 +261,21 @@ export function TaxonomyWorkbench({
     setNodeContent(node, { ...current, file });
   }
 
+  function effectiveVisibility(node: AdminTaxonomyNode): boolean {
+    return visibility[node.key] ?? node.isVisible;
+  }
+
+  function toggleVisibility(node: AdminTaxonomyNode) {
+    const next = !effectiveVisibility(node);
+    setVisibility((previous) => setVisibilityDraft(
+      previous,
+      node.key,
+      node.isVisible,
+      next,
+    ));
+    setSaveResult(null);
+  }
+
   function startMediaEdit(node: AdminTaxonomyNode) {
     const current = effectiveContent(node);
     setEditing({
@@ -284,12 +302,14 @@ export function TaxonomyWorkbench({
   const dirtyCount =
     Object.keys(activeCategoryOrders).length +
     Object.keys(activeFamilyOrders).length +
-    Object.keys(content).length;
+    Object.keys(content).length +
+    Object.keys(visibility).length;
 
   function discardAll() {
     setCategoryOrders({});
     setFamilyOrders({});
     setContent({});
+    setVisibility({});
     setEditing(null);
     setArrange(false);
     setSaveResult(null);
@@ -326,7 +346,16 @@ export function TaxonomyWorkbench({
           ...(edit.file ? { imageIndex: index } : {}),
         };
       }).filter((edit) => edit !== null);
-      formData.set("payload", JSON.stringify({ orders, content: submittedContent }));
+      const submittedVisibility = Object.entries(visibility).map(([key, isVisible]) => {
+        const node = model.byKey.get(key as TaxonomyNodeKey);
+        if (!node) return null;
+        return { kind: node.kind, id: node.id, isVisible };
+      }).filter((edit) => edit !== null);
+      formData.set("payload", JSON.stringify({
+        orders,
+        content: submittedContent,
+        visibility: submittedVisibility,
+      }));
 
       const result = await saveTaxonomyWorkbenchAction(formData);
       setSaveResult(result);
@@ -543,6 +572,7 @@ export function TaxonomyWorkbench({
                 ? orderedCategories(node.parentId)
                 : orderedFamilies(node.parentId!);
               const position = siblings.findIndex((sibling) => sibling.id === node.id);
+              const isVisible = effectiveVisibility(node);
               return (
                 <div
                   key={node.key}
@@ -584,6 +614,13 @@ export function TaxonomyWorkbench({
                   </span>
                   {arrange && (
                     <span className="taxonomy-move-buttons">
+                      <VisibilityButton
+                        visible={isVisible}
+                        name={nodeName(node, locale)}
+                        locale={locale}
+                        disabled={demo}
+                        onToggle={() => toggleVisibility(node)}
+                      />
                       <button
                         type="button"
                         disabled={demo || position <= 0}
@@ -1225,6 +1262,52 @@ function MoveButtons({
       <button type="button" disabled={disabled || index === 0} aria-label={t.columnsMoveUp} onClick={() => onMove(-1)}>↑</button>
       <button type="button" disabled={disabled || index === length - 1} aria-label={t.columnsMoveDown} onClick={() => onMove(1)}>↓</button>
     </span>
+  );
+}
+
+function VisibilityButton({
+  visible,
+  name,
+  locale,
+  disabled,
+  onToggle,
+}: {
+  visible: boolean;
+  name: string;
+  locale: Locale;
+  disabled: boolean;
+  onToggle: () => void;
+}) {
+  const t = getDict(locale);
+  const label = (visible ? t.taxonomyHideFromCatalog : t.taxonomyShowInCatalog)
+    .replace("{name}", name);
+  return (
+    <button
+      type="button"
+      className={`taxonomy-visibility-button ${visible ? "" : "is-hidden"}`}
+      disabled={disabled}
+      aria-label={label}
+      title={label}
+      onClick={onToggle}
+    >
+      <svg viewBox="0 0 20 20" width="13" height="13" fill="none" aria-hidden="true">
+        <path
+          d="M1.7 10S4.7 5 10 5s8.3 5 8.3 5-3 5-8.3 5-8.3-5-8.3-5Z"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinejoin="round"
+        />
+        <circle cx="10" cy="10" r="2.5" stroke="currentColor" strokeWidth="1.6" />
+        {!visible && (
+          <path
+            d="m3 3 14 14"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+          />
+        )}
+      </svg>
+    </button>
   );
 }
 

@@ -16,6 +16,7 @@ import {
   saveFamilyOrder,
   type TaxonomyContentChange,
   type TaxonomyOrderChange,
+  type TaxonomyVisibilityChange,
 } from "@/db/familyQueries";
 
 export type NewFamilyState =
@@ -132,6 +133,7 @@ export async function createTaxonomyNodeAction(
 type TaxonomySavePayload = {
   orders: TaxonomyOrderChange[];
   content: Array<Omit<TaxonomyContentChange, "imageUrl"> & { imageIndex?: number }>;
+  visibility: TaxonomyVisibilityChange[];
 };
 
 export type TaxonomySaveResult =
@@ -158,8 +160,16 @@ export async function saveTaxonomyWorkbenchAction(
   } catch {
     return "bad-data";
   }
-  if (!Array.isArray(payload.orders) || !Array.isArray(payload.content)) return "bad-data";
-  if (payload.orders.length > 120 || payload.content.length > 220) return "bad-data";
+  if (
+    !Array.isArray(payload.orders) ||
+    !Array.isArray(payload.content) ||
+    !Array.isArray(payload.visibility)
+  ) return "bad-data";
+  if (
+    payload.orders.length > 120 ||
+    payload.content.length > 220 ||
+    payload.visibility.length > 220
+  ) return "bad-data";
 
   const orders: TaxonomyOrderChange[] = [];
   const orderScopes = new Set<string>();
@@ -222,6 +232,22 @@ export async function saveTaxonomyWorkbenchAction(
     content.push(edit);
   }
 
+  const visibility: TaxonomyVisibilityChange[] = [];
+  const visibilityKeys = new Set<string>();
+  for (const submitted of payload.visibility) {
+    if (submitted?.kind !== "category" && submitted?.kind !== "family") return "bad-data";
+    if (!Number.isInteger(submitted.id) || submitted.id <= 0) return "bad-data";
+    if (typeof submitted.isVisible !== "boolean") return "bad-data";
+    const key = `${submitted.kind}:${submitted.id}`;
+    if (visibilityKeys.has(key)) return "bad-data";
+    visibilityKeys.add(key);
+    visibility.push({
+      kind: submitted.kind,
+      id: submitted.id,
+      isVisible: submitted.isVisible,
+    });
+  }
+
   // Upload only after every field and every file is valid. Object storage
   // cannot join a Postgres transaction, so a later DB-staleness refusal can
   // still orphan an immutable object; the existing media editor has the same
@@ -241,9 +267,9 @@ export async function saveTaxonomyWorkbenchAction(
     }
   }
 
-  if (!(await saveAdminTaxonomyChanges(orders, content))) return "stale";
+  if (!(await saveAdminTaxonomyChanges(orders, content, visibility))) return "stale";
 
-  if (content.length > 0) revalidatePath("/", "layout");
+  if (content.length > 0 || visibility.length > 0) revalidatePath("/", "layout");
   else {
     revalidatePath("/[locale]", "page");
     revalidatePath("/[locale]/c/[...slug]", "page");

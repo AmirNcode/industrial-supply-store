@@ -7,6 +7,7 @@
  */
 export type TaxonomyNodeKey = `c:${number}` | `f:${number}`;
 export type TaxonomyNodeKind = "category" | "family";
+export type TaxonomyVisibilityDraft = Partial<Record<TaxonomyNodeKey, boolean>>;
 
 export type AdminTaxonomyNode = {
   key: TaxonomyNodeKey;
@@ -70,6 +71,19 @@ export function moveSibling(
 
 export function sameOrder(a: readonly number[], b: readonly number[]): boolean {
   return a.length === b.length && a.every((id, index) => id === b[index]);
+}
+
+/** A visibility click is dirty only while it differs from the stored value. */
+export function setVisibilityDraft(
+  draft: Readonly<TaxonomyVisibilityDraft>,
+  key: TaxonomyNodeKey,
+  stored: boolean,
+  next: boolean,
+): TaxonomyVisibilityDraft {
+  const updated = { ...draft };
+  if (next === stored) delete updated[key];
+  else updated[key] = next;
+  return updated;
 }
 
 /** Keep local relative order while accepting siblings created/deleted on refresh. */

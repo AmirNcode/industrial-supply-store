@@ -495,6 +495,12 @@ export type TaxonomyContentChange = {
   imageUrl?: string;
 };
 
+export type TaxonomyVisibilityChange = {
+  kind: "category" | "family";
+  id: number;
+  isVisible: boolean;
+};
+
 /**
  * Commit every reversible workbench edit atomically.
  *
@@ -505,6 +511,7 @@ export type TaxonomyContentChange = {
 export async function saveAdminTaxonomyChanges(
   orders: readonly TaxonomyOrderChange[],
   content: readonly TaxonomyContentChange[],
+  visibility: readonly TaxonomyVisibilityChange[],
 ): Promise<boolean> {
   return sql.begin(async (tx) => {
     for (const change of orders) {
@@ -535,6 +542,31 @@ export async function saveAdminTaxonomyChanges(
           ? await tx<{ id: number }[]>`SELECT id FROM categories WHERE id = ${edit.id}`
           : await tx<{ id: number }[]>`SELECT id FROM product_families WHERE id = ${edit.id}`;
       if (found.length !== 1) return false;
+    }
+
+    const visibilityKeys = new Set<string>();
+    const categoryVisibility: TaxonomyVisibilityChange[] = [];
+    const familyVisibility: TaxonomyVisibilityChange[] = [];
+    for (const change of visibility) {
+      const key = `${change.kind}:${change.id}`;
+      if (visibilityKeys.has(key)) return false;
+      visibilityKeys.add(key);
+      if (change.kind === "category") categoryVisibility.push(change);
+      else familyVisibility.push(change);
+    }
+    if (categoryVisibility.length > 0) {
+      const ids = categoryVisibility.map((change) => change.id);
+      const found = await tx<{ id: number }[]>`
+        SELECT id FROM categories WHERE id = ANY(${ids}::int[])
+      `;
+      if (found.length !== ids.length) return false;
+    }
+    if (familyVisibility.length > 0) {
+      const ids = familyVisibility.map((change) => change.id);
+      const found = await tx<{ id: number }[]>`
+        SELECT id FROM product_families WHERE id = ANY(${ids}::int[])
+      `;
+      if (found.length !== ids.length) return false;
     }
 
     for (const change of orders) {
@@ -574,6 +606,27 @@ export async function saveAdminTaxonomyChanges(
           WHERE id = ${edit.id}
         `;
       }
+    }
+
+    // postgres-js binds a bare boolean[] as a scalar in this tagged position;
+    // paired 0/1 arrays keep the update batched without relying on that cast.
+    if (categoryVisibility.length > 0) {
+      const ids = categoryVisibility.map((change) => change.id);
+      const values = categoryVisibility.map((change) => change.isVisible ? 1 : 0);
+      await tx`
+        UPDATE categories c SET is_visible = (u.is_visible = 1)
+        FROM unnest(${ids}::int[], ${values}::int[]) AS u(id, is_visible)
+        WHERE c.id = u.id
+      `;
+    }
+    if (familyVisibility.length > 0) {
+      const ids = familyVisibility.map((change) => change.id);
+      const values = familyVisibility.map((change) => change.isVisible ? 1 : 0);
+      await tx`
+        UPDATE product_families f SET is_visible = (u.is_visible = 1)
+        FROM unnest(${ids}::int[], ${values}::int[]) AS u(id, is_visible)
+        WHERE f.id = u.id
+      `;
     }
 
     return true;

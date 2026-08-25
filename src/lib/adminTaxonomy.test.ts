@@ -7,6 +7,7 @@ import {
   normalizeTaxonomyName,
   parseTaxonomyNodeKey,
   reconcileSiblingOrder,
+  setVisibilityDraft,
   sameOrder,
 } from "./adminTaxonomy";
 
@@ -44,4 +45,15 @@ test("sibling duplicate names ignore case and whitespace runs", () => {
 test("a refreshed sibling list preserves local intent and appends new rows", () => {
   assert.deepEqual(reconcileSiblingOrder([3, 1, 2], [1, 2, 3, 4]), [3, 1, 2, 4]);
   assert.deepEqual(reconcileSiblingOrder([3, 1, 2], [1, 3, 4]), [3, 1, 4]);
+});
+
+test("visibility is dirty only while it differs from the database", () => {
+  const hidden = setVisibilityDraft({}, "c:7", true, false);
+  assert.deepEqual(hidden, { "c:7": false });
+  assert.deepEqual(setVisibilityDraft(hidden, "c:7", true, true), {});
+
+  const visible = setVisibilityDraft({}, "f:9", false, true);
+  assert.deepEqual(visible, { "f:9": true });
+  assert.deepEqual(setVisibilityDraft(visible, "f:9", false, false), {});
+  assert.deepEqual(hidden, { "c:7": false }, "the setter must not mutate earlier drafts");
 });
