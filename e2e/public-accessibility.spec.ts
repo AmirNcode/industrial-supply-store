@@ -6,6 +6,11 @@ const locales: Locale[] = ["en", "fa"];
 const familySlug = "oil-resistant-buna-n-o-rings";
 
 for (const locale of locales) {
+  test(`${locale}: public navigation does not expose the admin route`, async ({ page }) => {
+    await page.goto(`/${locale}`);
+    await expect(page.locator('a[href*="/admin"]')).toHaveCount(0);
+  });
+
   test(`${locale}: catalog and family meet the automated WCAG A/AA gate`, async ({ page }, testInfo) => {
     await page.goto(`/${locale}`);
     await expect(page.locator("html")).toHaveAttribute("dir", locale === "fa" ? "rtl" : "ltr");

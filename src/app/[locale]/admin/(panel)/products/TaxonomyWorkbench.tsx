@@ -605,6 +605,16 @@ export function TaxonomyWorkbench({
                   {node.kind === "family" && (
                     <span className="taxonomy-family-tag">{t.taxonomyFamilyTag}</span>
                   )}
+                  {!arrange && !isVisible && (
+                    <span
+                      className="taxonomy-hidden-indicator"
+                      role="img"
+                      aria-label={t.catalogHidden}
+                      title={t.catalogHidden}
+                    >
+                      <VisibilityIcon visible={false} />
+                    </span>
+                  )}
                   <span className="taxonomy-tree-count">
                     {node.kind === "category"
                       ? node.familyCount > 0
@@ -1290,24 +1300,30 @@ function VisibilityButton({
       title={label}
       onClick={onToggle}
     >
-      <svg viewBox="0 0 20 20" width="13" height="13" fill="none" aria-hidden="true">
-        <path
-          d="M1.7 10S4.7 5 10 5s8.3 5 8.3 5-3 5-8.3 5-8.3-5-8.3-5Z"
-          stroke="currentColor"
-          strokeWidth="1.6"
-          strokeLinejoin="round"
-        />
-        <circle cx="10" cy="10" r="2.5" stroke="currentColor" strokeWidth="1.6" />
-        {!visible && (
-          <path
-            d="m3 3 14 14"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-          />
-        )}
-      </svg>
+      <VisibilityIcon visible={visible} />
     </button>
+  );
+}
+
+function VisibilityIcon({ visible }: { visible: boolean }) {
+  return (
+    <svg viewBox="0 0 20 20" width="13" height="13" fill="none" aria-hidden="true">
+      <path
+        d="M1.7 10S4.7 5 10 5s8.3 5 8.3 5-3 5-8.3 5-8.3-5-8.3-5Z"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinejoin="round"
+      />
+      <circle cx="10" cy="10" r="2.5" stroke="currentColor" strokeWidth="1.6" />
+      {!visible && (
+        <path
+          d="m3 3 14 14"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+        />
+      )}
+    </svg>
   );
 }
 

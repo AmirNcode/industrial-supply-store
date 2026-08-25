@@ -1652,6 +1652,18 @@ html[lang="fa"] .taxonomy-kind-chip {
   font-weight: 400;
   white-space: nowrap;
 }
+.taxonomy-hidden-indicator {
+  display: grid;
+  width: 16px;
+  height: 16px;
+  flex: none;
+  margin-inline-start: auto;
+  place-items: center;
+  color: var(--color-ink-muted);
+}
+.taxonomy-hidden-indicator + .taxonomy-tree-count {
+  margin-inline-start: 0;
+}
 .taxonomy-move-buttons {
   display: inline-flex;
   flex: none;

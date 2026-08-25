@@ -105,8 +105,11 @@ test("products taxonomy stages and discards reversible work without writing", as
     name: t.taxonomyShowInCatalog.replace("{name}", "O-Rings"),
   })).toBeVisible();
   await expect(saveBar).toBeVisible();
+  await page.getByRole("button", { name: t.taxonomyDone, exact: true }).click();
+  await expect(category.locator("..").getByRole("img", { name: t.catalogHidden })).toBeVisible();
   await saveBar.getByRole("button", { name: t.orderDiscard }).click();
   await expect(saveBar).toBeHidden();
+  await expect(category.locator("..").getByRole("img", { name: t.catalogHidden })).toBeHidden();
   await page.getByRole("button", { name: t.taxonomyArrange, exact: true }).click();
   await expect(hideCategory).toBeVisible();
 

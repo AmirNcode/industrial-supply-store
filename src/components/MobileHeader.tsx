@@ -77,8 +77,8 @@ export function MobileHeader({
   const menuLinks = [
     { href: `/${locale}/quick-order`, label: t.quickOrder },
     { href: `/${locale}`, label: t.allCategories },
-    // Account, not Admin. This menu is what a customer on a phone sees, and
-    // /admin is staff-only — it stays reachable from the footer.
+    // Account, not Admin. This menu is customer-facing; staff enter the
+    // protected admin area from its direct URL.
     { href: `/${locale}/account`, label: t.account },
   ];
 
