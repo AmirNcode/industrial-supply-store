@@ -6,7 +6,13 @@ import { InCartQty } from "./InCartQty";
 import { CatalogImage } from "./CatalogImage";
 import { ProductDetails } from "./ProductDetails";
 import { getDict, pick, type Locale } from "@/lib/i18n";
-import { formatPrice, formatSpecNumber, formatInt, isPriceOnRequest } from "@/lib/money";
+import {
+  formatPrice,
+  formatSpecNumber,
+  formatInt,
+  isPriceOnRequest,
+  type Currency,
+} from "@/lib/money";
 import { specValueLabel } from "@/lib/specValues";
 
 type Item = ProductRow & {
@@ -37,6 +43,7 @@ export function ProductCardList({
   familyName,
   familyIcon,
   familyImageUrl,
+  currency,
   rate,
 }: {
   locale: Locale;
@@ -49,7 +56,8 @@ export function ProductCardList({
   familyName?: string;
   familyIcon?: string;
   familyImageUrl?: string;
-  /** Toman per USD, resolved once by the page. */
+  currency: Currency;
+  /** Rial per USD, resolved once by the page. */
   rate: number;
 }) {
   const t = getDict(locale);
@@ -242,7 +250,9 @@ export function ProductCardList({
                       : "tech whitespace-nowrap text-[14px] font-bold"
                   }
                 >
-                  {onRequest ? t.callForPrice : formatPrice(base, locale, rate)}
+                  {onRequest
+                    ? t.callForPrice
+                    : formatPrice(base, currency, locale, rate)}
                 </span>
                 <span className="whitespace-nowrap text-[10px] text-[var(--color-ink-faint)]">
                   {p.packQty > 1 ? `${t.pkg} ${formatInt(p.packQty, locale)}` : t.each}

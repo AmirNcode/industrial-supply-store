@@ -9,7 +9,7 @@ export type AccountOrderRow = {
   createdAt: string;
   totalCents: number;
   /** Frozen at invoicing; null until then, when the live rate is correct. */
-  fxRateToToman: number | null;
+  fxRateToRial: number | null;
   invoiceNumber: string | null;
   itemCount: number;
   /** Selected here so the list can offer Pay directly, without the customer
@@ -21,7 +21,7 @@ export async function listOrdersForUser(userId: string): Promise<AccountOrderRow
   return sql<AccountOrderRow[]>`
     SELECT o.id, o.ref, o.status, o.created_at AS "createdAt",
            o.total_cents AS "totalCents",
-           o.fx_rate_to_toman AS "fxRateToToman",
+           o.fx_rate_to_rial AS "fxRateToRial",
            o.invoice_number AS "invoiceNumber",
            o.payment_url AS "paymentUrl",
            (SELECT count(*)::int FROM order_items i WHERE i.order_id = o.id) AS "itemCount"
@@ -67,7 +67,7 @@ export async function getOrderForUser(
   const rows = await sql<AccountOrderDetail[]>`
     SELECT o.id, o.ref, o.status, o.created_at AS "createdAt",
            o.total_cents AS "totalCents",
-           o.fx_rate_to_toman AS "fxRateToToman",
+           o.fx_rate_to_rial AS "fxRateToRial",
            o.invoice_number AS "invoiceNumber",
            o.payment_url AS "paymentUrl", o.courier,
            o.tracking_number AS "trackingNumber", o.po_number AS "poNumber",

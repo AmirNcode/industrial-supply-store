@@ -8,7 +8,18 @@ SET statement_timeout = '120s';
 DO $$
 DECLARE
   blockers bigint;
+  rate_column text;
 BEGIN
+  SELECT column_name INTO rate_column
+  FROM information_schema.columns
+  WHERE table_schema = 'public' AND table_name = 'orders'
+    AND column_name IN ('fx_rate_to_toman', 'fx_rate_to_rial')
+  ORDER BY CASE column_name WHEN 'fx_rate_to_toman' THEN 0 ELSE 1 END
+  LIMIT 1;
+  IF rate_column IS NULL THEN
+    RAISE EXCEPTION 'cannot enforce invoice fields: frozen FX rate column is missing';
+  END IF;
+
   SELECT count(*) INTO blockers
   FROM (
     SELECT upper(part_number) FROM public.products
@@ -70,39 +81,41 @@ BEGIN
     RAISE EXCEPTION 'cannot enforce order item ranges: % invalid row(s)', blockers;
   END IF;
 
-  SELECT count(*) INTO blockers
-  FROM public.orders
-  WHERE requested_total_cents < 0
-     OR total_cents < 0
-     OR NOT (
-       (
-         invoice_number IS NULL
-         AND fx_rate_to_toman IS NULL
-         AND invoiced_at IS NULL
-       ) OR (
-         invoice_number IS NOT NULL
-         AND btrim(invoice_number) <> ''
-         AND fx_rate_to_toman > 0
-         AND invoiced_at IS NOT NULL
+  EXECUTE format($check$
+    SELECT count(*)
+    FROM public.orders
+    WHERE requested_total_cents < 0
+       OR total_cents < 0
+       OR NOT (
+         (
+           invoice_number IS NULL
+           AND %I IS NULL
+           AND invoiced_at IS NULL
+         ) OR (
+           invoice_number IS NOT NULL
+           AND btrim(invoice_number) <> ''
+           AND %I > 0
+           AND invoiced_at IS NOT NULL
+         )
        )
-     )
-     OR NOT (
-       (invoiced_at IS NULL OR invoiced_at >= created_at)
-       AND (paid_at IS NULL OR (invoiced_at IS NOT NULL AND paid_at >= invoiced_at))
-       AND (shipped_at IS NULL OR (paid_at IS NOT NULL AND shipped_at >= paid_at))
-       AND (delivered_at IS NULL OR (shipped_at IS NOT NULL AND delivered_at >= shipped_at))
-     )
-     OR NOT (
-       (status <> 'received' OR invoiced_at IS NULL)
-       AND (status NOT IN ('invoiced','preparing','shipped','delivered') OR invoiced_at IS NOT NULL)
-       AND (status NOT IN ('preparing','shipped','delivered') OR paid_at IS NOT NULL)
-       AND (status NOT IN ('shipped','delivered') OR shipped_at IS NOT NULL)
-       AND (status <> 'delivered' OR delivered_at IS NOT NULL)
-       AND (status <> 'invoiced' OR paid_at IS NULL)
-       AND (status <> 'preparing' OR shipped_at IS NULL)
-       AND (status <> 'shipped' OR delivered_at IS NULL)
-       AND (status <> 'cancelled' OR (shipped_at IS NULL AND delivered_at IS NULL))
-     );
+       OR NOT (
+         (invoiced_at IS NULL OR invoiced_at >= created_at)
+         AND (paid_at IS NULL OR (invoiced_at IS NOT NULL AND paid_at >= invoiced_at))
+         AND (shipped_at IS NULL OR (paid_at IS NOT NULL AND shipped_at >= paid_at))
+         AND (delivered_at IS NULL OR (shipped_at IS NOT NULL AND delivered_at >= shipped_at))
+       )
+       OR NOT (
+         (status <> 'received' OR invoiced_at IS NULL)
+         AND (status NOT IN ('invoiced','preparing','shipped','delivered') OR invoiced_at IS NOT NULL)
+         AND (status NOT IN ('preparing','shipped','delivered') OR paid_at IS NOT NULL)
+         AND (status NOT IN ('shipped','delivered') OR shipped_at IS NOT NULL)
+         AND (status <> 'delivered' OR delivered_at IS NOT NULL)
+         AND (status <> 'invoiced' OR paid_at IS NULL)
+         AND (status <> 'preparing' OR shipped_at IS NULL)
+         AND (status <> 'shipped' OR delivered_at IS NULL)
+         AND (status <> 'cancelled' OR (shipped_at IS NULL AND delivered_at IS NULL))
+       )
+  $check$, rate_column, rate_column) INTO blockers;
   IF blockers > 0 THEN
     RAISE EXCEPTION 'cannot enforce order lifecycle ranges: % invalid row(s)', blockers;
   END IF;
@@ -115,7 +128,19 @@ CREATE UNIQUE INDEX IF NOT EXISTS products_part_number_upper_key
   ON public.products (upper(part_number));
 
 DO $$
+DECLARE
+  rate_column text;
 BEGIN
+  SELECT column_name INTO rate_column
+  FROM information_schema.columns
+  WHERE table_schema = 'public' AND table_name = 'orders'
+    AND column_name IN ('fx_rate_to_toman', 'fx_rate_to_rial')
+  ORDER BY CASE column_name WHEN 'fx_rate_to_toman' THEN 0 ELSE 1 END
+  LIMIT 1;
+  IF rate_column IS NULL THEN
+    RAISE EXCEPTION 'cannot add invoice constraint: frozen FX rate column is missing';
+  END IF;
+
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint
     WHERE conrelid = 'public.categories'::regclass AND conname = 'categories_depth_check'
@@ -228,19 +253,21 @@ BEGIN
     SELECT 1 FROM pg_constraint
     WHERE conrelid = 'public.orders'::regclass AND conname = 'orders_invoice_fields_check'
   ) THEN
-    ALTER TABLE public.orders
-      ADD CONSTRAINT orders_invoice_fields_check CHECK (
-        (
-          invoice_number IS NULL
-          AND fx_rate_to_toman IS NULL
-          AND invoiced_at IS NULL
-        ) OR (
-          invoice_number IS NOT NULL
-          AND btrim(invoice_number) <> ''
-          AND fx_rate_to_toman > 0
-          AND invoiced_at IS NOT NULL
-        )
-      ) NOT VALID;
+    EXECUTE format($constraint$
+      ALTER TABLE public.orders
+        ADD CONSTRAINT orders_invoice_fields_check CHECK (
+          (
+            invoice_number IS NULL
+            AND %I IS NULL
+            AND invoiced_at IS NULL
+          ) OR (
+            invoice_number IS NOT NULL
+            AND btrim(invoice_number) <> ''
+            AND %I > 0
+            AND invoiced_at IS NOT NULL
+          )
+        ) NOT VALID
+    $constraint$, rate_column, rate_column);
   END IF;
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint

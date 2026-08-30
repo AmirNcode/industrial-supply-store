@@ -2,11 +2,11 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { currentUserId } from "@/lib/session";
 import { getOrderForUser } from "@/db/accountQueries";
-import { getFxRate } from "@/lib/fx";
+import { getFxRate, getPriceDisplayMode } from "@/lib/fx";
 import { OrderStatusPill } from "@/components/OrderStatusPill";
 import { OrderTimeline } from "@/components/OrderTimeline";
 import { isLocale, getDict, type Locale } from "@/lib/i18n";
-import { formatPrice, formatInt } from "@/lib/money";
+import { customerCurrencyFor, formatPrice, formatInt } from "@/lib/money";
 
 /**
  * One order, read-only.
@@ -33,7 +33,12 @@ export default async function AccountOrderPage({
   if (!found) notFound();
   const { order, items } = found;
 
-  const rate = order.fxRateToToman ?? (await getFxRate());
+  const [liveRate, priceDisplayMode] = await Promise.all([
+    getFxRate(),
+    getPriceDisplayMode(),
+  ]);
+  const rate = order.fxRateToRial ?? liveRate;
+  const currency = customerCurrencyFor(priceDisplayMode, l);
   const invoiced = order.invoiceNumber !== null;
 
   return (
@@ -114,9 +119,11 @@ export default async function AccountOrderPage({
               <td className="tech font-bold">{i.partNumber}</td>
               <td className="whitespace-normal">{i.familyName}</td>
               <td className="num tech tech-num">{formatInt(i.qty, l)}</td>
-              <td className="num tech tech-num">{formatPrice(i.unitPriceCents, l, rate)}</td>
               <td className="num tech tech-num">
-                {formatPrice(i.unitPriceCents * i.qty, l, rate)}
+                {formatPrice(i.unitPriceCents, currency, l, rate)}
+              </td>
+              <td className="num tech tech-num">
+                {formatPrice(i.unitPriceCents * i.qty, currency, l, rate)}
               </td>
             </tr>
           ))}
@@ -127,7 +134,7 @@ export default async function AccountOrderPage({
         <span>
           {t.total}:{" "}
           <strong className="tech text-[15px]">
-            {formatPrice(order.totalCents, l, rate)}
+            {formatPrice(order.totalCents, currency, l, rate)}
           </strong>
         </span>
       </div>

@@ -4,8 +4,8 @@ import { search } from "@/db/queries";
 import { CategorySidebar } from "@/components/CategorySidebar";
 import { CatalogImage } from "@/components/CatalogImage";
 import { isLocale, getDict, pick, type Locale } from "@/lib/i18n";
-import { formatInt, formatPrice } from "@/lib/money";
-import { getFxRate } from "@/lib/fx";
+import { customerCurrencyFor, formatInt, formatPrice } from "@/lib/money";
+import { getFxRate, getPriceDisplayMode } from "@/lib/fx";
 import { REQUEST_LIMITS, boundedString } from "@/lib/requestLimits";
 
 export default async function SearchPage({
@@ -22,7 +22,12 @@ export default async function SearchPage({
 
   const submitted = (await searchParams).q;
   const q = boundedString(submitted, REQUEST_LIMITS.searchChars, { allowEmpty: true }) ?? "";
-  const [results, rate] = await Promise.all([search(q), getFxRate()]);
+  const [results, rate, priceDisplayMode] = await Promise.all([
+    search(q),
+    getFxRate(),
+    getPriceDisplayMode(),
+  ]);
+  const currency = customerCurrencyFor(priceDisplayMode, l);
 
   return (
     <div className="flex gap-4 px-3 pt-2">
@@ -77,7 +82,9 @@ export default async function SearchPage({
                         </span>
                       </td>
                       <td>{locale === "fa" ? p.familyFa : p.familyEn}</td>
-                      <td className="num tech tech-num">{formatPrice(p.priceCents, l, rate)}</td>
+                      <td className="num tech tech-num">
+                        {formatPrice(p.priceCents, currency, l, rate)}
+                      </td>
                       <td>
                         <Link
                           href={`/${l}/f/${p.familySlug}?pn=${encodeURIComponent(p.partNumber)}`}

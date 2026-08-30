@@ -9,22 +9,32 @@ import {
   type FxMode,
   type FxSettings,
 } from "./fxRate";
+import {
+  DEFAULT_PRICE_DISPLAY_MODE,
+  isPriceDisplayMode,
+  type PriceDisplayMode,
+} from "./money";
 
 const KEY_MODE = "fx_mode";
 const KEY_RATE = "fx_manual_rate";
+const KEY_PRICE_DISPLAY = "price_display_mode";
+
+type PricingSettings = FxSettings & { priceDisplayMode: PriceDisplayMode };
 
 /**
  * Wrapped in React's `cache` so a page that formats two hundred prices still
  * reads the settings once. The cache is per-request, so a rate change is
  * visible on the next render rather than after a restart.
  */
-export const getFxSettings = cache(async (): Promise<FxSettings> => {
+const getPricingSettings = cache(async (): Promise<PricingSettings> => {
   const rows = await sql<{ key: string; value: string }[]>`
-    SELECT key, value FROM app_settings WHERE key IN (${KEY_MODE}, ${KEY_RATE})
+    SELECT key, value FROM app_settings
+    WHERE key IN (${KEY_MODE}, ${KEY_RATE}, ${KEY_PRICE_DISPLAY})
   `;
   const bag = new Map(rows.map((r) => [r.key, r.value]));
 
   const rawMode = bag.get(KEY_MODE) ?? "auto";
+  const rawPriceDisplay = bag.get(KEY_PRICE_DISPLAY) ?? DEFAULT_PRICE_DISPLAY_MODE;
 
   return {
     // An unrecognised stored mode reads as auto: the environment rate is the
@@ -34,8 +44,20 @@ export const getFxSettings = cache(async (): Promise<FxSettings> => {
     // stored input rather than typed input. A missing row reads as "", which
     // `parseRate` already treats as absent.
     manualRate: parseRate(bag.get(KEY_RATE) ?? ""),
+    priceDisplayMode: isPriceDisplayMode(rawPriceDisplay)
+      ? rawPriceDisplay
+      : DEFAULT_PRICE_DISPLAY_MODE,
   };
 });
+
+export async function getFxSettings(): Promise<FxSettings> {
+  const { mode, manualRate } = await getPricingSettings();
+  return { mode, manualRate };
+}
+
+export async function getPriceDisplayMode(): Promise<PriceDisplayMode> {
+  return (await getPricingSettings()).priceDisplayMode;
+}
 
 export const getFxRate = cache(async (): Promise<number> => {
   return resolveFxRate(await getFxSettings(), envFxRate());
@@ -72,4 +94,12 @@ export async function saveFxSettings(
       `;
     }
   });
+}
+
+export async function savePriceDisplayMode(mode: PriceDisplayMode): Promise<void> {
+  await sql`
+    INSERT INTO app_settings (key, value, updated_at)
+    VALUES (${KEY_PRICE_DISPLAY}, ${mode}, now())
+    ON CONFLICT (key) DO UPDATE SET value = ${mode}, updated_at = now()
+  `;
 }

@@ -30,8 +30,8 @@ export type InvoiceOrder = {
   id: number;
   ref: string;
   invoiceNumber: string;
-  /** Toman per USD, frozen when the invoice was issued. Never null here. */
-  fxRateToToman: number;
+  /** Rial per USD, frozen when the invoice was issued. Never null here. */
+  fxRateToRial: number;
   company: string;
   contactName: string;
   email: string;
@@ -62,7 +62,7 @@ export type InvoiceItem = {
  * The `invoice_number IS NOT NULL` predicate is the whole access rule for
  * "is there an invoice here": an order still being priced has no document to
  * show, and rendering an empty one would invite someone to send it. The
- * `fx_rate_to_toman IS NOT NULL` predicate pairs with it — the two are written
+ * `fx_rate_to_rial IS NOT NULL` predicate pairs with it — the two are written
  * in the same statement, so a row with one and not the other means something
  * has gone wrong and we would rather 404 than print a total at the wrong rate.
  */
@@ -71,7 +71,7 @@ export async function getInvoiceByRef(
 ): Promise<{ order: InvoiceOrder; items: InvoiceItem[] } | null> {
   const rows = await sql<InvoiceOrder[]>`
     SELECT id, ref, invoice_number AS "invoiceNumber",
-           fx_rate_to_toman AS "fxRateToToman",
+           fx_rate_to_rial AS "fxRateToRial",
            company, contact_name AS "contactName", email, phone,
            po_number AS "poNumber", address, city, country,
            payment_url AS "paymentUrl", total_cents AS "totalCents",
@@ -79,7 +79,7 @@ export async function getInvoiceByRef(
     FROM orders
     WHERE ref = ${ref}
       AND invoice_number IS NOT NULL
-      AND fx_rate_to_toman IS NOT NULL
+      AND fx_rate_to_rial IS NOT NULL
     LIMIT 1
   `;
   const order = rows[0];

@@ -9,20 +9,35 @@ export type FxMode = (typeof FX_MODES)[number];
 
 export type FxSettings = {
   mode: FxMode;
-  /** Toman per USD. Null when never set. */
+  /** Rial per USD. Null when never set. */
   manualRate: number | null;
 };
 
 /** Used only when the environment value is missing or unparseable. */
-export const DEFAULT_FX_RATE = 110000;
+export const DEFAULT_FX_RATE = 1_100_000;
 
 export function isFxMode(v: string): v is FxMode {
   return (FX_MODES as readonly string[]).includes(v);
 }
 
+export function configuredFxRate(
+  rialValue: string | undefined,
+  legacyTomanValue: string | undefined,
+): number {
+  const rial = Number(rialValue);
+  if (Number.isFinite(rial) && rial > 0) return rial;
+
+  // One-release compatibility for deployments that have not renamed their
+  // environment variable yet. All internal values are still Rial: the legacy
+  // Toman input is converted at the boundary and never leaves this function.
+  const legacyToman = Number(legacyTomanValue);
+  if (Number.isFinite(legacyToman) && legacyToman > 0) return legacyToman * 10;
+
+  return DEFAULT_FX_RATE;
+}
+
 export function envFxRate(): number {
-  const n = Number(process.env.USD_TO_TOMAN);
-  return Number.isFinite(n) && n > 0 ? n : DEFAULT_FX_RATE;
+  return configuredFxRate(process.env.USD_TO_RIAL, process.env.USD_TO_TOMAN);
 }
 
 /**

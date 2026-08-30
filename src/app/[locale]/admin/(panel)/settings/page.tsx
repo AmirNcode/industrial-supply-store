@@ -1,10 +1,14 @@
 import { notFound } from "next/navigation";
 import { DEMO_MODE } from "@/lib/demo";
-import { getFxSettings, getFxRate } from "@/lib/fx";
+import { getFxSettings, getFxRate, getPriceDisplayMode } from "@/lib/fx";
 import { envFxRate } from "@/lib/fxRate";
 import { FxRatePanel } from "@/components/FxRatePanel";
 import { getSiteContact } from "@/lib/siteContact";
-import { saveFxAction, saveSiteContactAction } from "../../actions";
+import {
+  saveFxAction,
+  savePriceDisplayModeAction,
+  saveSiteContactAction,
+} from "../../actions";
 import { isLocale, getDict, type Locale } from "@/lib/i18n";
 import { formatInt } from "@/lib/money";
 
@@ -14,17 +18,18 @@ export default async function AdminSettingsPage({
   searchParams,
 }: {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{ fx?: string; contact?: string }>;
+  searchParams: Promise<{ fx?: string; contact?: string; currency?: string }>;
 }) {
   const { locale } = await params;
   if (!isLocale(locale)) notFound();
   const l = locale as Locale;
   const t = getDict(l);
-  const { fx, contact: contactStatus } = await searchParams;
+  const { fx, contact: contactStatus, currency: currencyStatus } = await searchParams;
 
-  const [fxSettings, rate, contact] = await Promise.all([
+  const [fxSettings, rate, priceDisplayMode, contact] = await Promise.all([
     getFxSettings(),
     getFxRate(),
+    getPriceDisplayMode(),
     getSiteContact(),
   ]);
 
@@ -91,6 +96,79 @@ export default async function AdminSettingsPage({
             disabled={DEMO_MODE}
           >
             {t.siteContactSave}
+          </button>
+        </form>
+      </section>
+
+      <section className="mb-4 border border-[var(--color-rule)] p-3">
+        <h2 className="mb-1 text-[13px] font-bold">{t.customerCurrencyDisplay}</h2>
+        <p className="mb-3 max-w-[680px] text-[11px] text-[var(--color-ink-muted)]">
+          {t.customerCurrencyDisplayHint}
+        </p>
+
+        {currencyStatus === "saved" && (
+          <SuccessBanner>{t.customerCurrencyDisplaySaved}</SuccessBanner>
+        )}
+        {currencyStatus === "invalid" && (
+          <ErrorBanner>{t.customerCurrencyDisplayInvalid}</ErrorBanner>
+        )}
+
+        <form action={savePriceDisplayModeAction} className="grid gap-3">
+          <input type="hidden" name="locale" value={l} />
+          <fieldset className="grid gap-2 text-[12px]">
+            <legend className="sr-only">{t.customerCurrencyDisplay}</legend>
+            <label className="flex items-start gap-2">
+              <input
+                type="radio"
+                name="priceDisplayMode"
+                value="usd"
+                defaultChecked={priceDisplayMode === "usd"}
+                disabled={DEMO_MODE}
+              />
+              <span>
+                <strong>{t.currencyUsdOnly}</strong>
+                <span className="block text-[11px] text-[var(--color-ink-muted)]">
+                  {t.currencyUsdOnlyHint}
+                </span>
+              </span>
+            </label>
+            <label className="flex items-start gap-2">
+              <input
+                type="radio"
+                name="priceDisplayMode"
+                value="irr"
+                defaultChecked={priceDisplayMode === "irr"}
+                disabled={DEMO_MODE}
+              />
+              <span>
+                <strong>{t.currencyIrrOnly}</strong>
+                <span className="block text-[11px] text-[var(--color-ink-muted)]">
+                  {t.currencyIrrOnlyHint}
+                </span>
+              </span>
+            </label>
+            <label className="flex items-start gap-2">
+              <input
+                type="radio"
+                name="priceDisplayMode"
+                value="both"
+                defaultChecked={priceDisplayMode === "both"}
+                disabled={DEMO_MODE}
+              />
+              <span>
+                <strong>{t.currencyBoth}</strong>
+                <span className="block text-[11px] text-[var(--color-ink-muted)]">
+                  {t.currencyBothHint}
+                </span>
+              </span>
+            </label>
+          </fieldset>
+          <button
+            type="submit"
+            className="btn-small justify-self-start"
+            disabled={DEMO_MODE}
+          >
+            {t.customerCurrencyDisplaySave}
           </button>
         </form>
       </section>

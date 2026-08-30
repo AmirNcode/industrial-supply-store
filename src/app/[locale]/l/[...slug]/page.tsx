@@ -9,8 +9,8 @@ import {
 import { CategorySidebar } from "@/components/CategorySidebar";
 import { ProductCardList } from "@/components/ProductCardList";
 import { isLocale, type Locale } from "@/lib/i18n";
-import { formatInt } from "@/lib/money";
-import { getFxRate } from "@/lib/fx";
+import { customerCurrencyFor, formatInt } from "@/lib/money";
+import { getFxRate, getPriceDisplayMode } from "@/lib/fx";
 import { CategoryHeader } from "../../c/[...slug]/CategoryHeader";
 
 const LIST_PAGE_SIZE = 100;
@@ -56,11 +56,13 @@ export default async function CategoryListPage({
     : 1;
   const base = `/${l}/l/${path}`;
 
-  const [ancestors, products, rate] = await Promise.all([
+  const [ancestors, products, rate, priceDisplayMode] = await Promise.all([
     getAncestors(category.path),
     getProductsInSubtree(category.path, LIST_PAGE_SIZE, (page - 1) * LIST_PAGE_SIZE),
     getFxRate(),
+    getPriceDisplayMode(),
   ]);
+  const currency = customerCurrencyFor(priceDisplayMode, l);
 
   // One extra query for the whole page, keyed on the families actually shown.
   const defs =
@@ -80,7 +82,13 @@ export default async function CategoryListPage({
           view="list"
         />
 
-        <ProductCardList locale={l} products={products} defsByFamily={defs} rate={rate} />
+        <ProductCardList
+          locale={l}
+          products={products}
+          defsByFamily={defs}
+          currency={currency}
+          rate={rate}
+        />
 
         {pages > 1 && (
           <nav className="mt-4 flex flex-wrap items-center gap-2 text-[13px]">

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { currentUser } from "@/lib/session";
 import { listOrdersForUser } from "@/db/accountQueries";
-import { getFxRate } from "@/lib/fx";
+import { getFxRate, getPriceDisplayMode } from "@/lib/fx";
 import { OrderStatusPill } from "@/components/OrderStatusPill";
 import { MIN_PASSWORD_LENGTH } from "@/lib/password";
 import {
@@ -11,7 +11,7 @@ import {
   changePasswordAction,
 } from "./actions";
 import { isLocale, getDict, locales, type Locale } from "@/lib/i18n";
-import { formatPrice, formatInt } from "@/lib/money";
+import { customerCurrencyFor, formatPrice, formatInt } from "@/lib/money";
 import { REQUEST_LIMITS } from "@/lib/requestLimits";
 
 const ERROR_KEY = {
@@ -56,7 +56,12 @@ export default async function AccountPage({
     );
   }
 
-  const [orders, rate] = await Promise.all([listOrdersForUser(user.id), getFxRate()]);
+  const [orders, rate, priceDisplayMode] = await Promise.all([
+    listOrdersForUser(user.id),
+    getFxRate(),
+    getPriceDisplayMode(),
+  ]);
+  const currency = customerCurrencyFor(priceDisplayMode, l);
   const errorKey = error && error in ERROR_KEY ? ERROR_KEY[error as keyof typeof ERROR_KEY] : null;
 
   // A failed password change should not leave the panel shut over its own error
@@ -118,7 +123,7 @@ export default async function AccountPage({
                   {/* An invoiced order shows the rate it was invoiced at; one
                       still being priced has none, so the live rate is honest. */}
                   <strong className="tech ms-auto text-[13px]">
-                    {formatPrice(o.totalCents, l, o.fxRateToToman ?? rate)}
+                    {formatPrice(o.totalCents, currency, l, o.fxRateToRial ?? rate)}
                   </strong>
 
                   {/* The action comes to the customer rather than waiting to be

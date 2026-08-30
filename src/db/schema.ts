@@ -239,7 +239,7 @@ export const products = pgTable(
       .references(() => productFamilies.id, { onDelete: "cascade" }),
     /** Display + detail source of truth. Faceting reads productSpecValues instead. */
     specs: jsonb("specs").$type<SpecBag>().notNull().default({}),
-    /** Unit price at qty 1, in USD cents. Persian prices convert at render time. */
+    /** Unit price at qty 1, in USD cents. Rial prices convert at render time. */
     priceCents: integer("price_cents").notNull(),
     priceTiers: jsonb("price_tiers").$type<PriceTier[]>().notNull().default([]),
     /** Items ship in packs; qty in the table means "packs", as on the reference site. */
@@ -387,7 +387,7 @@ export const orders = pgTable(
     country: text("country").notNull().default(""),
     notes: text("notes").notNull().default(""),
     locale: text("locale").notNull().default("en"),
-    currency: text("currency").notNull().default("USD"),
+    currency: text("currency").notNull().default("IRR"),
     /** Total at the catalog prices the customer saw when they submitted. */
     requestedTotalCents: integer("requested_total_cents").notNull().default(0),
     /** Total at the prices staff finally set. Equal until the order is priced. */
@@ -397,10 +397,10 @@ export const orders = pgTable(
     trackingNumber: text("tracking_number").notNull().default(""),
     invoiceNumber: text("invoice_number"),
     /**
-     * Toman per USD, frozen when the invoice is issued. Without this, editing
+     * Rial per USD, frozen when the invoice is issued. Without this, editing
      * the rate would restate the amount owed on invoices already emailed.
      */
-    fxRateToToman: integer("fx_rate_to_toman"),
+    fxRateToRial: integer("fx_rate_to_rial"),
     invoicedAt: timestamp("invoiced_at", { withTimezone: true }),
     paidAt: timestamp("paid_at", { withTimezone: true }),
     shippedAt: timestamp("shipped_at", { withTimezone: true }),
@@ -423,6 +423,10 @@ export const orders = pgTable(
       sql`${t.status} IN ('received','invoiced','preparing','shipped','delivered','cancelled')`,
     ),
     check(
+      "orders_currency_check",
+      sql`${t.currency} IN ('USD','IRR')`,
+    ),
+    check(
       "orders_totals_check",
       sql`${t.requestedTotalCents} >= 0 AND ${t.totalCents} >= 0`,
     ),
@@ -430,12 +434,12 @@ export const orders = pgTable(
       "orders_invoice_fields_check",
       sql`(
         ${t.invoiceNumber} IS NULL
-        AND ${t.fxRateToToman} IS NULL
+        AND ${t.fxRateToRial} IS NULL
         AND ${t.invoicedAt} IS NULL
       ) OR (
         ${t.invoiceNumber} IS NOT NULL
         AND btrim(${t.invoiceNumber}) <> ''
-        AND ${t.fxRateToToman} > 0
+        AND ${t.fxRateToRial} > 0
         AND ${t.invoicedAt} IS NOT NULL
       )`,
     ),

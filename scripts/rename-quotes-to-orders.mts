@@ -48,7 +48,7 @@ async function main() {
         ADD COLUMN IF NOT EXISTS courier text NOT NULL DEFAULT '',
         ADD COLUMN IF NOT EXISTS tracking_number text NOT NULL DEFAULT '',
         ADD COLUMN IF NOT EXISTS invoice_number text,
-        ADD COLUMN IF NOT EXISTS fx_rate_to_toman integer,
+        ADD COLUMN IF NOT EXISTS fx_rate_to_rial integer,
         ADD COLUMN IF NOT EXISTS invoiced_at timestamptz,
         ADD COLUMN IF NOT EXISTS paid_at timestamptz,
         ADD COLUMN IF NOT EXISTS shipped_at timestamptz,

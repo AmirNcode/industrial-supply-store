@@ -9,11 +9,11 @@ import { DEMO_MODE } from "@/lib/demo";
 import { currentUserId } from "@/lib/session";
 import { PrintButton } from "@/components/PrintButton";
 import { isLocale, getDict, type Locale } from "@/lib/i18n";
+import { getPriceDisplayMode } from "@/lib/fx";
 import {
   formatMoneyExact,
   formatInt,
-  currencyFor,
-  isCurrency,
+  invoiceCurrencyFor,
   type Currency,
 } from "@/lib/money";
 
@@ -35,24 +35,20 @@ import {
  * the document's direction and the layout's `dir` follow it for free; currency
  * is a query parameter on top. A Tehran buyer may want Persian text priced in
  * dollars because that is what the contract says, or an English document
- * priced in the Toman they will actually pay.
+ * priced in the Rial they will actually pay. The admin setting decides whether
+ * that choice exists at all.
  */
 export async function generateMetadata({
   params,
-  searchParams,
 }: {
   params: Promise<{ ref: string }>;
-  searchParams: Promise<{ cur?: string }>;
 }) {
-  // Derived from the path and the reader's own toggle — nothing about the
-  // order is reachable before the access check in the page itself. Chrome
-  // names a saved PDF from this, and the whole phase exists so staff save
-  // PDFs; the currency is in the name so the dollar and Toman copies of one
-  // invoice do not overwrite each other in a downloads folder.
+  // Keep this currency-neutral. Resolving the real currency here would require
+  // a settings query before the page's access check, while trusting `?cur=`
+  // would let a conflicting URL mislabel a USD-locked invoice as IRR (or the
+  // reverse) in the browser and saved-PDF filename.
   const { ref } = await params;
-  const { cur } = await searchParams;
-  const currency = isCurrency(String(cur ?? "").toUpperCase()) ? String(cur).toUpperCase() : null;
-  return { title: currency ? `Invoice ${ref} ${currency}` : `Invoice ${ref}` };
+  return { title: `Invoice ${ref}` };
 }
 
 export default async function InvoicePage({
@@ -68,12 +64,6 @@ export default async function InvoicePage({
   const t = getDict(l);
 
   const { cur } = await searchParams;
-  const asked = String(cur ?? "").toUpperCase();
-  // Absent or unrecognised falls back to the locale's own currency, which is
-  // what this page did before the toggle existed.
-  const currency: Currency = isCurrency(asked) ? asked : currencyFor(l);
-  const other: Locale = l === "fa" ? "en" : "fa";
-  const otherCurrency: Currency = currency === "USD" ? "IRT" : "USD";
 
   /*
    * Staff may read any invoice; a customer may read one that is theirs.
@@ -97,13 +87,23 @@ export default async function InvoicePage({
   // unauthenticated traffic drive unbounded database load.
   if (!staff && !uid) notFound();
 
-  const [found, contact] = await Promise.all([getInvoiceByRef(ref), getSiteContact()]);
+  const [found, contact, priceDisplayMode] = await Promise.all([
+    getInvoiceByRef(ref),
+    getSiteContact(),
+    getPriceDisplayMode(),
+  ]);
   if (!found) notFound();
   const { order, items } = found;
 
   if (!staff && (order.userId === null || order.userId !== uid)) notFound();
 
-  const rate = order.fxRateToToman;
+  const currency = invoiceCurrencyFor(priceDisplayMode, l, cur);
+  const other: Locale = l === "fa" ? "en" : "fa";
+  const otherCurrency: Currency = currency === "USD" ? "IRR" : "USD";
+  const languageHref = `/${other}/invoice/${order.ref}${
+    priceDisplayMode === "both" ? `?cur=${currency}` : ""
+  }`;
+  const rate = order.fxRateToRial;
   const seller = { ...getSeller(l), email: contact.email, phone: contact.phone };
   const subtotal = subtotalCents(items);
   const issued = new Date(order.invoicedAt).toISOString().slice(0, 10);
@@ -122,20 +122,22 @@ export default async function InvoicePage({
         <span className="flex items-center gap-2">
           <span className="font-bold">{t.languagePreference}:</span>
           <span>{l === "fa" ? t.persian : t.english}</span>
-          <Link href={`/${other}/invoice/${order.ref}?cur=${currency}`} prefetch={false}>
+          <Link href={languageHref} prefetch={false}>
             {other === "fa" ? t.persian : t.english}
           </Link>
         </span>
         <span className="flex items-center gap-2">
           <span className="font-bold">{t.invoiceCurrency}:</span>
-          <span className="tech">{currency === "USD" ? "USD" : "IRT"}</span>
-          <Link
-            href={`/${l}/invoice/${order.ref}?cur=${otherCurrency}`}
-            prefetch={false}
-            className="tech"
-          >
-            {otherCurrency === "USD" ? "USD" : "IRT"}
-          </Link>
+          <span className="tech">{currency}</span>
+          {priceDisplayMode === "both" && (
+            <Link
+              href={`/${l}/invoice/${order.ref}?cur=${otherCurrency}`}
+              prefetch={false}
+              className="tech"
+            >
+              {otherCurrency}
+            </Link>
+          )}
         </span>
       </div>
 
@@ -258,9 +260,9 @@ export default async function InvoicePage({
       <footer className="mt-8 border-t border-[var(--color-rule)] pt-3 text-[11px] text-[var(--color-ink-muted)]">
         <p>{t.invoiceThanks}</p>
         {/* Keyed on the currency shown, not the language. An English invoice
-            priced in Toman is converted and must say so; a Persian invoice
+            priced in Rial is converted and must say so; a Persian invoice
             priced in dollars is not, and the note would be a lie. */}
-        {currency === "IRT" && (
+        {currency === "IRR" && (
           <p className="mt-1">
             {t.invoiceFxNote}{" "}
             <span className="tech">{formatInt(rate, l)}</span> {t.fxPerUsd}

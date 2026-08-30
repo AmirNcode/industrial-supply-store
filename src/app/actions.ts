@@ -21,6 +21,8 @@ import {
   boundedString,
   parseQuickOrder,
 } from "@/lib/requestLimits";
+import { getPriceDisplayMode } from "@/lib/fx";
+import { customerCurrencyFor } from "@/lib/money";
 
 /**
  * Revalidation is scoped to the cart page only.
@@ -185,11 +187,13 @@ export async function submitQuoteAction(formData: FormData) {
     notes: notes!,
   };
 
+  const currency = customerCurrencyFor(await getPriceDisplayMode(), locale);
   const result = await submitOrderFromCart({
     cartId,
     cartFingerprint: token.cartFingerprint,
     submissionKey: token.submissionKey,
     locale,
+    currency,
     userId,
     contact,
   });

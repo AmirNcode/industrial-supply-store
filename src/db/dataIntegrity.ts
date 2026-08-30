@@ -265,12 +265,12 @@ export async function inspectDatabaseIntegrity(
         WHERE NOT (
           (
             invoice_number IS NULL
-            AND fx_rate_to_toman IS NULL
+            AND fx_rate_to_rial IS NULL
             AND invoiced_at IS NULL
           ) OR (
             invoice_number IS NOT NULL
             AND btrim(invoice_number) <> ''
-            AND fx_rate_to_toman > 0
+            AND fx_rate_to_rial > 0
             AND invoiced_at IS NOT NULL
           )
         )

@@ -4,8 +4,8 @@ import { getCartId, getCartLines, unitPriceAt } from "@/lib/cart";
 import { submitQuoteAction } from "@/app/actions";
 import { isLocale, getDict, type Locale } from "@/lib/i18n";
 import { DEMO_MODE } from "@/lib/demo";
-import { formatPrice, formatInt } from "@/lib/money";
-import { getFxRate } from "@/lib/fx";
+import { customerCurrencyFor, formatPrice, formatInt } from "@/lib/money";
+import { getFxRate, getPriceDisplayMode } from "@/lib/fx";
 import { currentUser } from "@/lib/session";
 import { AUTH_SECRET } from "@/lib/authSecret";
 import {
@@ -29,14 +29,16 @@ export default async function QuotePage({
   const t = getDict(l);
   const { error } = await searchParams;
 
-  const [lines, rate, user, cartId] = await Promise.all([
+  const [lines, rate, priceDisplayMode, user, cartId] = await Promise.all([
     getCartLines(),
     getFxRate(),
+    getPriceDisplayMode(),
     currentUser(),
     getCartId(),
   ]);
   if (lines.length === 0) redirect(`/${l}/cart`);
   if (!cartId) redirect(`/${l}/cart`);
+  const currency = customerCurrencyFor(priceDisplayMode, l);
   const subtotal = lines.reduce((sum, x) => sum + unitPriceAt(x, x.qty) * x.qty, 0);
   const fingerprint = quoteCartFingerprint(
     lines.map((line) => ({
@@ -143,7 +145,9 @@ export default async function QuotePage({
           </ul>
           <div className="flex justify-between border-t border-[var(--color-ink)] pt-1.5 text-[13px]">
             <span>{t.subtotal}</span>
-            <strong className="tech">{formatPrice(subtotal, l, rate)}</strong>
+            <strong className="tech">
+              {formatPrice(subtotal, currency, l, rate)}
+            </strong>
           </div>
           <QuoteSubmitButton label={t.submitRequest} />
           <Link

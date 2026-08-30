@@ -47,7 +47,7 @@ Set in Vercel → Settings → Environment Variables → Production.
 | `DIRECT_DATABASE_URL` | **build** | build stalls 120s and usually fails — see trap 7 |
 | `AUTH_SECRET` | **build and runtime** | **build fails** |
 | `ADMIN_PASSWORD` | runtime | build fine, `/admin` throws |
-| `USD_TO_TOMAN` | runtime | falls back to a hardcoded rate |
+| `USD_TO_RIAL` | runtime | falls back to 1,100,000 Rial / USD |
 | `SELLER_*` | runtime | invoices print "set SELLER_NAME" |
 | `SUPABASE_URL` | runtime Storage access | URL images still work; image/CSV upload reports not configured |
 | `SUPABASE_PUBLIC_URL` | runtime Storage access | falls back to `SUPABASE_URL` |

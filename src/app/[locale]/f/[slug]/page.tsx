@@ -27,9 +27,11 @@ import {
   formatPriceBare,
   formatSpecNumber,
   currencyLabel,
+  customerCurrencyFor,
   isPriceOnRequest,
+  type Currency,
 } from "@/lib/money";
-import { getFxRate } from "@/lib/fx";
+import { getFxRate, getPriceDisplayMode } from "@/lib/fx";
 import { specValueLabel, isTechnicalValue } from "@/lib/specValues";
 import { summaryDefsFor, summaryParts } from "@/lib/cardSummary";
 import {
@@ -77,7 +79,7 @@ export default async function FamilyPage({
   const window = parseFamilyWindow(sp);
   const highlighted = boundedString(sp.pn, 120)?.toUpperCase() ?? null;
 
-  const [defs, summary, products, facets, category, ancestors, rate] = await Promise.all([
+  const [defs, summary, products, facets, category, ancestors, rate, priceDisplayMode] = await Promise.all([
     getSpecDefs(family.id),
     getProductSetSummary(family.id, filters),
     getProducts(family.id, filters, window.rows, highlighted),
@@ -85,7 +87,9 @@ export default async function FamilyPage({
     getCategoryByPath(family.categoryPath),
     getAncestors(family.categoryPath),
     getFxRate(),
+    getPriceDisplayMode(),
   ]);
+  const currency = customerCurrencyFor(priceDisplayMode, l);
 
   const trail = category ? [...ancestors, category] : ancestors;
   const total = summary.total;
@@ -271,6 +275,7 @@ export default async function FamilyPage({
                     defs={defs}
                     products={products}
                     highlighted={highlighted}
+                    currency={currency}
                     rate={rate}
                     icon={family.icon}
                   />
@@ -437,6 +442,7 @@ function SpecTable({
   defs,
   products,
   highlighted,
+  currency,
   rate,
   icon,
 }: {
@@ -444,6 +450,7 @@ function SpecTable({
   defs: SpecDefRow[];
   products: ProductDetailRow[];
   highlighted: string | null;
+  currency: Currency;
   rate: number;
   icon: string;
 }) {
@@ -481,7 +488,7 @@ function SpecTable({
           ))}
           <th className="!border-b-0" />
           <th className="group" colSpan={hasBulk ? 2 : 1}>
-            {t.pkg} — {currencyLabel(locale)}
+            {t.pkg} — {currencyLabel(currency, locale)}
           </th>
           <th className="!border-b-0" />
           <th className="!border-b-0" />
@@ -613,7 +620,7 @@ function SpecTable({
                   {p.packQty}
                 </td>
                 {/* Bare amounts — the currency is named once in the group header.
-                    Repeating "تومان" on 200 rows costs ~40px of table width and
+                    Repeating "ریال" on 200 rows costs table width and
                     tells the buyer nothing they don't already know. */}
                 <td
                   data-cell="price"
@@ -623,7 +630,9 @@ function SpecTable({
                       : "num tech tech-num price-col font-semibold"
                   }
                 >
-                  {onRequest ? t.callForPriceShort : formatPriceBare(base, locale, rate)}
+                  {onRequest
+                    ? t.callForPriceShort
+                    : formatPriceBare(base, currency, locale, rate)}
                 </td>
                 {hasBulk && (
                   <td
@@ -631,7 +640,7 @@ function SpecTable({
                     className="num tech tech-num price-col text-[var(--color-ink-muted)]"
                   >
                     {bulk !== undefined && !isPriceOnRequest(bulk)
-                      ? formatPriceBare(bulk, locale, rate)
+                      ? formatPriceBare(bulk, currency, locale, rate)
                       : ""}
                   </td>
                 )}

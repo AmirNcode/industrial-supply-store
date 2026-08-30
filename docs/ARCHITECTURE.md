@@ -55,20 +55,23 @@ They share nothing on purpose.
 
 ## Invariants that will bite you
 
-**Money is integer USD cents.** Persian display converts at a rate the caller
-passes in. `formatPrice(cents, locale, rate)` takes the rate as a *required*
-argument so a forgotten call site is a compile error, not silently stale prices.
+**Money is integer USD cents.** Customer display mode resolves an explicit USD
+or IRR currency for every price surface. `formatPrice(cents, currency, locale,
+rate)` takes both currency and the Rial-per-USD rate as *required* arguments so
+a forgotten setting or rate is a compile error, not silently stale prices.
 
-**An issued invoice uses `orders.fx_rate_to_toman`, never `getFxRate()`.** The
+**An issued invoice uses `orders.fx_rate_to_rial`, never `getFxRate()`.** The
 rate is frozen at issuance so reprinting later cannot change what is owed.
 
 **Invoices must not round.** `formatPriceExact` / `formatMoneyExact` skip the
-nearest-100 rounding `formatPrice` does, or a column of lines disagrees with its
+nearest-1,000 Rial rounding `formatPrice` does, or a column of lines disagrees with its
 own total.
 
-**Currency and locale are separate on the invoice only.** Everywhere else
-currency follows locale. `formatMoneyExact(cents, currency, locale, rate)` —
-currency picks the unit, locale still picks the script.
+**Customer currency is a global setting.** `usd` and `irr` force that currency
+in both languages. `both` preserves language-driven display (English USD,
+Persian IRR) and enables the invoice currency switch. Query parameters cannot
+override a single-currency setting. Locale still picks the script independently
+from currency on invoices.
 
 **A product write is never one insert.** `products`, `product_spec_values` (the
 facet index — filters read this, not `products.specs`), `products.search_text`,

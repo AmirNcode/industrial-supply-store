@@ -115,6 +115,7 @@ test("quote replay and reservation allocation stay correct through the order lif
       ]),
       submissionKey,
       locale: "en",
+      currency: "USD",
       userId: null,
       contact: {
         company: "Integration Test",
@@ -142,15 +143,18 @@ test("quote replay and reservation allocation stay correct through the order lif
     });
     assert.equal(refs[0], refs[1]);
 
-    const [created] = await sql<{ id: number; orders: number; items: number }[]>`
+    const [created] = await sql<
+      { id: number; orders: number; items: number; currency: string }[]
+    >`
       SELECT min(o.id)::int AS id, count(DISTINCT o.id)::int AS orders,
-             count(i.id)::int AS items
+             count(i.id)::int AS items, min(o.currency) AS currency
       FROM orders o
       JOIN order_items i ON i.order_id = o.id
       WHERE o.submission_key = ${submissionKey}
     `;
     assert.equal(created.orders, 1);
     assert.equal(created.items, 2);
+    assert.equal(created.currency, "USD");
 
     const snapshots = await sql<
       {
@@ -225,7 +229,7 @@ test("quote replay and reservation allocation stay correct through the order lif
       await tx`
         UPDATE orders
         SET status = 'preparing', invoice_number = ${`INV-TEST-${suffix}`},
-            fx_rate_to_toman = 1000, invoiced_at = now(), paid_at = now()
+            fx_rate_to_rial = 10000, invoiced_at = now(), paid_at = now()
         WHERE id = ${created.id}
       `;
       await sellHeldStock(tx, created.id);

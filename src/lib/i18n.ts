@@ -206,11 +206,24 @@ const en = {
   demoQuoteWarning:
     "This is a public demo. Anything you submit here can be read by anyone — please do not enter real contact details.",
   // Exchange rate
+  customerCurrencyDisplay: "Customer price currency",
+  customerCurrencyDisplayHint:
+    "Controls the catalog, cart, quote, customer accounts and invoices. CSV imports and admin invoice entry remain in USD.",
+  customerCurrencyDisplaySave: "Save currency display",
+  customerCurrencyDisplaySaved: "Customer currency display saved.",
+  customerCurrencyDisplayInvalid: "Choose USD only, Rials only, or both.",
+  currencyUsdOnly: "USD only",
+  currencyUsdOnlyHint: "Show USD prices in both English and Persian.",
+  currencyIrrOnly: "Rials only",
+  currencyIrrOnlyHint: "Show Rial prices in both English and Persian.",
+  currencyBoth: "Both",
+  currencyBothHint:
+    "English shows USD and Persian shows Rials. Customers can switch invoice currency.",
   exchangeRate: "Exchange rate",
   fxAutomatic: "Automatic",
   fxManual: "Manual",
-  fxPerUsd: "Toman / USD",
-  fxFromEnv: "from USD_TO_TOMAN",
+  fxPerUsd: "Rial / USD",
+  fxFromEnv: "from USD_TO_RIAL",
   fxApply: "Apply",
   fxConfirm: "Confirm",
   fxCancel: "Cancel",
@@ -219,7 +232,7 @@ const en = {
     "Applies to displayed prices. Invoices keep the rate frozen when they are issued.",
   fxOutOfRange:
     "That rate is more than ten times away from the automatic rate. Check for a stray digit.",
-  fxInvalid: "Enter a whole number of Toman.",
+  fxInvalid: "Enter a whole number of Rials.",
   // Invoice
   invoice: "Invoice",
   invoiceTo: "Bill to",
@@ -751,11 +764,24 @@ const fa: typeof en = {
     "نمای عمومی نسخه نمایشی — بدون نیاز به ورود. هر کسی با این لینک می‌تواند این درخواست‌ها را ببیند.",
   demoQuoteWarning:
     "این یک نسخه نمایشی عمومی است. هر آنچه ثبت کنید برای دیگران قابل مشاهده خواهد بود — لطفاً اطلاعات تماس واقعی وارد نکنید.",
+  customerCurrencyDisplay: "واحد نمایش قیمت برای مشتری",
+  customerCurrencyDisplayHint:
+    "واحد پول کاتالوگ، سبد خرید، درخواست قیمت، حساب کاربری و صورتحساب‌ها را تعیین می‌کند. ورودی CSV و ثبت قیمت در مدیریت همچنان دلاری است.",
+  customerCurrencyDisplaySave: "ذخیره نمایش واحد پول",
+  customerCurrencyDisplaySaved: "نمایش واحد پول مشتری ذخیره شد.",
+  customerCurrencyDisplayInvalid: "فقط دلار، فقط ریال یا هر دو را انتخاب کنید.",
+  currencyUsdOnly: "فقط دلار آمریکا",
+  currencyUsdOnlyHint: "قیمت‌ها در هر دو زبان به دلار نمایش داده می‌شود.",
+  currencyIrrOnly: "فقط ریال",
+  currencyIrrOnlyHint: "قیمت‌ها در هر دو زبان به ریال نمایش داده می‌شود.",
+  currencyBoth: "هر دو",
+  currencyBothHint:
+    "انگلیسی دلار و فارسی ریال نشان می‌دهد. مشتری می‌تواند واحد پول صورتحساب را تغییر دهد.",
   exchangeRate: "نرخ ارز",
   fxAutomatic: "خودکار",
   fxManual: "دستی",
-  fxPerUsd: "تومان به ازای هر دلار",
-  fxFromEnv: "از USD_TO_TOMAN",
+  fxPerUsd: "ریال به ازای هر دلار",
+  fxFromEnv: "از USD_TO_RIAL",
   fxApply: "اعمال",
   fxConfirm: "تأیید",
   fxCancel: "انصراف",
@@ -764,7 +790,7 @@ const fa: typeof en = {
     "روی قیمت‌های نمایش‌داده‌شده اعمال می‌شود. نرخ صورتحساب‌ها هنگام صدور ثابت می‌ماند.",
   fxOutOfRange:
     "این نرخ بیش از ده برابر با نرخ خودکار فاصله دارد. رقم اضافه را بررسی کنید.",
-  fxInvalid: "یک عدد صحیح به تومان وارد کنید.",
+  fxInvalid: "یک عدد صحیح به ریال وارد کنید.",
   invoice: "صورتحساب",
   invoiceTo: "صورتحساب برای",
   invoiceFrom: "از طرف",

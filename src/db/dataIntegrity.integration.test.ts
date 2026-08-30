@@ -332,9 +332,15 @@ test("constraints, corruption detection, and derived reconciliation share one in
       );
       await assert.rejects(
         tx.savepoint((sp) => sp`
+          UPDATE orders SET currency = 'IRT' WHERE id = ${order.id}
+        `),
+        postgresCode("23514"),
+      );
+      await assert.rejects(
+        tx.savepoint((sp) => sp`
           UPDATE orders
           SET status = 'invoiced', invoice_number = ${`INV-STAGE-${suffix}`},
-              fx_rate_to_toman = 1000, invoiced_at = now(), paid_at = now()
+              fx_rate_to_rial = 10000, invoiced_at = now(), paid_at = now()
           WHERE id = ${order.id}
         `),
         postgresCode("23514"),

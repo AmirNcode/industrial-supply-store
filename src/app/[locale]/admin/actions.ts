@@ -8,7 +8,7 @@ import { sql } from "@/db";
 import { findUserIdByEmail, setPassword } from "@/db/userQueries";
 import { hashPassword } from "@/lib/password";
 import { assertAdminWrite, signInAdmin, signOutAdmin } from "@/lib/admin";
-import { getFxRate, saveFxSettings } from "@/lib/fx";
+import { getFxRate, saveFxSettings, savePriceDisplayMode } from "@/lib/fx";
 import { envFxRate, isFxMode, isPlausibleRate, parseRate } from "@/lib/fxRate";
 import { safeLocale } from "@/lib/i18n";
 import { saveSiteContact } from "@/lib/siteContact";
@@ -22,6 +22,7 @@ import { sellHeldStock, releaseHeldStock } from "@/db/inventoryQueries";
 import { RATE_LIMITS, consumeRateLimit } from "@/lib/rateLimit";
 import { REQUEST_LIMITS, boundedString } from "@/lib/requestLimits";
 import { updateOrderItemPrices } from "@/db/invoiceQueries";
+import { isPriceDisplayMode } from "@/lib/money";
 
 /**
  * Signing in and out live here, alongside every other admin action, so
@@ -79,6 +80,20 @@ export async function saveFxAction(formData: FormData): Promise<void> {
   // a rate change would take up to an hour to reach the pages that show it.
   revalidatePath("/", "layout");
   redirect(`/${locale}/admin/settings?fx=saved`);
+}
+
+export async function savePriceDisplayModeAction(formData: FormData): Promise<void> {
+  await assertAdminWrite();
+
+  const locale = safeLocale(formData);
+  const rawMode = String(formData.get("priceDisplayMode") ?? "");
+  if (!isPriceDisplayMode(rawMode)) {
+    redirect(`/${locale}/admin/settings?currency=invalid`);
+  }
+
+  await savePriceDisplayMode(rawMode);
+  revalidatePath("/", "layout");
+  redirect(`/${locale}/admin/settings?currency=saved`);
 }
 
 export async function saveSiteContactAction(formData: FormData): Promise<void> {
@@ -311,7 +326,7 @@ export async function issueInvoiceAction(formData: FormData): Promise<void> {
         SET status = 'invoiced',
             invoiced_at = now(),
             payment_url = ${paymentUrl},
-            fx_rate_to_toman = ${rate},
+            fx_rate_to_rial = ${rate},
             invoice_number = 'INV-' || to_char(now(), 'YYYY') || '-' ||
                              lpad(nextval('invoice_seq')::text, 4, '0'),
             total_cents = (

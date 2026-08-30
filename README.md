@@ -1,8 +1,10 @@
 # TEMEX — Tools, Equipment & Materials Express
 
 A McMaster-Carr–style industrial parts catalog for the Iranian market.
-English (USD) and Persian (Toman), RTL throughout. No payment processing — the
-cart ends in a quote request.
+English and Persian, Rial and USD price display, and RTL throughout. The admin
+can show customers USD only, Rials only (the default), or language-driven USD
+in English and Rial in Persian. No payment processing — the cart ends in a
+quote request.
 
 **The catalog is generated demo data.** Dimensions follow real standard
 progressions and are correct in shape and magnitude, but this is not a certified
@@ -163,7 +165,7 @@ failure the Docker image hits, which is why `docker-compose` passes a build-time
    It has no override for an initialized database.
 
 5. **Set the remaining environment variables** in the Vercel project:
-   `ADMIN_PASSWORD` (see the warning below), `USD_TO_TOMAN`, and the Supabase
+   `ADMIN_PASSWORD` (see the warning below), `USD_TO_RIAL`, and the Supabase
    Storage variables documented in `.env.example` if administrators will upload
    catalog images or CSV files. CSV imports need a browser-safe publishable/anon
    key and a private import bucket in addition to the server secret.
@@ -487,9 +489,12 @@ both locales.
 Iranian procurement staff match dimensions against manufacturer catalogs, which
 are Latin; localizing `0.239"` would make the table harder to use, not easier.
 
-Toman amounts are converted from stored USD at a single hand-maintained rate
-(`USD_TO_TOMAN` in `.env`) and rounded to the nearest 100. **There is no live FX
-feed** — the rate is a constant you update by hand.
+Rial amounts are converted from stored USD at a single hand-maintained rate
+(`USD_TO_RIAL` in `.env`, or a manual rate in Admin → Settings) and catalog
+figures are rounded to the nearest 1,000 Rial. Invoices retain whole-Rial
+precision and freeze the issue-time rate. **There is no live FX feed.** Admin →
+Settings also controls whether customers see USD only, Rials only, or USD in
+English and Rial in Persian; CSV import prices remain USD.
 
 ---
 

@@ -7,6 +7,7 @@ import type { CartLine } from "@/lib/cart";
 import { unitPriceAt } from "@/lib/cart";
 import type { Locale } from "@/lib/i18n";
 import { quoteCartFingerprint } from "@/lib/quoteSubmission";
+import type { Currency } from "@/lib/money";
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 type Tx = TransactionSql<{}>;
@@ -28,6 +29,8 @@ export type SubmitOrderInput = {
   cartFingerprint: string;
   submissionKey: string;
   locale: Locale;
+  /** Currency selected by the customer-facing display policy at submission. */
+  currency: Currency;
   userId: string | null;
   contact: QuoteContact;
 };
@@ -131,7 +134,7 @@ export async function submitOrderFromCartInTransaction(
         ${input.contact.country},
         ${input.contact.notes},
         ${input.locale},
-        ${input.locale === "fa" ? "IRT" : "USD"},
+        ${input.currency},
         ${totalCents},
         ${totalCents},
         'received',

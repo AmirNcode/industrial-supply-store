@@ -4,9 +4,9 @@ import { getCartLines, unitPriceAt } from "@/lib/cart";
 import { updateQtyAction, removeLineAction } from "@/app/actions";
 import { CartPageSync } from "@/components/CartPageSync";
 import { isLocale, getDict, type Locale } from "@/lib/i18n";
-import { formatPrice, formatInt } from "@/lib/money";
+import { customerCurrencyFor, formatPrice, formatInt } from "@/lib/money";
 import { specValueLabel } from "@/lib/specValues";
-import { getFxRate } from "@/lib/fx";
+import { getFxRate, getPriceDisplayMode } from "@/lib/fx";
 
 export default async function CartPage({
   params,
@@ -21,7 +21,12 @@ export default async function CartPage({
   const t = getDict(l);
   const { error } = await searchParams;
 
-  const [lines, rate] = await Promise.all([getCartLines(), getFxRate()]);
+  const [lines, rate, priceDisplayMode] = await Promise.all([
+    getCartLines(),
+    getFxRate(),
+    getPriceDisplayMode(),
+  ]);
+  const currency = customerCurrencyFor(priceDisplayMode, l);
   const subtotal = lines.reduce((sum, x) => sum + unitPriceAt(x, x.qty) * x.qty, 0);
 
   return (
@@ -80,13 +85,13 @@ export default async function CartPage({
                       </bdi>
                     </div>
                     <span className="tech shrink-0 text-[15px] font-bold">
-                      {formatPrice(unit * line.qty, l, rate)}
+                      {formatPrice(unit * line.qty, currency, l, rate)}
                     </span>
                   </div>
 
                   <div className="mt-2 flex items-center gap-3">
                     <span className="tech text-[12px] text-[var(--color-ink-muted)]">
-                      {formatPrice(unit, l, rate)} / {t.each}
+                      {formatPrice(unit, currency, l, rate)} / {t.each}
                     </span>
                     <form
                       action={updateQtyAction}
@@ -164,7 +169,9 @@ export default async function CartPage({
                           {summary}
                         </span>
                       </td>
-                      <td className="num tech tech-num">{formatPrice(unit, l, rate)}</td>
+                      <td className="num tech tech-num">
+                        {formatPrice(unit, currency, l, rate)}
+                      </td>
                       <td>
                         <form action={updateQtyAction} className="flex items-center gap-1">
                           <input type="hidden" name="productId" value={line.productId} />
@@ -183,7 +190,7 @@ export default async function CartPage({
                         </form>
                       </td>
                       <td className="num tech tech-num font-bold">
-                        {formatPrice(unit * line.qty, l, rate)}
+                        {formatPrice(unit * line.qty, currency, l, rate)}
                       </td>
                       <td>
                         <form action={removeLineAction}>
@@ -208,7 +215,7 @@ export default async function CartPage({
             <span className="text-[15px] sm:text-[13px]">
               {t.subtotal}:{" "}
               <strong className="tech text-[17px] sm:text-[15px]">
-                {formatPrice(subtotal, l, rate)}
+                {formatPrice(subtotal, currency, l, rate)}
               </strong>
             </span>
             <Link

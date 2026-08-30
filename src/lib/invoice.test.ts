@@ -45,20 +45,21 @@ function digits(s: string): number {
   return Number(out);
 }
 
-test("on an invoice, the Persian line totals add up to the printed total", () => {
-  // formatPrice rounds Toman to the nearest hundred, so rounding each line
-  // and the total separately lets the column disagree with its own sum. At
-  // 145,000 three lines of 33 cents print 47,900 each -- 143,700 -- against a
-  // total of 143,600. formatPriceExact must not do that.
-  const rate = 145000;
+test("on an invoice, the Persian Rial line totals add up to the printed total", () => {
+  // The catalog formatter rounds to the nearest thousand Rial. The invoice
+  // formatter keeps whole-Rial precision so the printed arithmetic closes.
+  const rate = 1_450_000;
   const lines = [
     { qty: 1, unitPriceCents: 33 },
     { qty: 1, unitPriceCents: 33 },
     { qty: 1, unitPriceCents: 33 },
   ];
   const lineSum = lines.reduce(
-    (n, l) => n + digits(formatPriceExact(lineTotalCents(l), "fa", rate)),
+    (n, l) => n + digits(formatPriceExact(lineTotalCents(l), "IRR", "fa", rate)),
     0,
   );
-  assert.equal(digits(formatPriceExact(subtotalCents(lines), "fa", rate)), lineSum);
+  assert.equal(
+    digits(formatPriceExact(subtotalCents(lines), "IRR", "fa", rate)),
+    lineSum,
+  );
 });

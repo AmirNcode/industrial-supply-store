@@ -48,7 +48,7 @@ const COLUMNS: readonly (readonly [string, string])[] = [
   ["products", "inventory_available"],
   ["products", "inventory_on_hold"],
   ["products", "inventory_sold"],
-  ["orders", "fx_rate_to_toman"],
+  ["orders", "fx_rate_to_rial"],
   ["orders", "invoice_number"],
   ["orders", "user_id"],
   ["orders", "submission_key"],
@@ -141,7 +141,8 @@ const REQUIRED_CONSTRAINTS = [
   "products_price_tiers_check", "products_pack_qty_check",
   "products_lead_days_check", "products_inventory_on_hold_check",
   "products_inventory_sold_check", "cart_items_qty_check",
-  "orders_user_id_users_id_fk", "orders_status_check", "orders_totals_check",
+  "orders_user_id_users_id_fk", "orders_status_check", "orders_currency_check",
+  "orders_totals_check",
   "orders_invoice_fields_check", "orders_timestamp_chain_check",
   "orders_status_timestamps_check", "order_items_qty_check", "order_items_prices_check",
   "request_rate_limits_count_check",
@@ -202,6 +203,7 @@ const REQUIRED_MIGRATIONS = [
   "20260818025101",
   "20260820093000",
   "20260820154500",
+  "20260828212651",
 ] as const;
 let recordedMigrations = new Set<string>();
 if (hasMigrationLedger) {

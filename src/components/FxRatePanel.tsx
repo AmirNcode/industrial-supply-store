@@ -9,7 +9,7 @@ import { parseRate, type FxMode } from "@/lib/fxRate";
  * Two-step Apply.
  *
  * Typing a rate and moving the toggle change nothing on their own. One
- * keystroke slip here reprices every Toman figure on the site, and nothing
+ * keystroke slip here reprices every Rial figure on the site, and nothing
  * about the result looks wrong until a customer says so — cheap to guard,
  * expensive to notice afterwards.
  */

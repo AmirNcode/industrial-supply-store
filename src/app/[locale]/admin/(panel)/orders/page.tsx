@@ -3,8 +3,8 @@ import Link from "next/link";
 import { sql } from "@/db";
 import { DEMO_MODE } from "@/lib/demo";
 import { isLocale, getDict, type Locale } from "@/lib/i18n";
-import { formatPrice, formatInt } from "@/lib/money";
-import { getFxRate } from "@/lib/fx";
+import { customerCurrencyFor, formatPrice, formatInt } from "@/lib/money";
+import { getFxRate, getPriceDisplayMode } from "@/lib/fx";
 import { cookies } from "next/headers";
 import { emailsWithAccounts } from "@/db/userQueries";
 import { OrderStatusPill, STATUS_LABEL_KEY } from "@/components/OrderStatusPill";
@@ -40,7 +40,7 @@ type OrderRow = {
   courier: string;
   trackingNumber: string;
   invoiceNumber: string | null;
-  fxRateToToman: number | null;
+  fxRateToRial: number | null;
   paymentUrl: string;
 };
 
@@ -79,8 +79,9 @@ export default async function AdminPage({
   // The sign-in gate lives in the panel layout, which wraps this page. FX and
   // the queue have no dependency, so do not spend one database round trip
   // waiting to start the other.
-  const [rate, orders] = await Promise.all([
+  const [rate, priceDisplayMode, orders] = await Promise.all([
     getFxRate(),
+    getPriceDisplayMode(),
     sql<OrderRow[]>`
       SELECT q.id, q.ref, q.company, q.contact_name AS "contactName", q.email,
              q.phone, q.po_number AS "poNumber", q.city, q.country, q.notes,
@@ -88,7 +89,7 @@ export default async function AdminPage({
              q.created_at AS "createdAt", q.courier,
              q.tracking_number AS "trackingNumber",
              q.invoice_number AS "invoiceNumber",
-             q.fx_rate_to_toman AS "fxRateToToman",
+             q.fx_rate_to_rial AS "fxRateToRial",
              q.payment_url AS "paymentUrl",
              (SELECT count(*)::int FROM order_items i WHERE i.order_id = q.id) AS "itemCount"
       FROM orders q
@@ -124,6 +125,16 @@ export default async function AdminPage({
     if (!byOrder.has(i.orderId)) byOrder.set(i.orderId, []);
     byOrder.get(i.orderId)!.push(i);
   }
+
+  const formatOrderPrice = (cents: number, order: OrderRow) => {
+    const orderLocale: Locale = order.locale === "fa" ? "fa" : "en";
+    return formatPrice(
+      cents,
+      customerCurrencyFor(priceDisplayMode, orderLocale),
+      orderLocale,
+      order.fxRateToRial ?? rate,
+    );
+  };
 
   return (
     <>
@@ -189,10 +200,10 @@ export default async function AdminPage({
                 a customer owes changing every time someone edits the
                 exchange rate after their invoice has already gone out. The
                 live rate is only correct for an order that has not been
-                priced yet, which is exactly when fxRateToToman is still
+                priced yet, which is exactly when fxRateToRial is still
                 null. */}
             <span className="tech font-bold">
-              {formatPrice(q.totalCents, q.locale === "fa" ? "fa" : "en", q.fxRateToToman ?? rate)}
+              {formatOrderPrice(q.totalCents, q)}
             </span>
           </summary>
 
@@ -338,8 +349,8 @@ export default async function AdminPage({
                       <th>{t.partNumber}</th>
                       <th>{t.products}</th>
                       <th className="num">{t.qty}</th>
-                      <th className="num">{t.unitPrice}</th>
-                      <th className="num">{t.finalUnitPrice}</th>
+                      <th className="num">{t.unitPrice} (USD)</th>
+                      <th className="num">{t.finalUnitPrice} (USD)</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -416,10 +427,10 @@ export default async function AdminPage({
                       <td className="whitespace-normal">{i.familyName}</td>
                       <td className="num tech tech-num">{i.qty}</td>
                       <td className="num tech tech-num">
-                        {formatPrice(i.unitPriceCents, q.locale === "fa" ? "fa" : "en", q.fxRateToToman ?? rate)}
+                        {formatOrderPrice(i.unitPriceCents, q)}
                       </td>
                       <td className="num tech tech-num">
-                        {formatPrice(i.unitPriceCents * i.qty, q.locale === "fa" ? "fa" : "en", q.fxRateToToman ?? rate)}
+                        {formatOrderPrice(i.unitPriceCents * i.qty, q)}
                       </td>
                     </tr>
                   ))}
