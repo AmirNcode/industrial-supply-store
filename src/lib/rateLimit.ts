@@ -85,9 +85,20 @@ async function consumeCounter(
     RETURNING request_count::int AS count,
       greatest(
         1,
-        ceil(extract(epoch FROM (
-          window_started_at + make_interval(secs => ${policy.windowSeconds}) - now()
-        )))::int
+        least(
+          -- A window's remaining time cannot exceed the window itself, and
+          -- without this clamp it can read as more. now() is the transaction's
+          -- start time, so two callers racing for one counter each subtract a
+          -- different instant: the one whose transaction began earlier reads a
+          -- window_started_at written fractionally after it, which is enough
+          -- for the ceil below to answer 61 on a 60-second window. Promising a
+          -- wait longer than the window is wrong on its own terms, and it is
+          -- what made the rate-limit integration test fail at random.
+          ${policy.windowSeconds}::int,
+          ceil(extract(epoch FROM (
+            window_started_at + make_interval(secs => ${policy.windowSeconds}) - now()
+          )))::int
+        )
       ) AS "retryAfter"
   `;
 
