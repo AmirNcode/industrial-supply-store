@@ -17,10 +17,10 @@ import { MobileFilterBar } from "@/components/MobileFilterBar";
 import { ActiveFilterPills } from "@/components/ActiveFilterPills";
 import { Breadcrumb } from "@/components/Breadcrumb";
 import { FamilyCartController } from "@/components/FamilyCartController";
-import { CatalogImage } from "@/components/CatalogImage";
-import { CatalogCallout } from "@/components/CatalogCallout";
+import { CatalogImageLightbox } from "@/components/CatalogImageLightbox";
 import { ProductDetails } from "@/components/ProductDetails";
 import { CatalogHeadReveal } from "@/components/CatalogHeadReveal";
+import { calloutArt, paragraphs } from "@/lib/catalogCallout";
 import { isLocale, getDict, pick, type Locale } from "@/lib/i18n";
 import {
   formatInt,
@@ -109,6 +109,19 @@ export default async function FamilyPage({
         ? `${t.shipsIn} ${formatInt(maxLead, l)} ${t.days}`
         : null;
   const activeFilterCount = countActiveFilters(filters);
+  const familyName = pick(family, "name", l);
+  const art = calloutArt(family);
+  const about = paragraphs(pick(family, "about", l));
+
+  /*
+   * Whether the rail starts folded to its 44px edge.
+   *
+   * The fold this rail replaced existed to keep 210px for the table, and that
+   * reason has not gone away — it just does not apply to every family. Ten
+   * columns fit beside a rail on a laptop; the gate valve file's forty-seven do
+   * not, and there the reader wants the width first and the facets on request.
+   */
+  const wideTable = defs.filter((d) => d.inTable).length > 12;
 
   return (
     // The family page drops the top-level category rail — as the reference site
@@ -126,129 +139,156 @@ export default async function FamilyPage({
           countLabel={`${formatInt(total, l)} ${t.products}`}
         />
 
-        <CatalogCallout locale={l} entity={family} />
-
-        <div className="flex gap-5">
+        <div className="flex gap-4">
           {/*
-            The section is what the sticky head is measured against. The filter
-            fold pins to the top of the window and the table's own head pins
+            Facets stand beside the table again rather than folding out above
+            it, so a value's count is read while the results it would produce
+            are on screen. The width that bought the fold is given back by the
+            rail's own fold — see `FacetSidebar` — which starts closed on the
+            families whose tables want the room.
+          */}
+          <FacetSidebar
+            locale={l}
+            base={base}
+            searchParams={sp}
+            facets={facets}
+            defs={defs}
+            filters={filters}
+            collapsed={wideTable}
+          />
+
+          {/*
+            The section is what the sticky head is measured against. The result
+            toolbar pins to the top of the window and the table's own head pins
             directly beneath it, and the CSS needs one element that sees both to
             know how far down the second one sits. `CatalogHeadReveal` marks this
             element while the reader is scrolling down, which un-pins the pair —
             the same reveal the masthead does on a phone.
           */}
           <section className="min-w-0 flex-1" data-catalog-head>
-            <div className="mb-2 flex items-start gap-3">
-              <CatalogImage
-                imageUrl={family.imageUrl}
-                icon={family.icon}
-                alt={pick(family, "name", l)}
-                size={64}
-                className="hidden h-[64px] w-[64px] object-contain sm:block"
-                eager
-              />
+            {/*
+              The identity block. What used to be two things stacked — a small
+              header and a tinted "About" callout under it — is one: a diagram,
+              the name, what it costs you to wait for it, and the prose that
+              explains the choice. They were always answering the same question,
+              and splitting it across two boxes spent about 150px of the first
+              screen on saying the family's name twice.
+
+              `/c/…` and `/l/…` keep `CatalogCallout`; a category has no table
+              under it to make room for.
+            */}
+            <div className="mb-3 flex flex-col gap-4 border-b border-[var(--color-rule)] pb-3.5 sm:flex-row sm:items-start">
+              {/*
+                The wrapper reserves the space so a picture of any shape arrives
+                without moving the text. 3:2 landscape because a dimension
+                drawing is a part seen side-on with a measurement across it —
+                the same reason `calloutArt` sizes it that way — but at the
+                header's height rather than the callout's, since it now sits
+                beside the prose instead of above the table.
+              */}
+              <div
+                className={
+                  art.isDiagram
+                    ? "flex h-[104px] w-[156px] shrink-0 items-center justify-center"
+                    : "shrink-0"
+                }
+              >
+                <CatalogImageLightbox
+                  imageUrl={art.imageUrl}
+                  icon={art.icon}
+                  alt={familyName}
+                  size={art.size}
+                  className={
+                    art.isDiagram ? "object-contain" : "h-[46px] w-[46px] object-contain"
+                  }
+                  eager
+                  openLabel={`${t.viewImageFullSize} ${familyName}`}
+                  closeLabel={t.closeImage}
+                  fillThumbnail={art.isDiagram}
+                />
+              </div>
               <div className="min-w-0">
-                <h1 className="text-[19px] font-bold text-[var(--color-navy)]">
-                  {pick(family, "name", l)}
-                </h1>
-                <p className="text-[12px] text-[var(--color-ink-muted)]">
-                  {pick(family, "desc", l)}
-                </p>
-                {/* Availability and standards, surfaced once for the family
-                    rather than repeated down every row. */}
-                <div className="mt-2 flex flex-wrap gap-1.5">
+                {/* Availability and standards sit on the heading's own baseline
+                    rather than under it: they qualify the name, and a buyer
+                    deciding whether to read on wants both in one glance. Family
+                    facts, surfaced once, not repeated down every row. */}
+                <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1.5">
+                  <h1 className="text-[22px] font-bold text-[var(--color-navy-deep)]">
+                    {familyName}
+                  </h1>
                   {summary.hasStock && (
                     <span className="pill pill-ok">● {t.inStock}</span>
                   )}
+                  {leadLabel && <span className="pill pill-warn">{leadLabel}</span>}
                   {specStandards.map((s) => (
                     <span key={s} className="pill">
                       {s}
                     </span>
                   ))}
-                  {leadLabel && <span className="pill pill-warn">{leadLabel}</span>}
                 </div>
+                <p className="mt-1.5 text-[12px] text-[var(--color-ink-muted)]">
+                  {pick(family, "desc", l)}
+                </p>
+                {about.map((para, index) => (
+                  <p
+                    key={index}
+                    className="mt-1.5 max-w-[76ch] text-[12.5px] leading-relaxed text-[var(--color-ink)]"
+                  >
+                    {para}
+                  </p>
+                ))}
               </div>
             </div>
 
             <CatalogHeadReveal />
 
             {/*
-              The facets fold out above the table rather than standing beside
-              it. A 210px rail is charged to every page whether or not anyone
-              is filtering, and it is exactly the width a wide spec table needs
-              to avoid a horizontal scrollbar. Closed by default so the table is
-              the first thing on the page; opening it pushes the table down.
-
-              Desktop only — MobileFilterBar carries the same facets at phone
-              width, where a fold competing with the fixed bar would be two
-              answers to one question. When filters are active the fold opens
-              on the next render, keeping the state visible and easy to adjust.
+              What the fold's summary used to say, minus the control — the rail
+              is the control now. It pins with the table head, so a reader a
+              thousand rows down still has the count the filters produced next
+              to the columns they are reading.
             */}
-            {facets.some((f) => f.values.length > 0) && (
-              <details
-                className="filter-fold mb-2 hidden lg:block"
-                open={activeFilterCount > 0}
-              >
-                <summary className="filter-trigger">
-                  <span className="filter-trigger-icon" aria-hidden="true">
-                    <svg width="17" height="17" viewBox="0 0 20 20" fill="none">
-                      <path
-                        d="M3 4h14l-5.5 6.2v4.6l-3 1.7v-6.3L3 4Z"
-                        stroke="currentColor"
-                        strokeWidth="1.7"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-[14px] font-bold text-[var(--color-navy-deep)]">
-                      {t.filterBy}
-                    </span>
-                    <span className="block text-[11px] font-normal text-[var(--color-ink-muted)]">
-                      {activeFilterCount > 0
-                        ? `${formatInt(activeFilterCount, l)} ${
-                            activeFilterCount === 1 ? t.filterApplied : t.filtersApplied
-                          }`
-                        : t.filterHelp}
-                    </span>
-                  </span>
-                  <span className="filter-trigger-results">
-                    <span className="tech font-bold">{formatInt(total, l)}</span>{" "}
-                    {t.productsLower}
-                  </span>
-                  <span className="filter-trigger-chevron" aria-hidden="true">
-                    <svg width="14" height="14" viewBox="0 0 20 20" fill="none">
-                      <path
-                        d="m5 7.5 5 5 5-5"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                  </span>
-                </summary>
-                <div className="filter-fold-content">
-                  <FacetSidebar
-                    locale={l}
-                    base={base}
-                    searchParams={sp}
-                    facets={facets}
-                    defs={defs}
-                    filters={filters}
-                    layout="band"
-                  />
-                </div>
-              </details>
-            )}
+            <div className="catalog-toolbar mb-2">
+              <span>
+                <span className="tech font-bold text-[var(--color-ink)]">
+                  {formatInt(total, l)}
+                </span>{" "}
+                {t.productsLower}
+                {activeFilterCount > 0 && (
+                  <>
+                    {" · "}
+                    {formatInt(activeFilterCount, l)}{" "}
+                    {activeFilterCount === 1 ? t.filterApplied : t.filtersApplied}
+                  </>
+                )}
+              </span>
+              {/* The escape hatch to a printable, Find-able whole document. It
+                  is a property of the table rather than of the row window, so
+                  it sits over the table with the count it would change. */}
+              {!window.showAll && products.length < total && (
+                <Link
+                  href={familyWindowHref(base, sp, "all")}
+                  prefetch={false}
+                  rel="nofollow"
+                  className="no-print ms-auto"
+                >
+                  {t.viewAllProducts}
+                </Link>
+              )}
+            </div>
 
-            <ActiveFilterPills
-              locale={l}
-              base={base}
-              searchParams={sp}
-              filters={filters}
-              defs={defs}
-            />
+            {/* Phones only: the rail carries these on a desktop, where a filter
+                belongs beside the control that set it rather than above the
+                results it removed. */}
+            <div className="lg:hidden">
+              <ActiveFilterPills
+                locale={l}
+                base={base}
+                searchParams={sp}
+                filters={filters}
+                defs={defs}
+              />
+            </div>
 
             {products.length === 0 ? (
               <p className="py-6 text-[13px]">
@@ -268,19 +308,21 @@ export default async function FamilyPage({
                * half of them the layout the reader cannot see. Below `lg` the
                * stylesheet folds these same rows into cards instead.
               */
-              <>
-                <FamilyCartController locale={l}>
-                  <SpecTable
-                    locale={l}
-                    defs={defs}
-                    products={products}
-                    highlighted={highlighted}
-                    currency={currency}
-                    rate={rate}
-                    icon={family.icon}
-                  />
-                </FamilyCartController>
-                <FamilyWindowControls
+              <FamilyCartController locale={l}>
+                <SpecTable
+                  locale={l}
+                  defs={defs}
+                  products={products}
+                  highlighted={highlighted}
+                  currency={currency}
+                  rate={rate}
+                  icon={family.icon}
+                />
+                {/* Inside the controller so the running order total can be
+                    written by the same delegation that fills the "In cart"
+                    cells — a second client island for one number would be one
+                    island too many on a page that has worked hard to have one. */}
+                <TableFooter
                   locale={l}
                   base={base}
                   searchParams={sp}
@@ -288,7 +330,7 @@ export default async function FamilyPage({
                   shown={products.length}
                   total={total}
                 />
-              </>
+              </FamilyCartController>
             )}
           </section>
         </div>
@@ -307,7 +349,16 @@ export default async function FamilyPage({
   );
 }
 
-function FamilyWindowControls({
+/**
+ * The table's foot: how much of the family is on screen, how to see more of it,
+ * and how much of it is already on the order.
+ *
+ * The window controls used to sit below the table card as a bare nav. They are
+ * the card's own footer now — the same line as the running order total, which
+ * is the thing a buyer working down a hundred rows is actually keeping track
+ * of. `data-cart-total` is filled by `FamilyCartController`.
+ */
+function TableFooter({
   locale,
   base,
   searchParams,
@@ -322,9 +373,8 @@ function FamilyWindowControls({
   shown: number;
   total: number;
 }) {
-  if (total <= FAMILY_INITIAL_ROWS && !window.showAll) return null;
-
   const t = getDict(locale);
+  const bounded = total > FAMILY_INITIAL_ROWS || window.showAll;
   const currentRows = window.showAll ? null : window.rows;
   const nextRows = currentRows === null ? null : nextFamilyRows(currentRows, total);
   const nextCount = nextRows === null ? 0 : Math.min(FAMILY_ROW_STEP, total - shown);
@@ -335,75 +385,55 @@ function FamilyWindowControls({
         .replace("{total}", formatInt(total, locale));
 
   return (
-    <nav
-      className="no-print mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-[12px]"
-      aria-label={t.productDisplay}
-    >
-      <span className="text-[var(--color-ink-muted)]">{countText}</span>
-      {nextRows !== null && (
+    <div className="catalog-footer" aria-label={t.productDisplay}>
+      {bounded && (
+        <>
+          <span>{countText}</span>
+          {nextRows !== null && (
+            <Link
+              href={familyWindowHref(base, searchParams, nextRows)}
+              prefetch={false}
+              scroll={false}
+              className="btn-small no-print inline-flex items-center hover:no-underline"
+            >
+              {t.loadMoreProducts.replace("{count}", formatInt(nextCount, locale))}
+            </Link>
+          )}
+          {window.showAll && total > FAMILY_INITIAL_ROWS && (
+            <Link
+              href={familyWindowHref(base, searchParams, null)}
+              prefetch={false}
+              className="tap no-print inline-flex items-center"
+            >
+              {t.showFirstProducts.replace(
+                "{count}",
+                formatInt(FAMILY_INITIAL_ROWS, locale),
+              )}
+            </Link>
+          )}
+        </>
+      )}
+      {/*
+        Hidden until the controller has a count above zero. Rendered empty on
+        the server rather than conditionally, because the cart lives in client
+        state — a server that knew it would make this page dynamic and cost the
+        catalog its cache. See `CartLink`.
+      */}
+      <span className="catalog-footer-order no-print" data-cart-total hidden>
+        <span className="font-semibold text-[var(--color-navy-deep)]">
+          <span className="tech" data-cart-total-value />
+          {" "}
+          {t.itemsInOrder}
+        </span>
         <Link
-          href={familyWindowHref(base, searchParams, nextRows)}
+          href={`/${locale}/cart`}
           prefetch={false}
-          scroll={false}
           className="btn-small inline-flex items-center hover:no-underline"
         >
-          {t.loadMoreProducts.replace("{count}", formatInt(nextCount, locale))}
+          {t.reviewOrder}
         </Link>
-      )}
-      {!window.showAll && shown < total && (
-        <Link
-          href={familyWindowHref(base, searchParams, "all")}
-          prefetch={false}
-          rel="nofollow"
-          className="tap inline-flex items-center"
-        >
-          {t.viewAllProducts}
-        </Link>
-      )}
-      {window.showAll && total > FAMILY_INITIAL_ROWS && (
-        <Link
-          href={familyWindowHref(base, searchParams, null)}
-          prefetch={false}
-          className="tap inline-flex items-center"
-        >
-          {t.showFirstProducts.replace(
-            "{count}",
-            formatInt(FAMILY_INITIAL_ROWS, locale),
-          )}
-        </Link>
-      )}
-    </nav>
-  );
-}
-
-function FamilyAddControl({
-  productId,
-  locale,
-  packQty,
-}: {
-  productId: number;
-  locale: Locale;
-  packQty: number;
-}) {
-  const t = getDict(locale);
-  return (
-    <span className="qty-add" data-cart-line>
-      <input
-        type="number"
-        min={1}
-        data-cart-qty-input
-        aria-label={`${t.qty} — ${packQty > 1 ? `${t.pkg} ${packQty}` : ""}`}
-      />
-      <button
-        type="button"
-        className="btn-small"
-        data-cart-action="add"
-        data-product-id={productId}
-        aria-label={t.addToOrder}
-      >
-        +
-      </button>
-    </span>
+      </span>
+    </div>
   );
 }
 
@@ -455,8 +485,6 @@ function SpecTable({
   icon: string;
 }) {
   const t = getDict(locale);
-  // Two price columns mirror the reference site's 1-9 / 10-Up quantity breaks.
-  const hasBulk = products.some((p) => p.priceTiers.length > 1);
 
   /*
    * A family owns as many columns as its supplier keeps, which for the first
@@ -465,8 +493,15 @@ function SpecTable({
    */
   const tableDefs = defs.filter((d) => d.inTable);
   const detailDefs = defs.filter((d) => d.inDetail);
-  // +1 for the card cell, which is empty on desktop but still a column.
-  const columnCount = tableDefs.length + (hasBulk ? 7 : 6);
+  /*
+   * Part no., the phone card cell, the spec columns, pack, price, in-cart.
+   *
+   * The grid used to carry two more: a second price for the 10-up break, and a
+   * quantity box. The break is a fact only a buyer choosing a quantity needs,
+   * and the box only matters to one who has chosen — both are in the expanded
+   * row's order panel now, where the choice is actually made.
+   */
+  const columnCount = tableDefs.length + 5;
 
   /*
    * What the phone cards lead with. Computed here, once, from the same rows
@@ -477,22 +512,9 @@ function SpecTable({
 
   return (
     <table className="spec-table catalog-table">
+      {/* One tier. The second existed only to cap the pair of price columns,
+          and there is one price column now. */}
       <thead>
-        {/* Two-tier header: the quantity-break columns share one "Pkg." cap,
-            exactly as on the reference site. */}
-        <tr>
-          <th className="!border-b-0" />
-          <th className="!border-b-0" data-cell="card" />
-          {tableDefs.map((d) => (
-            <th key={d.key} className="!border-b-0" />
-          ))}
-          <th className="!border-b-0" />
-          <th className="group" colSpan={hasBulk ? 2 : 1}>
-            {t.pkg} — {currencyLabel(currency, locale)}
-          </th>
-          <th className="!border-b-0" />
-          <th className="!border-b-0" />
-        </tr>
         <tr>
           {/* The part number leads: it is what a buyer quotes on the phone and
               types into Quick Order, so it should not be hiding past a dozen
@@ -507,10 +529,10 @@ function SpecTable({
             </th>
           ))}
           <th className="num">{t.pkgQty}</th>
-          {/* Quantity-break captions are Latin ranges; they must not mirror. */}
-          <th className="num tech tech-num price-col">1–9</th>
-          {hasBulk && <th className="num tech tech-num price-col">10+</th>}
-          <th>{t.qty}</th>
+          {/* The currency is named once, here, rather than on every row. */}
+          <th className="num price-head">
+            {t.price} / {t.pkg} — {currencyLabel(currency, locale)}
+          </th>
           <th>{t.inCart}</th>
         </tr>
       </thead>
@@ -518,13 +540,7 @@ function SpecTable({
         {products.map((p) => {
           const isHit = highlighted && p.partNumber.toUpperCase() === highlighted;
           const base = p.priceTiers[0]?.priceCents ?? p.priceCents;
-          const bulk = p.priceTiers[1]?.priceCents;
           const onRequest = isPriceOnRequest(base);
-          const expandable =
-            detailDefs.some((d) => {
-              const v = p.specs[d.key];
-              return v !== null && v !== undefined && v !== "";
-            }) || p.documents.length > 0;
 
           return (
             <Fragment key={p.id}>
@@ -535,22 +551,25 @@ function SpecTable({
                 className={isHit ? "product-row row-hit" : "product-row"}
               >
                 <td data-cell="part">
-                  {expandable ? (
-                    // A checkbox and CSS rather than a client component: the
-                    // detail content is server-rendered, and a hundred rows of
-                    // hydrated toggle state buys nothing over `:has()`.
-                    //
-                    // The checkbox carries an id so cells further along the row
-                    // can point a plain `<label for>` at it — one row, one
-                    // toggle, several ways to reach it.
-                    <label className="row-expand" htmlFor={`row-${p.id}`}>
-                      <input type="checkbox" className="row-toggle" id={`row-${p.id}`} />
-                      <span className="part-no tech">{p.partNumber}</span>
-                      <span className="row-caret" aria-hidden="true" />
-                    </label>
-                  ) : (
+                  {/*
+                    A checkbox and CSS rather than a client component: the
+                    detail content is server-rendered, and a hundred rows of
+                    hydrated toggle state buys nothing over `:has()`.
+
+                    The checkbox carries an id so cells further along the row
+                    can point a plain `<label for>` at it — one row, one
+                    toggle, several ways to reach it.
+
+                    Every row opens, including one whose family declares no
+                    detail columns. The detail is where the price ladder and
+                    ADD live now, so a row that could not open would be a
+                    product nobody could buy.
+                  */}
+                  <label className="row-expand" htmlFor={`row-${p.id}`}>
+                    <input type="checkbox" className="row-toggle" id={`row-${p.id}`} />
                     <span className="part-no tech">{p.partNumber}</span>
-                  )}
+                    <span className="row-caret" aria-hidden="true" />
+                  </label>
                 </td>
                 {/*
                   The phone card's summary line, and the only content on the
@@ -594,7 +613,7 @@ function SpecTable({
                    * a name is what a reader clicks. Only the first: making every
                    * cell a target would swallow text selection across the table.
                    */
-                  const opens = expandable && col === 0 && !isNum;
+                  const opens = col === 0 && !isNum;
                   return (
                     <td
                       key={d.key}
@@ -634,42 +653,37 @@ function SpecTable({
                     ? t.callForPriceShort
                     : formatPriceBare(base, currency, locale, rate)}
                 </td>
-                {hasBulk && (
-                  <td
-                    data-cell="bulk"
-                    className="num tech tech-num price-col text-[var(--color-ink-muted)]"
-                  >
-                    {bulk !== undefined && !isPriceOnRequest(bulk)
-                      ? formatPriceBare(bulk, currency, locale, rate)
-                      : ""}
-                  </td>
-                )}
-                <td data-cell="qty">
-                  <FamilyAddControl
-                    productId={p.id}
-                    locale={locale}
-                    packQty={p.packQty}
-                  />
-                </td>
+                {/* A read-out, not a control. The quantity is set in the row's
+                    own order panel; what belongs in the grid is the answer to
+                    "have I already taken this size", which is what a buyer
+                    scanning a hundred rows keeps losing track of. */}
                 <td className="in-cart-col" data-cell="cart">
                   <FamilyInCart productId={p.id} locale={locale} />
                 </td>
               </tr>
-              {expandable && (
-                <tr className="detail-row">
-                  <td colSpan={columnCount}>
-                    <ProductDetails
-                      specs={p.specs}
-                      defs={detailDefs}
-                      documents={p.documents}
-                      imageUrl={p.imageUrl}
-                      imageAlt={p.partNumber}
-                      icon={icon}
-                      locale={locale}
-                    />
-                  </td>
-                </tr>
-              )}
+              <tr className="detail-row">
+                <td colSpan={columnCount}>
+                  <ProductDetails
+                    specs={p.specs}
+                    defs={detailDefs}
+                    documents={p.documents}
+                    imageUrl={p.imageUrl}
+                    imageAlt={p.partNumber}
+                    icon={icon}
+                    locale={locale}
+                    order={{
+                      productId: p.id,
+                      packQty: p.packQty,
+                      priceCents: p.priceCents,
+                      priceTiers: p.priceTiers,
+                      inStock: p.inStock,
+                      leadDays: p.leadDays,
+                      currency,
+                      rate,
+                    }}
+                  />
+                </td>
+              </tr>
             </Fragment>
           );
         })}

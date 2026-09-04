@@ -21,6 +21,7 @@ export function FacetList({
   searchable,
   columns = 1,
   asChips = false,
+  showCounts = false,
   searchLabel,
 }: {
   items: FacetItem[];
@@ -28,6 +29,13 @@ export function FacetList({
   columns?: number;
   /** Render values as tappable chips rather than a text list. */
   asChips?: boolean;
+  /**
+   * How many products each value would leave. Worth its width only where the
+   * results are visible beside the list — the rail — so a reader can see the
+   * cost of a choice before making it. The phone sheet covers the table, so it
+   * leaves them off.
+   */
+  showCounts?: boolean;
   searchLabel: string;
 }) {
   const [q, setQ] = useState("");
@@ -93,12 +101,14 @@ export function FacetList({
                 href={i.href}
                 prefetch={false}
                 scroll={false}
-                className={`block py-[1px] text-[12px] leading-snug ${
-                  i.selected ? "font-semibold text-[var(--color-navy-deep)]" : ""
-                }`}
+                className={`text-[12px] leading-snug ${
+                  showCounts ? "facet-row" : "block py-[1px]"
+                } ${i.selected ? "font-semibold text-[var(--color-navy-deep)]" : ""}`}
+                data-selected={i.selected || undefined}
               >
                 <span className="tech">{i.label}</span>
                 {i.selected && <span aria-hidden="true"> ✕</span>}
+                {showCounts && <span className="facet-count">{i.count}</span>}
               </Link>
             </li>
           ))}

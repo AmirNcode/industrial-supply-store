@@ -15,6 +15,9 @@ for (const locale of locales) {
     const marker = `E2E-${locale}-${testInfo.workerIndex}-${Date.now()}`;
 
     await page.goto(`/${locale}/f/${familySlug}`);
+    // Ordering lives in the expanded row now, not in a column of the grid, so
+    // the part number has to be opened before there is a quantity to fill.
+    await page.locator("label.row-expand").first().click();
     const quantity = page.getByRole("spinbutton", { name: new RegExp(t.qty) }).first();
     const add = page.getByRole("button", { name: t.addToOrder }).first();
     await quantity.fill("1");

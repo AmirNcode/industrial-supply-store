@@ -112,6 +112,7 @@ const en = {
   requestQuote: "REQUEST QUOTE",
   continueShopping: "Continue browsing",
   itemsInOrder: "items",
+  reviewOrder: "Review order",
   // Quick order
   quickOrder: "Quick Order",
   quickOrderHelp:
@@ -680,6 +681,7 @@ const fa: typeof en = {
   requestQuote: "درخواست استعلام",
   continueShopping: "ادامه مرور",
   itemsInOrder: "قلم",
+  reviewOrder: "بررسی سفارش",
   quickOrder: "سفارش سریع",
   quickOrderHelp:
     "در هر سطر یک کد کالا وارد کنید، سپس ویرگول و تعداد. نمونه: ‎91290A115, 25",
