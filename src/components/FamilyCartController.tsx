@@ -16,10 +16,23 @@ import type { Locale } from "@/lib/i18n";
 
 type CartButton = HTMLButtonElement & {
   dataset: DOMStringMap & {
-    cartAction?: "add" | "remove";
+    cartAction?: "add" | "remove" | "step";
+    cartStep?: string;
     productId?: string;
   };
 };
+
+/**
+ * The part of a button whose text says what the press is doing.
+ *
+ * The ADD control in the order panel is an icon beside a word, so writing "✓"
+ * over the whole button would drop the icon and never bring it back — the swap
+ * goes to the label span instead. A button that is only a glyph has no such
+ * span and is written to directly.
+ */
+function faceOf(button: HTMLButtonElement): HTMLElement {
+  return button.querySelector<HTMLElement>("[data-cart-label]") ?? button;
+}
 
 function productIdFrom(button: CartButton): number | null {
   const id = Number(button.dataset.productId);
@@ -70,6 +83,22 @@ export function FamilyCartController({
       }
       if (value) value.textContent = present ? formatInt(qty, locale) : "";
     }
+
+    /*
+     * The table's own running total.
+     *
+     * Rendered empty and hidden on the server: the cart lives in client state,
+     * and a server that read it would make this page dynamic and cost the whole
+     * catalog its cache. The count is every line in the order, not only lines
+     * from this family — "Review order" goes to all of it.
+     */
+    const footer = root.querySelector<HTMLElement>("[data-cart-total]");
+    if (footer) {
+      const shown = cart.hydrated && cart.count > 0;
+      footer.hidden = !shown;
+      const value = footer.querySelector<HTMLElement>("[data-cart-total-value]");
+      if (value) value.textContent = shown ? formatInt(cart.count, locale) : "";
+    }
   }, [cart, locale]);
 
   async function add(button: CartButton) {
@@ -81,9 +110,13 @@ export function FamilyCartController({
     const oldTimer = doneTimers.current.get(button);
     if (oldTimer !== undefined) window.clearTimeout(oldTimer);
 
+    const face = faceOf(button);
+    const idle = face.dataset.cartIdle ?? face.textContent ?? "+";
+    face.dataset.cartIdle = idle;
+
     button.disabled = true;
     button.setAttribute("aria-busy", "true");
-    button.textContent = "…";
+    face.textContent = "…";
     let ok = false;
     try {
       ok = await addToCart(productId, requestedQuantity(button));
@@ -94,17 +127,29 @@ export function FamilyCartController({
     button.removeAttribute("aria-busy");
 
     if (!ok) {
-      button.textContent = "+";
+      face.textContent = idle;
       return;
     }
 
-    if (input) input.value = "";
-    button.textContent = "✓";
+    // The field is a committed quantity with a stepper on either side, not the
+    // grid's old blank "how many more", so it returns to 1 rather than empty.
+    if (input) input.value = "1";
+    face.textContent = "✓";
     const timer = window.setTimeout(() => {
-      if (button.isConnected && !button.disabled) button.textContent = "+";
+      if (button.isConnected && !button.disabled) face.textContent = idle;
       doneTimers.current.delete(button);
     }, 1_600);
     doneTimers.current.set(button, timer);
+  }
+
+  /** The order panel's −/+ . Nudges the field without a round trip. */
+  function step(button: CartButton) {
+    const input = button
+      .closest<HTMLElement>("[data-cart-line]")
+      ?.querySelector<HTMLInputElement>("[data-cart-qty-input]");
+    if (!input) return;
+    const by = Number(button.dataset.cartStep) || 0;
+    input.value = String(Math.max(1, Math.min(99_999, (Number(input.value) || 1) + by)));
   }
 
   async function remove(button: CartButton) {
@@ -130,6 +175,7 @@ export function FamilyCartController({
     if (!button || !rootRef.current?.contains(button)) return;
     if (button.dataset.cartAction === "add") void add(button);
     else if (button.dataset.cartAction === "remove") void remove(button);
+    else if (button.dataset.cartAction === "step") step(button);
   }
 
   function onKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {

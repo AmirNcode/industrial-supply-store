@@ -275,13 +275,11 @@ html[lang="fa"] .spec-table thead th {
   text-transform: none;
   font-size: calc(11px * var(--table-scale, 1));
 }
-/* A column-group label is structure, not money, so it takes the band's own
-   muted blue rather than the gold it used to borrow. */
-.spec-table thead th.group {
-  text-align: center;
-  font-weight: 400;
-  color: var(--color-chrome-muted);
-  padding-bottom: 0;
+/* Money's own cell in the head. The band is one flat colour across a dozen
+   spec columns, so the price column is marked by lifting its heading a shade
+   out of it — the head's counterpart to the amber wash on the cells below. */
+.spec-table thead th.price-head {
+  background: #1c2f57;
 }
 
 .spec-table td {
@@ -335,6 +333,14 @@ html[lang="fa"] .spec-table thead th {
   white-space: normal;
   padding: 0;
   background: var(--color-paper);
+}
+/* The catalog's detail is a panel, not a wider row: a tint it does not share
+   with any row above or below it, and a navy spine on the leading edge saying
+   which row it belongs to. Without the spine an open detail four rows down a
+   zebra table reads as another stripe. */
+.catalog-table tbody tr.detail-row > td {
+  background: #f6f8fb;
+  border-inline-start: 3px solid var(--color-navy);
 }
 /* Kept inside the visible area when a table is wide enough to scroll sideways —
    the page carries that scroll now, not the card. Capped at a readable measure
@@ -524,12 +530,10 @@ html[lang="fa"] .spec-table thead th {
 /* Collapsible category groups on the admin products page. The marker is styled
    rather than hidden — with every group closed by default, the triangle is the
    only thing saying these open at all. */
-.admin-group > summary,
-.filter-trigger {
+.admin-group > summary {
   list-style: none;
 }
-.admin-group > summary::-webkit-details-marker,
-.filter-trigger::-webkit-details-marker {
+.admin-group > summary::-webkit-details-marker {
   display: none;
 }
 .admin-group > summary::before {
@@ -551,86 +555,417 @@ html[dir="rtl"] .admin-group[open] > summary::before {
   color: var(--color-navy);
 }
 
-/* The desktop filter is a toolbar rather than a hairline disclosure. It keeps
-   the table's full width while making the control easy to find, understand and
-   hit. Native details/summary preserves keyboard and no-JavaScript behaviour. */
-.filter-fold {
+
+/* --------------------------------------------------------------------------
+   The catalog filter rail — desktop
+
+   Filters stand beside the table again rather than folding out above it. The
+   rail is what makes a value's *count* worth showing: a fold that pushes the
+   table down is read once and closed, a rail is read while the results move.
+
+   The width is the reason this was a fold before, and the reason the rail
+   collapses: a 47-column family needs every pixel, so `.rail-toggle` shrinks
+   this to a 44px edge and the page starts collapsed when the table is wide.
+   The toggle is a checkbox and `:has()`, the same mechanism the expandable
+   rows use — the panel is server-rendered and there is no state to hydrate.
+   -------------------------------------------------------------------------- */
+.catalog-rail {
+  width: 238px;
+  flex: none;
+  align-self: flex-start;
   overflow: hidden;
   border: 1px solid var(--color-rule);
   border-radius: 5px;
   background: #fff;
-  transition: border-color 0.12s, box-shadow 0.12s;
+  /* Sticky so the facets stay reachable a thousand rows down. Bounded by the
+     window, and scrolls internally when a family has thirty of them. */
+  position: sticky;
+  top: 0;
+  max-height: 100vh;
+  overflow-y: auto;
+  /* Deliberately not transitioned. Animating this width would relayout the
+     table beside it on every frame, and that table can be 1,374 rows. */
 }
-.filter-fold[open] {
-  border-color: var(--color-navy-lift);
-  box-shadow: 0 0 0 1px rgba(42, 93, 176, 0.12);
+/* Off-screen rather than display:none, so the rail opens from the keyboard —
+   the same trick `.row-toggle` uses. */
+.rail-toggle {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
 }
-.filter-trigger {
+.rail-bar {
   display: flex;
-  min-height: 52px;
-  cursor: pointer;
   align-items: center;
-  gap: 10px;
-  padding: 7px 10px;
+  gap: 8px;
+  padding: 9px 11px;
   background: var(--color-panel);
-  transition: background 0.12s;
+  border-bottom: 1px solid var(--color-rule);
 }
-.filter-trigger:hover,
-.filter-fold[open] > .filter-trigger {
-  background: var(--color-navy-tint);
+.rail-head {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-navy-deep);
 }
-.filter-trigger:focus-visible {
+.catalog-rail:has(.rail-toggle:focus-visible) .rail-head {
   outline: 2px solid var(--color-navy-lift);
-  outline-offset: -3px;
+  outline-offset: 2px;
 }
-.filter-trigger-icon {
-  display: grid;
-  width: 32px;
-  height: 32px;
+.rail-count {
   flex: none;
-  place-items: center;
-  border-radius: 3px;
+  border-radius: 9px;
   background: var(--color-navy);
+  padding: 1px 7px;
   color: #fff;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
 }
-.filter-trigger-results {
+/* Points the way the panel folds, which under RTL is the other way. */
+.rail-caret {
   flex: none;
-  border-inline-start: 1px solid var(--color-rule);
-  padding-inline-start: 12px;
-  font-size: 11px;
-  color: var(--color-ink-muted);
-}
-.filter-trigger-chevron {
-  display: grid;
-  width: 28px;
-  height: 28px;
-  flex: none;
-  place-items: center;
-  border: 1px solid var(--color-rule);
-  border-radius: 3px;
-  background: #fff;
+  margin-inline-start: auto;
   color: var(--color-navy);
 }
-.filter-trigger-chevron svg {
-  transition: transform 0.12s;
-}
-.filter-fold[open] .filter-trigger-chevron svg {
+html[dir="rtl"] .rail-caret {
   transform: rotate(180deg);
 }
-.filter-fold-content {
+.rail-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 9px 11px;
+  border-bottom: 1px solid var(--color-rule-light);
+}
+/* Narrower than the page's `.filter-pill`, which is sized for a full-width row
+   and would wrap after one chip in a 238px column. */
+.rail-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--color-navy);
+  border-radius: 3px;
+  background: var(--color-navy-tint);
+  padding: 3px 7px;
+  color: var(--color-navy-deep);
+  font-size: 11px;
+}
+.rail-clear {
+  flex: none;
+  font-size: 11px;
+  color: var(--color-ink-muted);
+  text-decoration: underline;
+}
+.rail-group {
+  padding: 11px 11px 12px;
+  border-bottom: 1px solid var(--color-rule-light);
+}
+.rail-group:last-child {
+  border-bottom: 0;
+}
+/* Mono uppercase, like a column code in the table head — the facet and the
+   column it filters are the same thing, and should look like it. */
+.rail-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--color-ink-faint);
+}
+html[lang="fa"] .rail-label {
+  font-family: var(--font-fa);
+  font-size: 11px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+/* A value and what choosing it would leave. The count is the whole reason the
+   rail earns its width, so it gets its own end-aligned column rather than
+   trailing the label as parenthetical text. */
+.facet-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 3px;
+  padding: 4px 6px;
+  color: var(--color-navy);
+}
+.facet-row:hover {
+  background: var(--color-panel);
+  text-decoration: none;
+}
+.facet-row[data-selected] {
+  background: var(--color-navy-tint);
+}
+.facet-count {
+  margin-inline-start: auto;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--color-ink-faint);
+}
+.facet-row[data-selected] .facet-count {
+  color: var(--color-ink-muted);
+}
+
+.rail-unit {
+  font-family: var(--font-mono);
+  font-weight: 400;
+  color: var(--color-control-border);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* Collapsed: a 44px edge. The label turns on its side rather than disappearing,
+   so the rail still says what it is and where to click to get it back. */
+.catalog-rail:has(.rail-toggle:checked) {
+  width: 44px;
+}
+.catalog-rail:has(.rail-toggle:checked) .rail-bar {
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 0;
+}
+/* The row direction stays: under a vertical writing mode the inline axis runs
+   down the page, so the label, the count and the caret stack without the flex
+   direction being changed — changing it too would lay them out sideways again
+   and overflow the 44px edge. */
+.catalog-rail:has(.rail-toggle:checked) .rail-head {
+  flex: none;
+  justify-content: center;
+  gap: 8px;
+  padding-block: 4px;
+  writing-mode: vertical-rl;
+}
+html[dir="rtl"] .catalog-rail:has(.rail-toggle:checked) .rail-head {
+  writing-mode: vertical-lr;
+}
+.catalog-rail:has(.rail-toggle:checked) .rail-caret {
+  margin-inline-start: 0;
+  transform: rotate(180deg);
+}
+html[dir="rtl"] .catalog-rail:has(.rail-toggle:checked) .rail-caret {
+  transform: rotate(0deg);
+}
+.catalog-rail:has(.rail-toggle:checked) .rail-chips,
+.catalog-rail:has(.rail-toggle:checked) .rail-groups,
+.catalog-rail:has(.rail-toggle:checked) .rail-clear {
+  display: none;
+}
+
+/* --------------------------------------------------------------------------
+   The toolbar over the table.
+
+   What the fold's summary used to say — how many results, how many filters —
+   minus the control, which is now the rail. It is a single line, and it pins
+   with the table head so both answer "what am I looking at" together.
+   -------------------------------------------------------------------------- */
+.catalog-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 9px;
+  border-bottom: 1px solid var(--color-rule);
+  background: #fff;
+  font-size: 11.5px;
+  color: var(--color-ink-muted);
+}
+
+/* --------------------------------------------------------------------------
+   The order panel inside an expanded row.
+
+   Quantity and ADD used to be two columns of the grid, on every row, whether
+   or not anyone was buying. They are one panel here instead: the row stays a
+   datasheet to scan, and committing to a size happens in one place, next to
+   the price it costs and the specifications that justify it.
+   -------------------------------------------------------------------------- */
+.order-panel {
+  width: 236px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-self: flex-start;
+  border: 1px solid var(--color-rule);
+  border-radius: 5px;
+  background: #fff;
+  padding: 12px 13px 13px;
+  text-align: start;
+}
+.order-price {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-navy-deep);
+}
+.order-price-unit {
+  font-family: var(--font-sans);
+  font-size: 10.5px;
+  font-weight: 400;
+  color: var(--color-ink-faint);
+}
+.order-pack {
+  margin-top: 2px;
+  font-size: 10.5px;
+  color: var(--color-ink-faint);
+}
+/* The quantity-break ladder. It was a second price column on every row; here
+   it is a three-line table shown only to someone who opened the row. */
+.order-tiers {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 1px 10px;
+  border-top: 1px solid var(--color-rule-light);
+  padding-top: 8px;
+  font-size: 11px;
+}
+.order-stock {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-ok);
+}
+.order-stock[data-stock="out"] {
+  color: var(--color-warn);
+}
+/* Full width and uppercase: the one commitment on the panel, and it should not
+   be mistaken for the row's other controls. */
+.order-add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 11px 12px;
+  font-size: 12px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+html[lang="fa"] .order-add {
+  text-transform: none;
+  letter-spacing: 0;
+}
+.order-add:hover {
+  transform: none;
+}
+/* The stepper. `-`/`+` are buttons the shared table controller handles, so the
+   panel adds no client component of its own. */
+.qty-step {
+  display: inline-flex;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid var(--color-control-border);
+  border-radius: 3px;
+  background: #fff;
+}
+.qty-step button {
+  width: 28px;
+  height: 34px;
+  flex: none;
+  border: 0;
+  background: transparent;
+  color: var(--color-navy);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+.qty-step button:hover {
+  background: var(--color-navy-tint);
+}
+.qty-step input {
+  width: 44px;
+  height: 34px;
+  border: 0;
+  border-inline: 1px solid var(--color-rule-light);
+  border-radius: 0;
+  padding: 0;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  /* The stepper's own buttons replace the browser's, which are too small to
+     hit and sit on only one edge. */
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+.qty-step input::-webkit-outer-spin-button,
+.qty-step input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.qty-label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--color-ink-faint);
+}
+html[lang="fa"] .qty-label {
+  font-family: var(--font-fa);
+  font-size: 11px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+/* The card layout has no 236px column to put the panel in. */
+@media (max-width: 1023px) {
+  .order-panel {
+    width: 100%;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   The table's own footer: what is shown, what else there is, and what is
+   already on the order.
+   -------------------------------------------------------------------------- */
+.catalog-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
   border-top: 1px solid var(--color-rule);
-  padding: 12px 12px 0;
+  background: var(--color-panel-alt);
+  padding: 9px 12px;
+  font-size: 11.5px;
+  color: var(--color-ink-muted);
+}
+.catalog-footer-order {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  margin-inline-start: auto;
 }
 
 /* --------------------------------------------------------------------------
    The catalog head, pinned — desktop
 
    A family renders all of its rows, so "which column is this?" can come up a
-   thousand rows below the heading that answers it. The filter toolbar and the
+   thousand rows below the heading that answers it. The result toolbar and the
    table head pin to the top of the window together, and only while the reader
    is scrolling back up: `CatalogHeadReveal` sets `data-hidden` on the way down,
    which is the same gesture the masthead makes on a phone, for the same reason
-   — chrome that is only worth its ~90px when someone is looking for it.
+   — chrome that is only worth its ~50px when someone is looking for it.
+
+   The facet rail is not part of this. It pins on its own, in both directions:
+   it is a panel someone is working in, and dropping it would return it to the
+   top of the document, where from a thousand rows down it has simply vanished.
 
    Un-pinning is `static` rather than the masthead's `translateY(-100%)`. A
    transform would drag the head up over the rows above it whenever the reader
@@ -641,27 +976,18 @@ html[dir="rtl"] .admin-group[open] > summary::before {
    own masthead reveal is below.
    -------------------------------------------------------------------------- */
 @media (min-width: 1024px) {
-  /* An open fold stays pinned in both directions, unlike everything else here.
-     It is a panel the reader is working in, not chrome they are scrolling past:
-     letting the reveal drop it would put it back at the top of the document,
-     which from a thousand rows down means it has simply vanished. */
-  [data-catalog-head]:not([data-hidden="true"]) .filter-fold,
-  [data-catalog-head] .filter-fold[open] {
+  [data-catalog-head]:not([data-hidden="true"]) .catalog-toolbar {
     position: sticky;
     top: 0;
     /* Above the table head, which pins directly beneath it. */
     z-index: 30;
-    /* However many facets a family has, the panel cannot take the whole window
-       and leave no results to look at while filtering. */
-    max-height: 85vh;
-    overflow-y: auto;
   }
 
   [data-catalog-head]:not([data-hidden="true"]) .catalog-table thead {
     position: sticky;
-    /* However tall the pinned fold currently is — 0 when a family has no
-       filterable columns and renders none. `CatalogHeadReveal` measures it,
-       because an open fold is as tall as its facets and no constant can say. */
+    /* However tall the pinned toolbar currently is. Measured rather than
+       declared: it is one line in English and wraps to two under Persian, and
+       a constant would leave a gap or clip the first row in one of them. */
     top: var(--catalog-head-top, 0px);
     z-index: 20;
   }
@@ -701,13 +1027,15 @@ html[dir="rtl"] .admin-group[open] > summary::before {
     display: none;
   }
 
+  /* Two rows since the quantity box left the grid: what it is and what it
+     costs, then how to open it and how many are already taken. A third row
+     with an empty right-hand cell read as a rendering fault. */
   .catalog-table tr.product-row {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     grid-template-areas:
       "summary price"
-      "part    qty"
-      "open    cart";
+      "part    cart";
     align-items: center;
     gap: 2px 10px;
     padding: 10px 8px;
@@ -734,11 +1062,10 @@ html[dir="rtl"] .admin-group[open] > summary::before {
     background: var(--color-in-cart-row);
   }
 
-  /* The spec columns, the pack count and the bulk price: all present in the
-     row, none of them what a card leads with. */
+  /* The spec columns and the pack count: both present in the row, neither what
+     a card leads with. The card's own summary line carries the pack. */
   .catalog-table tr.product-row > td:not([data-cell]),
-  .catalog-table tr.product-row > td[data-cell="pack"],
-  .catalog-table tr.product-row > td[data-cell="bulk"] {
+  .catalog-table tr.product-row > td[data-cell="pack"] {
     display: none;
   }
 
@@ -772,11 +1099,6 @@ html[dir="rtl"] .admin-group[open] > summary::before {
     font-size: 14px;
     /* The amber wash marks a column. There is no column here. */
     background: none;
-  }
-  .catalog-table td[data-cell="qty"] {
-    grid-area: qty;
-    padding: 0;
-    justify-self: end;
   }
   .catalog-table td[data-cell="cart"] {
     grid-area: cart;
@@ -928,6 +1250,23 @@ html[dir="rtl"] .admin-group[open] > summary::before {
   html[dir="rtl"] .catalog-table thead th.tech-num,
   html[dir="rtl"] .catalog-table tbody tr.product-row > td.tech-num {
     text-align: center;
+  }
+  /* Money is the exception, and reads against its own edge: a column of
+     thousands separators only lines up when the last digit does.
+
+     Spelled left/right rather than start/end because the cells carry `.tech`,
+     which forces `direction: ltr` so a dimension never mirrors — `end` inside
+     one of those means the physical right whatever the page direction is, and
+     the heading above it, which has no `.tech`, would then point the other way.
+     Under RTL the whole table is mirrored, so the price column's outer edge is
+     the physical left. */
+  .catalog-table thead th.price-head,
+  .catalog-table tbody tr.product-row > td.price-col {
+    text-align: right;
+  }
+  html[dir="rtl"] .catalog-table thead th.price-head,
+  html[dir="rtl"] .catalog-table tbody tr.product-row > td.price-col {
+    text-align: left;
   }
   .catalog-table tbody tr.product-row > td {
     vertical-align: middle;
