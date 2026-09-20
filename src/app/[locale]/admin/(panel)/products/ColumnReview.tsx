@@ -129,6 +129,13 @@ export function ColumnReview({
     plans.filter((p) => p.role === "spec" && p.inTable).length +
     missing.filter((m) => m.inTable && !dropKeys.includes(m.key)).length;
 
+  /**
+   * A file can leave the part number cells empty, or leave the column out
+   * altogether. Both mean the same thing — every row is a new product — but
+   * the sentence that explains it is different, and "31 rows have an empty
+   * part number" would be a lie about a file that has no such column.
+   */
+  const hasPartColumn = plans.some((p) => p.role === "builtin" && p.field === "part_number");
   const plan = JSON.stringify({ headers: plans, dropKeys, mode, skipBadRows, autoNumber });
   const badRowCount = new Set(rowProblems.map((e) => e.row)).size;
   // Confirming with bad rows and no decision about them would just bounce back.
@@ -206,9 +213,14 @@ export function ColumnReview({
 
       {blankRows > 0 && (
         <fieldset className="mt-3 border border-[#e0c9a0] bg-[#fdf8ef] px-2.5 py-1.5">
-          <legend className="text-[12px] font-bold">{t.reviewBlankParts}</legend>
+          <legend className="text-[12px] font-bold">
+            {hasPartColumn ? t.reviewBlankParts : t.reviewNoPartColumn}
+          </legend>
           <p className="text-[11px] text-[var(--color-ink-muted)]">
-            {t.reviewBlankPartsHint.replace("{count}", formatInt(blankRows, locale))}
+            {(hasPartColumn ? t.reviewBlankPartsHint : t.reviewNoPartColumnHint).replace(
+              "{count}",
+              formatInt(blankRows, locale),
+            )}
           </p>
           <label className="mt-1 flex items-start gap-1.5 text-[12px]">
             <input

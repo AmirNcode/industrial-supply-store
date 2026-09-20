@@ -389,6 +389,9 @@ const en = {
   reviewBlankPartsHint:
     "{count} rows have an empty part number. Each one becomes a new product with a new TEMEX part number. Numbers are never reused, so cancel and fix the file if that is not what you meant.",
   reviewBlankPartsGenerate: "Create new TEMEX part numbers for these rows",
+  reviewNoPartColumn: "This file has no part number column",
+  reviewNoPartColumnHint:
+    "Nothing in the file identifies an existing product, so all {count} rows are treated as new products, each with a new TEMEX part number. Numbers are never reused, so cancel and add a part_number column if you meant to update existing products.",
   reviewBlockedBlanks: "Tick the box above to create part numbers, or upload a different file.",
   reviewMode: "Existing products in this family",
   reviewModeUpdate: "Update and add",
@@ -953,6 +956,9 @@ const fa: typeof en = {
   reviewBlankPartsHint:
     "{count} سطر شماره قطعه ندارد. هر سطر به کالایی تازه با شماره قطعه تمکس تازه تبدیل می‌شود. شماره‌ها هرگز دوباره صادر نمی‌شوند؛ اگر منظورتان این نیست، لغو کنید و فایل را اصلاح کنید.",
   reviewBlankPartsGenerate: "برای این سطرها شماره قطعه تمکس ساخته شود",
+  reviewNoPartColumn: "این فایل ستون شماره قطعه ندارد",
+  reviewNoPartColumnHint:
+    "چیزی در فایل کالای موجود را مشخص نمی‌کند، بنابراین هر {count} سطر کالای تازه در نظر گرفته می‌شود و هرکدام شماره قطعه تمکس تازه می‌گیرد. شماره‌ها هرگز دوباره صادر نمی‌شوند؛ اگر می‌خواستید کالاهای موجود را به‌روزرسانی کنید، لغو کنید و ستون part_number را اضافه کنید.",
   reviewBlockedBlanks: "برای ساخت شماره قطعه گزینه بالا را علامت بزنید، یا فایل دیگری بارگذاری کنید.",
   reviewMode: "کالاهای موجود در این خانواده",
   reviewModeUpdate: "به‌روزرسانی و افزودن",

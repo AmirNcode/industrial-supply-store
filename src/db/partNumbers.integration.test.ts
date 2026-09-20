@@ -25,14 +25,36 @@ async function makeFamily(slug: string): Promise<number> {
   return family.id;
 }
 
-async function cleanUp(slug: string, familyNumber: number): Promise<void> {
+async function cleanUp(slug: string): Promise<void> {
+  const [family] = await sql<{ familyNumber: number | null }[]>`
+    SELECT family_number AS "familyNumber" FROM product_families WHERE slug = ${slug}
+  `;
   await sql`DELETE FROM categories WHERE slug = ${slug}`;
-  await sql`DELETE FROM part_number_registry WHERE family_number = ${familyNumber}`;
+  if (family?.familyNumber != null) {
+    await sql`DELETE FROM part_number_registry WHERE family_number = ${family.familyNumber}`;
+  }
+}
+
+/**
+ * Cleanup has to survive a failed assertion. A leaked fixture is not a silent
+ * one: these families show up in the admin catalog tree, where someone then has
+ * to work out what "pn-mixed-1789924939168" is and delete it by hand.
+ */
+async function withFamily(
+  slug: string,
+  body: (familyId: number) => Promise<void>,
+): Promise<void> {
+  const familyId = await makeFamily(slug);
+  try {
+    await body(familyId);
+  } finally {
+    await cleanUp(slug);
+  }
 }
 
 test("allocates sequential codes and never reuses a slot", async () => {
   const slug = `pn-seq-${Date.now()}`;
-  const familyId = await makeFamily(slug);
+  await withFamily(slug, async (familyId) => {
 
   const familyNumber = await sql.begin((tx) => ensureFamilyNumber(tx, familyId));
   const first = await sql.begin((tx) => allocatePartNumbers(tx, familyId, 3));
@@ -53,12 +75,12 @@ test("allocates sequential codes and never reuses a slot", async () => {
   const afterDelete = await sql.begin((tx) => allocatePartNumbers(tx, familyId, 1));
   assert.deepEqual(afterDelete, [`${familyNumber}A005`]);
 
-  await cleanUp(slug, familyNumber);
+  });
 });
 
 test("two concurrent allocations never mint the same code", async () => {
   const slug = `pn-race-${Date.now()}`;
-  const familyId = await makeFamily(slug);
+  await withFamily(slug, async (familyId) => {
   const familyNumber = await sql.begin((tx) => ensureFamilyNumber(tx, familyId));
 
   const [a, b] = await Promise.all([
@@ -72,12 +94,12 @@ test("two concurrent allocations never mint the same code", async () => {
   `;
   assert.equal(n, 100);
 
-  await cleanUp(slug, familyNumber);
+  });
 });
 
 test("reserves TEMEX codes that arrived in a file, ignoring legacy ones", async () => {
   const slug = `pn-existing-${Date.now()}`;
-  const familyId = await makeFamily(slug);
+  await withFamily(slug, async (familyId) => {
   const familyNumber = await sql.begin((tx) => ensureFamilyNumber(tx, familyId));
 
   await sql.begin((tx) =>
@@ -99,12 +121,12 @@ test("reserves TEMEX codes that arrived in a file, ignoring legacy ones", async 
   const next = await sql.begin((tx) => allocatePartNumbers(tx, familyId, 1));
   assert.deepEqual(next, [`${familyNumber}A008`]);
 
-  await cleanUp(slug, familyNumber);
+  });
 });
 
 test("re-registering the same codes is a no-op", async () => {
   const slug = `pn-idem-${Date.now()}`;
-  const familyId = await makeFamily(slug);
+  await withFamily(slug, async (familyId) => {
   const familyNumber = await sql.begin((tx) => ensureFamilyNumber(tx, familyId));
   const codes = [`${familyNumber}A001`, `${familyNumber}A002`];
 
@@ -116,12 +138,12 @@ test("re-registering the same codes is a no-op", async () => {
   `;
   assert.equal(n, 2);
 
-  await cleanUp(slug, familyNumber);
+  });
 });
 
 test("an import row with no part number is given a minted code", async () => {
   const slug = `pn-import-${Date.now()}`;
-  const familyId = await makeFamily(slug);
+  await withFamily(slug, async (familyId) => {
   const { writeImport } = await import("./importQueries");
 
   const blank = {
@@ -148,12 +170,12 @@ test("an import row with no part number is given a minted code", async () => {
   // The caller reads the minted code back off the row it passed in.
   assert.equal(blank.partNumber, `${familyNumber}A001`);
 
-  await cleanUp(slug, familyNumber);
+  });
 });
 
 test("an import mixing supplied and blank part numbers keeps both", async () => {
   const slug = `pn-mixed-${Date.now()}`;
-  const familyId = await makeFamily(slug);
+  await withFamily(slug, async (familyId) => {
   const { writeImport } = await import("./importQueries");
   const common = {
     specs: {},
@@ -185,5 +207,32 @@ test("an import mixing supplied and blank part numbers keeps both", async () => 
     [legacy, `${familyNumber}A001`],
   );
 
-  await cleanUp(slug, familyNumber);
+  });
+});
+
+test("a deleted family's number is not handed to the next family", async () => {
+  const goneSlug = `pn-gone-${Date.now()}`;
+  const nextSlug = `pn-next-${Date.now()}`;
+  const goneId = await makeFamily(goneSlug);
+  const goneNumber = await sql.begin((tx) => allocatePartNumbers(tx, goneId, 1)).then(
+    ([code]) => Number(code.slice(0, 4)),
+  );
+
+  // Deleting the family leaves its reservations behind on purpose, so the
+  // number it used must not come back around to a different family.
+  await sql`DELETE FROM categories WHERE slug = ${goneSlug}`;
+
+  try {
+    const nextId = await makeFamily(nextSlug);
+    const nextNumber = await sql.begin((tx) => ensureFamilyNumber(tx, nextId));
+    assert.notEqual(nextNumber, goneNumber);
+    // And the allocation that follows must succeed rather than hit the
+    // registry's unique index.
+    const [code] = await sql.begin((tx) => allocatePartNumbers(tx, nextId, 1));
+    assert.equal(code, `${nextNumber}A001`);
+    await sql`DELETE FROM part_number_registry WHERE family_number = ${nextNumber}`;
+  } finally {
+    await sql`DELETE FROM categories WHERE slug = ${nextSlug}`;
+    await sql`DELETE FROM part_number_registry WHERE family_number = ${goneNumber}`;
+  }
 });

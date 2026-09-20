@@ -42,11 +42,21 @@ export async function ensureFamilyNumber(tx: Tx, familyId: number): Promise<numb
   if (!family) throw new Error(`No family ${familyId}`);
   if (family.familyNumber !== null) return family.familyNumber;
 
-  // Sequential, with no ranges reserved per category: the number means nothing
-  // by itself, so the only rules are that it is free and never reused.
+  /*
+   * Sequential, with no ranges reserved per category: the number means nothing
+   * by itself, so the only rules are that it is free and never reused.
+   *
+   * The registry is consulted as well as the families table, because deleting a
+   * family removes its row but not its reservations. Counting only live
+   * families would hand 1001 to a new family whose first allocation then
+   * collides with the deleted family's registry slots — an import failing on a
+   * unique-index violation with nothing on screen to explain it.
+   */
   const [next] = await tx<{ candidate: number }[]>`
-    SELECT COALESCE(MAX(family_number) + 1, ${MIN_FAMILY_NUMBER})::int AS candidate
-    FROM product_families
+    SELECT GREATEST(
+      COALESCE((SELECT MAX(family_number) FROM product_families), ${MIN_FAMILY_NUMBER - 1}),
+      COALESCE((SELECT MAX(family_number) FROM part_number_registry), ${MIN_FAMILY_NUMBER - 1})
+    )::int + 1 AS candidate
   `;
   if (next.candidate > MAX_FAMILY_NUMBER) throw new FamilyNumbersExhausted();
 

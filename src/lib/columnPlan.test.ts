@@ -278,10 +278,11 @@ const partNo: HeaderPlan = {
   field: "part_number",
 };
 
-test("a plan with no part number column is refused", () => {
+test("a plan with no part number column is allowed: every row is new", () => {
+  // It reads as a file whose part number cells are all blank. The rows get
+  // minted codes, gated on the operator ticking that on the review screen.
   const errors = validatePlan({ headers: [spec("bore_size")], dropKeys: [], mode: "update", skipBadRows: false });
-  assert.equal(errors.length, 1);
-  assert.match(errors[0], /part number/i);
+  assert.deepEqual(errors, []);
 });
 
 test("two columns claiming the same field or key are refused", () => {

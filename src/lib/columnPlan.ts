@@ -519,10 +519,18 @@ export function validatePlan(plan: ImportPlan): string[] {
     byField.set(h.field, cols);
   }
 
-  const partNumberCols = byField.get("part_number") ?? [];
-  if (partNumberCols.length === 0) {
-    errors.push("No column is mapped to the part number, so rows cannot be identified.");
-  }
+  /*
+   * A file with no part number column at all is allowed.
+   *
+   * It reads exactly like a file whose part number cells are all empty: every
+   * row is a new product and the server mints a code for each, once the
+   * operator has ticked that on the review screen. Refusing it used to leave
+   * one way to load a list of genuinely new products — inventing part numbers
+   * by hand in the spreadsheet first.
+   *
+   * Nothing can be matched to an existing product in that case, so "Update and
+   * add" and "Replace everything" both insert every row.
+   */
 
   for (const [field, cols] of byField) {
     if (cols.length < 2) continue;

@@ -11,7 +11,7 @@ import {
   toCsv,
   FIXED_COLUMNS,
 } from "./importCsv";
-import { analyzeCsv, type ImportPlan } from "./columnPlan";
+import { analyzeCsv, validatePlan, type ImportPlan } from "./columnPlan";
 
 const DEFS = [
   { key: "dash", kind: "text" as const },
@@ -368,4 +368,16 @@ test("a repeated part number is still a duplicate", () => {
   );
   assert.equal(errors.length, 1);
   assert.equal(errors[0].column, "part_number");
+});
+
+test("a file with no part_number column gives every row a blank part number", () => {
+  const csv = "dash,width,price_usd\n004,0.07,0.35\n006,0.10,0.40\n";
+  const plan = proposedPlan(csv);
+  assert.deepEqual(validatePlan(plan), []);
+  const { rows, errors } = parseWithPlan(csv, plan);
+  assert.deepEqual(errors, []);
+  assert.deepEqual(
+    rows.map((r) => r.partNumber),
+    ["", ""],
+  );
 });
