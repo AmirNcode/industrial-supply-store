@@ -130,3 +130,32 @@ test("products taxonomy stages and discards reversible work without writing", as
   await expect(saveBar).toBeHidden();
   await expectNoAccessibilityViolations(page, testInfo, ".taxonomy-card");
 });
+
+test("a family row opens an add-a-product form built from its own columns", async (
+  { page, isMobile },
+  testInfo,
+) => {
+  test.skip(isMobile, "The inline family rows this link sits on are desktop controls.");
+  const locale: Locale = "en";
+  const t = getDict(locale);
+  await openProducts(page, locale, `203.0.113.${80 + testInfo.workerIndex}`);
+
+  await page.getByRole("searchbox", { name: t.taxonomyFindCategory }).fill("o-ring");
+  const category = page
+    .locator(".taxonomy-tree-row:not(.is-family) .taxonomy-node-name")
+    .filter({ hasText: /^O-Rings$/ });
+  await category.click();
+
+  await page.getByRole("link", { name: t.newProduct }).first().click();
+  await expect(page).toHaveURL(/\/admin\/products\/\d+\/new$/);
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("Add a product to");
+
+  // The part number is optional here, exactly as a blank cell is in a file.
+  await expect(page.getByLabel(t.partNumber)).toBeVisible();
+  await expect(page.getByText(t.newProductPartNumberHint).first()).toBeVisible();
+
+  // Nothing is written: a rejected entry stays on screen to be corrected.
+  await page.getByLabel(t.price, { exact: true }).fill("not-a-price");
+  await page.getByRole("button", { name: t.newProduct }).click();
+  await expect(page.getByText(t.newProductBadPrice)).toBeVisible();
+});

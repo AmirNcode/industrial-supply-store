@@ -1169,6 +1169,7 @@ function FamiliesPane({
                 <button type="button" className="taxonomy-text-link" onClick={() => onToggleDetail(family.key)}>
                   {detailOpen ? t.taxonomyCloseImageText : t.taxonomyImageText}
                 </button>
+                <Link href={`/${locale}/admin/products/${family.id}/new`}>{t.newProduct}</Link>
                 <a href={`/api/admin/family/${family.id}/template`} download>{t.downloadTemplate}</a>
                 <a href={`/api/admin/family/${family.id}/export`} download>{t.exportProducts}</a>
                 <Link href={`/${locale}/admin/products/${family.id}/columns`}>{t.editColumns}</Link>
@@ -1242,6 +1243,7 @@ function SelectedFamilyPane({
       </div>
       <div className="taxonomy-selected-import">
         <FamilyImportControl familyId={node.id} locale={locale} demo={demo} prominent />
+        <Link href={`/${locale}/admin/products/${node.id}/new`}>{t.newProduct}</Link>
         <a href={`/api/admin/family/${node.id}/template`} download>{t.downloadTemplate}</a>
         <a href={`/api/admin/family/${node.id}/export`} download>{t.exportProducts}</a>
         <Link href={`/${locale}/admin/products/${node.id}/columns`}>{t.editColumns}</Link>
