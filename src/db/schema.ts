@@ -153,11 +153,63 @@ export const productFamilies = pgTable(
      * are rows that can be deleted and the memory should go with them.
      */
     fieldAliases: jsonb("field_aliases").$type<FieldAliases>().notNull().default({}),
+    /**
+     * The 4-digit prefix of every TEMEX part number in this family, 1000–9999,
+     * handed out sequentially. It carries no category meaning on purpose: a
+     * number that described where a family sat would become a lie the first
+     * time the catalog was reorganised, while already printed on a quote.
+     * Null until the family needs its first code.
+     */
+    familyNumber: integer("family_number"),
+    /**
+     * Next 1-based variant ordinal: 1 → A001, 1000 → B001. Only ever increases.
+     * Deleting a product does not give its number back, because a code already
+     * quoted must never come to mean a different product.
+     */
+    nextVariantOrdinal: integer("next_variant_ordinal").notNull().default(1),
   },
   (t) => [
     uniqueIndex("families_slug_key").on(t.slug),
     index("families_category_idx").on(t.categoryId, t.sort),
     check("product_families_product_count_check", sql`${t.productCount} >= 0`),
+    uniqueIndex("families_family_number_key").on(t.familyNumber),
+    check(
+      "product_families_family_number_check",
+      sql`${t.familyNumber} IS NULL OR ${t.familyNumber} BETWEEN 1000 AND 9999`,
+    ),
+    check(
+      "product_families_next_variant_check",
+      sql`${t.nextVariantOrdinal} BETWEEN 1 AND 23977`,
+    ),
+  ],
+);
+
+/**
+ * Every part number this system has ever issued.
+ *
+ * Separate from `products` because the guarantee is "never reused", and a
+ * product row disappears with its family (`family_id` cascades). The
+ * reservation has to outlive the product, so a later product cannot inherit a
+ * code that once meant something else on a customer's quote.
+ */
+export const partNumberRegistry = pgTable(
+  "part_number_registry",
+  {
+    id: serial("id").primaryKey(),
+    partNumber: text("part_number").notNull(),
+    familyNumber: integer("family_number").notNull(),
+    variantOrdinal: integer("variant_ordinal").notNull(),
+    /** Null once the product is gone; the reservation stays. */
+    productId: integer("product_id").references((): AnyPgColumn => products.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("part_number_registry_key").on(t.partNumber),
+    uniqueIndex("part_number_registry_slot_key").on(t.familyNumber, t.variantOrdinal),
+    index("part_number_registry_product_idx").on(t.productId),
+    check("part_number_registry_slot_check", sql`${t.variantOrdinal} BETWEEN 1 AND 23976`),
   ],
 );
 
