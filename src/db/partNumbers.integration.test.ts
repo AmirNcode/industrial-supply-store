@@ -236,3 +236,58 @@ test("a deleted family's number is not handed to the next family", async () => {
     await sql`DELETE FROM part_number_registry WHERE family_number = ${goneNumber}`;
   }
 });
+
+test("a family number the catalog already uses as a prefix is skipped", async () => {
+  const slug = `pn-prefix-${Date.now()}`;
+  await withFamily(slug, async (familyId) => {
+    // The seeded catalog carries supplier codes shaped exactly like ours, so
+    // the next free number by counting alone can already be in use.
+    const [{ candidate }] = await sql<{ candidate: number }[]>`
+      SELECT GREATEST(
+        COALESCE((SELECT MAX(family_number) FROM product_families), 999),
+        COALESCE((SELECT MAX(family_number) FROM part_number_registry), 999)
+      )::int + 1 AS candidate
+    `;
+    const blocker = `${candidate}A500`;
+    const [other] = await sql<{ id: number }[]>`
+      SELECT id FROM product_families WHERE id <> ${familyId} LIMIT 1
+    `;
+    await sql`
+      INSERT INTO products (part_number, family_id, specs, price_cents, pack_qty,
+                            lead_days, in_stock, search_text, sort)
+      VALUES (${blocker}, ${other.id}, '{}'::jsonb, 100, 1, 0, true, ${blocker}, 0)
+    `;
+    try {
+      const assigned = await sql.begin((tx) => ensureFamilyNumber(tx, familyId));
+      assert.notEqual(assigned, candidate);
+      const [code] = await sql.begin((tx) => allocatePartNumbers(tx, familyId, 1));
+      assert.equal(code, `${assigned}A001`);
+      await sql`DELETE FROM part_number_registry WHERE family_number = ${assigned}`;
+    } finally {
+      await sql`DELETE FROM products WHERE part_number = ${blocker}`;
+    }
+  });
+});
+
+test("allocation steps over a supplier code that landed inside the family's range", async () => {
+  const slug = `pn-clash-${Date.now()}`;
+  await withFamily(slug, async (familyId) => {
+    const familyNumber = await sql.begin((tx) => ensureFamilyNumber(tx, familyId));
+    const [other] = await sql<{ id: number }[]>`
+      SELECT id FROM product_families WHERE id <> ${familyId} LIMIT 1
+    `;
+    const blocker = `${familyNumber}A001`;
+    await sql`
+      INSERT INTO products (part_number, family_id, specs, price_cents, pack_qty,
+                            lead_days, in_stock, search_text, sort)
+      VALUES (${blocker}, ${other.id}, '{}'::jsonb, 100, 1, 0, true, ${blocker}, 0)
+    `;
+    try {
+      const [code] = await sql.begin((tx) => allocatePartNumbers(tx, familyId, 1));
+      assert.equal(code, `${familyNumber}A002`);
+    } finally {
+      await sql`DELETE FROM products WHERE part_number = ${blocker}`;
+      await sql`DELETE FROM part_number_registry WHERE family_number = ${familyNumber}`;
+    }
+  });
+});

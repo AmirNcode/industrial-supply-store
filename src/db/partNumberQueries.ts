@@ -58,7 +58,30 @@ export async function ensureFamilyNumber(tx: Tx, familyId: number): Promise<numb
       COALESCE((SELECT MAX(family_number) FROM part_number_registry), ${MIN_FAMILY_NUMBER - 1})
     )::int + 1 AS candidate
   `;
-  if (next.candidate > MAX_FAMILY_NUMBER) throw new FamilyNumbersExhausted();
+  /*
+   * Step over any prefix the catalog is already using.
+   *
+   * The seeded catalog carries supplier codes shaped exactly like ours —
+   * `1000A100` and its neighbours sit in another family. Handing 1000 to a new
+   * family works for its first 99 products and then collides on the products
+   * unique index at A100: an import that has been fine all week suddenly fails
+   * with nothing on screen to explain it.
+   *
+   * `LIKE 'nnnn%'` uses the part number index because this database is
+   * initialised with the C locale.
+   */
+  let candidate = next.candidate;
+  while (candidate <= MAX_FAMILY_NUMBER) {
+    const [taken] = await tx<{ exists: boolean }[]>`
+      SELECT EXISTS (
+        SELECT 1 FROM products WHERE part_number LIKE ${String(candidate)} || '%'
+      ) AS exists
+    `;
+    if (!taken.exists) break;
+    candidate += 1;
+  }
+  if (candidate > MAX_FAMILY_NUMBER) throw new FamilyNumbersExhausted();
+  next.candidate = candidate;
 
   await tx`
     UPDATE product_families SET family_number = ${next.candidate} WHERE id = ${familyId}
@@ -85,16 +108,39 @@ export async function allocatePartNumbers(
     SELECT next_variant_ordinal AS "nextOrdinal" FROM product_families
     WHERE id = ${familyId} FOR UPDATE
   `;
-  const start = family.nextOrdinal;
-  if (start + count - 1 > MAX_VARIANTS_PER_FAMILY) {
-    throw new FamilyCapacityExhausted(familyNumber);
-  }
+  const firstOrdinal = family.nextOrdinal;
 
-  const codes: string[] = [];
-  const ordinals: number[] = [];
-  for (let i = 0; i < count; i++) {
-    ordinals.push(start + i);
-    codes.push(formatPartNumber(familyNumber, start + i));
+  /*
+   * The counter alone is not proof that a code is free.
+   *
+   * `ensureFamilyNumber` keeps a new family off a prefix the catalog already
+   * uses, but a later upload can still bring in a product whose supplier code
+   * happens to land inside this family's range. Colliding with it would abort
+   * the whole import on the products unique index, so step past it instead.
+   */
+  let start = firstOrdinal;
+  let codes: string[] = [];
+  let ordinals: number[] = [];
+  for (let attempt = 0; ; attempt++) {
+    if (start + count - 1 > MAX_VARIANTS_PER_FAMILY) {
+      throw new FamilyCapacityExhausted(familyNumber);
+    }
+    codes = [];
+    ordinals = [];
+    for (let i = 0; i < count; i++) {
+      ordinals.push(start + i);
+      codes.push(formatPartNumber(familyNumber, start + i));
+    }
+    const clashes = await tx<{ partNumber: string }[]>`
+      SELECT part_number AS "partNumber" FROM products
+      WHERE part_number = ANY(${codes}::text[])
+    `;
+    if (clashes.length === 0) break;
+    if (attempt >= 8) throw new FamilyCapacityExhausted(familyNumber);
+    const highest = Math.max(
+      ...clashes.map((clash) => variantOrdinalOf(clash.partNumber) ?? 0),
+    );
+    start = highest + 1;
   }
 
   await tx`
