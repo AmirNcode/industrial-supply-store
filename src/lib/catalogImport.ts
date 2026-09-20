@@ -27,6 +27,8 @@ export type ImportState =
       problems: string[];
       rowProblems: ImportError[];
       goodRows: number;
+      /** Rows whose part number cell is empty; each becomes a new product. */
+      blankRows: number;
     }
   | {
       kind: "ok";
@@ -52,6 +54,7 @@ export type ImportState =
         | "not-found"
         | "bad-plan"
         | "all-rows-skipped"
+        | "needs-numbers"
         | "storage-missing"
         | "upload-failed"
         | "rate-limit";
@@ -97,6 +100,20 @@ export async function processCatalogImport(input: {
   if (errors.length > 0) return review(familyId, text, family, [], errors);
   if (rows.length === 0) {
     return { kind: "message", familyId, message: "all-rows-skipped" };
+  }
+
+  // Minting is the one part of an import that cannot be undone: a code, once
+  // issued, is never reissued, so a mistaken upload burns numbers for good.
+  // The operator has to ask for it on the review screen; a plan that arrived
+  // without that decision is sent back rather than acted on.
+  const blankRows = rows.filter((row) => row.partNumber === "").length;
+  if (blankRows > 0 && plan.autoNumber !== true) {
+    return {
+      kind: "message",
+      familyId,
+      message: "needs-numbers",
+      detail: String(blankRows),
+    };
   }
   if (rows.length > IMPORT_MAX_ROWS) {
     return { kind: "message", familyId, message: "too-large" };
@@ -165,6 +182,10 @@ async function review(
       ? parseWithPlan(text, proposed)
       : { errors: [] as ImportError[] };
   const badRows = new Set(dryRun.errors.map((error) => error.row));
+  // Counted from the same dry run the operator is about to look at, so the
+  // number on screen is the number of codes the apply would actually mint.
+  const blankRows =
+    "rows" in dryRun ? dryRun.rows.filter((row) => row.partNumber === "").length : 0;
 
   return {
     kind: "review",
@@ -178,5 +199,6 @@ async function review(
     problems,
     rowProblems: dryRun.errors,
     goodRows: analysis.rowCount - badRows.size,
+    blankRows,
   };
 }

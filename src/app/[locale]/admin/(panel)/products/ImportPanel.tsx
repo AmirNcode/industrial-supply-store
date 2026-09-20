@@ -489,6 +489,7 @@ export function ImportPanel({
                           problems={state.problems}
                           rowProblems={state.rowProblems}
                           goodRows={state.goodRows}
+                          blankRows={state.blankRows}
                           locale={locale}
                           pending={isPending}
                         />

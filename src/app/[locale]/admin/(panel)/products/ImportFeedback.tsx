@@ -85,7 +85,9 @@ export function ImportFeedback({
                   ? t.importBadPlan
                   : state.message === "all-rows-skipped"
                     ? t.importAllSkipped
-                    : t.importFamilyGone;
+                    : state.message === "needs-numbers"
+                      ? t.importNeedsNumbers
+                      : t.importFamilyGone;
     return <ImportProblem>{message}</ImportProblem>;
   }
 

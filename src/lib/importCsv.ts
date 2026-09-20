@@ -212,10 +212,17 @@ function parseRows(
       return;
     }
 
+    /*
+     * A blank part number is a row waiting for a code, not a bad row.
+     *
+     * Every line in a file is one item, so the server mints a number for it —
+     * but only after the operator has asked for that on the review screen,
+     * because a minted code is never reused and a mistaken upload burns
+     * numbers permanently. Blanks are deliberately not compared to each other:
+     * two blank rows are two products, not a duplicate.
+     */
     const partNumber = cellAt(partAt?.at);
-    if (!partNumber) {
-      errors.push({ row: rowNo, column: "part_number", message: "Part number is required." });
-    } else {
+    if (partNumber) {
       const key = partNumber.toUpperCase();
       const first = seenPart.get(key);
       if (first !== undefined) {

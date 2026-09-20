@@ -385,6 +385,11 @@ const en = {
   reviewBadRows: "{bad} of {total} rows cannot be imported as they are:",
   reviewSkipBadRows: "Leave out these {bad} rows and import the other {good}",
   reviewBlocked: "Decide what to do with the rows above first.",
+  reviewBlankParts: "Rows with no part number",
+  reviewBlankPartsHint:
+    "{count} rows have an empty part number. Each one becomes a new product with a new TEMEX part number. Numbers are never reused, so cancel and fix the file if that is not what you meant.",
+  reviewBlankPartsGenerate: "Create new TEMEX part numbers for these rows",
+  reviewBlockedBlanks: "Tick the box above to create part numbers, or upload a different file.",
   reviewMode: "Existing products in this family",
   reviewModeUpdate: "Update and add",
   reviewModeUpdateHint:
@@ -395,6 +400,8 @@ const en = {
   importRemoved: "{n} old products deleted",
   importSkipped: "{n} rows left out",
   importAllSkipped: "Every row had a problem, so there was nothing to import.",
+  importNeedsNumbers:
+    "Some rows have no part number. Choose to create part numbers for them, or upload a different file.",
   reviewConfirm: "Confirm and import",
   reviewStartOver: "Choose a different file",
   reviewProblems: "This cannot be imported yet:",
@@ -942,6 +949,11 @@ const fa: typeof en = {
   reviewBadRows: "{bad} سطر از {total} سطر به این شکل قابل ثبت نیست:",
   reviewSkipBadRows: "این {bad} سطر کنار گذاشته شود و {good} سطر دیگر ثبت شود",
   reviewBlocked: "ابتدا درباره سطرهای بالا تصمیم بگیرید.",
+  reviewBlankParts: "سطرهای بدون شماره قطعه",
+  reviewBlankPartsHint:
+    "{count} سطر شماره قطعه ندارد. هر سطر به کالایی تازه با شماره قطعه تمکس تازه تبدیل می‌شود. شماره‌ها هرگز دوباره صادر نمی‌شوند؛ اگر منظورتان این نیست، لغو کنید و فایل را اصلاح کنید.",
+  reviewBlankPartsGenerate: "برای این سطرها شماره قطعه تمکس ساخته شود",
+  reviewBlockedBlanks: "برای ساخت شماره قطعه گزینه بالا را علامت بزنید، یا فایل دیگری بارگذاری کنید.",
   reviewMode: "کالاهای موجود در این خانواده",
   reviewModeUpdate: "به‌روزرسانی و افزودن",
   reviewModeUpdateHint:
@@ -952,6 +964,8 @@ const fa: typeof en = {
   importRemoved: "{n} کالای قدیمی حذف شد",
   importSkipped: "{n} سطر کنار گذاشته شد",
   importAllSkipped: "همه سطرها اشکال داشتند، بنابراین چیزی ثبت نشد.",
+  importNeedsNumbers:
+    "برخی سطرها شماره قطعه ندارند. یا ساخت شماره قطعه را انتخاب کنید یا فایل دیگری بارگذاری کنید.",
   reviewConfirm: "تأیید و ثبت",
   reviewStartOver: "انتخاب فایل دیگر",
   reviewProblems: "فعلاً قابل ثبت نیست:",

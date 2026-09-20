@@ -99,6 +99,17 @@ export type ImportPlan = {
    * redoing the column mapping.
    */
   skipBadRows: boolean;
+  /**
+   * The operator has seen how many rows have no part number and asked for
+   * codes to be minted for them. Defaults to false everywhere: generating
+   * codes is the one step in an import that cannot be undone, because a code
+   * is never reissued once it exists.
+   *
+   * Optional, and absent means no. Every plan built anywhere other than the
+   * review screen therefore mints nothing, which is the outcome to default to
+   * when a caller has not thought about it.
+   */
+  autoNumber?: boolean;
 };
 
 /** A family's current column, as the analyzer needs to see it. */
@@ -438,11 +449,16 @@ export function parsePlanJson(raw: unknown): ImportPlan | null {
   }
   if (typeof parsed !== "object" || parsed === null) return null;
 
-  const { headers, dropKeys, mode, skipBadRows } = parsed as Record<string, unknown>;
+  const { headers, dropKeys, mode, skipBadRows, autoNumber } = parsed as Record<
+    string,
+    unknown
+  >;
   if (!Array.isArray(headers) || !Array.isArray(dropKeys)) return null;
   if (!dropKeys.every((k): k is string => typeof k === "string")) return null;
   if (mode !== "update" && mode !== "replace") return null;
   if (typeof skipBadRows !== "boolean") return null;
+  // Absent means no: a plan that does not mention minting must never mint.
+  if (autoNumber !== undefined && typeof autoNumber !== "boolean") return null;
 
   const out: HeaderPlan[] = [];
   for (const h of headers) {
@@ -481,7 +497,7 @@ export function parsePlanJson(raw: unknown): ImportPlan | null {
     }
   }
 
-  return { headers: out, dropKeys, mode, skipBadRows };
+  return { headers: out, dropKeys, mode, skipBadRows, autoNumber: autoNumber === true };
 }
 
 export function validatePlan(plan: ImportPlan): string[] {

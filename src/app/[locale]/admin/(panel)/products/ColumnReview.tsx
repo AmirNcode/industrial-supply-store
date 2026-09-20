@@ -44,6 +44,7 @@ export function ColumnReview({
   problems,
   rowProblems,
   goodRows,
+  blankRows,
   locale,
   pending,
 }: {
@@ -53,6 +54,7 @@ export function ColumnReview({
   problems: string[];
   rowProblems: ImportError[];
   goodRows: number;
+  blankRows: number;
   locale: Locale;
   pending: boolean;
 }) {
@@ -61,6 +63,8 @@ export function ColumnReview({
   const [dropKeys, setDropKeys] = useState<string[]>([]);
   const [mode, setMode] = useState<ImportMode>("update");
   const [skipBadRows, setSkipBadRows] = useState(false);
+  /** Starts off: minting codes is never the default, in any locale or flow. */
+  const [autoNumber, setAutoNumber] = useState(false);
 
   const update = (i: number, next: HeaderPlan) =>
     setPlans((prev) => prev.map((p, j) => (j === i ? next : p)));
@@ -125,10 +129,13 @@ export function ColumnReview({
     plans.filter((p) => p.role === "spec" && p.inTable).length +
     missing.filter((m) => m.inTable && !dropKeys.includes(m.key)).length;
 
-  const plan = JSON.stringify({ headers: plans, dropKeys, mode, skipBadRows });
+  const plan = JSON.stringify({ headers: plans, dropKeys, mode, skipBadRows, autoNumber });
   const badRowCount = new Set(rowProblems.map((e) => e.row)).size;
   // Confirming with bad rows and no decision about them would just bounce back.
-  const blocked = badRowCount > 0 && !skipBadRows;
+  // Blank part numbers are the same shape of problem: the server refuses to
+  // mint codes nobody asked for, so confirming without the tick achieves
+  // nothing except a round trip.
+  const blocked = (badRowCount > 0 && !skipBadRows) || (blankRows > 0 && !autoNumber);
 
   return (
     <div className="mt-2 border border-[var(--color-rule)] bg-white p-3">
@@ -195,6 +202,24 @@ export function ColumnReview({
               .replace("{good}", formatInt(goodRows, locale))}
           </label>
         </div>
+      )}
+
+      {blankRows > 0 && (
+        <fieldset className="mt-3 border border-[#e0c9a0] bg-[#fdf8ef] px-2.5 py-1.5">
+          <legend className="text-[12px] font-bold">{t.reviewBlankParts}</legend>
+          <p className="text-[11px] text-[var(--color-ink-muted)]">
+            {t.reviewBlankPartsHint.replace("{count}", formatInt(blankRows, locale))}
+          </p>
+          <label className="mt-1 flex items-start gap-1.5 text-[12px]">
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={autoNumber}
+              onChange={(e) => setAutoNumber(e.target.checked)}
+            />
+            <span>{t.reviewBlankPartsGenerate}</span>
+          </label>
+        </fieldset>
       )}
 
       <fieldset className="mt-3">
@@ -429,7 +454,9 @@ export function ColumnReview({
         )}
       </div>
       {blocked && (
-        <p className="mt-1 text-[11px] text-[var(--color-danger)]">{t.reviewBlocked}</p>
+        <p className="mt-1 text-[11px] text-[var(--color-danger)]">
+          {blankRows > 0 && !autoNumber ? t.reviewBlockedBlanks : t.reviewBlocked}
+        </p>
       )}
     </div>
   );

@@ -5,6 +5,7 @@ import type { ImportSpecDef, ImportRow } from "@/lib/importCsv";
 import { plannedAliases, plannedDefs, type ImportPlan } from "@/lib/columnPlan";
 import type { FieldAliases } from "./schema";
 import { reconcileInventoryForProducts } from "./dataIntegrity";
+import { allocatePartNumbers, registerExistingPartNumbers } from "./partNumberQueries";
 
 /**
  * A family's spec column, in full.
@@ -446,6 +447,31 @@ export async function writeImport(
       if (conflicts.length > 0 || caseVariants.length > 0) {
         throw new ImportRefused(conflicts, caseVariants);
       }
+
+      /*
+       * Codes are minted here rather than in the route so a failed write rolls
+       * the reservation back with everything else, and so the family row stays
+       * locked for the whole write — which is what stops two uploads minting
+       * the same code.
+       *
+       * `rows` is mutated in place on purpose: every step below keys off
+       * `row.partNumber`, and rebuilding those maps from a copy would be three
+       * more chances to miss one.
+       */
+      const needing = rows.filter((row) => row.partNumber === "");
+      if (needing.length > 0) {
+        const minted = await allocatePartNumbers(tx, familyId, needing.length);
+        needing.forEach((row, i) => {
+          row.partNumber = minted[i];
+        });
+      }
+      // Codes the file supplied are reserved too, or the counter would hand
+      // one of them out again to a different product later.
+      await registerExistingPartNumbers(
+        tx,
+        familyId,
+        rows.map((row) => row.partNumber),
+      );
 
       // New products land after whatever is already in the family, so a
       // partial file cannot reshuffle the products it does not mention.

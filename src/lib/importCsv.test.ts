@@ -137,12 +137,6 @@ test("an unrecognised in_stock value is an error, not a silent false", () => {
   assert.equal(errors[0].column, "in_stock");
 });
 
-test("a blank part number is an error", () => {
-  const { errors } = parseImport(`${HEADER}\n,004,0.07,0.35,1,0,yes,10,0,0\n`, DEFS);
-  assert.equal(errors.length, 1);
-  assert.equal(errors[0].column, "part_number");
-});
-
 test("every bad row is reported, not just the first", () => {
   const { rows, errors } = parseImport(
     `${HEADER}\nP1,004,bad,0.35,1,0,yes,10,0,0\nP2,004,0.07,also-bad,1,0,yes,10,0,0\n`,
@@ -313,7 +307,7 @@ test("skipping bad rows imports the rest and reports what was left out", () => {
 });
 
 test("a file whose every row is bad imports nothing even when skipping", () => {
-  const csv = `${HEADER}\n,004,0.07,0.35,1,0,yes,10,0,0\n`;
+  const csv = `${HEADER}\nP1,004,0.07,also-bad,1,0,yes,10,0,0\n`;
   const { rows, errors, skipped } = parseWithPlan(csv, {
     ...proposedPlan(csv),
     skipBadRows: true,
@@ -345,4 +339,33 @@ test("toCsv quotes what needs quoting and round-trips", () => {
   const lines = csv.trimEnd().split("\n");
   assert.equal(lines[0], "a,b");
   assert.equal(lines[1], 'plain,"has ""quotes"" and, comma"');
+});
+
+test("a blank part number is a row awaiting a code, not a bad row", () => {
+  const { rows, errors } = parseImport(
+    `${HEADER}\n1000A1,004,0.07,0.35,1,0,yes,10,0,0\n,006,0.10,0.40,1,0,yes,4,0,0\n`,
+    DEFS,
+  );
+  assert.deepEqual(errors, []);
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0].partNumber, "1000A1");
+  assert.equal(rows[1].partNumber, "");
+});
+
+test("two blank part numbers are two products, not a duplicate", () => {
+  const { rows, errors } = parseImport(
+    `${HEADER}\n,004,0.07,0.35,1,0,yes,10,0,0\n,006,0.10,0.40,1,0,yes,4,0,0\n`,
+    DEFS,
+  );
+  assert.deepEqual(errors, []);
+  assert.equal(rows.length, 2);
+});
+
+test("a repeated part number is still a duplicate", () => {
+  const { errors } = parseImport(
+    `${HEADER}\n1000A1,004,0.07,0.35,1,0,yes,10,0,0\n1000A1,006,0.10,0.40,1,0,yes,4,0,0\n`,
+    DEFS,
+  );
+  assert.equal(errors.length, 1);
+  assert.equal(errors[0].column, "part_number");
 });

@@ -118,3 +118,72 @@ test("re-registering the same codes is a no-op", async () => {
 
   await cleanUp(slug, familyNumber);
 });
+
+test("an import row with no part number is given a minted code", async () => {
+  const slug = `pn-import-${Date.now()}`;
+  const familyId = await makeFamily(slug);
+  const { writeImport } = await import("./importQueries");
+
+  const blank = {
+    partNumber: "",
+    specs: {},
+    priceCents: 100,
+    packQty: 1,
+    leadDays: 0,
+    inStock: true,
+    inventoryAvailable: 0,
+    inventoryOnHold: 0,
+    inventorySold: 0,
+  };
+  const result = await writeImport(familyId, [blank]);
+  assert.equal(result.inserted, 1);
+
+  const [{ familyNumber }] = await sql<{ familyNumber: number }[]>`
+    SELECT family_number AS "familyNumber" FROM product_families WHERE id = ${familyId}
+  `;
+  const [product] = await sql<{ partNumber: string }[]>`
+    SELECT part_number AS "partNumber" FROM products WHERE family_id = ${familyId}
+  `;
+  assert.equal(product.partNumber, `${familyNumber}A001`);
+  // The caller reads the minted code back off the row it passed in.
+  assert.equal(blank.partNumber, `${familyNumber}A001`);
+
+  await cleanUp(slug, familyNumber);
+});
+
+test("an import mixing supplied and blank part numbers keeps both", async () => {
+  const slug = `pn-mixed-${Date.now()}`;
+  const familyId = await makeFamily(slug);
+  const { writeImport } = await import("./importQueries");
+  const common = {
+    specs: {},
+    priceCents: 100,
+    packQty: 1,
+    leadDays: 0,
+    inStock: true,
+    inventoryAvailable: 0,
+    inventoryOnHold: 0,
+    inventorySold: 0,
+  };
+
+  // Unique on purpose: a real catalog code like 2490T1 belongs to another
+  // family, and the importer rightly refuses the whole file for that.
+  const legacy = `LEGACY-${Date.now()}`;
+  await writeImport(familyId, [
+    { ...common, partNumber: legacy },
+    { ...common, partNumber: "" },
+  ]);
+
+  const [{ familyNumber }] = await sql<{ familyNumber: number }[]>`
+    SELECT family_number AS "familyNumber" FROM product_families WHERE id = ${familyId}
+  `;
+  const rows = await sql<{ partNumber: string }[]>`
+    SELECT part_number AS "partNumber" FROM products WHERE family_id = ${familyId} ORDER BY id
+  `;
+  assert.deepEqual(
+    rows.map((r) => r.partNumber),
+    [legacy, `${familyNumber}A001`],
+  );
+
+  await cleanUp(slug, familyNumber);
+});

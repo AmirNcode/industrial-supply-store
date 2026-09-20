@@ -187,6 +187,7 @@ export function FamilyImportControl({
           problems={state.problems}
           rowProblems={state.rowProblems}
           goodRows={state.goodRows}
+          blankRows={state.blankRows}
           locale={locale}
           pending={pending}
         />
