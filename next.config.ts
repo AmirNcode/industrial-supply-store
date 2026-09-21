@@ -75,7 +75,7 @@ const nextConfig: NextConfig = {
   },
   async redirects() {
     return [
-      { source: "/", destination: "/en", permanent: false },
+      { source: "/", destination: "/fa", permanent: false },
       /**
        * The SKU list used to be `?view=list` on the category page. Reading that
        * param made the category page itself uncacheable, so the list moved to

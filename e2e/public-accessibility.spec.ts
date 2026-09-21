@@ -90,3 +90,18 @@ for (const locale of locales) {
     await expect(filterButton).toBeFocused();
   });
 }
+
+test("the bare site opens in Persian and the language switch keeps the current page", async ({ page, isMobile }) => {
+  await page.goto("/?utm_source=locale-check");
+  await expect(page).toHaveURL(/\/fa\?utm_source=locale-check$/);
+  await expect(page.locator("html")).toHaveAttribute("lang", "fa");
+  await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
+  if (isMobile) await page.getByRole("button", { name: getDict("fa").browseCatalog }).click();
+  await page.locator('a[lang="en"]').filter({ visible: true }).first().click();
+  await expect(page).toHaveURL(/\/en\?utm_source=locale-check$/);
+  await expect(page.locator("html")).toHaveAttribute("dir", "ltr");
+  await page.goto(`/fa/f/${familySlug}?page=2`);
+  if (isMobile) await page.getByRole("button", { name: getDict("fa").browseCatalog }).click();
+  await page.locator('a[lang="en"]').filter({ visible: true }).first().click();
+  await expect(page).toHaveURL(new RegExp(`/en/f/${familySlug}\\?page=2$`));
+});

@@ -1,6 +1,6 @@
 export const locales = ["en", "fa"] as const;
 export type Locale = (typeof locales)[number];
-export const defaultLocale: Locale = "en";
+export const defaultLocale: Locale = "fa";
 
 export function isLocale(v: string): v is Locale {
   return (locales as readonly string[]).includes(v);
@@ -10,11 +10,11 @@ export function isLocale(v: string): v is Locale {
  * Used by every action that redirects to a locale-prefixed path: the posted
  * `locale` value reaches `redirect()` unchanged, so a `locale` of `/evil.com`
  * would make that `//evil.com/admin` — a protocol-relative URL, and an open
- * redirect. Anything unrecognised falls back to English.
+ * redirect. Anything unrecognised falls back to the default language.
  */
 export function safeLocale(formData: FormData): Locale {
   const raw = String(formData.get("locale") ?? "");
-  return isLocale(raw) ? raw : "en";
+  return isLocale(raw) ? raw : defaultLocale;
 }
 
 export function dir(locale: Locale): "ltr" | "rtl" {
