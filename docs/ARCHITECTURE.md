@@ -248,6 +248,62 @@ to `catalogImport.ts`. Review/apply still share the same parsing and atomic
 database-write path. Never make the import bucket public or reuse the public
 catalog-image bucket.
 
+## TEMEX part numbers
+
+A product's part number is an identifier, not a description. `1842A001` is a
+4-digit family number, a variant letter and a 1-based variant number, and it
+encodes nothing about category, size or material — so reorganising the catalog
+never invalidates a code already printed on a quote. `src/lib/partNumber.ts`
+holds the format and nothing else: no I/O, so it is the one place the rules are
+testable in isolation.
+
+**Family numbers are sequential from 1000 and carry no meaning.** Blocks
+reserved per category were considered and rejected: a block that fills up, or a
+family that moves, turns the number into a lie while it is already in use.
+`ensureFamilyNumber` skips every 4-digit prefix live products already use,
+because the seeded catalog carries supplier codes shaped exactly like ours —
+`1000A100` sits in the O-ring family. Counting upward from the highest number in
+use would hand out a prefix whose first hundred codes are already taken, and the
+import would fail at A100 with nothing on screen to explain it.
+
+**`I` and `O` are never generated.** On a printed label they read as `1` and
+`0`. That leaves 24 letters and 23,976 variants per family.
+
+**A code is never reused.** `part_number_registry` records every code ever
+issued and outlives the product: `products.family_id` cascades on delete, so
+without a separate table a re-created family would inherit codes that once meant
+something else on a customer's quote. A reservation is bound to its product by
+`product_id` (`ON DELETE SET NULL`), and a supplied code is accepted only from
+the same live product that owns it. A tombstone — a reservation whose product is
+gone — is refused, and that refusal is the guarantee, not an edge case.
+
+**Everything mints inside the write transaction.** `writeImport` takes a
+transaction-scoped advisory lock (`lockPartNumberWrites`) before any family or
+product row lock, because prefixes and supplied codes share one namespace across
+families and a per-family row lock cannot protect them. Supplied codes are
+reserved *before* blanks are filled, or an explicit `<family>A001` and a blank
+row in the same file both resolve to the same code and Postgres aborts the whole
+import with SQLSTATE 21000. Part-number writes therefore serialise site-wide;
+that is deliberate, and it is what makes two simultaneous uploads safe.
+
+**A blank part number is a new product, and only on request.** CSV rows with an
+empty cell — or a file with no `part_number` column at all — are new items, and
+the review screen refuses to apply until the operator ticks the box that asks
+for codes. Minting is the one step of an import that cannot be undone, so it is
+never the default in any locale or flow. Every line in a file is one item: two
+blank rows are two products, not a duplicate.
+
+**Creating a single product is insert-only.** `createProductAction` calls
+`writeImport` with `insertOnly`, enforced by the upsert's own `WHERE` clause
+rather than a check before the insert, which would leave a race. Without it,
+re-entering an existing number rewrote that product's price and specs while the
+screen reported success.
+
+Existing products keep the part numbers they already have; nothing renumbers the
+catalog. `scripts/verify-remote.mts` checks the registry's indexes, its
+`ON DELETE SET NULL` behaviour, and that every reservation agrees with its
+product and its family counter.
+
 ## Admin editing conventions
 
 Every editing screen in `/admin` follows the same four rules. They are listed
@@ -320,8 +376,13 @@ src/
 
 Pure logic sits in `src/lib/*` with no database imports so it can be tested
 without one: `orders.ts`, `fxRate.ts`, `money.ts`, `invoice.ts`, `trackRef.ts`,
-`importCsv.ts`, `requestLimits.ts`, and signed import claims. That is where the
-tests are.
+`importCsv.ts`, `partNumber.ts`, `requestLimits.ts`, and signed import claims.
+That is where the tests are.
+
+Part numbers span both halves: `lib/partNumber.ts` is the format,
+`db/partNumberQueries.ts` is the allocation and the reservations, and
+`db/partNumbers.integration.test.ts` covers the concurrency and reuse rules
+against a real database because they cannot be proved without one.
 
 ## Schema changes and the trap that kept recurring
 
