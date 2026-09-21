@@ -33,7 +33,7 @@ const sql = postgres(url, { prepare: false, max: 2 });
 const TABLES = [
   "categories", "product_families", "products", "product_spec_values",
   "spec_defs", "carts", "cart_items", "orders", "order_items", "users",
-  "app_settings", "order_comments", "request_rate_limits",
+  "app_settings", "order_comments", "request_rate_limits", "part_number_registry",
 ] as const;
 
 /**
@@ -76,6 +76,12 @@ const COLUMNS: readonly (readonly [string, string])[] = [
   // catalog route selects these to decide where a spec column renders.
   ["spec_defs", "in_table"],
   ["spec_defs", "in_detail"],
+  ["product_families", "family_number"],
+  ["product_families", "next_variant_ordinal"],
+  ["part_number_registry", "part_number"],
+  ["part_number_registry", "family_number"],
+  ["part_number_registry", "variant_ordinal"],
+  ["part_number_registry", "product_id"],
 ];
 
 const present = await sql<{ name: string }[]>`
@@ -146,6 +152,8 @@ const REQUIRED_CONSTRAINTS = [
   "orders_invoice_fields_check", "orders_timestamp_chain_check",
   "orders_status_timestamps_check", "order_items_qty_check", "order_items_prices_check",
   "request_rate_limits_count_check",
+  "product_families_family_number_check", "product_families_next_variant_check",
+  "part_number_registry_slot_check",
 ] as const;
 const constraintRows = await sql<{ conname: string; convalidated: boolean }[]>`
   SELECT c.conname, c.convalidated
@@ -204,6 +212,7 @@ const REQUIRED_MIGRATIONS = [
   "20260820093000",
   "20260820154500",
   "20260828212651",
+  "20260920120000",
 ] as const;
 let recordedMigrations = new Set<string>();
 if (hasMigrationLedger) {
@@ -273,6 +282,53 @@ if (missingTables.length > 0 || missingCols.length > 0) {
   await sql.end();
   process.exit(1);
 }
+
+// Check both uniqueness and the deletion behavior that preserves reservations.
+const numberIndexes = await sql<{ name: string; valid: boolean; unique: boolean }[]>`
+  SELECT c.relname AS name, i.indisvalid AS valid, i.indisunique AS unique
+  FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid
+  JOIN pg_namespace n ON n.oid = c.relnamespace
+  WHERE n.nspname = 'public' AND c.relname = ANY(${[
+    "families_family_number_key", "part_number_registry_key",
+    "part_number_registry_slot_key", "part_number_registry_product_idx",
+  ]})
+`;
+const hasNumberIndexes = numberIndexes.length === 4 && numberIndexes.every(
+  (index) => index.valid && (index.unique || index.name === "part_number_registry_product_idx"),
+);
+const [{ hasReservationFk }] = await sql<{ hasReservationFk: boolean }[]>`
+  SELECT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'public.part_number_registry'::regclass
+      AND confrelid = 'public.products'::regclass AND contype = 'f'
+      AND convalidated AND confdeltype = 'n'
+      AND pg_get_constraintdef(oid) LIKE 'FOREIGN KEY (product_id) REFERENCES products(id)%'
+  ) AS "hasReservationFk"
+`;
+const [numberIntegrity] = await sql<{ malformed: number; wrongProduct: number; staleCounter: number; missingReservation: number }[]>`
+  SELECT
+    (SELECT count(*)::int FROM part_number_registry r
+     WHERE r.family_number NOT BETWEEN 1000 AND 9999
+       OR r.part_number <> r.family_number::text
+         || substr('ABCDEFGHJKLMNPQRSTUVWXYZ', ((r.variant_ordinal - 1) / 999) + 1, 1)
+         || lpad((((r.variant_ordinal - 1) % 999) + 1)::text, 3, '0')) AS malformed,
+    (SELECT count(*)::int FROM part_number_registry r
+     LEFT JOIN products p ON p.id = r.product_id
+     WHERE (r.product_id IS NOT NULL AND (p.id IS NULL OR upper(p.part_number) <> r.part_number))
+       OR (r.product_id IS NULL AND EXISTS (
+         SELECT 1 FROM products p WHERE upper(p.part_number) = r.part_number))) AS "wrongProduct",
+    (SELECT count(*)::int FROM product_families f
+     WHERE f.family_number IS NOT NULL AND f.next_variant_ordinal <= COALESCE(
+       (SELECT max(r.variant_ordinal) FROM part_number_registry r WHERE r.family_number = f.family_number), 0)) AS "staleCounter",
+    (SELECT count(*)::int FROM products p JOIN product_families f ON f.id = p.family_id
+     WHERE left(p.part_number, 4) = f.family_number::text
+       AND upper(p.part_number) ~ '^[1-9][0-9]{3}[ABCDEFGHJKLMNPQRSTUVWXYZ][0-9]{3}$'
+       AND right(p.part_number, 3) <> '000'
+       AND NOT EXISTS (SELECT 1 FROM part_number_registry r WHERE r.product_id = p.id)) AS "missingReservation"
+`;
+const numbersOk = hasNumberIndexes && hasReservationFk && Object.values(numberIntegrity).every((n) => n === 0);
+console.log(numbersOk ? "part numbers schema and reservations agree ✓" :
+  `part numbers ✗ indexes=${hasNumberIndexes} delete-set-null=${hasReservationFk} ${JSON.stringify(numberIntegrity)}`);
 
 const [counts] = await sql<
   { c: number; f: number; p: number; v: number }[]
@@ -349,6 +405,7 @@ const ok =
   hasSeq &&
   rlsOff.length === 0 &&
   integrityIssues.length === 0 &&
+  numbersOk &&
   !have.has("quotes");
 console.log(ok ? "\n✓ database looks correct" : "\n✗ something is wrong above");
 

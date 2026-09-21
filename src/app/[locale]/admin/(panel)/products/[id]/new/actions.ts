@@ -6,6 +6,7 @@ import { getFamilyForImport, writeImport } from "@/db/importQueries";
 import { parseNumeric } from "@/lib/columnPlan";
 import { normalizeCatalogImageUrl } from "@/lib/catalogImages";
 import type { ImportRow } from "@/lib/importCsv";
+import { FamilyCapacityExhausted, FamilyNumbersExhausted, PartNumberUnavailable } from "@/db/partNumberQueries";
 
 export type CreateProductState =
   | { kind: "ok"; partNumber: string }
@@ -50,7 +51,7 @@ export async function createProductAction(
     const raw = String(form.get(name) ?? "").trim();
     if (raw === "") return fallback;
     const parsed = parseNumeric(raw);
-    if (parsed === null || parsed < 0 || !Number.isInteger(parsed)) return null;
+    if (parsed === null || parsed < 0 || !Number.isSafeInteger(parsed) || parsed > 2147483647) return null;
     return parsed;
   }
 
@@ -68,6 +69,9 @@ export async function createProductAction(
     const price = parseNumeric(priceRaw);
     if (price === null || price < 0) return { kind: "error", message: "bad-price" };
     priceCents = Math.round(price * 100);
+    if (!Number.isSafeInteger(priceCents) || priceCents > 2147483647) {
+      return { kind: "error", message: "bad-price" };
+    }
   }
 
   const imageRaw = String(form.get("image_url") ?? "").trim();
@@ -90,14 +94,25 @@ export async function createProductAction(
     imageUrl: imageUrl ?? undefined,
   };
 
-  const result = await writeImport(familyId, [row]);
+  let result;
+  try {
+    result = await writeImport(familyId, [row], undefined, { insertOnly: true });
+  } catch (error) {
+    if (error instanceof PartNumberUnavailable) {
+      return { kind: "error", message: error.reason === "existing" ? "already-exists" : "reserved" };
+    }
+    if (error instanceof FamilyCapacityExhausted || error instanceof FamilyNumbersExhausted) {
+      return { kind: "error", message: "numbers-exhausted" };
+    }
+    throw error;
+  }
   if (result.conflicts.length > 0) {
     return { kind: "error", message: "wrong-family", column: result.conflicts[0] };
   }
   if (result.caseVariants.length > 0) {
     return { kind: "error", message: "case-variant", column: result.caseVariants[0] };
   }
-  if (result.inserted + result.updated !== 1) return { kind: "error", message: "not-created" };
+  if (result.inserted !== 1) return { kind: "error", message: "not-created" };
 
   revalidatePath("/", "layout");
   // `writeImport` fills the minted code into the row it was handed.

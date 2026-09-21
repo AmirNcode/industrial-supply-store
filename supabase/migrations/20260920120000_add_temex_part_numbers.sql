@@ -39,6 +39,14 @@ CREATE UNIQUE INDEX IF NOT EXISTS part_number_registry_slot_key
 CREATE INDEX IF NOT EXISTS part_number_registry_product_idx
   ON part_number_registry (product_id);
 
+-- Earlier local feature testing created reservations without product_id.
+-- Attach those reservations to their still-live products once, before the
+-- strict ownership checks ship. This changes no product or part number.
+UPDATE part_number_registry r
+SET product_id = p.id
+FROM products p
+WHERE r.product_id IS NULL AND upper(p.part_number) = r.part_number;
+
 -- Written only by the application's owner role, which bypasses RLS. Enabling
 -- it here keeps the table out of Supabase's REST API, matching the posture of
 -- request_rate_limits: a reservation list is not public data.

@@ -87,14 +87,16 @@ export function ImportFeedback({
                     ? t.importAllSkipped
                     : state.message === "needs-numbers"
                       ? t.importNeedsNumbers
+                      : state.message === "numbers-exhausted"
+                        ? t.importNumbersExhausted
                       : t.importFamilyGone;
     return <ImportProblem>{message}</ImportProblem>;
   }
 
-  if (state.kind === "conflicts" || state.kind === "case-variants") {
+  if (state.kind === "conflicts" || state.kind === "case-variants" || state.kind === "reserved") {
     return (
       <ImportProblem>
-        {state.kind === "conflicts" ? t.importWrongFamily : t.importCaseVariant}{" "}
+        {state.kind === "conflicts" ? t.importWrongFamily : state.kind === "reserved" ? t.importReservedNumber : t.importCaseVariant}{" "}
         <span className="tech">{state.parts.slice(0, MAX_SHOWN).join(", ")}</span>
       </ImportProblem>
     );

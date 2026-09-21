@@ -482,7 +482,8 @@ export function ImportPanel({
                           // Remounting per upload throws away the decisions made
                           // about the previous file, which no longer describe
                           // this one.
-                          key={state.headers.map((h) => h.plan.header).join("|")}
+                          key={JSON.stringify(state.plan)}
+                          initialPlan={state.plan}
                           headers={state.headers}
                           missing={state.missing}
                           rowCount={state.rowCount}

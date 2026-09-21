@@ -107,6 +107,18 @@ write without it, which prevents a forgotten value in an env file becoming a
 permanent bypass. Migration files are applied in timestamp order and recorded
 in `supabase_migrations.schema_migrations`; a second run is a no-op.
 
+For the September 2026 part-number release, apply
+`20260920120000_add_temex_part_numbers.sql` **before pushing the new application
+to main**. Imports and product creation require its registry and family columns.
+The migration preserves all product numbers; it also binds reservations left by
+earlier local feature testing to their still-live products. Existing products
+will not be renumbered. The release verifier checks the registry's indexes,
+deletion behavior, product links, counters, and migration ledger.
+
+The storefront's bare root redirects to `/fa`; `/en/...` remains available
+through the language switch. This is a fixed application default, with no admin
+language setting.
+
 Reconciliation is deliberately separate from migration. The check is read-only
 and exits non-zero when canonical or derived data disagrees. `--apply` repairs
 only mechanically derived family/category counts, facet rows, and inventory

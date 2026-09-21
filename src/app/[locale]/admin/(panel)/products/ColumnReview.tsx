@@ -12,6 +12,7 @@ import {
   type BuiltinField,
   type HeaderPlan,
   type ImportMode,
+  type ImportPlan,
   type MissingColumn,
 } from "@/lib/columnPlan";
 import type { ImportError } from "@/lib/importCsv";
@@ -47,6 +48,7 @@ export function ColumnReview({
   blankRows,
   locale,
   pending,
+  initialPlan,
 }: {
   headers: AnalyzedHeader[];
   missing: MissingRow[];
@@ -57,14 +59,15 @@ export function ColumnReview({
   blankRows: number;
   locale: Locale;
   pending: boolean;
+  initialPlan: ImportPlan;
 }) {
   const t = getDict(locale);
-  const [plans, setPlans] = useState<HeaderPlan[]>(() => headers.map((h) => h.plan));
-  const [dropKeys, setDropKeys] = useState<string[]>([]);
-  const [mode, setMode] = useState<ImportMode>("update");
-  const [skipBadRows, setSkipBadRows] = useState(false);
+  const [plans, setPlans] = useState<HeaderPlan[]>(initialPlan.headers);
+  const [dropKeys, setDropKeys] = useState<string[]>(initialPlan.dropKeys);
+  const [mode, setMode] = useState<ImportMode>(initialPlan.mode);
+  const [skipBadRows, setSkipBadRows] = useState(initialPlan.skipBadRows);
   /** Starts off: minting codes is never the default, in any locale or flow. */
-  const [autoNumber, setAutoNumber] = useState(false);
+  const [autoNumber, setAutoNumber] = useState(initialPlan.autoNumber ?? false);
 
   const update = (i: number, next: HeaderPlan) =>
     setPlans((prev) => prev.map((p, j) => (j === i ? next : p)));

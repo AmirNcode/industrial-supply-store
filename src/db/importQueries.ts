@@ -5,7 +5,7 @@ import type { ImportSpecDef, ImportRow } from "@/lib/importCsv";
 import { plannedAliases, plannedDefs, type ImportPlan } from "@/lib/columnPlan";
 import type { FieldAliases } from "./schema";
 import { reconcileInventoryForProducts } from "./dataIntegrity";
-import { allocatePartNumbers, registerExistingPartNumbers } from "./partNumberQueries";
+import { allocatePartNumbers, lockPartNumberWrites, PartNumberUnavailable, registerExistingPartNumbers } from "./partNumberQueries";
 
 /**
  * A family's spec column, in full.
@@ -391,7 +391,7 @@ async function syncColumns(tx: Tx, family: FamilyForImport, plan: ImportPlan) {
  */
 export async function writeImport(
   familyId: number,
-  rows: readonly ImportRow[],
+  inputRows: readonly ImportRow[],
   /**
    * Given when the upload also redefines the family's columns. The column
    * changes and the row writes share this one transaction on purpose: a family
@@ -399,7 +399,10 @@ export async function writeImport(
    * catalog that renders headings with no values under them.
    */
   plan?: ImportPlan,
+  options: { insertOnly?: boolean } = {},
 ): Promise<ImportResult> {
+  // Publish generated codes back to the caller only after a successful commit.
+  const rows = inputRows.map((row) => ({ ...row }));
   const family = await getFamilyForImport(familyId);
   if (!family) throw new Error(`No family ${familyId}`);
   if (rows.length === 0) {
@@ -414,7 +417,8 @@ export async function writeImport(
   const numeric = new Set(effective.filter((d) => d.kind === "number").map((d) => d.key));
 
   try {
-    return await sql.begin(async (tx) => {
+    const result = await sql.begin(async (tx) => {
+      await lockPartNumberWrites(tx);
       if (plan) await syncColumns(tx, family, plan);
 
       const parts = rows.map((r) => r.partNumber);
@@ -447,6 +451,12 @@ export async function writeImport(
       if (conflicts.length > 0 || caseVariants.length > 0) {
         throw new ImportRefused(conflicts, caseVariants);
       }
+      if (options.insertOnly && existing.length > 0) {
+        throw new PartNumberUnavailable(existing.map((row) => row.partNumber), "existing");
+      }
+
+      // Supplied codes must be reserved before filling blanks in the same file.
+      await registerExistingPartNumbers(tx, familyId, parts.filter(Boolean));
 
       /*
        * Codes are minted here rather than in the route so a failed write rolls
@@ -454,9 +464,8 @@ export async function writeImport(
        * locked for the whole write — which is what stops two uploads minting
        * the same code.
        *
-       * `rows` is mutated in place on purpose: every step below keys off
-       * `row.partNumber`, and rebuilding those maps from a copy would be three
-       * more chances to miss one.
+       * Only our working copy changes here; a failed transaction leaves the
+       * caller's blank rows ready to retry.
        */
       const needing = rows.filter((row) => row.partNumber === "");
       if (needing.length > 0) {
@@ -465,13 +474,6 @@ export async function writeImport(
           row.partNumber = minted[i];
         });
       }
-      // Codes the file supplied are reserved too, or the counter would hand
-      // one of them out again to a different product later.
-      await registerExistingPartNumbers(
-        tx,
-        familyId,
-        rows.map((row) => row.partNumber),
-      );
 
       // New products land after whatever is already in the family, so a
       // partial file cannot reshuffle the products it does not mention.
@@ -525,17 +527,30 @@ export async function writeImport(
             inventory_available = EXCLUDED.inventory_available,
             inventory_on_hold = EXCLUDED.inventory_on_hold,
             inventory_sold = EXCLUDED.inventory_sold
+          WHERE NOT ${options.insertOnly ?? false}
+            AND products.family_id = EXCLUDED.family_id
           -- xmax is 0 on a fresh insert and the updating transaction's id
           -- otherwise; it is the only way to tell the two apart from one
           -- statement.
           RETURNING id, (xmax = 0) AS inserted
         `;
+        if (result.length !== chunk.length) {
+          throw new PartNumberUnavailable(chunk.map((row) => row.partNumber), "existing");
+        }
         for (const r of result) {
           touched.push(r.id);
           if (r.inserted) inserted++;
           else updated++;
         }
       }
+
+      // A reservation belongs to this exact product for its entire lifetime.
+      // ON DELETE SET NULL leaves a tombstone that future imports must refuse.
+      await tx`
+        UPDATE part_number_registry r SET product_id = p.id
+        FROM products p
+        WHERE p.id = ANY(${touched}::int[]) AND upper(p.part_number) = r.part_number
+      `;
 
       /*
        * Images and documents are written separately, and only for the rows
@@ -722,6 +737,8 @@ export async function writeImport(
 
       return { inserted, updated, removed, conflicts: [], caseVariants: [], mismatches };
     });
+    inputRows.forEach((row, index) => { row.partNumber = rows[index].partNumber; });
+    return result;
   } catch (e) {
     if (e instanceof ImportRefused) {
       return {

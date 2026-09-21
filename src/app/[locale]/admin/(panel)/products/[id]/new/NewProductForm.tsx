@@ -52,6 +52,12 @@ export function NewProductForm({
                 ? t.newProductBadImage
                 : state.message === "wrong-family"
                   ? t.importWrongFamily
+                  : state.message === "already-exists"
+                    ? t.newProductAlreadyExists
+                  : state.message === "reserved"
+                    ? t.importReservedNumber
+                  : state.message === "numbers-exhausted"
+                    ? t.importNumbersExhausted
                   : state.message === "case-variant"
                     ? t.importCaseVariant
                     : t.newProductFailed

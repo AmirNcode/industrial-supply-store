@@ -16,6 +16,7 @@ import {
   getFamilyForImport,
   writeImport,
 } from "@/db/importQueries";
+import { FamilyCapacityExhausted, FamilyNumbersExhausted, PartNumberUnavailable } from "@/db/partNumberQueries";
 
 export type ImportState =
   | {
@@ -29,6 +30,7 @@ export type ImportState =
       goodRows: number;
       /** Rows whose part number cell is empty; each becomes a new product. */
       blankRows: number;
+      plan: ImportPlan;
     }
   | {
       kind: "ok";
@@ -45,6 +47,7 @@ export type ImportState =
   | { kind: "errors"; familyId: number; errors: ImportError[] }
   | { kind: "conflicts"; familyId: number; parts: string[] }
   | { kind: "case-variants"; familyId: number; parts: string[] }
+  | { kind: "reserved"; familyId: number; parts: string[] }
   | {
       kind: "message";
       familyId: number;
@@ -55,6 +58,7 @@ export type ImportState =
         | "bad-plan"
         | "all-rows-skipped"
         | "needs-numbers"
+        | "numbers-exhausted"
         | "storage-missing"
         | "upload-failed"
         | "rate-limit";
@@ -94,10 +98,10 @@ export async function processCatalogImport(input: {
   if (!plan) return { kind: "message", familyId, message: "bad-plan" };
 
   const problems = validatePlan(plan);
-  if (problems.length > 0) return review(familyId, text, family, problems);
+  if (problems.length > 0) return review(familyId, text, family, problems, plan);
 
   const { rows, errors, skipped } = parseWithPlan(text, plan);
-  if (errors.length > 0) return review(familyId, text, family, [], errors);
+  if (errors.length > 0) return review(familyId, text, family, [], plan);
   if (rows.length === 0) {
     return { kind: "message", familyId, message: "all-rows-skipped" };
   }
@@ -108,12 +112,7 @@ export async function processCatalogImport(input: {
   // without that decision is sent back rather than acted on.
   const blankRows = rows.filter((row) => row.partNumber === "").length;
   if (blankRows > 0 && plan.autoNumber !== true) {
-    return {
-      kind: "message",
-      familyId,
-      message: "needs-numbers",
-      detail: String(blankRows),
-    };
+    return review(familyId, text, family, [], plan);
   }
   if (rows.length > IMPORT_MAX_ROWS) {
     return { kind: "message", familyId, message: "too-large" };
@@ -124,7 +123,18 @@ export async function processCatalogImport(input: {
     (header) => header.role === "spec" && !existing.has(header.key),
   ).length;
 
-  const result = await writeImport(familyId, rows, plan);
+  let result;
+  try {
+    result = await writeImport(familyId, rows, plan);
+  } catch (error) {
+    if (error instanceof PartNumberUnavailable) {
+      return { kind: "reserved", familyId, parts: error.parts };
+    }
+    if (error instanceof FamilyCapacityExhausted || error instanceof FamilyNumbersExhausted) {
+      return { kind: "message", familyId, message: "numbers-exhausted" };
+    }
+    throw error;
+  }
   if (result.conflicts.length > 0) {
     return { kind: "conflicts", familyId, parts: result.conflicts };
   }
@@ -152,7 +162,7 @@ async function review(
   text: string,
   family: NonNullable<Awaited<ReturnType<typeof getFamilyForImport>>>,
   problems: string[],
-  knownRowProblems?: ImportError[],
+  submittedPlan?: ImportPlan,
 ): Promise<ImportState> {
   const analysis = analyzeCsv(text, family.defs, family.fieldAliases);
   if (!analysis.ok) {
@@ -170,22 +180,22 @@ async function review(
     familyId,
     analysis.missing.map((missing) => missing.key),
   );
-  const proposed: ImportPlan = {
+  const proposed: ImportPlan = submittedPlan ?? {
     headers: analysis.headers.map((header) => header.plan),
     dropKeys: [],
     mode: "update",
     skipBadRows: false,
   };
-  const dryRun = knownRowProblems
-    ? { errors: knownRowProblems }
-    : validatePlan(proposed).length === 0
-      ? parseWithPlan(text, proposed)
-      : { errors: [] as ImportError[] };
-  const badRows = new Set(dryRun.errors.map((error) => error.row));
+  // A preview retains valid rows even when other rows are invalid. Parsing in
+  // all-or-nothing mode hides the blank codes that still need consent.
+  const dryRun = validatePlan(proposed).length === 0
+    ? parseWithPlan(text, { ...proposed, skipBadRows: true })
+    : { rows: [], errors: [], skipped: [] };
+  const rowProblems = [...dryRun.errors, ...dryRun.skipped];
+  const badRows = new Set(rowProblems.map((error) => error.row));
   // Counted from the same dry run the operator is about to look at, so the
   // number on screen is the number of codes the apply would actually mint.
-  const blankRows =
-    "rows" in dryRun ? dryRun.rows.filter((row) => row.partNumber === "").length : 0;
+  const blankRows = dryRun.rows.filter((row) => row.partNumber === "").length;
 
   return {
     kind: "review",
@@ -197,8 +207,9 @@ async function review(
     })),
     rowCount: analysis.rowCount,
     problems,
-    rowProblems: dryRun.errors,
+    rowProblems,
     goodRows: analysis.rowCount - badRows.size,
     blankRows,
+    plan: proposed,
   };
 }

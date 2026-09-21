@@ -180,7 +180,8 @@ export function FamilyImportControl({
 
       {state?.kind === "review" && (
         <ColumnReview
-          key={state.headers.map((header) => header.plan.header).join("|")}
+          key={JSON.stringify(state.plan)}
+          initialPlan={state.plan}
           headers={state.headers}
           missing={state.missing}
           rowCount={state.rowCount}

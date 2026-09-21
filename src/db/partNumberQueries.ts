@@ -26,15 +26,26 @@ export class FamilyNumbersExhausted extends Error {
   }
 }
 
+export class PartNumberUnavailable extends Error {
+  constructor(readonly parts: string[], readonly reason: "existing" | "reserved") {
+    super(`Part numbers are ${reason}: ${parts.join(", ")}`);
+    this.name = "PartNumberUnavailable";
+  }
+}
+
 /**
- * This family's 4-digit prefix, assigned on first use.
- *
- * `FOR UPDATE` is what serialises two uploads into one family. Without it both
- * read the same counter, both compute the same code, and the unique index turns
- * a routine import into a failed one — after the operator has already waited
- * for the upload.
+ * Prefixes and supplied supplier codes share one namespace across families.
+ * A family row lock cannot protect first allocation in different families.
+ * Imports already update shared category counts, so serialising these rare
+ * writes also keeps their conflict checks valid until commit. Take this lock
+ * before any family/product row lock.
  */
+export async function lockPartNumberWrites(tx: Tx): Promise<void> {
+  await tx`SELECT pg_advisory_xact_lock(1842150101)`;
+}
+
 export async function ensureFamilyNumber(tx: Tx, familyId: number): Promise<number> {
+  await lockPartNumberWrites(tx);
   const [family] = await tx<{ familyNumber: number | null }[]>`
     SELECT family_number AS "familyNumber" FROM product_families
     WHERE id = ${familyId} FOR UPDATE
@@ -42,157 +53,89 @@ export async function ensureFamilyNumber(tx: Tx, familyId: number): Promise<numb
   if (!family) throw new Error(`No family ${familyId}`);
   if (family.familyNumber !== null) return family.familyNumber;
 
-  /*
-   * Sequential, with no ranges reserved per category: the number means nothing
-   * by itself, so the only rules are that it is free and never reused.
-   *
-   * The registry is consulted as well as the families table, because deleting a
-   * family removes its row but not its reservations. Counting only live
-   * families would hand 1001 to a new family whose first allocation then
-   * collides with the deleted family's registry slots — an import failing on a
-   * unique-index violation with nothing on screen to explain it.
-   */
+  // Include live supplier prefixes and permanent reservations. MAX + 1 would
+  // let one imported 9999A001 exhaust all lower, never-used family prefixes.
   const [next] = await tx<{ candidate: number }[]>`
-    SELECT GREATEST(
-      COALESCE((SELECT MAX(family_number) FROM product_families), ${MIN_FAMILY_NUMBER - 1}),
-      COALESCE((SELECT MAX(family_number) FROM part_number_registry), ${MIN_FAMILY_NUMBER - 1})
-    )::int + 1 AS candidate
+    WITH occupied AS (
+      SELECT family_number::text AS prefix FROM product_families WHERE family_number IS NOT NULL
+      UNION SELECT family_number::text FROM part_number_registry
+      UNION SELECT left(part_number, 4) FROM products
+    )
+    SELECT n AS candidate FROM generate_series(${MIN_FAMILY_NUMBER}::int, ${MAX_FAMILY_NUMBER}::int) n
+    WHERE NOT EXISTS (SELECT 1 FROM occupied WHERE prefix = n::text)
+    ORDER BY n LIMIT 1
   `;
-  /*
-   * Step over any prefix the catalog is already using.
-   *
-   * The seeded catalog carries supplier codes shaped exactly like ours —
-   * `1000A100` and its neighbours sit in another family. Handing 1000 to a new
-   * family works for its first 99 products and then collides on the products
-   * unique index at A100: an import that has been fine all week suddenly fails
-   * with nothing on screen to explain it.
-   *
-   * `LIKE 'nnnn%'` uses the part number index because this database is
-   * initialised with the C locale.
-   */
-  let candidate = next.candidate;
-  while (candidate <= MAX_FAMILY_NUMBER) {
-    const [taken] = await tx<{ exists: boolean }[]>`
-      SELECT EXISTS (
-        SELECT 1 FROM products WHERE part_number LIKE ${String(candidate)} || '%'
-      ) AS exists
-    `;
-    if (!taken.exists) break;
-    candidate += 1;
-  }
-  if (candidate > MAX_FAMILY_NUMBER) throw new FamilyNumbersExhausted();
-  next.candidate = candidate;
-
-  await tx`
-    UPDATE product_families SET family_number = ${next.candidate} WHERE id = ${familyId}
-  `;
+  if (!next) throw new FamilyNumbersExhausted();
+  await tx`UPDATE product_families SET family_number = ${next.candidate} WHERE id = ${familyId}`;
   return next.candidate;
 }
 
-/**
- * `count` fresh codes for this family, in order, reserved in the registry
- * before they are handed back.
- */
-export async function allocatePartNumbers(
-  tx: Tx,
-  familyId: number,
-  count: number,
-): Promise<string[]> {
-  if (!Number.isSafeInteger(count) || count < 0) {
-    throw new RangeError(`Invalid allocation count: ${count}`);
-  }
+/** Reserve fresh codes inside the same transaction that will insert products. */
+export async function allocatePartNumbers(tx: Tx, familyId: number, count: number): Promise<string[]> {
+  if (!Number.isSafeInteger(count) || count < 0) throw new RangeError(`Invalid allocation count: ${count}`);
   if (count === 0) return [];
 
   const familyNumber = await ensureFamilyNumber(tx, familyId);
   const [family] = await tx<{ nextOrdinal: number }[]>`
-    SELECT next_variant_ordinal AS "nextOrdinal" FROM product_families
-    WHERE id = ${familyId} FOR UPDATE
+    SELECT next_variant_ordinal AS "nextOrdinal" FROM product_families WHERE id = ${familyId}
   `;
-  const firstOrdinal = family.nextOrdinal;
-
-  /*
-   * The counter alone is not proof that a code is free.
-   *
-   * `ensureFamilyNumber` keeps a new family off a prefix the catalog already
-   * uses, but a later upload can still bring in a product whose supplier code
-   * happens to land inside this family's range. Colliding with it would abort
-   * the whole import on the products unique index, so step past it instead.
-   */
-  let start = firstOrdinal;
-  let codes: string[] = [];
-  let ordinals: number[] = [];
-  for (let attempt = 0; ; attempt++) {
-    if (start + count - 1 > MAX_VARIANTS_PER_FAMILY) {
-      throw new FamilyCapacityExhausted(familyNumber);
-    }
-    codes = [];
-    ordinals = [];
-    for (let i = 0; i < count; i++) {
-      ordinals.push(start + i);
-      codes.push(formatPartNumber(familyNumber, start + i));
-    }
-    const clashes = await tx<{ partNumber: string }[]>`
-      SELECT part_number AS "partNumber" FROM products
-      WHERE part_number = ANY(${codes}::text[])
-    `;
-    if (clashes.length === 0) break;
-    if (attempt >= 8) throw new FamilyCapacityExhausted(familyNumber);
-    const highest = Math.max(
-      ...clashes.map((clash) => variantOrdinalOf(clash.partNumber) ?? 0),
-    );
-    start = highest + 1;
+  const occupied = await tx<{ partNumber: string }[]>`
+    SELECT upper(part_number) AS "partNumber" FROM products
+    WHERE part_number LIKE ${`${familyNumber}%`}
+    UNION SELECT part_number FROM part_number_registry WHERE family_number = ${familyNumber}
+  `;
+  const used = new Set(occupied.map((row) => row.partNumber));
+  const codes: string[] = [];
+  const ordinals: number[] = [];
+  let next = family.nextOrdinal;
+  for (; next <= MAX_VARIANTS_PER_FAMILY && codes.length < count; next++) {
+    const code = formatPartNumber(familyNumber, next);
+    if (used.has(code)) continue;
+    codes.push(code);
+    ordinals.push(next);
   }
-
+  if (codes.length !== count) throw new FamilyCapacityExhausted(familyNumber);
   await tx`
     INSERT INTO part_number_registry (part_number, family_number, variant_ordinal)
-    SELECT u.part_number, ${familyNumber}, u.variant_ordinal::int
+    SELECT u.part_number, ${familyNumber}, u.variant_ordinal
     FROM unnest(${codes}::text[], ${ordinals}::int[]) AS u(part_number, variant_ordinal)
   `;
-  await tx`
-    UPDATE product_families SET next_variant_ordinal = ${start + count}
-    WHERE id = ${familyId}
-  `;
+  await tx`UPDATE product_families SET next_variant_ordinal = ${next} WHERE id = ${familyId}`;
   return codes;
 }
 
 /**
- * Reserve codes that arrived in a file rather than from the allocator.
- *
- * Only this family's TEMEX-shaped codes are recorded. A legacy supplier number
- * like `2490T1` occupies no slot in this scheme, and inventing one for it would
- * block a real code later. Already-registered codes are left alone, so
- * re-uploading the same file stays idempotent.
+ * Reserve supplied TEMEX-shaped codes before minting blanks. A reservation is
+ * reusable only by the same live product, never a replacement after deletion.
+ * Uppercase keys also protect lowercase supplier spellings. Arbitrary supplier
+ * codes remain supported and need no invented TEMEX ordinal.
  */
-export async function registerExistingPartNumbers(
-  tx: Tx,
-  familyId: number,
-  partNumbers: readonly string[],
-): Promise<void> {
-  const familyNumber = await ensureFamilyNumber(tx, familyId);
-  const prefix = String(familyNumber);
-
-  const mine: string[] = [];
-  const ordinals: number[] = [];
-  for (const part of partNumbers) {
-    if (!isTemexPartNumber(part) || !part.startsWith(prefix)) continue;
-    const ordinal = variantOrdinalOf(part);
-    if (ordinal === null) continue;
-    mine.push(part);
-    ordinals.push(ordinal);
-  }
-  if (mine.length === 0) return;
-
+export async function registerExistingPartNumbers(tx: Tx, familyId: number, partNumbers: readonly string[]): Promise<void> {
+  await lockPartNumberWrites(tx);
+  const codes = [...new Set(partNumbers.map((part) => part.toUpperCase()).filter(isTemexPartNumber))];
+  if (codes.length === 0) return;
+  const unavailable = await tx<{ partNumber: string }[]>`
+    SELECT r.part_number AS "partNumber" FROM part_number_registry r
+    LEFT JOIN products p ON p.id = r.product_id
+    WHERE r.part_number = ANY(${codes}::text[])
+      AND (p.id IS NULL OR upper(p.part_number) <> r.part_number OR p.family_id <> ${familyId})
+  `;
+  if (unavailable.length) throw new PartNumberUnavailable(unavailable.map((r) => r.partNumber), "reserved");
   await tx`
-    INSERT INTO part_number_registry (part_number, family_number, variant_ordinal)
-    SELECT u.part_number, ${familyNumber}, u.variant_ordinal::int
-    FROM unnest(${mine}::text[], ${ordinals}::int[]) AS u(part_number, variant_ordinal)
+    INSERT INTO part_number_registry (part_number, family_number, variant_ordinal, product_id)
+    SELECT u.code, u.prefix, u.ordinal, p.id
+    FROM unnest(${codes}::text[], ${codes.map((c) => Number(c.slice(0, 4)))}::int[],
+                ${codes.map((c) => variantOrdinalOf(c)!)}::int[]) AS u(code, prefix, ordinal)
+    LEFT JOIN products p ON upper(p.part_number) = u.code AND p.family_id = ${familyId}
     ON CONFLICT (part_number) DO NOTHING
   `;
-  // Move the counter past anything the file brought in, or the next allocation
-  // collides with a code that already exists in the catalog.
+  // Advance the owning range even when a supplier code was entered under a
+  // different catalog family. Do not consume this family's unrelated range.
   await tx`
-    UPDATE product_families
-    SET next_variant_ordinal = GREATEST(next_variant_ordinal, ${Math.max(...ordinals) + 1})
-    WHERE id = ${familyId}
+    UPDATE product_families f
+    SET next_variant_ordinal = GREATEST(f.next_variant_ordinal,
+      COALESCE((SELECT max(r.variant_ordinal) + 1 FROM part_number_registry r
+                WHERE r.family_number = f.family_number), 1))
+    WHERE f.family_number = ANY(${codes.map((code) => Number(code.slice(0, 4)))}::int[])
   `;
 }
