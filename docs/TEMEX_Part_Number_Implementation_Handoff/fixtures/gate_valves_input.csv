@@ -1,0 +1,5 @@
+product_name,type,design_standard,valve_size,pressure_rating,bore_type,bore_size,end_connection,body_material,stem_material,operation,material_class,temperature_class,psl,pr,service,standard_painting_system
+Gate Valve,Slab - Through Conduit,API 6A,"2-1/16",3000,Full,"2-1/16",API 6B RTJ Flange,Forged AISI 4130 (API 60K),AISI 410 + QPQ,Handwheel,DD,P+U,3,2,Sour Oil & Gas Service,7E System
+Gate Valve,Slab - Through Conduit,API 6A,"2-1/16",3000,Full,"2-1/16",API 6B RTJ Flange,Forged AISI 4130 (API 60K),AISI 410 + QPQ,Handwheel,EE,P+U,3,2,Sour Oil & Gas Service,7E System
+Gate Valve,Slab - Through Conduit,API 6A,"2-1/16",3000,Full,"2-1/16",API 6B RTJ Flange,Forged AISI 4130 (API 60K),INCONEL 718,Handwheel,EE-NL,P+U,3,2,Sour Oil & Gas Service,7E System
+Gate Valve,Slab - Through Conduit,API 6A,"2-1/16",5000,Full,"2-1/16",API 6B RTJ Flange,Forged AISI 4130 (API 60K),AISI 410 + QPQ,Handwheel,DD,P+U,3,2,Sour Oil & Gas Service,7E System

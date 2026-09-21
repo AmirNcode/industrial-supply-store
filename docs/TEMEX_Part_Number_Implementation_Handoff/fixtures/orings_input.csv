@@ -1,0 +1,6 @@
+id_mm,cross_section_mm,od_mm,material,hardness,color,price_usd,pack_qty,lead_days,in_stock
+1,1,3,Buna-N,70A,Black,0.35,50,0,yes
+1,1.5,4,Buna-N,70A,Black,0.35,50,0,yes
+1,2,5,Buna-N,70A,Black,0.35,50,0,yes
+1,2.5,6,Buna-N,70A,Black,0.35,50,0,yes
+1,3,7,Buna-N,70A,Black,0.35,50,0,yes

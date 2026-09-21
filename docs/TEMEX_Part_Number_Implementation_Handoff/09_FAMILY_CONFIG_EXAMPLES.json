@@ -1,0 +1,154 @@
+{
+  "version": 1,
+  "notes": "Examples only. Final field keys must match the website's canonical product attribute model.",
+  "families": [
+    {
+      "name": "Metric Buna-N (NBR) O-Rings",
+      "example_family_number": 1842,
+      "taxonomy": {
+        "main_category": "Seals, Packing & Gaskets",
+        "category": "O-Rings",
+        "subcategory": "Metric O-Rings",
+        "product_family": "Metric Buna-N (NBR) O-Rings"
+      },
+      "identity_fields": [
+        {
+          "key": "id_mm",
+          "type": "number",
+          "required": true
+        },
+        {
+          "key": "cross_section_mm",
+          "type": "number",
+          "required": true
+        },
+        {
+          "key": "od_mm",
+          "type": "number",
+          "required": true
+        },
+        {
+          "key": "material",
+          "type": "string",
+          "required": true
+        },
+        {
+          "key": "hardness",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "non_identity_examples": [
+        "price_usd",
+        "pack_qty",
+        "lead_days",
+        "in_stock",
+        "inventory_available",
+        "inventory_on_hold",
+        "inventory_sold",
+        "image_url"
+      ]
+    },
+    {
+      "name": "API 6A Slab / Through-Conduit Gate Valve",
+      "example_family_number": 6813,
+      "taxonomy": {
+        "main_category": "Industrial Valves",
+        "category": "API 6A Valves",
+        "subcategory": "Gate Valves",
+        "product_family": "Slab / Through-Conduit Gate Valve"
+      },
+      "identity_fields": [
+        {
+          "key": "type",
+          "type": "string",
+          "required": true
+        },
+        {
+          "key": "design_standard",
+          "type": "string",
+          "required": true
+        },
+        {
+          "key": "valve_size",
+          "type": "string",
+          "required": true
+        },
+        {
+          "key": "pressure_rating",
+          "type": "number",
+          "required": true
+        },
+        {
+          "key": "bore_type",
+          "type": "string",
+          "required": true
+        },
+        {
+          "key": "bore_size",
+          "type": "string",
+          "required": true
+        },
+        {
+          "key": "end_connection",
+          "type": "string",
+          "required": true
+        },
+        {
+          "key": "body_material",
+          "type": "string",
+          "required": true
+        },
+        {
+          "key": "gate_seat_material_and_coating",
+          "type": "string",
+          "required": true
+        },
+        {
+          "key": "stem_material",
+          "type": "string",
+          "required": true
+        },
+        {
+          "key": "operation",
+          "type": "string",
+          "required": true
+        },
+        {
+          "key": "material_class",
+          "type": "string",
+          "required": true
+        },
+        {
+          "key": "temperature_class",
+          "type": "string",
+          "required": true
+        },
+        {
+          "key": "psl",
+          "type": "string",
+          "required": true
+        },
+        {
+          "key": "pr",
+          "type": "string",
+          "required": true
+        },
+        {
+          "key": "service",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "non_identity_examples": [
+        "test_pressure",
+        "face_to_face",
+        "standard_painting_system",
+        "custom_painting",
+        "inventory_available",
+        "price"
+      ],
+      "warning": "Confirm final identity-field list with TEMEX product engineering before production. Fields that are strictly derived from configuration may be removed."
+    }
+  ]
+}
