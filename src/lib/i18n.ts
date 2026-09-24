@@ -197,6 +197,7 @@ const en = {
   help: "Help",
   terms: "Terms and Conditions",
   footerNote: "By using this website, you agree to our Terms and Conditions.",
+  enamadSeal: "Enamad e-commerce trust seal (opens in a new tab)",
   seedNotice:
     "Demonstration catalog. Product data is generated for interface testing and must not be used to select a real part.",
   // Demo mode
@@ -789,6 +790,7 @@ const fa: typeof en = {
   help: "راهنما",
   terms: "شرایط و مقررات",
   footerNote: "استفاده از این وب‌سایت به معنای پذیرش شرایط و مقررات است.",
+  enamadSeal: "نماد اعتماد الکترونیکی (در زبانه جدید باز می‌شود)",
   seedNotice:
     "کاتالوگ نمایشی. داده‌های کالا برای آزمایش رابط کاربری تولید شده و مبنای انتخاب قطعه واقعی نیست.",
   demoBanner:

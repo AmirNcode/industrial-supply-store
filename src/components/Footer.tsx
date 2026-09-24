@@ -25,6 +25,48 @@ export function Footer({ locale }: { locale: Locale }) {
           </span>
         ))}
         <span className="ms-auto">{t.footerNote}</span>
+        {/*
+          Enamad's trust seal, required before the payment gateway activates.
+
+          It sits at the inline end of the row, which the reading direction
+          turns into the right side in English and the left side in Persian —
+          no per-locale branch needed.
+
+          Kept close to Enamad's own snippet on purpose, because their check
+          reads it:
+          - `referrerPolicy="origin"` on both elements is how Enamad knows
+            which domain is displaying the seal. `rel` is `noopener` only:
+            `noreferrer` would strip exactly that header when someone clicks
+            through to verify the certificate.
+          - A plain <img>, not next/image. next/image would fetch the logo
+            through Vercel's optimizer, so the request would come from Vercel
+            with no visitor referrer — and Enamad's server does not answer
+            requests from outside Iran at all.
+          - `loading="lazy"`: that same server hangs for any visitor outside
+            Iran. An eager image would hold the page's load event open until
+            the browser gives up on it.
+          - Enamad's `alt=''` leaves the link without a name, so the link
+            carries the label for screen readers instead.
+        */}
+        <a
+          href="https://trustseal.enamad.ir/?id=7632148&Code=1auDi9cdJK53HcA2WPL2BV02T5Tu4z7N"
+          target="_blank"
+          rel="noopener"
+          referrerPolicy="origin"
+          aria-label={t.enamadSeal}
+          className="shrink-0"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element -- see above */}
+          <img
+            referrerPolicy="origin"
+            src="https://trustseal.enamad.ir/logo.aspx?id=7632148&Code=1auDi9cdJK53HcA2WPL2BV02T5Tu4z7N"
+            alt=""
+            loading="lazy"
+            decoding="async"
+            style={{ cursor: "pointer" }}
+            {...{ code: "1auDi9cdJK53HcA2WPL2BV02T5Tu4z7N" }}
+          />
+        </a>
       </div>
       {/* v1 runs on generated data; saying so in the chrome avoids anyone
           mistaking a demo catalog for a real parts reference. */}
