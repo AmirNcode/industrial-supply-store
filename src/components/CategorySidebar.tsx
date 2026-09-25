@@ -17,16 +17,13 @@ export async function CategorySidebar({
   heading?: string;
 }) {
   const t = getDict(locale);
-  const all = await getTopCategories();
+  // The order the admin arranges on the products screen, exactly as the
+  // homepage grid shows it. This rail used to sort alphabetically, which put
+  // the two lists beside each other in different orders — and the arranged
+  // order is a merchandising decision (Valves first), which alphabetising
+  // silently overrode.
+  const cats = await getTopCategories();
   const activeRoot = activePath?.split("/")[0];
-
-  // Alphabetical by the displayed name, per locale — a buyer scanning 26 entries
-  // for "Sealing" should not have to know the catalog's internal ordering.
-  // Intl collation matters here: Persian sorts nothing like code-unit order.
-  const collator = new Intl.Collator(locale === "fa" ? "fa" : "en");
-  const cats = [...all].sort((a, b) =>
-    collator.compare(pick(a, "name", locale), pick(b, "name", locale)),
-  );
 
   return (
     // Hidden below lg: at phone width this rail consumed two thirds of the
