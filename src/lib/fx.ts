@@ -9,6 +9,7 @@ import {
   type FxMode,
   type FxSettings,
 } from "./fxRate";
+import { parseMarketState, summarizeMarket, type MarketSummary } from "./fxMarket";
 import {
   DEFAULT_PRICE_DISPLAY_MODE,
   isPriceDisplayMode,
@@ -18,6 +19,13 @@ import {
 const KEY_MODE = "fx_mode";
 const KEY_RATE = "fx_manual_rate";
 const KEY_PRICE_DISPLAY = "price_display_mode";
+/**
+ * The market job's output, split in two on purpose: every priced page reads
+ * the rate, a bare number, while only the job and the admin panel read the
+ * history behind it.
+ */
+export const KEY_MARKET_RATE = "fx_market_rate";
+export const KEY_MARKET_STATE = "fx_market_state";
 
 type PricingSettings = FxSettings & { priceDisplayMode: PriceDisplayMode };
 
@@ -29,7 +37,7 @@ type PricingSettings = FxSettings & { priceDisplayMode: PriceDisplayMode };
 const getPricingSettings = cache(async (): Promise<PricingSettings> => {
   const rows = await sql<{ key: string; value: string }[]>`
     SELECT key, value FROM app_settings
-    WHERE key IN (${KEY_MODE}, ${KEY_RATE}, ${KEY_PRICE_DISPLAY})
+    WHERE key IN (${KEY_MODE}, ${KEY_RATE}, ${KEY_PRICE_DISPLAY}, ${KEY_MARKET_RATE})
   `;
   const bag = new Map(rows.map((r) => [r.key, r.value]));
 
@@ -37,13 +45,14 @@ const getPricingSettings = cache(async (): Promise<PricingSettings> => {
   const rawPriceDisplay = bag.get(KEY_PRICE_DISPLAY) ?? DEFAULT_PRICE_DISPLAY_MODE;
 
   return {
-    // An unrecognised stored mode reads as auto: the environment rate is the
-    // one value that is always present and always deliberate.
+    // An unrecognised stored mode reads as auto: the market rate, or failing
+    // that the environment rate, which is always present and deliberate.
     mode: isFxMode(rawMode) ? rawMode : "auto",
     // The validity rule lives in `parseRate`; this is the same bar applied to
     // stored input rather than typed input. A missing row reads as "", which
     // `parseRate` already treats as absent.
     manualRate: parseRate(bag.get(KEY_RATE) ?? ""),
+    marketRate: parseRate(bag.get(KEY_MARKET_RATE) ?? ""),
     priceDisplayMode: isPriceDisplayMode(rawPriceDisplay)
       ? rawPriceDisplay
       : DEFAULT_PRICE_DISPLAY_MODE,
@@ -51,8 +60,22 @@ const getPricingSettings = cache(async (): Promise<PricingSettings> => {
 });
 
 export async function getFxSettings(): Promise<FxSettings> {
-  const { mode, manualRate } = await getPricingSettings();
-  return { mode, manualRate };
+  const { mode, manualRate, marketRate } = await getPricingSettings();
+  return { mode, manualRate, marketRate };
+}
+
+/** What automatic mode would price at right now, whichever mode is set. */
+export async function getAutomaticRate(): Promise<number> {
+  return resolveFxRate({ ...(await getFxSettings()), mode: "auto" }, envFxRate());
+}
+
+/** The market job's history and health, for the admin panel only. */
+export async function getMarketSummary(now = new Date()): Promise<MarketSummary> {
+  const [settings, rows] = await Promise.all([
+    getFxSettings(),
+    sql<{ value: string }[]>`SELECT value FROM app_settings WHERE key = ${KEY_MARKET_STATE}`,
+  ]);
+  return summarizeMarket(parseMarketState(rows[0]?.value), settings.marketRate, now);
 }
 
 export async function getPriceDisplayMode(): Promise<PriceDisplayMode> {

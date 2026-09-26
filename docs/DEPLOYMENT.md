@@ -47,7 +47,8 @@ Set in Vercel → Settings → Environment Variables → Production.
 | `DIRECT_DATABASE_URL` | **build** | build stalls 120s and usually fails — see trap 7 |
 | `AUTH_SECRET` | **build and runtime** | **build fails** |
 | `ADMIN_PASSWORD` | runtime | build fine, `/admin` throws |
-| `USD_TO_RIAL` | runtime | falls back to 1,100,000 Rial / USD |
+| `USD_TO_RIAL` | runtime | falls back to 1,100,000 Rial / USD; only used before the first market reading |
+| `CRON_SECRET` | runtime (evening rate job) | the job is refused and the automatic rate stops moving; admin warns after 36 h |
 | `SELLER_*` | runtime | invoices print "set SELLER_NAME" |
 | `SUPABASE_URL` | runtime Storage access | URL images still work; image/CSV upload reports not configured |
 | `SUPABASE_PUBLIC_URL` | runtime Storage access | falls back to `SUPABASE_URL` |
@@ -144,6 +145,46 @@ row-level security ✓ on every table
 integrity   canonical and derived data agree ✓
 ✓ database looks correct
 ```
+
+## The evening exchange-rate job
+
+Automatic mode prices at a daily market reading, taken by `/api/cron/fx-rate`.
+On Vercel the schedule lives in `vercel.ts` — 17:30 UTC, which is 21:00 in
+Tehran — and Vercel calls the route with `Authorization: Bearer $CRON_SECRET`.
+Set `CRON_SECRET` (at least 16 characters, `openssl rand -base64 32`) in
+Production before relying on automatic mode; without it every call is refused
+and the rate stays wherever the last reading left it. Admin → Settings has an
+**Update now** button for a missed evening, and warns once the reading is more
+than 36 hours old or the latest one was refused.
+
+The job reads two public, keyless market-data endpoints — Nobitex
+(`apiv2.nobitex.ir`) and Wallex (`api.wallex.ir`). Both are Iranian
+exchanges, and they answered from outside Iran when this was built, but not
+yet from Vercel's servers. Press **Update now** right after deploying: a
+reading in the panel proves both are reachable from there.
+
+### Moving off Vercel: the job needs a new scheduler
+
+**Open item.** A self-hosted deployment — the client's servers in Iran — gets
+no cron from `vercel.ts`. Nothing calls the route, the automatic rate freezes
+at its last reading, and the only symptom is the 36-hour warning in admin.
+Before cutting over, decide what calls the route once a day. Options found so
+far:
+
+1. **A scheduler service in `docker-compose.yml`** (preferred): a small
+   container beside `app` that calls
+   `curl -fsS -H "Authorization: Bearer $CRON_SECRET" http://app:3000/api/cron/fx-rate`
+   once a day. It ships and starts with the site, so no one has to remember
+   server configuration.
+2. **The host's own crontab**, running the same `curl`. One line, but it lives
+   outside the repository and is easy to lose when the server is rebuilt.
+3. **`pg_cron` + `pg_net`**, only if the self-hosted stack is full Supabase.
+   Ties a site job to the database.
+
+Whichever is chosen, keep the same bearer header and the evening Tehran time.
+The Telegram-based and foreign rate sources were rejected partly because they
+are unreachable from inside Iran; the two exchanges are domestic, so the source
+itself should not need to change.
 
 ---
 

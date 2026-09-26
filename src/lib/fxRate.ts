@@ -11,6 +11,12 @@ export type FxSettings = {
   mode: FxMode;
   /** Rial per USD. Null when never set. */
   manualRate: number | null;
+  /**
+   * Rial per USD from the daily market job (`fxMarket.ts`). Null until its
+   * first accepted reading, which is the only time automatic mode still
+   * reads the environment rate.
+   */
+  marketRate: number | null;
 };
 
 /** Used only when the environment value is missing or unparseable. */
@@ -40,18 +46,22 @@ export function envFxRate(): number {
   return configuredFxRate(process.env.USD_TO_RIAL, process.env.USD_TO_TOMAN);
 }
 
+function usable(rate: number | null): rate is number {
+  return typeof rate === "number" && Number.isFinite(rate) && rate > 0;
+}
+
 /**
- * Manual mode falls back to the environment rate when the stored value is
- * unusable. The alternative — returning zero or NaN — would render every
- * Persian price as free, which is worse than a stale rate and harder to spot.
+ * Automatic mode is the market rate; manual mode is the typed rate.
+ *
+ * Either falls back to the environment rate when its own value is unusable —
+ * before the market job's first reading, or a corrupt manual row. The
+ * alternative, zero or NaN, would render every Persian price as free, which
+ * is worse than a stale rate and harder to spot.
  */
 export function resolveFxRate(settings: FxSettings, envRate: number): number {
   const env = Number.isFinite(envRate) && envRate > 0 ? envRate : DEFAULT_FX_RATE;
-  if (settings.mode !== "manual") return env;
-  const manual = settings.manualRate;
-  return typeof manual === "number" && Number.isFinite(manual) && manual > 0
-    ? manual
-    : env;
+  const chosen = settings.mode === "manual" ? settings.manualRate : settings.marketRate;
+  return usable(chosen) ? chosen : env;
 }
 
 /**

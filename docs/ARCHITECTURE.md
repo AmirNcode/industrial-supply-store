@@ -35,6 +35,7 @@ connects to either hosted Supabase project.
 | `/[locale]/admin/(panel)/{orders,products,settings}` | staff | gate lives in the panel layout |
 | `/api/admin/family/[id]/{template,export}` | staff | CSV, 404 when signed out |
 | `/api/admin/import` | staff | small signed-upload control messages; CSV bytes go to private Storage |
+| `/api/cron/fx-rate` | scheduler | evening exchange-rate reading; `Authorization: Bearer $CRON_SECRET` |
 
 `(panel)` is a route group — it does not appear in URLs. The sign-in gate is in
 its `layout.tsx`, which is why `/admin/login` sits **outside** it: a gate
@@ -62,6 +63,20 @@ a forgotten setting or rate is a compile error, not silently stale prices.
 
 **An issued invoice uses `orders.fx_rate_to_rial`, never `getFxRate()`.** The
 rate is frozen at issuance so reprinting later cannot change what is owed.
+
+**The automatic exchange rate is one market reading a day, not a live feed.**
+`/api/cron/fx-rate` takes the Tether price from Nobitex and Wallex each
+evening (21:00 Tehran), and the rate is the higher of that reading and its
+7-day average, plus 3% (`src/lib/fxMarket.ts`, rules and tests; the reasons
+for each number are in its header). A reading is refused — the rate stays put
+and admin says why — when the exchanges disagree by more than 2%, when the
+first reading has only one exchange, or when the price jumps past 25% (10% on
+one exchange alone) from the last reading. The rate lives in `app_settings`
+as `fx_market_rate`, a bare number read by every priced page, beside
+`fx_market_state`, the history only the job and admin read. No page cache is
+purged: every page that shows a price renders per request. Manual mode ignores
+all of it. The schedule is Vercel-only — see "Moving off Vercel" in
+[`DEPLOYMENT.md`](DEPLOYMENT.md) before self-hosting.
 
 **Invoices must not round.** `formatPriceExact` / `formatMoneyExact` skip the
 nearest-1,000 Rial rounding `formatPrice` does, or a column of lines disagrees with its

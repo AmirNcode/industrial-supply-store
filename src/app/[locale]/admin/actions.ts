@@ -8,8 +8,9 @@ import { sql } from "@/db";
 import { findUserIdByEmail, setPassword } from "@/db/userQueries";
 import { hashPassword } from "@/lib/password";
 import { assertAdminWrite, signInAdmin, signOutAdmin } from "@/lib/admin";
-import { getFxRate, saveFxSettings, savePriceDisplayMode } from "@/lib/fx";
-import { envFxRate, isFxMode, isPlausibleRate, parseRate } from "@/lib/fxRate";
+import { getAutomaticRate, getFxRate, saveFxSettings, savePriceDisplayMode } from "@/lib/fx";
+import { isFxMode, isPlausibleRate, parseRate } from "@/lib/fxRate";
+import { refreshMarketRate } from "@/lib/fxMarketUpdate";
 import { safeLocale } from "@/lib/i18n";
 import { saveSiteContact } from "@/lib/siteContact";
 import {
@@ -69,7 +70,9 @@ export async function saveFxAction(formData: FormData): Promise<void> {
   if (mode === "manual") {
     const parsed = parseRate(String(formData.get("rate") ?? ""));
     if (parsed === null) redirect(`/${locale}/admin/settings?fx=invalid`);
-    if (!isPlausibleRate(parsed, envFxRate())) {
+    // Judged against the rate automatic mode would use, which is what the
+    // warning names and what the admin can see beside the field.
+    if (!isPlausibleRate(parsed, await getAutomaticRate())) {
       redirect(`/${locale}/admin/settings?fx=range`);
     }
     manualRate = parsed;
@@ -80,6 +83,21 @@ export async function saveFxAction(formData: FormData): Promise<void> {
   // a rate change would take up to an hour to reach the pages that show it.
   revalidatePath("/", "layout");
   redirect(`/${locale}/admin/settings?fx=saved`);
+}
+
+/**
+ * Run the evening market job now.
+ *
+ * For a missed evening, or to see a first reading without waiting for one.
+ * It reprices only in automatic mode — manual mode ignores the market rate —
+ * and, like the job, it purges nothing: every priced page reads the rate as it
+ * renders, and the settings page this redirects to is rendered per request.
+ */
+export async function refreshFxRateAction(formData: FormData): Promise<void> {
+  await assertAdminWrite();
+  const locale = safeLocale(formData);
+  const result = await refreshMarketRate();
+  redirect(`/${locale}/admin/settings?fx=${result.ok ? "refreshed" : "refresh-failed"}`);
 }
 
 export async function savePriceDisplayModeAction(formData: FormData): Promise<void> {

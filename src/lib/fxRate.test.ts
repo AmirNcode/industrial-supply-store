@@ -10,25 +10,40 @@ import {
 
 const ENV = 1_100_000;
 
-test("auto mode uses the environment rate and ignores any stored value", () => {
-  assert.equal(resolveFxRate({ mode: "auto", manualRate: 999 }, ENV), ENV);
-  assert.equal(resolveFxRate({ mode: "auto", manualRate: null }, ENV), ENV);
+test("auto mode uses the market rate and ignores the manual one", () => {
+  assert.equal(
+    resolveFxRate({ mode: "auto", manualRate: 999, marketRate: 2_417_000 }, ENV),
+    2_417_000,
+  );
 });
 
-test("manual mode uses the stored rate", () => {
-  assert.equal(resolveFxRate({ mode: "manual", manualRate: 1_185_000 }, ENV), 1_185_000);
+test("auto mode reads the environment rate only until the first market reading", () => {
+  assert.equal(resolveFxRate({ mode: "auto", manualRate: 999, marketRate: null }, ENV), ENV);
+  assert.equal(resolveFxRate({ mode: "auto", manualRate: null, marketRate: 0 }, ENV), ENV);
+});
+
+test("manual mode uses the stored rate, whatever the market says", () => {
+  assert.equal(
+    resolveFxRate({ mode: "manual", manualRate: 1_185_000, marketRate: 2_417_000 }, ENV),
+    1_185_000,
+  );
 });
 
 test("manual mode falls back to the environment rate rather than to zero", () => {
   // A missing or corrupt setting must not price the entire catalog at nothing.
-  assert.equal(resolveFxRate({ mode: "manual", manualRate: null }, ENV), ENV);
-  assert.equal(resolveFxRate({ mode: "manual", manualRate: 0 }, ENV), ENV);
-  assert.equal(resolveFxRate({ mode: "manual", manualRate: -5 }, ENV), ENV);
-  assert.equal(resolveFxRate({ mode: "manual", manualRate: Number.NaN }, ENV), ENV);
+  const manual = (manualRate: number | null) =>
+    resolveFxRate({ mode: "manual", manualRate, marketRate: null }, ENV);
+  assert.equal(manual(null), ENV);
+  assert.equal(manual(0), ENV);
+  assert.equal(manual(-5), ENV);
+  assert.equal(manual(Number.NaN), ENV);
 });
 
 test("a non-finite environment rate falls back to the built-in default", () => {
-  assert.equal(resolveFxRate({ mode: "auto", manualRate: null }, Number.NaN), DEFAULT_FX_RATE);
+  assert.equal(
+    resolveFxRate({ mode: "auto", manualRate: null, marketRate: null }, Number.NaN),
+    DEFAULT_FX_RATE,
+  );
 });
 
 test("plausible rates are within an order of magnitude of the environment rate", () => {

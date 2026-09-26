@@ -28,6 +28,21 @@ export const config: VercelConfig = {
    */
   regions: ["fra1"],
 
+  /**
+   * The evening exchange-rate reading (`src/lib/fxMarketUpdate.ts`).
+   *
+   * 17:30 UTC is 21:00 in Tehran (UTC+3:30, no daylight saving since 2022),
+   * after the day's trading has settled. Hobby plans allow one run a day and
+   * fire anywhere within the hour, which is all this needs. Vercel sends
+   * `CRON_SECRET` as a bearer token; without that variable the route refuses
+   * every call and the rate simply stops moving.
+   *
+   * This exists only on Vercel. A self-hosted deployment gets no cron from
+   * this file and must call the route itself — see "Moving off Vercel" in
+   * docs/DEPLOYMENT.md.
+   */
+  crons: [{ path: "/api/cron/fx-rate", schedule: "30 17 * * *" }],
+
   headers: [
     /**
      * The bundled font subsets are content-stable: their filenames never change

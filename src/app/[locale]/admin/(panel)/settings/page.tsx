@@ -1,10 +1,16 @@
 import { notFound } from "next/navigation";
 import { DEMO_MODE } from "@/lib/demo";
-import { getFxSettings, getFxRate, getPriceDisplayMode } from "@/lib/fx";
-import { envFxRate } from "@/lib/fxRate";
+import {
+  getAutomaticRate,
+  getFxSettings,
+  getFxRate,
+  getMarketSummary,
+  getPriceDisplayMode,
+} from "@/lib/fx";
 import { FxRatePanel } from "@/components/FxRatePanel";
 import { getSiteContact } from "@/lib/siteContact";
 import {
+  refreshFxRateAction,
   saveFxAction,
   savePriceDisplayModeAction,
   saveSiteContactAction,
@@ -26,9 +32,11 @@ export default async function AdminSettingsPage({
   const t = getDict(l);
   const { fx, contact: contactStatus, currency: currencyStatus } = await searchParams;
 
-  const [fxSettings, rate, priceDisplayMode, contact] = await Promise.all([
+  const [fxSettings, rate, autoRate, market, priceDisplayMode, contact] = await Promise.all([
     getFxSettings(),
     getFxRate(),
+    getAutomaticRate(),
+    getMarketSummary(),
     getPriceDisplayMode(),
     getSiteContact(),
   ]);
@@ -42,6 +50,9 @@ export default async function AdminSettingsPage({
       {/* The panel's Apply button lives outside its own <form> so the two-step
           confirmation can sit next to the fields; this is the form it posts. */}
       <form action={saveFxAction} id="fx-save" className="hidden">
+        <input type="hidden" name="locale" value={l} />
+      </form>
+      <form action={refreshFxRateAction} id="fx-refresh" className="hidden">
         <input type="hidden" name="locale" value={l} />
       </form>
 
@@ -178,6 +189,12 @@ export default async function AdminSettingsPage({
           {t.exchangeRate}: {formatInt(rate, l)} {t.fxPerUsd}
         </p>
       )}
+      {fx === "refreshed" && (
+        <SuccessBanner>
+          {t.fxRefreshed}: {formatInt(autoRate, l)} {t.fxPerUsd}
+        </SuccessBanner>
+      )}
+      {fx === "refresh-failed" && <ErrorBanner>{t.fxRefreshFailed}</ErrorBanner>}
       {fx === "range" && <ErrorBanner>{t.fxOutOfRange}</ErrorBanner>}
       {fx === "invalid" && <ErrorBanner>{t.fxInvalid}</ErrorBanner>}
 
@@ -185,7 +202,8 @@ export default async function AdminSettingsPage({
         locale={l}
         mode={fxSettings.mode}
         manualRate={fxSettings.manualRate}
-        envRate={envFxRate()}
+        autoRate={autoRate}
+        market={market}
         effectiveRate={rate}
         disabled={DEMO_MODE}
       />

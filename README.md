@@ -165,7 +165,8 @@ failure the Docker image hits, which is why `docker-compose` passes a build-time
    It has no override for an initialized database.
 
 5. **Set the remaining environment variables** in the Vercel project:
-   `ADMIN_PASSWORD` (see the warning below), `USD_TO_RIAL`, and the Supabase
+   `ADMIN_PASSWORD` (see the warning below), `USD_TO_RIAL`, `CRON_SECRET` (for
+   the evening exchange-rate job), and the Supabase
    Storage variables documented in `.env.example` if administrators will upload
    catalog images or CSV files. CSV imports need a browser-safe publishable/anon
    key and a private import bucket in addition to the server secret.
@@ -489,12 +490,14 @@ both locales.
 Iranian procurement staff match dimensions against manufacturer catalogs, which
 are Latin; localizing `0.239"` would make the table harder to use, not easier.
 
-Rial amounts are converted from stored USD at a single hand-maintained rate
-(`USD_TO_RIAL` in `.env`, or a manual rate in Admin → Settings) and catalog
-figures are rounded to the nearest 1,000 Rial. Invoices retain whole-Rial
-precision and freeze the issue-time rate. **There is no live FX feed.** Admin →
-Settings also controls whether customers see USD only, Rials only, or USD in
-English and Rial in Persian; CSV import prices remain USD.
+Rial amounts are converted from stored USD at a single rate. In automatic mode
+it comes from a daily market reading — the Tether price on Nobitex and Wallex,
+taken each evening, as the higher of that reading and its 7-day average plus
+3%; `USD_TO_RIAL` is only the fallback before the first reading. A manual rate
+in Admin → Settings overrides it. Catalog figures are rounded to the nearest
+1,000 Rial. Invoices retain whole-Rial precision and freeze the issue-time
+rate. Admin → Settings also controls whether customers see USD only, Rials
+only, or USD in English and Rial in Persian; CSV import prices remain USD.
 
 ---
 
