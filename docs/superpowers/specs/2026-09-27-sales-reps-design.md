@@ -1,7 +1,7 @@
 # Sales reps and a basic CRM
 
 Date: 2026-09-27
-Status: design approved in conversation (2026-09-26/27); this written spec awaits review
+Status: approved 2026-09-27 (bank account section added at approval)
 Branch: `feat/sales-reps` — local testing only, nothing deployed
 
 Part A is the product: who can do what, and the money rules. It is written for
@@ -45,8 +45,15 @@ admin panel or a customer's account, and no rep sees another rep's customers.
   notes, see their orders, and reset their password.
 - **Order queue.** Each order shows its rep, whether a rep placed it, and the
   customer ID, plus a **Copy pay link** button.
-- **Settings.** A **Bank details** box per language. If one language is empty,
-  the other is shown.
+- **Settings — Bank account section:** bank name and account holder (each in
+  English and Persian), card number, Sheba number, account number, and an
+  optional note per language (e.g. "send the receipt to your rep"). Every
+  field is optional and can be filled in later; pay pages show only what is
+  filled in, and nothing at all while the section is empty. If a name or note
+  is filled in only one language, that one is shown in both. Card and Sheba
+  numbers carry built-in check digits, so a mistyped number is refused before
+  it reaches a customer. On the pay page each number has a **Copy** button —
+  paying card-to-card from a phone means copying 16 to 26 characters.
 
 ## Reps: managing customers
 
@@ -334,9 +341,21 @@ Setting a target writes (upserts) the current month's row.
 
 ### Settings
 
-`app_settings` rows `bank_details_fa` and `bank_details_en` (plain text, blank
-line = paragraph, no markup — the same rules as catalog descriptions). No
-schema change.
+`app_settings` rows, no schema change: `bank_name_en`, `bank_name_fa`,
+`bank_holder_en`, `bank_holder_fa`, `bank_card`, `bank_sheba`,
+`bank_account`, `bank_note_en`, `bank_note_fa`. Names, holders and notes are
+plain text (a note: blank line = paragraph, no markup, like catalog
+descriptions). Numbers are stored normalized — digits only for the card and
+account number, `IR` + 24 digits for the Sheba — and grouped in fours only
+when displayed.
+
+`lib/bankDetails.ts` (pure, unit-tested) owns normalization (Persian/Arabic
+digits, spaces, dashes), validation — card: 16 digits passing the Luhn check
+every Shetab card carries; Sheba: `IR` + 24 digits passing the ISO 13616
+mod-97 check; account number: 4–30 digits with `-`/`.` separators — and
+display grouping. The settings form saves all fields in one action and
+writes nothing unless every filled field is valid, following the admin
+editing conventions.
 
 ## B3. Rep authentication
 
@@ -437,9 +456,11 @@ schema change.
   index. Money follows the customer display policy, like the account order
   page: catalog rounding at today's rate before invoicing (labelled estimate),
   exact at the frozen rate after.
-- **Bank details:** `getBankDetails(locale)` with fallback to the other
-  language; rendered while status is `invoiced`, on the pay page and on the
-  customer's own order page.
+- **Bank details:** `getBankDetails(locale)` returns the filled fields, names
+  and notes falling back to the other language, or null when the section is
+  empty. Rendered while status is `invoiced`, on the pay page and on the
+  customer's own order page; card, Sheba and account numbers each get the
+  Copy control and render left-to-right in Latin digits, like part numbers.
 - **Invoice:** `/[locale]/invoice/[ref]?key=<token>` is allowed when the key
   equals that order's `pay_token` (constant-time compare), in addition to
   staff and the owning customer. The language and currency switch links keep
@@ -537,7 +558,9 @@ surrounding text like part numbers; money and counts use Persian digits in
   token); customer codes; temporary passwords; Persian calendar (2026-03-21 →
   1 Farvardin 1405; 2026-09-23 → 1 Mehr 1405; month change at Tehran
   midnight); rep stats (tiles, table, top 5, average, owed, a target standing
-  until changed, a year boundary Esfand → Farvardin).
+  until changed, a year boundary Esfand → Farvardin); bank details (Persian
+  digits and separators normalized, a valid and a one-digit-off card and
+  Sheba, language fallback, empty section → null).
 - **Integration (`npm run test:db`, new
   `src/db/salesReps.integration.test.ts`, rolled back):** stamping (rep, rate
   and eligibility locked at placement; later reassignment or rate change
