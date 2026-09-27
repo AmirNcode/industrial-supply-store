@@ -2,7 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { isAdmin } from "@/lib/admin";
 import { DEMO_MODE } from "@/lib/demo";
 import { logoutAction } from "../actions";
-import { AdminTabs } from "./AdminTabs";
+import { PanelTabs } from "@/components/PanelTabs";
 import { isLocale, getDict, type Locale } from "@/lib/i18n";
 
 /**
@@ -60,7 +60,7 @@ export default async function AdminPanelLayout({
       */}
       <nav className="admin-tabs">
         <span className="admin-tabs-brand">{t.admin}</span>
-        <AdminTabs sections={sections} />
+        <PanelTabs sections={sections} />
 
         {!DEMO_MODE && (
           <form action={logoutAction} className="ms-auto">

@@ -655,6 +655,19 @@ const en = {
   stockSold: "Sold",
   stockShortfall: "Not enough stock for:",
   importReadOnly: "Importing is disabled in demo mode.",
+  // Sales reps
+  repPortal: "Sales rep",
+  repSignInTitle: "Sales rep sign-in",
+  repSignInPrompt: "Sign in with the username and password you were given.",
+  username: "Username",
+  repSignInFailed: "Username or password is incorrect.",
+  repHome: "Home",
+  welcomeRep: "Welcome, {name}",
+  choosePasswordTitle: "Choose your password",
+  tempPasswordForced: "You signed in with a temporary password. Choose your own to continue.",
+  repPasswordRules: "At least 8 characters, including an uppercase English letter (A–Z), a number and a special character such as ! @ # $ %.",
+  repPasswordPolicy: "That password does not follow the rules below.",
+  savePassword: "Save password",
 };
 
 /**
@@ -1256,6 +1269,19 @@ const fa: typeof en = {
   stockSold: "فروخته شده",
   stockShortfall: "موجودی کافی نیست برای:",
   importReadOnly: "بارگذاری در حالت نمایشی غیرفعال است.",
+  // Sales reps
+  repPortal: "نمایندهٔ فروش",
+  repSignInTitle: "ورود نمایندهٔ فروش",
+  repSignInPrompt: "با نام کاربری و گذرواژه‌ای که دریافت کرده‌اید وارد شوید.",
+  username: "نام کاربری",
+  repSignInFailed: "نام کاربری یا گذرواژه نادرست است.",
+  repHome: "خانه",
+  welcomeRep: "{name}، خوش آمدید",
+  choosePasswordTitle: "گذرواژهٔ خود را انتخاب کنید",
+  tempPasswordForced: "با گذرواژهٔ موقت وارد شده‌اید. برای ادامه، گذرواژهٔ خودتان را انتخاب کنید.",
+  repPasswordRules: "دست‌کم ۸ نویسه، شامل یک حرف بزرگ انگلیسی (A–Z)، یک عدد و یک نویسهٔ ویژه مانند ! @ # $ %.",
+  repPasswordPolicy: "این گذرواژه با قواعد زیر سازگار نیست.",
+  savePassword: "ذخیرهٔ گذرواژه",
 };
 
 export type Dict = typeof en;

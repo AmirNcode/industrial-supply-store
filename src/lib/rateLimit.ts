@@ -24,6 +24,9 @@ export const RATE_LIMITS = {
   guestTracking: { limit: 30, windowSeconds: 10 * 60 },
   importPrepare: { limit: 10, windowSeconds: 60 * 60 },
   importProcess: { limit: 30, windowSeconds: 60 * 60 },
+  repSignIn: { limit: 10, windowSeconds: 15 * 60 },
+  repWrite: { limit: 60, windowSeconds: 10 * 60 },
+  repOrderSubmit: { limit: 30, windowSeconds: 10 * 60 },
 } as const satisfies Record<string, RateLimitPolicy>;
 
 type HeaderSource = Pick<Headers, "get">;

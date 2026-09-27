@@ -5,6 +5,14 @@ import type { TransactionSql } from "postgres";
 import { sql } from "./index";
 import { randomReferralCode } from "@/lib/repAccount";
 import { randomCustomerCode } from "@/lib/customerCode";
+import {
+  createRep,
+  deactivateRep,
+  findRepForSignIn,
+  getActiveRepByReferralCode,
+  getRepById,
+  setRepPassword,
+} from "./repQueries";
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 type Tx = TransactionSql<{}>;
@@ -121,4 +129,54 @@ test("every order gets its own pay token without the insert naming one", async (
     assert.match(b.payToken, /^[0-9a-f]{64}$/);
     assert.notEqual(a.payToken, b.payToken);
   });
+});
+
+async function cleanupReps(repIds: string[], userIds: string[] = []): Promise<void> {
+  if (userIds.length) await sql`DELETE FROM users WHERE id = ANY(${userIds})`;
+  if (repIds.length) await sql`DELETE FROM sales_reps WHERE id = ANY(${repIds})`;
+}
+
+test("rep accounts: unique usernames, a password change ends sessions, deactivation moves customers", async () => {
+  assertLocalDatabase();
+  const suffix = randomUUID().slice(0, 8);
+  const repIds: string[] = [];
+  const userIds: string[] = [];
+  try {
+    const a = await createRep({ username: `a-${suffix}`, name: "A", phone: "", email: "", commissionRateBp: 250, passwordHash: "x" });
+    const b = await createRep({ username: `b-${suffix}`, name: "B", phone: "", email: "", commissionRateBp: 300, passwordHash: "x" });
+    if (a === "username-taken" || b === "username-taken") throw new Error("username clash");
+    repIds.push(a.id, b.id);
+
+    assert.equal(
+      await createRep({ username: `a-${suffix}`, name: "Dup", phone: "", email: "", commissionRateBp: 0, passwordHash: "x" }),
+      "username-taken",
+    );
+    assert.equal((await findRepForSignIn(`a-${suffix}`))?.passwordHash, "x");
+    assert.equal(a.mustChangePassword, true);
+
+    const version = await setRepPassword(a.id, "y", false);
+    assert.equal(version, a.sessionVersion + 1);
+    assert.equal((await getRepById(a.id))?.mustChangePassword, false);
+
+    const [c] = await sql<{ id: string }[]>`
+      INSERT INTO users (email, password_hash, customer_code, rep_id, origin, origin_rep_id)
+      VALUES (${`${suffix}@example.invalid`}, 'x', ${randomCustomerCode()}, ${a.id}, 'rep', ${a.id})
+      RETURNING id`;
+    userIds.push(c.id);
+
+    assert.equal(await deactivateRep(a.id, a.id), "bad-destination");
+    assert.equal(await deactivateRep(a.id, b.id), "ok");
+    const [moved] = await sql<{ repId: string }[]>`SELECT rep_id AS "repId" FROM users WHERE id = ${c.id}`;
+    assert.equal(moved.repId, b.id);
+    const after = await getRepById(a.id);
+    assert.equal(after?.active, false);
+    assert.equal(after?.sessionVersion, (version ?? 0) + 1);
+    assert.equal(await deactivateRep(b.id, a.id), "bad-destination");
+
+    // A referral link opened before deactivation must not credit a locked-out rep.
+    assert.equal(await getActiveRepByReferralCode(a.referralCode), null);
+    assert.deepEqual(await getActiveRepByReferralCode(b.referralCode), { id: b.id });
+  } finally {
+    await cleanupReps(repIds, userIds);
+  }
 });
