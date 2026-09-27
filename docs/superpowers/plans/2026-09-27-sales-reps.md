@@ -918,9 +918,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS orders_pay_token_key ON orders (pay_token);
 CREATE INDEX IF NOT EXISTS orders_rep_delivered_idx ON orders (rep_id, delivered_at)
   WHERE rep_id IS NOT NULL;
 ALTER TABLE orders DROP CONSTRAINT IF EXISTS orders_commission_check;
+-- Written with IS NULL on both sides: a CHECK whose expression is NULL
+-- passes, so `rep_id IS NOT NULL AND commission_rate_bp BETWEEN …` would let
+-- a credited order with no rate through.
 ALTER TABLE orders ADD CONSTRAINT orders_commission_check CHECK (
-  (rep_id IS NULL AND commission_rate_bp IS NULL)
-  OR (rep_id IS NOT NULL AND commission_rate_bp BETWEEN 0 AND 10000)
+  (rep_id IS NULL) = (commission_rate_bp IS NULL)
+  AND (commission_rate_bp IS NULL OR commission_rate_bp BETWEEN 0 AND 10000)
 );
 ALTER TABLE orders DROP CONSTRAINT IF EXISTS orders_placed_by_rep_check;
 ALTER TABLE orders ADD CONSTRAINT orders_placed_by_rep_check
@@ -996,10 +999,12 @@ and in its constraint list:
 ```ts
     uniqueIndex("orders_pay_token_key").on(t.payToken),
     index("orders_rep_delivered_idx").on(t.repId, t.deliveredAt).where(sql`${t.repId} IS NOT NULL`),
+    // IS NULL on both sides: a CHECK that evaluates to NULL passes, which would
+    // let a credited order with no rate through.
     check(
       "orders_commission_check",
-      sql`(${t.repId} IS NULL AND ${t.commissionRateBp} IS NULL)
-        OR (${t.repId} IS NOT NULL AND ${t.commissionRateBp} BETWEEN 0 AND 10000)`,
+      sql`(${t.repId} IS NULL) = (${t.commissionRateBp} IS NULL)
+        AND (${t.commissionRateBp} IS NULL OR ${t.commissionRateBp} BETWEEN 0 AND 10000)`,
     ),
     check("orders_placed_by_rep_check", sql`NOT ${t.placedByRep} OR ${t.repId} IS NOT NULL`),
     check("orders_pay_token_check", sql`${t.payToken} ~ '^[0-9a-f]{64}$'`),

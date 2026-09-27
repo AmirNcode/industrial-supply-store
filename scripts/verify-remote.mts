@@ -34,6 +34,7 @@ const TABLES = [
   "categories", "product_families", "products", "product_spec_values",
   "spec_defs", "carts", "cart_items", "orders", "order_items", "users",
   "app_settings", "order_comments", "request_rate_limits", "part_number_registry",
+  "sales_reps", "customer_notes", "rep_payouts", "rep_targets",
 ] as const;
 
 /**
@@ -82,6 +83,13 @@ const COLUMNS: readonly (readonly [string, string])[] = [
   ["part_number_registry", "family_number"],
   ["part_number_registry", "variant_ordinal"],
   ["part_number_registry", "product_id"],
+  // Added by the 2026-09-27 sales-rep migration. Every account and order page
+  // reads customer_code, pay_token or the rep columns.
+  ["users", "customer_code"], ["users", "rep_id"], ["users", "rep_earns_commission"],
+  ["users", "origin"], ["users", "origin_rep_id"], ["users", "must_change_password"],
+  ["users", "address"], ["users", "city"], ["users", "next_follow_up_on"],
+  ["orders", "rep_id"], ["orders", "commission_rate_bp"], ["orders", "placed_by_rep"],
+  ["orders", "pay_token"],
 ];
 
 const present = await sql<{ name: string }[]>`
@@ -140,6 +148,19 @@ console.log(
 const hasSubmissionIndex = haveObjs.has("orders_submission_key_key");
 console.log(`submission key ${hasSubmissionIndex ? "unique index ✓" : "✗ UNIQUE INDEX MISSING"}`);
 
+// A missing unique index here fails silently: two customers sharing an ID, or
+// two orders sharing a pay link. Presence is what matters, so check each.
+const REQUIRED_INDEXES = [
+  "users_customer_code_key", "orders_pay_token_key",
+  "sales_reps_username_key", "sales_reps_referral_code_key",
+] as const;
+const missingIndexes = REQUIRED_INDEXES.filter((name) => !haveObjs.has(name));
+console.log(
+  `sales rep unique indexes ${REQUIRED_INDEXES.length - missingIndexes.length}/${REQUIRED_INDEXES.length} ${
+    missingIndexes.length === 0 ? "✓" : `✗ MISSING ${missingIndexes.join(", ")}`
+  }`,
+);
+
 const REQUIRED_CONSTRAINTS = [
   "categories_depth_check", "categories_product_count_check",
   "product_families_product_count_check",
@@ -154,6 +175,12 @@ const REQUIRED_CONSTRAINTS = [
   "request_rate_limits_count_check",
   "product_families_family_number_check", "product_families_next_variant_check",
   "part_number_registry_slot_check",
+  "sales_reps_username_check", "sales_reps_name_check", "sales_reps_commission_rate_check",
+  "sales_reps_referral_code_check", "sales_reps_session_version_check",
+  "users_customer_code_check", "users_origin_check", "users_rep_id_sales_reps_id_fk",
+  "orders_rep_id_sales_reps_id_fk", "orders_commission_check", "orders_placed_by_rep_check",
+  "orders_pay_token_check", "customer_notes_body_check", "rep_payouts_amount_check",
+  "rep_payouts_note_check", "rep_targets_month_check", "rep_targets_amount_check",
 ] as const;
 const constraintRows = await sql<{ conname: string; convalidated: boolean }[]>`
   SELECT c.conname, c.convalidated
@@ -213,6 +240,7 @@ const REQUIRED_MIGRATIONS = [
   "20260820154500",
   "20260828212651",
   "20260920120000",
+  "20260927120000",
 ] as const;
 let recordedMigrations = new Set<string>();
 if (hasMigrationLedger) {
@@ -399,6 +427,7 @@ const ok =
   missingConstraints.length === 0 &&
   unvalidatedConstraints.length === 0 &&
   hasSubmissionIndex &&
+  missingIndexes.length === 0 &&
   hasRateLimitPrimaryKey &&
   hasRateLimitExpiryIndex &&
   missingMigrations.length === 0 &&

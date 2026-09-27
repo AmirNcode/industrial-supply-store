@@ -7,6 +7,8 @@ import {
   boolean,
   jsonb,
   doublePrecision,
+  bigint,
+  date,
   timestamp,
   uuid,
   index,
@@ -458,9 +460,32 @@ export const orders = pgTable(
     shippedAt: timestamp("shipped_at", { withTimezone: true }),
     deliveredAt: timestamp("delivered_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    /** The customer's rep when the order was placed. Never moves afterwards. */
+    repId: uuid("rep_id").references((): AnyPgColumn => salesReps.id, { onDelete: "restrict" }),
+    /**
+     * Locked at placement: the rep's rate, or 0 when the customer is not
+     * commission-eligible. Null exactly when repId is null.
+     */
+    commissionRateBp: integer("commission_rate_bp"),
+    placedByRep: boolean("placed_by_rep").notNull().default(false),
+    /** The private pay link: 64 hex characters from two random UUIDs. */
+    payToken: text("pay_token")
+      .notNull()
+      .default(sql`replace(gen_random_uuid()::text, '-', '') || replace(gen_random_uuid()::text, '-', '')`),
   },
   (t) => [
     uniqueIndex("orders_submission_key_key").on(t.submissionKey),
+    uniqueIndex("orders_pay_token_key").on(t.payToken),
+    index("orders_rep_delivered_idx").on(t.repId, t.deliveredAt).where(sql`${t.repId} IS NOT NULL`),
+    // IS NULL on both sides: a CHECK that evaluates to NULL passes, which would
+    // let a credited order with no rate through.
+    check(
+      "orders_commission_check",
+      sql`(${t.repId} IS NULL) = (${t.commissionRateBp} IS NULL)
+        AND (${t.commissionRateBp} IS NULL OR ${t.commissionRateBp} BETWEEN 0 AND 10000)`,
+    ),
+    check("orders_placed_by_rep_check", sql`NOT ${t.placedByRep} OR ${t.repId} IS NOT NULL`),
+    check("orders_pay_token_check", sql`${t.payToken} ~ '^[0-9a-f]{64}$'`),
     uniqueIndex("orders_ref_key").on(t.ref),
     index("orders_created_idx").on(t.createdAt),
     index("orders_status_idx").on(t.status, t.createdAt),
@@ -616,7 +641,8 @@ export const users = pgTable(
   "users",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    email: text("email").notNull(),
+    /** Null for an account a rep created without one; sign-in then uses the customer ID. */
+    email: text("email"),
     passwordHash: text("password_hash").notNull(),
     company: text("company").notNull().default(""),
     contactName: text("contact_name").notNull().default(""),
@@ -625,8 +651,141 @@ export const users = pgTable(
     locale: text("locale").notNull().default("en"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
+    /** The seven-digit sign-in ID. See lib/customerCode.ts. Never changes. */
+    customerCode: text("customer_code").notNull(),
+    repId: uuid("rep_id").references((): AnyPgColumn => salesReps.id, { onDelete: "restrict" }),
+    repEarnsCommission: boolean("rep_earns_commission").notNull().default(false),
+    /** How the account began: 'self', 'rep' (created by one) or 'referral'. */
+    origin: text("origin").notNull().default("self"),
+    originRepId: uuid("origin_rep_id").references((): AnyPgColumn => salesReps.id, {
+      onDelete: "restrict",
+    }),
+    mustChangePassword: boolean("must_change_password").notNull().default(false),
+    address: text("address").notNull().default(""),
+    city: text("city").notNull().default(""),
+    nextFollowUpOn: date("next_follow_up_on", { mode: "string" }),
   },
-  (t) => [index("users_created_idx").on(t.createdAt)],
+  (t) => [
+    index("users_created_idx").on(t.createdAt),
+    uniqueIndex("users_customer_code_key").on(t.customerCode),
+    index("users_rep_idx").on(t.repId, t.createdAt),
+    index("users_rep_follow_up_idx")
+      .on(t.repId, t.nextFollowUpOn)
+      .where(sql`${t.nextFollowUpOn} IS NOT NULL`),
+    check("users_customer_code_check", sql`${t.customerCode} ~ '^[0-9]{7}$'`),
+    check(
+      "users_origin_check",
+      sql`${t.origin} IN ('self','rep','referral') AND (${t.origin} = 'self' OR ${t.originRepId} IS NOT NULL)`,
+    ),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// Sales reps — a third identity, sharing no table or cookie with the other two
+// ---------------------------------------------------------------------------
+
+/**
+ * Never deleted: every foreign key pointing here is RESTRICT, because orders
+ * credited to a rep, notes they wrote and payouts made to them are history.
+ * Deactivation (`active = false`) is the way out, and it moves their customers
+ * in the same transaction. `session_version` is embedded in the rep cookie;
+ * incrementing it ends every open session for that rep.
+ */
+export const salesReps = pgTable(
+  "sales_reps",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    username: text("username").notNull(),
+    passwordHash: text("password_hash").notNull(),
+    name: text("name").notNull(),
+    phone: text("phone").notNull().default(""),
+    email: text("email").notNull().default(""),
+    /** Basis points: 250 = 2.5%. */
+    commissionRateBp: integer("commission_rate_bp").notNull().default(0),
+    referralCode: text("referral_code").notNull(),
+    active: boolean("active").notNull().default(true),
+    mustChangePassword: boolean("must_change_password").notNull().default(true),
+    sessionVersion: integer("session_version").notNull().default(1),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex("sales_reps_username_key").on(t.username),
+    uniqueIndex("sales_reps_referral_code_key").on(t.referralCode),
+    check("sales_reps_username_check", sql`${t.username} ~ '^[a-z0-9._-]{3,32}$'`),
+    check("sales_reps_name_check", sql`btrim(${t.name}) <> ''`),
+    check("sales_reps_commission_rate_check", sql`${t.commissionRateBp} BETWEEN 0 AND 10000`),
+    check("sales_reps_referral_code_check", sql`${t.referralCode} ~ '^[A-HJ-NP-Z2-9]{6}$'`),
+    check("sales_reps_session_version_check", sql`${t.sessionVersion} > 0`),
+  ],
+);
+
+/**
+ * Append-only, like `order_comments`: the point of a note is what was known
+ * when, and an editable field loses that the first time someone tidies it.
+ * Readable by the admin and by whichever rep has the customer now — never by
+ * the customer.
+ */
+export const customerNotes = pgTable(
+  "customer_notes",
+  {
+    id: serial("id").primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** Null when the admin wrote it. */
+    authorRepId: uuid("author_rep_id").references(() => salesReps.id, { onDelete: "restrict" }),
+    body: text("body").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("customer_notes_user_idx").on(t.userId, t.createdAt),
+    check("customer_notes_body_check", sql`btrim(${t.body}) <> '' AND char_length(${t.body}) <= 2000`),
+  ],
+);
+
+/** What the business actually paid a rep, in rial, as recorded by the admin. */
+export const repPayouts = pgTable(
+  "rep_payouts",
+  {
+    id: serial("id").primaryKey(),
+    repId: uuid("rep_id")
+      .notNull()
+      .references(() => salesReps.id, { onDelete: "restrict" }),
+    amountRial: bigint("amount_rial", { mode: "number" }).notNull(),
+    note: text("note").notNull().default(""),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("rep_payouts_rep_idx").on(t.repId, t.createdAt),
+    check("rep_payouts_amount_check", sql`${t.amountRial} > 0`),
+    check("rep_payouts_note_check", sql`char_length(${t.note}) <= 500`),
+  ],
+);
+
+/**
+ * A target stands from the Persian month it was set in until a later row
+ * replaces it, so a month's target is the latest row at or before that month.
+ */
+export const repTargets = pgTable(
+  "rep_targets",
+  {
+    repId: uuid("rep_id")
+      .notNull()
+      .references(() => salesReps.id, { onDelete: "cascade" }),
+    persianYear: integer("persian_year").notNull(),
+    persianMonth: integer("persian_month").notNull(),
+    amountRial: bigint("amount_rial", { mode: "number" }).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.repId, t.persianYear, t.persianMonth] }),
+    check(
+      "rep_targets_month_check",
+      sql`${t.persianYear} BETWEEN 1300 AND 1600 AND ${t.persianMonth} BETWEEN 1 AND 12`,
+    ),
+    check("rep_targets_amount_check", sql`${t.amountRial} >= 0`),
+  ],
 );
 
 // ---------------------------------------------------------------------------
