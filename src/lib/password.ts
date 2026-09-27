@@ -65,3 +65,11 @@ export async function verifyPassword(plain: string, stored: string): Promise<boo
 
   return actual.length === expected.length && timingSafeEqual(actual, expected);
 }
+
+/**
+ * A well-formed hash no password matches, for sign-in forms to verify against
+ * when the account does not exist. Without it, an unknown login returns
+ * noticeably faster than a known one, and the form becomes an oracle for
+ * which accounts exist.
+ */
+export const DUMMY_PASSWORD_HASH = `scrypt$16384$8$1$${"A".repeat(22)}==$${"A".repeat(88)}`;
