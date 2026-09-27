@@ -1,0 +1,169 @@
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { DEMO_MODE } from "@/lib/demo";
+import { getRepById, listActiveReps } from "@/db/repQueries";
+import {
+  deactivateRepAction,
+  reactivateRepAction,
+  resetRepPasswordAction,
+  updateRepAction,
+} from "../actions";
+import { RepFields } from "../RepFields";
+import { ErrorBanner, SuccessBanner } from "@/components/Banners";
+import { ConfirmSubmit } from "@/components/ConfirmSubmit";
+import { ShownOnceCredential } from "@/components/ShownOnceCredential";
+import { readShownOnce } from "@/lib/shownOnce";
+import { siteOrigin } from "@/lib/siteOrigin";
+import { formatCommissionPercent } from "@/lib/repAccount";
+import { isUuid } from "@/lib/ids";
+import { isLocale, getDict, type Locale } from "@/lib/i18n";
+
+const ERROR_KEY = {
+  incomplete: "required",
+  username: "repUsernameInvalid",
+  "username-taken": "repUsernameTaken",
+  commission: "commissionInvalid",
+  invalid: "invalidInput",
+  destination: "repBadDestination",
+} as const;
+
+const OK_KEY = {
+  saved: "repSaved",
+  deactivated: "repDeactivated",
+  reactivated: "repReactivated",
+} as const;
+
+export default async function AdminRepPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ locale: string; id: string }>;
+  searchParams: Promise<{ ok?: string; error?: string }>;
+}) {
+  const { locale, id } = await params;
+  if (!isLocale(locale) || !isUuid(id)) notFound();
+  const l = locale as Locale;
+  const t = getDict(l);
+  const { ok, error } = await searchParams;
+
+  const rep = await getRepById(id);
+  if (!rep) notFound();
+  const [activeReps, origin, credential] = await Promise.all([
+    listActiveReps(),
+    siteOrigin(),
+    ok === "created" || ok === "password" ? readShownOnce("rep", id) : Promise.resolve(null),
+  ]);
+  const errorKey = error && error in ERROR_KEY ? ERROR_KEY[error as keyof typeof ERROR_KEY] : null;
+  const okKey = ok && ok in OK_KEY ? OK_KEY[ok as keyof typeof OK_KEY] : null;
+  const section = "mb-4 border border-[var(--color-rule)] p-3";
+
+  return (
+    <>
+      <p className="mb-2 text-[12px]">
+        <Link href={`/${l}/admin/reps`}>← {t.salesReps}</Link>
+      </p>
+      <div className="mb-3 flex flex-wrap items-baseline gap-3 border-b border-[var(--color-ink)] pb-1">
+        <h1 className="text-[17px] font-bold">{rep.name}</h1>
+        <span className="tech text-[12px]" dir="ltr">{rep.username}</span>
+        <span className="text-[11px] text-[var(--color-ink-muted)]">
+          {rep.active ? t.repStatusActive : t.repStatusInactive}
+        </span>
+      </div>
+
+      {credential && (
+        <ShownOnceCredential
+          heading={t.tempPasswordOnce}
+          loginLabel={t.username}
+          login={credential.login}
+          password={credential.password}
+          message={t.repCredentialsMessage
+            .replace("{url}", `${origin}/${l}/rep/signin`)
+            .replace("{login}", credential.login)
+            .replace("{password}", credential.password)}
+          labels={{ tempPassword: t.tempPassword, share: t.share, copied: t.copied }}
+        />
+      )}
+      {okKey && <SuccessBanner>{t[okKey]}</SuccessBanner>}
+      {errorKey && <ErrorBanner>{t[errorKey]}</ErrorBanner>}
+
+      <section className={section}>
+        <h2 className="mb-3 text-[13px] font-bold">{t.details}</h2>
+        <form action={updateRepAction} className="grid max-w-[680px] gap-3 sm:grid-cols-2">
+          <input type="hidden" name="locale" value={l} />
+          <input type="hidden" name="repId" value={rep.id} />
+          <RepFields
+            t={t}
+            disabled={DEMO_MODE}
+            values={{
+              name: rep.name,
+              username: rep.username,
+              phone: rep.phone,
+              email: rep.email,
+              commission: formatCommissionPercent(rep.commissionRateBp),
+            }}
+          />
+          <button type="submit" className="btn-small justify-self-start sm:col-span-2" disabled={DEMO_MODE}>
+            {t.save}
+          </button>
+        </form>
+      </section>
+
+      <section className={section}>
+        <h2 className="mb-2 text-[13px] font-bold">{t.password}</h2>
+        <form action={resetRepPasswordAction}>
+          <input type="hidden" name="locale" value={l} />
+          <input type="hidden" name="repId" value={rep.id} />
+          <ConfirmSubmit
+            label={t.issueTempPassword}
+            title={t.confirmIssueTempPassword}
+            continueLabel={t.confirmContinue}
+            discardLabel={t.confirmDiscard}
+            disabled={DEMO_MODE}
+            details={[{ label: t.username, value: rep.username, tech: true }]}
+          />
+        </form>
+      </section>
+
+      <section className={section}>
+        <h2 className="mb-2 text-[13px] font-bold">{t.status}</h2>
+        {rep.active ? (
+          <form action={deactivateRepAction} className="grid max-w-[680px] gap-2">
+            <input type="hidden" name="locale" value={l} />
+            <input type="hidden" name="repId" value={rep.id} />
+            <p className="text-[11px] text-[var(--color-ink-muted)]">{t.repDeactivateHint}</p>
+            <label className="grid gap-0.5 text-[11px] font-semibold">
+              {t.repMoveCustomersTo}
+              <select name="destination" defaultValue="" disabled={DEMO_MODE}>
+                <option value="">{t.noRep}</option>
+                {activeReps
+                  .filter((other) => other.id !== rep.id)
+                  .map((other) => (
+                    <option key={other.id} value={other.id}>
+                      {other.name}
+                    </option>
+                  ))}
+              </select>
+            </label>
+            <ConfirmSubmit
+              label={t.repDeactivate}
+              title={t.confirmDeactivateRep}
+              continueLabel={t.confirmContinue}
+              discardLabel={t.confirmDiscard}
+              disabled={DEMO_MODE}
+              details={[{ label: t.repName, value: rep.name }]}
+              className="btn-small justify-self-start"
+            />
+          </form>
+        ) : (
+          <form action={reactivateRepAction}>
+            <input type="hidden" name="locale" value={l} />
+            <input type="hidden" name="repId" value={rep.id} />
+            <button type="submit" className="btn-small" disabled={DEMO_MODE}>
+              {t.repReactivate}
+            </button>
+          </form>
+        )}
+      </section>
+    </>
+  );
+}
