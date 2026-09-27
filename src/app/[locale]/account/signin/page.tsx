@@ -39,11 +39,14 @@ export default async function SignInPage({
       <form action={signInAction} className="grid gap-3">
         <input type="hidden" name="locale" value={l} />
         <label className="block text-[12px]">
-          <span className="mb-0.5 block font-bold">{t.email}</span>
+          <span className="mb-0.5 block font-bold">{t.loginEmailOrId}</span>
           <input
-            type="email"
-            name="email"
+            type="text"
+            name="login"
             dir="ltr"
+            autoComplete="username"
+            autoCapitalize="none"
+            spellCheck={false}
             maxLength={REQUEST_LIMITS.emailChars}
             required
             autoFocus

@@ -75,7 +75,13 @@ export default async function AccountPage({
         <h1 className="text-[17px] font-bold">{t.account}</h1>
         <div className="flex items-baseline gap-3 text-[11px] text-[var(--color-ink-muted)]">
           <span>
-            {t.signedInAs} <span className="tech">{user.email}</span>
+            {t.signedInAs} <span className="tech">{user.email ?? user.customerCode}</span>
+          </span>
+          <span>
+            {t.customerId}:{" "}
+            <span className="tech" dir="ltr" data-testid="customer-id">
+              {user.customerCode}
+            </span>
           </span>
           <form action={signOutAction}>
             <input type="hidden" name="locale" value={l} />

@@ -95,7 +95,7 @@ export default async function QuotePage({
         <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))] self-start">
           <Field name="company" label={t.company} maxLength={REQUEST_LIMITS.companyChars} required defaultValue={user?.company} />
           <Field name="contactName" label={t.contactName} maxLength={REQUEST_LIMITS.contactNameChars} required defaultValue={user?.contactName} />
-          <Field name="email" label={t.email} type="email" maxLength={REQUEST_LIMITS.emailChars} required defaultValue={user?.email} />
+          <Field name="email" label={t.email} type="email" maxLength={REQUEST_LIMITS.emailChars} required defaultValue={user?.email ?? undefined} />
           <Field name="phone" label={t.phone} type="tel" maxLength={REQUEST_LIMITS.phoneChars} required defaultValue={user?.phone} />
           <Field name="poNumber" label={t.poNumber} maxLength={REQUEST_LIMITS.poNumberChars} optional={t.optional} defaultValue={user?.defaultPoNumber} />
           <Field name="city" label={t.city} maxLength={REQUEST_LIMITS.cityChars} optional={t.optional} />

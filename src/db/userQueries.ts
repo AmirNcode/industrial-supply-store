@@ -1,18 +1,27 @@
 import "server-only";
 import { sql } from "./index";
+import { codeFromPhone, randomCustomerCode, type LoginIdentifier } from "@/lib/customerCode";
 
 export type UserRow = {
   id: string;
-  email: string;
+  /** Null for an account a rep created without one. */
+  email: string | null;
+  customerCode: string;
   company: string;
   contactName: string;
   phone: string;
   defaultPoNumber: string;
   locale: string;
+  address: string;
+  city: string;
+  repId: string | null;
+  mustChangePassword: boolean;
 };
 
-const COLS = sql`id, email, company, contact_name AS "contactName", phone,
-                 default_po_number AS "defaultPoNumber", locale`;
+const COLS = sql`id, email, customer_code AS "customerCode", company,
+                 contact_name AS "contactName", phone,
+                 default_po_number AS "defaultPoNumber", locale, address, city,
+                 rep_id AS "repId", must_change_password AS "mustChangePassword"`;
 
 export async function getUserById(id: string): Promise<UserRow | null> {
   // Session token verification rejects malformed UUIDs before this query, so
@@ -23,12 +32,16 @@ export async function getUserById(id: string): Promise<UserRow | null> {
   return rows[0] ?? null;
 }
 
-export async function findUserByEmail(
-  email: string,
+/** One sign-in field: a seven-digit ID or an email, never both kinds of lookup. */
+export async function findUserForSignIn(
+  login: LoginIdentifier,
 ): Promise<(UserRow & { passwordHash: string }) | null> {
+  const where =
+    login.kind === "code"
+      ? sql`customer_code = ${login.code}`
+      : sql`lower(email) = lower(${login.email})`;
   const rows = await sql<(UserRow & { passwordHash: string })[]>`
-    SELECT ${COLS}, password_hash AS "passwordHash"
-    FROM users WHERE lower(email) = lower(${email}) LIMIT 1
+    SELECT ${COLS}, password_hash AS "passwordHash" FROM users WHERE ${where} LIMIT 1
   `;
   return rows[0] ?? null;
 }
@@ -57,29 +70,45 @@ export type NewUser = {
   contactName: string;
   phone: string;
   locale: string;
+  /** 'referral' only with the rep whose link brought them; that rep earns commission. */
+  origin: "self" | "referral";
+  repId: string | null;
 };
 
 /**
  * Returns "email-taken" rather than throwing, because a duplicate address is
  * an ordinary thing for a person to do, not an exceptional condition.
  *
- * The unique index is what actually decides. Checking first and inserting
- * second is a race, and sign-up is exactly where two simultaneous attempts
- * collide.
+ * The unique indexes decide, not a check first — sign-up is exactly where two
+ * simultaneous attempts collide. Which index was hit matters: a clash on the
+ * email is the person's, reported; a clash on the customer ID is not theirs,
+ * and a self sign-up is never shown an error for something it did not choose,
+ * so it quietly takes a random ID instead.
  */
 export async function createUser(input: NewUser): Promise<UserRow | "email-taken"> {
-  try {
-    const rows = await sql<UserRow[]>`
-      INSERT INTO users (email, password_hash, company, contact_name, phone, locale)
-      VALUES (${input.email}, ${input.passwordHash}, ${input.company},
-              ${input.contactName}, ${input.phone}, ${input.locale})
-      RETURNING ${COLS}
-    `;
-    return rows[0];
-  } catch (err) {
-    if ((err as { code?: string })?.code === "23505") return "email-taken";
-    throw err;
+  let code = codeFromPhone(input.phone) ?? randomCustomerCode();
+  for (let attempt = 0; attempt < 10; attempt++) {
+    try {
+      const rows = await sql<UserRow[]>`
+        INSERT INTO users (email, password_hash, company, contact_name, phone, locale,
+                           customer_code, origin, rep_id, origin_rep_id, rep_earns_commission)
+        VALUES (${input.email}, ${input.passwordHash}, ${input.company},
+                ${input.contactName}, ${input.phone}, ${input.locale}, ${code},
+                ${input.origin}, ${input.repId}, ${input.repId}, ${input.repId !== null})
+        RETURNING ${COLS}
+      `;
+      return rows[0];
+    } catch (err) {
+      const e = err as { code?: string; constraint_name?: string };
+      if (e?.code !== "23505") throw err;
+      if (e.constraint_name === "users_customer_code_key") {
+        code = randomCustomerCode();
+        continue;
+      }
+      return "email-taken";
+    }
   }
+  throw new Error("Could not allocate a unique customer ID");
 }
 
 export async function updateProfile(

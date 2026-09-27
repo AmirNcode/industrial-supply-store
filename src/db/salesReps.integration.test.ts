@@ -13,6 +13,7 @@ import {
   getRepById,
   setRepPassword,
 } from "./repQueries";
+import { createUser, findUserForSignIn } from "./userQueries";
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 type Tx = TransactionSql<{}>;
@@ -178,5 +179,35 @@ test("rep accounts: unique usernames, a password change ends sessions, deactivat
     assert.deepEqual(await getActiveRepByReferralCode(b.referralCode), { id: b.id });
   } finally {
     await cleanupReps(repIds, userIds);
+  }
+});
+
+test("self sign-up gets the phone's digits as its ID, or a random one when taken", async () => {
+  assertLocalDatabase();
+  const digits = randomUUID().replace(/\D/g, "").slice(0, 7).padEnd(7, "3");
+  const phone = `0912${digits}`;
+  const ids: string[] = [];
+  try {
+    const base = {
+      passwordHash: "x", company: "C", contactName: "N", phone, locale: "fa",
+      origin: "self" as const, repId: null,
+    };
+    const first = await createUser({ ...base, email: `${randomUUID()}@example.invalid` });
+    const second = await createUser({ ...base, email: `${randomUUID()}@example.invalid` });
+    if (first === "email-taken" || second === "email-taken") throw new Error("unexpected clash");
+    ids.push(first.id, second.id);
+
+    assert.match(first.customerCode, /^[0-9]{7}$/);
+    assert.match(second.customerCode, /^[0-9]{7}$/);
+    assert.notEqual(first.customerCode, second.customerCode);
+
+    const byCode = await findUserForSignIn({ kind: "code", code: second.customerCode });
+    assert.equal(byCode?.id, second.id);
+    // Upper-case on purpose: the lookup compares lower(email) on both sides.
+    const byEmail = await findUserForSignIn({ kind: "email", email: first.email!.toUpperCase() });
+    assert.equal(byEmail?.id, first.id);
+    assert.equal(await createUser({ ...base, email: first.email! }), "email-taken");
+  } finally {
+    if (ids.length) await sql`DELETE FROM users WHERE id = ANY(${ids})`;
   }
 });

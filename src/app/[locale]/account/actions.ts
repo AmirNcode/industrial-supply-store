@@ -11,7 +11,7 @@ import {
 } from "@/lib/session";
 import {
   createUser,
-  findUserByEmail,
+  findUserForSignIn,
   touchLastLogin,
   updateProfile,
   setPassword,
@@ -19,6 +19,7 @@ import {
 } from "@/db/userQueries";
 import { RATE_LIMITS, consumeRateLimit } from "@/lib/rateLimit";
 import { REQUEST_LIMITS, boundedString } from "@/lib/requestLimits";
+import { parseLogin } from "@/lib/customerCode";
 
 /**
  * None of these actions revalidate, deliberately.
@@ -73,6 +74,8 @@ export async function signUpAction(formData: FormData): Promise<void> {
     contactName,
     phone,
     locale,
+    origin: "self",
+    repId: null,
   });
   if (created === "email-taken") {
     redirect(`/${locale}/account/signup?error=taken`);
@@ -84,7 +87,7 @@ export async function signUpAction(formData: FormData): Promise<void> {
 
 /**
  * One failure message and one code path for "no such account" and "wrong
- * password" alike.
+ * password" alike — whether the account was named by email or customer ID.
  *
  * Distinguishing them turns this form into an oracle for which addresses have
  * accounts — worth something on its own, and worth more when the same
@@ -101,12 +104,13 @@ export async function signInAction(formData: FormData): Promise<void> {
   const limit = await consumeRateLimit("account:sign-in", RATE_LIMITS.accountSignIn);
   if (!limit.allowed) redirect(`/${locale}/account/signin?error=rate-limit`);
 
-  const email = boundedString(formData.get("email"), REQUEST_LIMITS.emailChars)?.toLowerCase();
+  const raw = boundedString(formData.get("login"), REQUEST_LIMITS.emailChars);
   const password = boundedString(formData.get("password"), REQUEST_LIMITS.passwordChars, {
     trim: false,
   });
 
-  const user = email ? await findUserByEmail(email) : null;
+  const login = raw ? parseLogin(raw) : null;
+  const user = login ? await findUserForSignIn(login) : null;
   const ok = await verifyPassword(password ?? "", user ? user.passwordHash : DUMMY_HASH);
 
   if (!user || !ok) {

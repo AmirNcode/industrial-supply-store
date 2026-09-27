@@ -280,7 +280,7 @@ const en = {
   haveAccount: "Already have an account?",
   needAccount: "Need an account?",
   passwordAgain: "Confirm password",
-  signInFailed: "Email or password is incorrect.",
+  signInFailed: "Email, customer ID or password is incorrect.",
   emailTaken: "An account with that email already exists.",
   passwordTooShort: "Use at least 8 characters.",
   passwordMismatch: "The two passwords do not match.",
@@ -701,6 +701,8 @@ const en = {
   copy: "Copy",
   copied: "Copied",
   repCredentialsMessage: "Your TEMEX sales account is ready. Sign in at {url} with username {login} and temporary password {password}. You will be asked to choose your own password.",
+  customerId: "Customer ID",
+  loginEmailOrId: "Email or customer ID",
 };
 
 /**
@@ -934,7 +936,7 @@ const fa: typeof en = {
   haveAccount: "قبلاً حساب ساخته‌اید؟",
   needAccount: "حساب ندارید؟",
   passwordAgain: "تکرار گذرواژه",
-  signInFailed: "ایمیل یا گذرواژه نادرست است.",
+  signInFailed: "ایمیل، کد مشتری یا گذرواژه نادرست است.",
   emailTaken: "حسابی با این ایمیل از قبل وجود دارد.",
   passwordTooShort: "حداقل ۸ نویسه وارد کنید.",
   passwordMismatch: "دو گذرواژه یکسان نیستند.",
@@ -1348,6 +1350,8 @@ const fa: typeof en = {
   copy: "کپی",
   copied: "کپی شد",
   repCredentialsMessage: "حساب فروش شما در تمکس آماده است. در {url} با نام کاربری {login} و گذرواژهٔ موقت {password} وارد شوید. پس از ورود، گذرواژهٔ خودتان را انتخاب می‌کنید.",
+  customerId: "کد مشتری",
+  loginEmailOrId: "ایمیل یا کد مشتری",
 };
 
 export type Dict = typeof en;
