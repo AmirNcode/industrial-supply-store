@@ -10,6 +10,7 @@ import {
   type DatabaseIntegrityReport,
 } from "./dataIntegrity";
 import { saveColumnsInTransaction } from "./columnQueries";
+import { randomCustomerCode } from "@/lib/customerCode";
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 type Tx = TransactionSql<{}>;
@@ -88,8 +89,9 @@ test("constraints, corruption detection, and derived reconciliation share one in
         ) VALUES (${product.id}, ${family.id}, 'diameter', '0.0313', 0.03125)
       `;
       const [user] = await tx<{ id: string }[]>`
-        INSERT INTO users (email, password_hash)
-        VALUES (${`integrity-${suffix}@example.invalid`}, 'not-a-real-hash')
+        INSERT INTO users (email, password_hash, customer_code)
+        VALUES (${`integrity-${suffix}@example.invalid`}, 'not-a-real-hash',
+                ${randomCustomerCode()})
         RETURNING id
       `;
       const [order] = await tx<{ id: number }[]>`
