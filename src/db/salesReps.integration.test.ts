@@ -35,6 +35,16 @@ import { submitOrderFromCartInTransaction } from "./orderSubmissionQueries";
 import { quoteCartFingerprint } from "@/lib/quoteSubmission";
 import { getOrderByPayToken } from "./accountQueries";
 import { getOrderForRep, getReorderLines, listOrdersForRep } from "./repOrderQueries";
+import {
+  addPayout,
+  deletePayout,
+  listDeliveredForRep,
+  listInProgressForRep,
+  listPayouts,
+  listRepTotals,
+  listTargets,
+  setTarget,
+} from "./repMoney";
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 type Tx = TransactionSql<{}>;
@@ -596,4 +606,72 @@ test("reorder leaves out products the admin has since hidden from the catalog", 
     }
     await cleanupReps(repIds, userIds);
   }
+});
+
+async function insertDelivered(
+  tx: Tx,
+  repId: string,
+  totalCents: number,
+  fxRateToRial: number,
+  rateBp: number,
+  deliveredAt: string,
+): Promise<void> {
+  await tx`
+    INSERT INTO orders (ref, company, contact_name, email, total_cents, requested_total_cents,
+                        status, rep_id, commission_rate_bp, invoice_number, fx_rate_to_rial,
+                        created_at, invoiced_at, paid_at, shipped_at, delivered_at)
+    VALUES (${`ORD-${randomUUID().slice(0, 6).toUpperCase()}`}, 'Money Co', 'N', '',
+            ${totalCents}, ${totalCents}, 'delivered', ${repId}, ${rateBp},
+            ${`INV-TEST-${randomUUID().slice(0, 8)}`}, ${fxRateToRial},
+            ${deliveredAt}::timestamptz - interval '9 days', ${deliveredAt}::timestamptz - interval '8 days',
+            ${deliveredAt}::timestamptz - interval '6 days', ${deliveredAt}::timestamptz - interval '4 days',
+            ${deliveredAt}::timestamptz)`;
+}
+
+test("one exact definition of sales and commission, and owed after payouts", async () => {
+  assertLocalDatabase();
+  await rolledBack(async (tx) => {
+    const rep = await insertRep(tx, { rateBp: 250 });
+    await insertDelivered(tx, rep, 12345, 1050000, 250, "2026-09-10T10:00:00Z");
+    // Cents × rate × basis points here is 1.35e19 — past 2^53, where
+    // JavaScript arithmetic would already be wrong.
+    await insertDelivered(tx, rep, 900000000, 1500000, 10000, "2026-09-11T10:00:00Z");
+
+    const rows = await listDeliveredForRep(rep, tx);
+    assert.deepEqual(rows.map((r) => [r.salesRial, r.commissionRial]), [
+      [129_622_500, 3_240_563],
+      [13_500_000_000_000, 13_500_000_000_000],
+    ]);
+    assert.ok(rows[0].deliveredAt instanceof Date);
+
+    await addPayout(rep, 1_000_000, "Shahrivar", tx);
+    assert.deepEqual((await listRepTotals(tx)).get(rep), {
+      repId: rep,
+      earnedRial: 3_240_563 + 13_500_000_000_000,
+      paidRial: 1_000_000,
+    });
+    const [payout] = await listPayouts(rep, tx);
+    assert.equal(await deletePayout(rep, payout.id, tx), true);
+    assert.equal((await listRepTotals(tx)).get(rep)?.paidRial, 0);
+
+    await setTarget(rep, { year: 1405, month: 7 }, 500_000_000, tx);
+    await setTarget(rep, { year: 1405, month: 7 }, 600_000_000, tx);
+    assert.deepEqual(await listTargets(rep, tx), [{ year: 1405, month: 7, amountRial: 600_000_000 }]);
+  });
+});
+
+test("an order not yet invoiced is estimated at today's rate", async () => {
+  assertLocalDatabase();
+  await rolledBack(async (tx) => {
+    const rep = await insertRep(tx, { rateBp: 500 });
+    await tx`
+      INSERT INTO orders (ref, company, contact_name, email, total_cents, requested_total_cents,
+                          status, rep_id, commission_rate_bp)
+      VALUES (${`ORD-${randomUUID().slice(0, 6).toUpperCase()}`}, 'Open Co', 'N', '', 10000, 10000,
+              'received', ${rep}, 500)`;
+    const [row] = await listInProgressForRep(rep, 1_000_000, tx);
+    assert.equal(row.estimate, true);
+    assert.equal(row.salesRial, 100_000_000);
+    assert.equal(row.commissionRial, 5_000_000);
+  });
 });
