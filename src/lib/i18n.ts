@@ -732,6 +732,20 @@ const en = {
   overdue: "Overdue",
   customerOrders: "Orders",
   followUpDueToday: "Due today",
+  allReps: "All reps",
+  filter: "Filter",
+  originSelf: "Signed up alone",
+  originRep: "Created by {name}",
+  originReferral: "Referred by {name}",
+  assignRep: "Rep",
+  repEarnsCommission: "Rep earns commission on this customer's orders",
+  repEarnsCommissionHint: "Applies to orders placed from now on.",
+  assignmentSaved: "Assignment saved.",
+  pagePrevious: "Previous",
+  pageNext: "Next",
+  createdOn: "Created",
+  commissionShortOn: "On",
+  commissionShortOff: "Off",
 };
 
 /**
@@ -1410,6 +1424,20 @@ const fa: typeof en = {
   overdue: "گذشته از موعد",
   customerOrders: "سفارش‌ها",
   followUpDueToday: "سررسید امروز",
+  allReps: "همهٔ نمایندگان",
+  filter: "فیلتر",
+  originSelf: "ثبت‌نام توسط خود مشتری",
+  originRep: "ایجادشده توسط {name}",
+  originReferral: "معرفی‌شده توسط {name}",
+  assignRep: "نماینده",
+  repEarnsCommission: "نماینده از سفارش‌های این مشتری پورسانت می‌گیرد",
+  repEarnsCommissionHint: "برای سفارش‌هایی اعمال می‌شود که از این پس ثبت شوند.",
+  assignmentSaved: "واگذاری ذخیره شد.",
+  pagePrevious: "قبلی",
+  pageNext: "بعدی",
+  createdOn: "تاریخ ایجاد",
+  commissionShortOn: "دارد",
+  commissionShortOff: "ندارد",
 };
 
 export type Dict = typeof en;

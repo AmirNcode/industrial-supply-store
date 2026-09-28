@@ -15,13 +15,12 @@ import { CustomerNotes } from "@/components/CustomerNotes";
 import { FollowUpControl } from "@/components/FollowUpControl";
 import { ErrorBanner, SuccessBanner } from "@/components/Banners";
 import { ConfirmSubmit } from "@/components/ConfirmSubmit";
-import { OrderStatusPill } from "@/components/OrderStatusPill";
+import { CustomerOrderList } from "@/components/CustomerOrderList";
 import { ShownOnceCredential } from "@/components/ShownOnceCredential";
 import { readShownOnce } from "@/lib/shownOnce";
 import { siteOrigin } from "@/lib/siteOrigin";
 import { getFxRate } from "@/lib/fx";
-import { formatPrice } from "@/lib/money";
-import { formatPersianDate, tehranToday } from "@/lib/persianCalendar";
+import { tehranToday } from "@/lib/persianCalendar";
 import { isUuid } from "@/lib/ids";
 import { isLocale, getDict, type Locale } from "@/lib/i18n";
 
@@ -109,29 +108,7 @@ export default async function RepCustomerPage({
       />
       <CustomerNotes locale={l} notes={notes} action={addCustomerNoteAction} hidden={hidden} />
 
-      <section className={section}>
-        <h2 className="mb-2 text-[13px] font-bold">{t.customerOrders}</h2>
-        {orders.length === 0 ? (
-          <p className="text-[12px] text-[var(--color-ink-muted)]">{t.noOrdersYet}</p>
-        ) : (
-          <ul className="grid gap-1 text-[12px]">
-            {orders.map((order) => (
-              <li key={order.id} className="flex flex-wrap items-baseline gap-3">
-                <span className="tech" dir="ltr">
-                  {order.ref}
-                </span>
-                <OrderStatusPill locale={l} status={order.status} />
-                <span className="text-[var(--color-ink-muted)]">
-                  {formatPersianDate(order.createdAt, l)}
-                </span>
-                <span className="num">
-                  {formatPrice(order.totalCents, "IRR", l, order.fxRateToRial ?? liveRate)}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      <CustomerOrderList locale={l} orders={orders} liveRate={liveRate} />
 
       <section className={section}>
         <h2 className="mb-3 text-[13px] font-bold">{t.details}</h2>
