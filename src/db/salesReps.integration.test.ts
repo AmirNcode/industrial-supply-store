@@ -13,7 +13,14 @@ import {
   getRepById,
   setRepPassword,
 } from "./repQueries";
-import { createUser, findUserForSignIn, setPassword, getUserById } from "./userQueries";
+import {
+  createUser,
+  findUserForSignIn,
+  getRepContactForUser,
+  getUserById,
+  setPassword,
+  updateProfile,
+} from "./userQueries";
 import {
   assignCustomer,
   createCustomerForRep,
@@ -318,6 +325,56 @@ test("a rep reads and changes only their own customers", async () => {
     assert.equal(await getCustomerForRep(a.id, created.id), null);
     assert.equal((await getCustomerForRep(b.id, created.id))?.repEarnsCommission, false);
     assert.equal((await listNotes(created.id)).length, 1);
+  } finally {
+    await cleanupReps(repIds, userIds);
+  }
+});
+
+test("a customer sees their rep only while the rep is active; the profile keeps an address", async () => {
+  assertLocalDatabase();
+  const suffix = randomUUID().slice(0, 8);
+  const repIds: string[] = [];
+  const userIds: string[] = [];
+  try {
+    const rep = await createRep({
+      username: `rc-${suffix}`,
+      name: "Rep C",
+      phone: "0912 000 2222",
+      email: "",
+      commissionRateBp: 250,
+      passwordHash: "x",
+    });
+    if (rep === "username-taken") throw new Error("username clash");
+    repIds.push(rep.id);
+    const created = await createUser({
+      email: `${suffix}@example.invalid`,
+      passwordHash: "x",
+      company: "C",
+      contactName: "N",
+      phone: "",
+      locale: "fa",
+      origin: "referral",
+      repId: rep.id,
+    });
+    if (created === "email-taken") throw new Error("unexpected");
+    userIds.push(created.id);
+
+    assert.deepEqual({ ...(await getRepContactForUser(created.id)) }, { name: "Rep C", phone: "0912 000 2222" });
+    await sql`UPDATE sales_reps SET active = false WHERE id = ${rep.id}`;
+    assert.equal(await getRepContactForUser(created.id), null);
+
+    await updateProfile(created.id, {
+      company: "C2",
+      contactName: "N2",
+      phone: "021",
+      defaultPoNumber: "",
+      locale: "fa",
+      address: "خیابان ۱، پلاک ۲",
+      city: "تهران",
+    });
+    const after = await getUserById(created.id);
+    assert.equal(after?.address, "خیابان ۱، پلاک ۲");
+    assert.equal(after?.city, "تهران");
   } finally {
     await cleanupReps(repIds, userIds);
   }

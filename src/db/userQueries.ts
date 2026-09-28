@@ -119,15 +119,29 @@ export async function updateProfile(
     phone: string;
     defaultPoNumber: string;
     locale: string;
+    address: string;
+    city: string;
   },
 ): Promise<void> {
   await sql`
     UPDATE users
     SET company = ${input.company}, contact_name = ${input.contactName},
         phone = ${input.phone}, default_po_number = ${input.defaultPoNumber},
-        locale = ${input.locale}
+        locale = ${input.locale}, address = ${input.address}, city = ${input.city}
     WHERE id = ${id}
   `;
+}
+
+/** The customer's rep, for "Your sales rep" — only while that rep is active. */
+export async function getRepContactForUser(
+  userId: string,
+): Promise<{ name: string; phone: string } | null> {
+  const [row] = await sql<{ name: string; phone: string }[]>`
+    SELECT r.name, r.phone
+    FROM users u JOIN sales_reps r ON r.id = u.rep_id AND r.active
+    WHERE u.id = ${userId}
+  `;
+  return row ?? null;
 }
 
 /**

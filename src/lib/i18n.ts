@@ -746,6 +746,10 @@ const en = {
   createdOn: "Created",
   commissionShortOn: "On",
   commissionShortOff: "Off",
+  referralLink: "Your referral link",
+  referralHint: "People who sign up within 30 days of opening this link become your customers.",
+  referralMessage: "Browse TEMEX industrial parts and open your account here: {url}",
+  yourSalesRep: "Your sales rep",
 };
 
 /**
@@ -1438,6 +1442,10 @@ const fa: typeof en = {
   createdOn: "تاریخ ایجاد",
   commissionShortOn: "دارد",
   commissionShortOff: "ندارد",
+  referralLink: "لینک معرفی شما",
+  referralHint: "کسانی که ظرف ۳۰ روز پس از باز کردن این لینک ثبت‌نام کنند، مشتری شما می‌شوند.",
+  referralMessage: "قطعات صنعتی تمکس را ببینید و حساب خود را از اینجا باز کنید: {url}",
+  yourSalesRep: "نمایندهٔ فروش شما",
 };
 
 export type Dict = typeof en;

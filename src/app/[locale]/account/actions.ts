@@ -20,6 +20,8 @@ import {
 import { RATE_LIMITS, consumeRateLimit } from "@/lib/rateLimit";
 import { REQUEST_LIMITS, boundedString } from "@/lib/requestLimits";
 import { parseLogin } from "@/lib/customerCode";
+import { clearReferralCookie, readReferralCode } from "@/lib/referral";
+import { getActiveRepByReferralCode } from "@/db/repQueries";
 
 /**
  * None of these actions revalidate, deliberately.
@@ -67,6 +69,12 @@ export async function signUpAction(formData: FormData): Promise<void> {
     redirect(`/${locale}/account/signup?error=mismatch`);
   }
 
+  // A referral link opened in the last 30 days makes this the rep's customer,
+  // commission on — the rep brought them in. Re-checked here: a rep deactivated
+  // since the link was opened credits nobody.
+  const referralCode = await readReferralCode();
+  const referrer = referralCode ? await getActiveRepByReferralCode(referralCode) : null;
+
   const created = await createUser({
     email,
     passwordHash: await hashPassword(password),
@@ -74,12 +82,13 @@ export async function signUpAction(formData: FormData): Promise<void> {
     contactName,
     phone,
     locale,
-    origin: "self",
-    repId: null,
+    origin: referrer ? "referral" : "self",
+    repId: referrer?.id ?? null,
   });
   if (created === "email-taken") {
     redirect(`/${locale}/account/signup?error=taken`);
   }
+  if (referralCode) await clearReferralCookie();
 
   await setSessionCookie(created.id);
   redirect(`/${locale}/account`);
@@ -163,7 +172,15 @@ export async function updateProfileAction(formData: FormData): Promise<void> {
     REQUEST_LIMITS.poNumberChars,
     { allowEmpty: true },
   );
-  if ([company, contactName, phone, defaultPoNumber].some((value) => value === null)) {
+  const address = boundedString(formData.get("address"), REQUEST_LIMITS.addressChars, {
+    allowEmpty: true,
+  });
+  const city = boundedString(formData.get("city"), REQUEST_LIMITS.cityChars, {
+    allowEmpty: true,
+  });
+  if (
+    [company, contactName, phone, defaultPoNumber, address, city].some((value) => value === null)
+  ) {
     redirect(`/${locale}/account?error=invalid#profile`);
   }
 
@@ -173,6 +190,8 @@ export async function updateProfileAction(formData: FormData): Promise<void> {
     phone: phone!,
     defaultPoNumber: defaultPoNumber!,
     locale: isLocale(preferred) ? (preferred as Locale) : locale,
+    address: address!,
+    city: city!,
   });
   redirect(`/${locale}/account?ok=profile#profile`);
 }

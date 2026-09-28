@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { requireRep } from "@/lib/repSession";
 import { listFollowUpsDue } from "@/db/customerQueries";
 import { ErrorBanner, SuccessBanner } from "@/components/Banners";
+import { ShareButton } from "@/components/ShareButton";
+import { siteOrigin } from "@/lib/siteOrigin";
 import { formatPersianDay, tehranToday } from "@/lib/persianCalendar";
 import { isLocale, getDict, type Locale } from "@/lib/i18n";
 
@@ -20,7 +22,8 @@ export default async function RepHomePage({
   const { ok, error } = await searchParams;
   const rep = await requireRep(l);
   const today = tehranToday();
-  const due = await listFollowUpsDue(rep.id, today);
+  const [due, origin] = await Promise.all([listFollowUpsDue(rep.id, today), siteOrigin()]);
+  const referralLink = `${origin}/${l}/r/${rep.referralCode}`;
 
   return (
     <>
@@ -30,6 +33,21 @@ export default async function RepHomePage({
       {ok === "password" && <SuccessBanner>{t.passwordChanged}</SuccessBanner>}
       {/* Every rep write that hits its rate limit lands here. */}
       {error === "rate-limit" && <ErrorBanner>{t.rateLimited}</ErrorBanner>}
+
+      <section className="mb-4 border border-[var(--color-rule)] p-3">
+        <h2 className="mb-1 text-[13px] font-bold">{t.referralLink}</h2>
+        <p className="mb-2 text-[11px] text-[var(--color-ink-muted)]">{t.referralHint}</p>
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="tech break-all text-[12px]" dir="ltr" data-testid="referral-link">
+            {referralLink}
+          </span>
+          <ShareButton
+            text={t.referralMessage.replace("{url}", referralLink)}
+            label={t.share}
+            copiedLabel={t.copied}
+          />
+        </div>
+      </section>
 
       <section className="mb-4 border border-[var(--color-rule)] p-3">
         <h2 className="mb-2 text-[13px] font-bold">{t.followUpsDue}</h2>

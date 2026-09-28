@@ -2,6 +2,8 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { currentUser } from "@/lib/session";
 import { listOrdersForUser } from "@/db/accountQueries";
+import { getRepContactForUser } from "@/db/userQueries";
+import { latinDigits } from "@/lib/digits";
 import { getFxRate, getPriceDisplayMode } from "@/lib/fx";
 import { OrderStatusPill } from "@/components/OrderStatusPill";
 import { MIN_PASSWORD_LENGTH } from "@/lib/password";
@@ -57,10 +59,11 @@ export default async function AccountPage({
   }
   if (user.mustChangePassword) redirect(`/${l}/account/password`);
 
-  const [orders, rate, priceDisplayMode] = await Promise.all([
+  const [orders, rate, priceDisplayMode, repContact] = await Promise.all([
     listOrdersForUser(user.id),
     getFxRate(),
     getPriceDisplayMode(),
+    getRepContactForUser(user.id),
   ]);
   const currency = customerCurrencyFor(priceDisplayMode, l);
   const errorKey = error && error in ERROR_KEY ? ERROR_KEY[error as keyof typeof ERROR_KEY] : null;
@@ -92,6 +95,26 @@ export default async function AccountPage({
           </form>
         </div>
       </div>
+
+      {repContact && (
+        <section className="mb-3 border border-[var(--color-rule)] px-3 py-2 text-[12px]">
+          <h2 className="mb-1 text-[13px] font-bold">{t.yourSalesRep}</h2>
+          <p className="flex flex-wrap items-baseline gap-3">
+            <span data-testid="your-rep">{repContact.name}</span>
+            {repContact.phone && (
+              // Digits normalised first: a phone typed in Persian digits would
+              // otherwise leave nothing for the tel: link to dial.
+              <a
+                href={`tel:${latinDigits(repContact.phone).replace(/[^\d+]/g, "")}`}
+                className="tech"
+                dir="ltr"
+              >
+                {repContact.phone}
+              </a>
+            )}
+          </p>
+        </section>
+      )}
 
       {/* Native <details>: collapsed by default, keyboard accessible, and it
           works before any JavaScript loads — which matters because the only
@@ -216,6 +239,26 @@ export default async function AccountPage({
                 />
               </label>
             </div>
+            <label className="block text-[12px]">
+              <span className="mb-0.5 block font-bold">{t.city}</span>
+              <input
+                type="text"
+                name="city"
+                maxLength={REQUEST_LIMITS.cityChars}
+                defaultValue={user.city}
+                className="w-full"
+              />
+            </label>
+            <label className="block text-[12px]">
+              <span className="mb-0.5 block font-bold">{t.address}</span>
+              <textarea
+                name="address"
+                rows={2}
+                maxLength={REQUEST_LIMITS.addressChars}
+                defaultValue={user.address}
+                className="w-full"
+              />
+            </label>
             <label className="block text-[12px]">
               <span className="mb-0.5 block font-bold">{t.defaultPoNumber}</span>
               <input
