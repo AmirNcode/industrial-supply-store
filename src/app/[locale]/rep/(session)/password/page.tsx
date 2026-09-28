@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { repChangePasswordAction } from "../../actions";
+import { repChangePasswordAction, repSignOutAction } from "../../actions";
 import { requireRepSession } from "@/lib/repSession";
 import { isLocale, getDict, type Locale } from "@/lib/i18n";
 import { REQUEST_LIMITS } from "@/lib/requestLimits";
@@ -60,7 +60,17 @@ export default async function RepPasswordPage({
         </button>
       </form>
 
-      {!forced && (
+      {forced ? (
+        // The portal's sign-out sits behind this page, and a forced change asks
+        // for no current password: without this, a session left open on a
+        // shared computer lets the next person choose the rep's password.
+        <form action={repSignOutAction} className="mt-4 text-[12px]">
+          <input type="hidden" name="locale" value={l} />
+          <button type="submit" className="btn-small">
+            {t.signOut}
+          </button>
+        </form>
+      ) : (
         <p className="mt-4 text-[12px]">
           <Link href={`/${l}/rep`}>← {t.repHome}</Link>
         </p>
