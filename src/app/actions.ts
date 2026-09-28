@@ -10,17 +10,19 @@ import {
   getCartId,
 } from "@/lib/cart";
 import { findByPartNumbers } from "@/db/queries";
-import { safeLocale } from "@/lib/i18n";
+import { isLocale, safeLocale, type Locale } from "@/lib/i18n";
 import { currentUserId } from "@/lib/session";
 import { AUTH_SECRET } from "@/lib/authSecret";
 import { verifyQuoteSubmissionToken } from "@/lib/quoteSubmission";
-import { submitOrderFromCart, type QuoteContact } from "@/db/orderSubmissionQueries";
+import { submitOrderFromCart } from "@/db/orderSubmissionQueries";
+import { parseContact } from "@/lib/quoteContact";
+import { currentRep } from "@/lib/repSession";
+import type { RepRow } from "@/db/repQueries";
+import { getCustomerForRep } from "@/db/customerQueries";
+import { clearOrderingFor } from "@/lib/repOrderContext";
+import { isUuid } from "@/lib/ids";
 import { RATE_LIMITS, consumeRateLimit } from "@/lib/rateLimit";
-import {
-  REQUEST_LIMITS,
-  boundedString,
-  parseQuickOrder,
-} from "@/lib/requestLimits";
+import { boundedString, parseQuickOrder } from "@/lib/requestLimits";
 import { getPriceDisplayMode } from "@/lib/fx";
 import { customerCurrencyFor } from "@/lib/money";
 
@@ -129,6 +131,10 @@ export async function quickOrderAction(
 
 export async function submitQuoteAction(formData: FormData) {
   const locale = safeLocale(formData);
+  // A signed-in rep orders for a customer; that path owns its own limit,
+  // customer check and landing page.
+  const rep = await currentRep();
+  if (rep) return submitForCustomer(rep, locale, formData);
   const userId = await currentUserId();
   const limit = await consumeRateLimit("quote:submit", RATE_LIMITS.quoteSubmit, {
     accountId: userId,
@@ -146,46 +152,14 @@ export async function submitQuoteAction(formData: FormData) {
     redirect(`/${locale}/quote?error=expired`);
   }
 
-  const company = boundedString(formData.get("company"), REQUEST_LIMITS.companyChars);
-  const contactName = boundedString(
-    formData.get("contactName"),
-    REQUEST_LIMITS.contactNameChars,
-  );
-  const email = boundedString(formData.get("email"), REQUEST_LIMITS.emailChars)?.toLowerCase();
-  const phone = boundedString(formData.get("phone"), REQUEST_LIMITS.phoneChars);
-  if (!company || !contactName || !email || !phone) {
-    redirect(`/${locale}/quote?error=missing`);
-  }
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    redirect(`/${locale}/quote?error=invalid`);
-  }
-
-  const optional = (name: string, maxChars: number) =>
-    boundedString(formData.get(name), maxChars, { allowEmpty: true });
-  const poNumber = optional("poNumber", REQUEST_LIMITS.poNumberChars);
-  const address = optional("address", REQUEST_LIMITS.addressChars);
-  const city = optional("city", REQUEST_LIMITS.cityChars);
-  const country = optional("country", REQUEST_LIMITS.countryChars);
-  const notes = optional("notes", REQUEST_LIMITS.notesChars);
-  if ([poNumber, address, city, country, notes].some((value) => value === null)) {
-    redirect(`/${locale}/quote?error=invalid`);
-  }
-
-  // Guest checkout stays supported, so this is nullable. A guest's typed
+  // Guest checkout stays supported, so userId is nullable. A guest's typed
   // address is deliberately NOT matched against an existing account: without
   // email verification that would let anyone attach a stranger's order to
-  // themselves by typing their address.
-  const contact: QuoteContact = {
-    company,
-    contactName,
-    email,
-    phone,
-    poNumber: poNumber!,
-    address: address!,
-    city: city!,
-    country: country!,
-    notes: notes!,
-  };
+  // themselves by typing their address. The email is required only from a
+  // guest — a signed-in customer's order sits on their account.
+  const parsed = parseContact(formData, userId === null);
+  if ("error" in parsed) redirect(`/${locale}/quote?error=${parsed.error}`);
+  const contact = parsed.contact;
 
   const currency = customerCurrencyFor(await getPriceDisplayMode(), locale);
   const result = await submitOrderFromCart({
@@ -212,4 +186,50 @@ export async function submitQuoteAction(formData: FormData) {
   // The order, item snapshots, stock hold and cart clear have all committed at
   // this point. A replay returns the same reference through the same redirect.
   redirect(`/${locale}/quote/submitted?ref=${result.ref}`);
+}
+
+/**
+ * A rep placing an order for one of their customers: its own rate limit
+ * (reps legitimately place many orders), the customer re-checked against the
+ * session, the order in the customer's language, and the rep landing on the
+ * order with its pay link rather than on the customer's confirmation page.
+ */
+async function submitForCustomer(rep: RepRow, locale: Locale, formData: FormData): Promise<void> {
+  if (rep.mustChangePassword) redirect(`/${locale}/rep/password`);
+  const limit = await consumeRateLimit("rep:order", RATE_LIMITS.repOrderSubmit, { accountId: rep.id });
+  if (!limit.allowed) redirect(`/${locale}/quote?error=rate-limit`);
+
+  const token = verifyQuoteSubmissionToken(
+    boundedString(formData.get("submissionToken"), 2_000) ?? "",
+    AUTH_SECRET,
+  );
+  const cartId = await getCartId();
+  if (!cartId) redirect(`/${locale}/cart`);
+  if (!token || token.cartId !== cartId) redirect(`/${locale}/quote?error=expired`);
+
+  const customerId = String(formData.get("forCustomerId") ?? "");
+  const customer = isUuid(customerId) ? await getCustomerForRep(rep.id, customerId) : null;
+  if (!customer) redirect(`/${locale}/quote?error=customer`);
+  const again = `/${locale}/quote?for=${customer.id}`;
+
+  const parsed = parseContact(formData, false);
+  if ("error" in parsed) redirect(`${again}&error=${parsed.error}`);
+
+  const orderLocale: Locale = isLocale(customer.locale) ? customer.locale : locale;
+  const result = await submitOrderFromCart({
+    cartId,
+    cartFingerprint: token.cartFingerprint,
+    submissionKey: token.submissionKey,
+    locale: orderLocale,
+    currency: customerCurrencyFor(await getPriceDisplayMode(), orderLocale),
+    userId: customer.id,
+    placedByRepId: rep.id,
+    contact: parsed.contact,
+  });
+  if (result.kind === "customer-moved") redirect(`/${locale}/quote?error=customer`);
+  if (result.kind === "cart-changed") redirect(`${again}&error=cart-changed`);
+  if (result.kind === "empty-cart" || result.kind === "missing-cart") redirect(`/${locale}/cart`);
+
+  await clearOrderingFor();
+  redirect(`/${locale}/rep/orders/${result.ref}?ok=created`);
 }

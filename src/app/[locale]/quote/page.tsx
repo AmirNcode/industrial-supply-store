@@ -7,6 +7,11 @@ import { DEMO_MODE } from "@/lib/demo";
 import { customerCurrencyFor, formatPrice, formatInt } from "@/lib/money";
 import { getFxRate, getPriceDisplayMode } from "@/lib/fx";
 import { currentUser } from "@/lib/session";
+import { currentRep } from "@/lib/repSession";
+import { listCustomersForRep } from "@/db/customerQueries";
+import { readOrderingFor } from "@/lib/repOrderContext";
+import { isUuid } from "@/lib/ids";
+import { RepQuoteForm } from "./RepQuoteForm";
 import { AUTH_SECRET } from "@/lib/authSecret";
 import {
   createQuoteSubmission,
@@ -21,20 +26,21 @@ export default async function QuotePage({
   searchParams,
 }: {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; for?: string | string[] }>;
 }) {
   const { locale } = await params;
   if (!isLocale(locale)) notFound();
   const l = locale as Locale;
   const t = getDict(l);
-  const { error } = await searchParams;
+  const { error, for: forParam } = await searchParams;
 
-  const [lines, rate, priceDisplayMode, user, cartId] = await Promise.all([
+  const [lines, rate, priceDisplayMode, user, cartId, rep] = await Promise.all([
     getCartLines(),
     getFxRate(),
     getPriceDisplayMode(),
     currentUser(),
     getCartId(),
+    currentRep(),
   ]);
   if (lines.length === 0) redirect(`/${l}/cart`);
   if (!cartId) redirect(`/${l}/cart`);
@@ -51,6 +57,27 @@ export default async function QuotePage({
     createQuoteSubmission(cartId, fingerprint),
     AUTH_SECRET,
   );
+
+  // A signed-in rep checks out for one of their customers, on its own form.
+  if (rep) {
+    if (rep.mustChangePassword) redirect(`/${l}/rep/password`);
+    const customers = await listCustomersForRep(rep.id, "");
+    const wanted =
+      (typeof forParam === "string" && isUuid(forParam) ? forParam : null) ??
+      (await readOrderingFor());
+    return (
+      <RepQuoteForm
+        locale={l}
+        customers={customers}
+        selected={customers.find((c) => c.id === wanted) ?? null}
+        lines={lines}
+        subtotal={subtotal}
+        rate={rate}
+        submissionToken={submissionToken}
+        error={error}
+      />
+    );
+  }
 
   return (
     <main className="mx-auto max-w-[900px] px-3 pt-3">
@@ -95,7 +122,17 @@ export default async function QuotePage({
         <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))] self-start">
           <Field name="company" label={t.company} maxLength={REQUEST_LIMITS.companyChars} required defaultValue={user?.company} />
           <Field name="contactName" label={t.contactName} maxLength={REQUEST_LIMITS.contactNameChars} required defaultValue={user?.contactName} />
-          <Field name="email" label={t.email} type="email" maxLength={REQUEST_LIMITS.emailChars} required defaultValue={user?.email ?? undefined} />
+          {/* Required only from a guest, who tracks the order by it; a
+              signed-in customer's order sits on their account. */}
+          <Field
+            name="email"
+            label={t.email}
+            type="email"
+            maxLength={REQUEST_LIMITS.emailChars}
+            required={!user}
+            optional={user ? t.optional : undefined}
+            defaultValue={user?.email ?? undefined}
+          />
           <Field name="phone" label={t.phone} type="tel" maxLength={REQUEST_LIMITS.phoneChars} required defaultValue={user?.phone} />
           <Field name="poNumber" label={t.poNumber} maxLength={REQUEST_LIMITS.poNumberChars} optional={t.optional} defaultValue={user?.defaultPoNumber} />
           <Field name="city" label={t.city} maxLength={REQUEST_LIMITS.cityChars} optional={t.optional} />

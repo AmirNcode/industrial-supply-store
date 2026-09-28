@@ -7,26 +7,37 @@ import { isLocale, getDict, type Locale } from "@/lib/i18n";
 import { customerCurrencyFor, formatPrice, formatInt } from "@/lib/money";
 import { specValueLabel } from "@/lib/specValues";
 import { getFxRate, getPriceDisplayMode } from "@/lib/fx";
+import { currentRep } from "@/lib/repSession";
+import { readOrderingFor } from "@/lib/repOrderContext";
+import { getCustomerForRep } from "@/db/customerQueries";
 
 export default async function CartPage({
   params,
   searchParams,
 }: {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; skipped?: string | string[] }>;
 }) {
   const { locale } = await params;
   if (!isLocale(locale)) notFound();
   const l = locale as Locale;
   const t = getDict(l);
-  const { error } = await searchParams;
+  const { error, skipped } = await searchParams;
 
-  const [lines, rate, priceDisplayMode] = await Promise.all([
+  const [lines, rate, priceDisplayMode, rep, orderingForId] = await Promise.all([
     getCartLines(),
     getFxRate(),
     getPriceDisplayMode(),
+    currentRep(),
+    readOrderingFor(),
   ]);
-  const currency = customerCurrencyFor(priceDisplayMode, l);
+  // Reps never see dollar amounts.
+  const currency = rep ? "IRR" : customerCurrencyFor(priceDisplayMode, l);
+  const orderingFor =
+    rep && orderingForId ? await getCustomerForRep(rep.id, orderingForId) : null;
+  // Set by Reorder: part numbers from the old order that are no longer sold.
+  const skippedParts =
+    typeof skipped === "string" ? skipped.split(",").filter(Boolean).slice(0, 20) : [];
   const subtotal = lines.reduce((sum, x) => sum + unitPriceAt(x, x.qty) * x.qty, 0);
 
   return (
@@ -40,6 +51,32 @@ export default async function CartPage({
           </span>
         )}
       </h1>
+      {rep && (
+        <p className="mb-3 flex flex-wrap items-baseline gap-3 border border-[var(--color-rule)] px-3 py-2 text-[12px]">
+          <span className="font-bold">
+            {orderingFor
+              ? t.orderingForName.replace(
+                  "{name}",
+                  `${orderingFor.company} (${orderingFor.customerCode})`,
+                )
+              : t.orderingForChoose}
+          </span>
+          <Link href={`/${l}/rep/customers`}>{t.change}</Link>
+        </p>
+      )}
+      {skippedParts.length > 0 && (
+        <p className="mb-3 border border-[var(--color-warn)] bg-[var(--color-warn-soft)] px-3 py-2 text-[12px] text-[var(--color-warn)]">
+          {t.reorderSkipped}{" "}
+          {skippedParts.map((part, i) => (
+            <span key={part}>
+              {i > 0 && ", "}
+              <span className="tech" dir="ltr">
+                {part}
+              </span>
+            </span>
+          ))}
+        </p>
+      )}
       {error === "rate-limit" && (
         <p className="mb-3 border border-[#e0b4b0] bg-[#fdf2f1] px-3 py-2 text-[12px] text-[var(--color-danger)]">
           {t.rateLimited}

@@ -775,6 +775,17 @@ const en = {
   payPaidThanks: "Paid — thank you.",
   payCancelled: "This order was cancelled. Nothing is due.",
   priceEstimate: "Estimate at today's catalog prices.",
+  repOrderForCustomer: "New order for a customer",
+  orderingForName: "Ordering for {name}",
+  orderingForChoose: "You will choose the customer at checkout.",
+  chooseCustomer: "Choose a customer",
+  useCustomer: "Use",
+  repPlaceOrder: "Place order",
+  repNoCustomersYet: "Create a customer first.",
+  customerNotYours: "That customer is no longer assigned to you.",
+  newOrder: "New order",
+  change: "Change",
+  reorderSkipped: "Not added — no longer sold:",
 };
 
 /**
@@ -1496,6 +1507,17 @@ const fa: typeof en = {
   payPaidThanks: "پرداخت شد — سپاسگزاریم.",
   payCancelled: "این سفارش لغو شده است و مبلغی قابل پرداخت نیست.",
   priceEstimate: "برآورد بر اساس قیمت‌های امروز کاتالوگ.",
+  repOrderForCustomer: "سفارش جدید برای مشتری",
+  orderingForName: "سفارش برای {name}",
+  orderingForChoose: "مشتری را هنگام ثبت سفارش انتخاب می‌کنید.",
+  chooseCustomer: "انتخاب مشتری",
+  useCustomer: "انتخاب",
+  repPlaceOrder: "ثبت سفارش",
+  repNoCustomersYet: "ابتدا یک مشتری ایجاد کنید.",
+  customerNotYours: "این مشتری دیگر به شما واگذار نشده است.",
+  newOrder: "سفارش جدید",
+  change: "تغییر",
+  reorderSkipped: "افزوده نشد — دیگر فروخته نمی‌شود:",
 };
 
 export type Dict = typeof en;

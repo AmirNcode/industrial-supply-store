@@ -13,6 +13,7 @@ import { generateTempPassword } from "@/lib/tempPassword";
 import { tehranDatePlusDays } from "@/lib/persianCalendar";
 import { setShownOnce } from "@/lib/shownOnce";
 import { redirectFresh } from "@/lib/redirectFresh";
+import { setOrderingFor } from "@/lib/repOrderContext";
 import {
   findRepForSignIn,
   getRepPasswordHash,
@@ -22,6 +23,7 @@ import {
 } from "@/db/repQueries";
 import {
   createCustomerForRep,
+  getCustomerForRep,
   resetCustomerPasswordForRep,
   setFollowUpForRep,
   updateCustomerForRep,
@@ -222,4 +224,15 @@ export async function setFollowUpAction(formData: FormData): Promise<void> {
   if (date === undefined) redirect(`/${locale}/rep/customers/${id}?error=invalid#follow-up`);
   if (!(await setFollowUpForRep(rep.id, id, date))) redirect(`/${locale}/rep/customers`);
   redirectFresh(`/${locale}/rep/customers/${id}#follow-up`);
+}
+
+export async function startOrderAction(formData: FormData): Promise<void> {
+  const { rep, locale } = await repForWrite(formData);
+  const id = postedCustomerId(formData);
+  const customer = id ? await getCustomerForRep(rep.id, id) : null;
+  if (!customer) redirect(`/${locale}/rep/customers`);
+  await setOrderingFor(customer.id);
+  // Quick order first: reps usually know the part numbers. The catalog is one
+  // click away in the masthead, and the choice survives either route.
+  redirect(`/${locale}/quick-order`);
 }

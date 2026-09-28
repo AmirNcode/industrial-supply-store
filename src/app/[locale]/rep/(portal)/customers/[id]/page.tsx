@@ -8,6 +8,7 @@ import {
   addCustomerNoteAction,
   resetCustomerPasswordAction,
   setFollowUpAction,
+  startOrderAction,
   updateCustomerAction,
 } from "../../../actions";
 import { CustomerFields } from "../CustomerFields";
@@ -81,6 +82,13 @@ export default async function RepCustomerPage({
         <span className="text-[11px] text-[var(--color-ink-muted)]">
           {customer.repEarnsCommission ? t.commissionOn : t.commissionOff}
         </span>
+        <form action={startOrderAction} className="ms-auto">
+          <input type="hidden" name="locale" value={l} />
+          <input type="hidden" name="customerId" value={id} />
+          <button type="submit" className="btn-primary">
+            {t.newOrder}
+          </button>
+        </form>
       </div>
 
       {credential && (
