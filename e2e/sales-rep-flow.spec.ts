@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import { getDict, type Locale } from "../src/lib/i18n";
+import { formatRial } from "../src/lib/money";
 
 const locales: Locale[] = ["en", "fa"];
 const familySlug = "oil-resistant-buna-n-o-rings";
@@ -98,6 +99,42 @@ for (const locale of locales) {
 
     await visitor.reload();
     await expect(visitor.getByRole("link", { name: t.payNow })).toBeVisible();
+
+    // Paid, shipped, delivered — then the sale and its commission reach the rep.
+    // The queue keeps a card open after acting on it (its <details> survives
+    // the redirect), so the card is opened only when it is closed. Each step
+    // waits for the order's new state: the URL reads ?ok=status after the
+    // first step already, so it cannot tell one step from the next.
+    const row = () => admin.locator("details").filter({ hasText: company });
+    const advance = async (
+      button: string,
+      dialogTitle: string,
+      done: () => Promise<void>,
+      fill?: () => Promise<void>,
+    ) => {
+      if ((await row().first().getAttribute("open")) === null) await row().first().locator("summary").click();
+      if (fill) await fill();
+      await row().first().getByRole("button", { name: button }).click();
+      await admin
+        .getByRole("dialog", { name: dialogTitle })
+        .getByRole("button", { name: t.confirmContinue })
+        .click();
+      await done();
+    };
+    const statusIs = (label: string) => () =>
+      expect(row().first().locator("summary")).toContainText(label);
+    await advance(t.markPaid, t.confirmMarkPaid, statusIs(t.statusPreparing));
+    await advance(t.markShipped, t.confirmMarkShipped, statusIs(t.statusShipped), async () => {
+      await row().first().locator('input[name="courier"]').fill("E2E Post");
+      await row().first().locator('input[name="trackingNumber"]').fill("TRK-E2E-1");
+    });
+    // A delivered order leaves the default queue.
+    await advance(t.markDelivered, t.confirmMarkDelivered, () => expect(row()).toHaveCount(0));
+
+    await rep.goto(`/${locale}/rep`);
+    // Whole-text comparisons: "84,350 IRR" contains the substring "0 IRR".
+    await expect(rep.getByTestId("tile-sales-to-date")).not.toHaveText(formatRial(0, locale));
+    await expect(rep.getByTestId("tile-commission-owed")).not.toHaveText(formatRial(0, locale));
 
     await Promise.all([adminContext.close(), repContext.close(), visitorContext.close()]);
   });

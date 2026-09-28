@@ -29,10 +29,13 @@ connects to either hosted Supabase project.
 | `/f/…`, `/l/…`, `/search` | public | request-driven catalog results; family output is bounded by default |
 | `/[locale]/cart`, `/quote` | public | order submission |
 | `/[locale]/track` | public | guest tracking: reference **plus** email |
-| `/[locale]/account/**` | customer | signed cookie session |
-| `/[locale]/invoice/[ref]` | customer or staff | language in path, currency in `?cur=` |
+| `/[locale]/account/**` | customer | signed cookie session; sign-in by email or 7-digit customer ID |
+| `/[locale]/invoice/[ref]` | customer, staff, or pay-link key | language in path, currency in `?cur=`, pay-link key in `?key=` |
+| `/[locale]/pay/[token]` | anyone holding the link | one order per 64-hex token; no sign-in, `noindex`, no referrer |
+| `/[locale]/r/[code]` | public (route handler) | a rep's referral link: remembers an active rep for 30 days, lands on the catalog |
+| `/[locale]/rep/**` | sales rep | own signed cookie; `(session)` holds only the forced-password page, `(portal)` the rest |
 | `/[locale]/admin/login` | public | the only password form |
-| `/[locale]/admin/(panel)/{orders,products,settings}` | staff | gate lives in the panel layout |
+| `/[locale]/admin/(panel)/{orders,reps,customers,products,settings}` | staff | gate lives in the panel layout |
 | `/api/admin/family/[id]/{template,export}` | staff | CSV, 404 when signed out |
 | `/api/admin/import` | staff | small signed-upload control messages; CSV bytes go to private Storage |
 | `/api/cron/fx-rate` | scheduler | evening exchange-rate reading; `Authorization: Bearer $CRON_SECRET` |
@@ -41,7 +44,7 @@ connects to either hosted Supabase project.
 its `layout.tsx`, which is why `/admin/login` sits **outside** it: a gate
 wrapping the login page would redirect the login page to itself.
 
-## Two independent auth systems
+## Three independent auth systems
 
 They share nothing on purpose.
 
@@ -53,6 +56,15 @@ They share nothing on purpose.
   (`src/lib/session.ts`, `sessionToken.ts`). No sessions table; the cookie is
   an HMAC of `userId.expiry`. Verification accepts only canonical UUID-shaped
   user IDs, so ownership queries compare UUID to UUID and retain their indexes.
+  A password someone else set (a rep's or the admin's reset) flags the account,
+  and the account pages send it to choose its own first.
+- **Sales reps** — their own `sales_reps` table and `isupply_rep` cookie
+  (`src/lib/repSession.ts`, `repSessionToken.ts`), signed with a key derived
+  from `AUTH_SECRET` for this purpose alone. The cookie carries the rep's
+  `session_version`; `currentRep()` re-reads the row every request, so
+  deactivation and every password change end open sessions at once. Passwords
+  need an upper-case letter, a digit and a symbol, and have Persian digits
+  normalised before hashing, so a password typed on either keyboard works.
 
 ## Invariants that will bite you
 
@@ -263,6 +275,45 @@ to `catalogImport.ts`. Review/apply still share the same parsing and atomic
 database-write path. Never make the import bucket public or reuse the public
 catalog-image bucket.
 
+**Credit and rate are locked when an order is placed.**
+`submitOrderFromCartInTransaction` reads the customer's rep and that rep's rate
+inside the order's own transaction and copies them onto `orders.rep_id` and
+`orders.commission_rate_bp`; moving the customer or changing the rate later
+cannot reach back into a placed order. Eligibility is a per-customer flag
+(`users.rep_earns_commission`): an ineligible customer's orders still credit
+the rep, at 0. A rep ordering for a customer is re-checked there too, so a
+customer moved between page load and submit refuses the order. A sale — for
+every total, month and commission — is a *delivered* order.
+
+**One definition of rep money.** `src/db/repMoney.ts` is the only place sales
+and commission are computed: `ROUND(total_cents × fx_rate_to_rial / 100)` and
+`ROUND(total_cents × fx_rate_to_rial × commission_rate_bp / 1,000,000)`, in
+Postgres `numeric`, crossing to JavaScript as `float8` whole rial. JavaScript
+never multiplies them — cents × rate × basis points passes 2^53 on a large
+order. Timestamps come back from the shared client as text (drizzle swaps
+postgres-js's date parsers); `repMoney` converts them where its types promise
+a `Date`.
+
+**Persian months are bucketed in JavaScript.** Postgres has no Persian
+calendar, so delivered orders are read once and placed in months by
+`src/lib/persianCalendar.ts` (ICU, Tehran time — a month turns at Tehran
+midnight) and summed by `src/lib/repStats.ts`, which is pure and tested. The
+cost is one query per dashboard view that grows with the rep's delivered
+orders, at a few dozen bytes each; the HTML does not grow.
+
+**A pay token is the key to one order.** `orders.pay_token` is 64 hex
+characters from two random UUIDs, a column default, so every order has one
+without application code choosing it. Its shape is checked before any query;
+it opens `/pay/[token]` and, as `?key=`, that order's invoice — nothing else.
+It cannot be revoked short of a migration: treat it like the emailed invoice
+PDF it stands in for.
+
+**Rep scoping is in the WHERE clause.** Every rep read and write carries the
+rep's id, taken from the session, in its own `WHERE` (`customerQueries.ts`,
+`noteQueries.ts`, `repOrderQueries.ts`), so a posted id for someone else's
+customer or order matches nothing. Pages turn that into a 404, not a 403,
+which would confirm the id exists.
+
 ## TEMEX part numbers
 
 A product's part number is an identifier, not a description. `1842A001` is a
@@ -374,6 +425,12 @@ matter, and refusing it would mean refusing the catalog.
 Statuses and legal transitions live in `src/lib/orders.ts`, which has zero
 imports so it is testable standalone.
 
+A rep's order takes the same path. `submitQuoteAction` sees the rep's session
+and hands off to `submitForCustomer`, which checks the customer is the rep's,
+writes the order in the customer's name and language with `placed_by_rep`, and
+lands the rep on `/rep/orders/[ref]` with the pay link to send. The rep is
+credited, and the order counts toward their numbers once it is delivered.
+
 ## Where things live
 
 ```
@@ -385,13 +442,19 @@ src/
   db/schema.ts           Drizzle schema (definition only)
   db/extensions.sql      everything drizzle-kit cannot express — see below
   db/*Queries.ts         all reads and writes, raw SQL
+  db/repMoney.ts         the one definition of a rep's sales and commission
   lib/                   i18n, money, orders, auth, limits, imports, storage
+  lib/rep*, customerCode, persianCalendar, payToken, bankDetails
+                         sales reps, customer IDs, Tehran months, pay links
   seed/                  taxonomy, generators, AS568 data
 ```
 
 Pure logic sits in `src/lib/*` with no database imports so it can be tested
 without one: `orders.ts`, `fxRate.ts`, `money.ts`, `invoice.ts`, `trackRef.ts`,
-`importCsv.ts`, `partNumber.ts`, `requestLimits.ts`, and signed import claims.
+`importCsv.ts`, `partNumber.ts`, `requestLimits.ts`, and signed import claims —
+and for sales reps `repStats.ts`, `persianCalendar.ts`, `repPassword.ts`,
+`customerCode.ts`, `bankDetails.ts`, `payToken.ts` and `quoteContact.ts`. The
+rep rules that need a database are in `db/salesReps.integration.test.ts`.
 That is where the tests are.
 
 Part numbers span both halves: `lib/partNumber.ts` is the format,

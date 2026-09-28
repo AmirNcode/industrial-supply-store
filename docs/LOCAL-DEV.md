@@ -247,6 +247,7 @@ auto-load, such as `.env.remote`, and update the `db:*:remote` scripts in
 | Open a SQL prompt | `docker exec -it isupply-db psql -U isupply -d isupply` |
 | Run one SQL statement | `docker exec isupply-db psql -U isupply -d isupply -c "select count(*) from products;"` |
 | Wipe and rebuild the data | `npm run db:reset` |
+| Add demo sales reps, customers and orders | `npm run db:seed:reps` |
 
 Two of those deserve a note.
 
@@ -260,6 +261,20 @@ the only command on this page you cannot undo.
 `docker exec` means "run a command inside a container that is already running."
 `-it` makes it interactive so you get a live `psql` prompt; leave it off when you
 just want one query's output. Type `\q` to leave `psql`.
+
+### Demo data for sales reps
+
+`npm run db:seed:reps` gives the rep dashboards something to show: two reps,
+fifteen customers of every origin (created by a rep, referred, signed up
+alone), sixty orders spread over the last fourteen Persian months in every
+status, notes, follow-ups, payouts and targets. It needs the catalog seeded
+first (`npm run db:seed`), refuses any database that is not local, and can be
+run again at will: each run replaces only its own rows — reps named `demo.*`,
+customers with `demo.*@example.invalid` emails and their orders — then
+re-derives stock for the products those orders used, so
+`npm run db:reconcile:check` stays clean. The sign-in details for the demo reps
+and customers are in the header of `scripts/seed-reps.mts`, and the command
+prints the customer IDs.
 
 ---
 

@@ -116,6 +116,18 @@ earlier local feature testing to their still-live products. Existing products
 will not be renumbered. The release verifier checks the registry's indexes,
 deletion behavior, product links, counters, and migration ledger.
 
+For the sales-rep release, apply `20260927120000_add_sales_reps.sql` **before
+pushing the new application to main**. Every account, order, invoice and admin
+page reads its columns — `users.customer_code`, the rep columns on `users` and
+`orders`, and `orders.pay_token` — so the old schema breaks those pages the
+moment the new code runs. The migration gives every existing customer a
+seven-digit ID (the last seven digits of their phone where free, otherwise a
+random one) and every existing order a pay token; it moves no data between
+customers and credits no rep with any past order. `db:verify:remote` checks
+its four tables, the new columns and constraints, the four unique indexes
+(`users_customer_code_key`, `orders_pay_token_key`, `sales_reps_username_key`,
+`sales_reps_referral_code_key`) and the migration version.
+
 The storefront's bare root redirects to `/fa`; `/en/...` remains available
 through the language switch. This is a fixed application default, with no admin
 language setting.
