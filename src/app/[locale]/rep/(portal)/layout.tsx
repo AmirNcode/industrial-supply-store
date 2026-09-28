@@ -23,7 +23,10 @@ export default async function RepPortalLayout({
   const t = getDict(l);
   const rep = await requireRep(l);
 
-  const sections = [{ href: `/${l}/rep`, label: t.repHome, exact: true }];
+  const sections = [
+    { href: `/${l}/rep`, label: t.repHome, exact: true },
+    { href: `/${l}/rep/customers`, label: t.customers },
+  ];
 
   return (
     <div className="mx-auto max-w-[1240px] px-3 pt-3 pb-16">
@@ -41,7 +44,7 @@ export default async function RepPortalLayout({
           </form>
         </div>
       </nav>
-      <div className="min-w-0 pt-3">{children}</div>
+      <main className="min-w-0 pt-3">{children}</main>
     </div>
   );
 }
