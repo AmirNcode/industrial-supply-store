@@ -249,9 +249,11 @@ export async function changePasswordAction(formData: FormData): Promise<void> {
 /**
  * The first password a customer chooses after a rep or admin set one for them.
  *
- * No current password asked: the session was opened with the temporary one
- * moments ago. Refused for anyone not flagged, so it cannot become a way
- * around the current-password check on the ordinary change form.
+ * The temporary password is asked for again. A reset does not end the
+ * account's other sessions (see changePasswordAction), so without it any
+ * session still open from before — including one someone else took — could
+ * choose the password first and lock the customer out for good. Refused for
+ * anyone not flagged, so it cannot become a way around the ordinary form.
  */
 export async function setInitialPasswordAction(formData: FormData): Promise<void> {
   const locale = safeLocale(formData);
@@ -264,13 +266,18 @@ export async function setInitialPasswordAction(formData: FormData): Promise<void
   });
   if (!limit.allowed) redirect(`${back}?error=rate-limit`);
 
+  const current = boundedString(formData.get("currentPassword"), REQUEST_LIMITS.passwordChars, {
+    trim: false,
+  });
   const next = boundedString(formData.get("newPassword"), REQUEST_LIMITS.passwordChars, {
     trim: false,
   });
   const confirm = boundedString(formData.get("passwordAgain"), REQUEST_LIMITS.passwordChars, {
     trim: false,
   });
-  if (!next || !confirm) redirect(`${back}?error=invalid`);
+  if (!current || !next || !confirm) redirect(`${back}?error=invalid`);
+  const hash = await getPasswordHash(user.id);
+  if (!hash || !(await verifyPassword(current, hash))) redirect(`${back}?error=current-password`);
   if (next.length < MIN_PASSWORD_LENGTH) redirect(`${back}?error=short`);
   if (next !== confirm) redirect(`${back}?error=mismatch`);
 

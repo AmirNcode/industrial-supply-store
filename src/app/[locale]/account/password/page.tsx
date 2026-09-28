@@ -6,6 +6,7 @@ import { REQUEST_LIMITS } from "@/lib/requestLimits";
 import { MIN_PASSWORD_LENGTH } from "@/lib/password";
 
 const ERROR_KEY = {
+  "current-password": "currentPasswordWrong",
   short: "passwordTooShort",
   mismatch: "passwordMismatch",
   invalid: "invalidInput",
@@ -52,8 +53,10 @@ export default async function ChoosePasswordPage({
 
       <form action={setInitialPasswordAction} className="grid gap-3">
         <input type="hidden" name="locale" value={l} />
-        <PasswordField name="newPassword" label={t.newPassword} />
-        <PasswordField name="passwordAgain" label={t.passwordAgain} />
+        {/* Asked again on purpose: see setInitialPasswordAction. */}
+        <PasswordField name="currentPassword" label={t.tempPassword} autoComplete="current-password" />
+        <PasswordField name="newPassword" label={t.newPassword} autoComplete="new-password" />
+        <PasswordField name="passwordAgain" label={t.passwordAgain} autoComplete="new-password" />
         <button type="submit" className="btn-primary mt-1 w-full">
           {t.savePassword}
         </button>
@@ -69,7 +72,15 @@ export default async function ChoosePasswordPage({
   );
 }
 
-function PasswordField({ name, label }: { name: string; label: string }) {
+function PasswordField({
+  name,
+  label,
+  autoComplete,
+}: {
+  name: string;
+  label: string;
+  autoComplete: string;
+}) {
   return (
     <label className="block text-[12px]">
       <span className="mb-0.5 block font-bold">{label}</span>
@@ -77,8 +88,8 @@ function PasswordField({ name, label }: { name: string; label: string }) {
         type="password"
         name={name}
         dir="ltr"
-        autoComplete="new-password"
-        minLength={MIN_PASSWORD_LENGTH}
+        autoComplete={autoComplete}
+        minLength={autoComplete === "new-password" ? MIN_PASSWORD_LENGTH : undefined}
         maxLength={REQUEST_LIMITS.passwordChars}
         required
         className="w-full"
