@@ -2,6 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireRep } from "@/lib/repSession";
 import { listCustomersForRep } from "@/db/customerQueries";
+import { salesByCustomerForRep } from "@/db/repMoney";
+import { formatRial } from "@/lib/money";
 import { formatPersianDate, formatPersianDay, tehranToday } from "@/lib/persianCalendar";
 import { REQUEST_LIMITS } from "@/lib/requestLimits";
 import { isLocale, getDict, type Locale } from "@/lib/i18n";
@@ -20,7 +22,10 @@ export default async function RepCustomersPage({
   const { q } = await searchParams;
   const search = (typeof q === "string" ? q : "").slice(0, REQUEST_LIMITS.searchChars);
   const rep = await requireRep(l);
-  const customers = await listCustomersForRep(rep.id, search);
+  const [customers, sales] = await Promise.all([
+    listCustomersForRep(rep.id, search),
+    salesByCustomerForRep(rep.id),
+  ]);
   const today = tehranToday();
 
   return (
@@ -58,6 +63,7 @@ export default async function RepCustomersPage({
                 <th>{t.company}</th>
                 <th>{t.contactName}</th>
                 <th>{t.phone}</th>
+                <th className="num">{t.sales}</th>
                 <th>{t.lastOrder}</th>
                 <th>{t.nextFollowUp}</th>
               </tr>
@@ -75,6 +81,7 @@ export default async function RepCustomersPage({
                   <td className="tech" dir="ltr">
                     {customer.phone}
                   </td>
+                  <td className="num tech tech-num">{formatRial(sales.get(customer.id) ?? 0, l)}</td>
                   <td>{customer.lastOrderAt ? formatPersianDate(customer.lastOrderAt, l) : "—"}</td>
                   <td
                     className={

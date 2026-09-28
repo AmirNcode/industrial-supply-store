@@ -5,6 +5,8 @@ import { listFollowUpsDue } from "@/db/customerQueries";
 import { ErrorBanner, SuccessBanner } from "@/components/Banners";
 import { ShareButton } from "@/components/ShareButton";
 import { siteOrigin } from "@/lib/siteOrigin";
+import { loadRepSummary } from "@/lib/repDashboard";
+import { RepDashboard } from "@/components/RepDashboard";
 import { formatPersianDay, tehranToday } from "@/lib/persianCalendar";
 import { isLocale, getDict, type Locale } from "@/lib/i18n";
 
@@ -13,16 +15,23 @@ export default async function RepHomePage({
   searchParams,
 }: {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{ ok?: string; error?: string }>;
+  searchParams: Promise<{ ok?: string; error?: string; year?: string | string[] }>;
 }) {
   const { locale } = await params;
   if (!isLocale(locale)) notFound();
   const l = locale as Locale;
   const t = getDict(l);
-  const { ok, error } = await searchParams;
+  const { ok, error, year: yearParam } = await searchParams;
   const rep = await requireRep(l);
   const today = tehranToday();
-  const [due, origin] = await Promise.all([listFollowUpsDue(rep.id, today), siteOrigin()]);
+  // Only a plausible Persian year picks the table's year; anything else is ignored.
+  const year = typeof yearParam === "string" ? Number(yearParam) : NaN;
+  const tableYear = Number.isInteger(year) && year >= 1300 && year <= 1600 ? year : undefined;
+  const [due, origin, summary] = await Promise.all([
+    listFollowUpsDue(rep.id, today),
+    siteOrigin(),
+    loadRepSummary(rep.id, tableYear),
+  ]);
   const referralLink = `${origin}/${l}/r/${rep.referralCode}`;
 
   return (
@@ -33,6 +42,8 @@ export default async function RepHomePage({
       {ok === "password" && <SuccessBanner>{t.passwordChanged}</SuccessBanner>}
       {/* Every rep write that hits its rate limit lands here. */}
       {error === "rate-limit" && <ErrorBanner>{t.rateLimited}</ErrorBanner>}
+
+      <RepDashboard locale={l} summary={summary} yearHref={(y) => `/${l}/rep?year=${y}`} />
 
       <section className="mb-4 border border-[var(--color-rule)] p-3">
         <h2 className="mb-1 text-[13px] font-bold">{t.referralLink}</h2>

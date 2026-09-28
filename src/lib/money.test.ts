@@ -6,6 +6,7 @@ import {
   formatMoneyExact,
   formatPrice,
   formatPriceBare,
+  formatRial,
   invoiceCurrencyFor,
   isCurrency,
   isPriceDisplayMode,
@@ -80,4 +81,10 @@ test("isCurrency accepts ISO USD and IRR only", () => {
   assert.equal(isCurrency("IRT"), false);
   assert.equal(isCurrency("usd"), false);
   assert.equal(isCurrency(""), false);
+});
+
+test("a whole-rial amount reads with the reader's digits and unit", () => {
+  assert.equal(formatRial(1234567, "en"), "1,234,567 IRR");
+  assert.equal(formatRial(1234567, "fa"), "۱٬۲۳۴٬۵۶۷ ریال");
+  assert.equal(formatRial(0, "en"), "0 IRR");
 });

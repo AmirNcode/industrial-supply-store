@@ -93,6 +93,15 @@ export function formatPrice(
   return rialWithUnit(toCatalogRial(cents, rate), locale);
 }
 
+/**
+ * An amount already in whole rial — a rep's sales, commission or payout —
+ * never a catalog price in cents. No catalog rounding: these are totals of
+ * exact invoice amounts, and a rep compares them with what they were paid.
+ */
+export function formatRial(rial: number, locale: Locale): string {
+  return rialWithUnit(Math.round(rial), locale);
+}
+
 /** Exact conversion to a whole Rial, for invoices where catalog rounding is invalid. */
 export function formatPriceExact(
   cents: number,

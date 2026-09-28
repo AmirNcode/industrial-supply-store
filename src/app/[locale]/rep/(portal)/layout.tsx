@@ -27,6 +27,7 @@ export default async function RepPortalLayout({
     { href: `/${l}/rep`, label: t.repHome, exact: true },
     { href: `/${l}/rep/customers`, label: t.customers },
     { href: `/${l}/rep/orders`, label: t.ordersTab },
+    { href: `/${l}/rep/commission`, label: t.commission },
   ];
 
   return (
