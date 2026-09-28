@@ -33,7 +33,7 @@ export default async function RepPortalLayout({
       <nav className="admin-tabs">
         <span className="admin-tabs-brand">{t.repPortal}</span>
         <PanelTabs sections={sections} />
-        <div className="ms-auto flex flex-wrap items-baseline gap-3 text-[11px]">
+        <div className="admin-tabs-aside ms-auto flex flex-wrap items-baseline gap-3 text-[11px]">
           <span className="text-[var(--color-ink-muted)]">{rep.name}</span>
           <Link href={`/${l}/rep/password`}>{t.changePassword}</Link>
           <form action={repSignOutAction}>

@@ -65,7 +65,7 @@ export default async function AdminPanelLayout({
         <PanelTabs sections={sections} />
 
         {!DEMO_MODE && (
-          <form action={logoutAction} className="ms-auto">
+          <form action={logoutAction} className="admin-tabs-aside ms-auto">
             <input type="hidden" name="locale" value={l} />
             <button type="submit" className="text-[11px] underline">
               {t.signOut}

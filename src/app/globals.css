@@ -527,6 +527,43 @@ html[lang="fa"] .spec-table thead th {
   border-bottom-color: #fff;
 }
 
+/* Phones. The admin's five tabs, or the rep portal's tabs beside the rep's own
+   links, do not fit one row at 390px, and a strip that overflows makes a phone
+   zoom the whole page out. So the account links take a row of their own above,
+   and the tabs wrap as bordered buttons: the folder-tab join only reads on a
+   single row. */
+@media (max-width: 639px) {
+  .admin-tabs {
+    flex-wrap: wrap;
+    align-items: center;
+    row-gap: 6px;
+    padding-bottom: 6px;
+  }
+  .admin-tabs-brand {
+    padding-bottom: 0;
+  }
+  .admin-tabs-aside {
+    order: -1;
+    flex-basis: 100%;
+    display: flex;
+    justify-content: flex-end;
+  }
+  .admin-tabs-list {
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-bottom: 0;
+  }
+  .admin-tab {
+    border-color: var(--color-rule);
+    border-radius: 3px;
+  }
+  .admin-tab[aria-current="page"] {
+    background: var(--color-navy);
+    border-color: var(--color-navy);
+    color: #fff;
+  }
+}
+
 /* Collapsible category groups on the admin products page. The marker is styled
    rather than hidden — with every group closed by default, the triangle is the
    only thing saying these open at all. */
