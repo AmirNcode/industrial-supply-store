@@ -30,6 +30,7 @@
     "db:reconcile:apply": "tsx scripts/reconcile-data.mts --apply",
     "db:studio": "drizzle-kit studio",
     "db:seed": "tsx src/seed/index.ts",
+    "db:seed:reps": "tsx scripts/seed-reps.mts",
     "db:reset": "npm run db:bootstrap:local",
     "db:rename-orders": "tsx scripts/rename-quotes-to-orders.mts",
     "db:column-tiers": "tsx scripts/add-column-tiers.mts",
