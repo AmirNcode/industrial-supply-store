@@ -13,7 +13,7 @@ import {
   getRepById,
   setRepPassword,
 } from "./repQueries";
-import { createUser, findUserForSignIn } from "./userQueries";
+import { createUser, findUserForSignIn, setPassword, getUserById } from "./userQueries";
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 type Tx = TransactionSql<{}>;
@@ -209,5 +209,28 @@ test("self sign-up gets the phone's digits as its ID, or a random one when taken
     assert.equal(await createUser({ ...base, email: first.email! }), "email-taken");
   } finally {
     if (ids.length) await sql`DELETE FROM users WHERE id = ANY(${ids})`;
+  }
+});
+
+test("a reset password must be replaced; the replacement clears the flag", async () => {
+  assertLocalDatabase();
+  const created = await createUser({
+    email: `${randomUUID()}@example.invalid`,
+    passwordHash: "x",
+    company: "C",
+    contactName: "N",
+    phone: "12",
+    locale: "en",
+    origin: "self",
+    repId: null,
+  });
+  if (created === "email-taken") throw new Error("unexpected");
+  try {
+    await setPassword(created.id, "reset-hash", true);
+    assert.equal((await getUserById(created.id))?.mustChangePassword, true);
+    await setPassword(created.id, "own-hash", false);
+    assert.equal((await getUserById(created.id))?.mustChangePassword, false);
+  } finally {
+    await sql`DELETE FROM users WHERE id = ${created.id}`;
   }
 });

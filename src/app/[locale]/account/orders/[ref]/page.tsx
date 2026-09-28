@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { currentUserId } from "@/lib/session";
+import { currentUser } from "@/lib/session";
 import { getOrderForUser } from "@/db/accountQueries";
 import { getFxRate, getPriceDisplayMode } from "@/lib/fx";
 import { OrderStatusPill } from "@/components/OrderStatusPill";
@@ -25,10 +25,11 @@ export default async function AccountOrderPage({
   const l = locale as Locale;
   const t = getDict(l);
 
-  const userId = await currentUserId();
-  if (!userId) redirect(`/${l}/account/signin`);
+  const user = await currentUser();
+  if (!user) redirect(`/${l}/account/signin`);
+  if (user.mustChangePassword) redirect(`/${l}/account/password`);
 
-  const found = await getOrderForUser(userId, ref);
+  const found = await getOrderForUser(user.id, ref);
   // 404 rather than 403: a 403 would confirm the reference exists.
   if (!found) notFound();
   const { order, items } = found;

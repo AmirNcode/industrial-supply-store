@@ -383,7 +383,7 @@ export async function resetCustomerPasswordAction(formData: FormData): Promise<v
   if (!userId) redirect(`/${locale}/admin/orders?error=no-account`);
 
   const generated = randomBytes(9).toString("base64url");
-  await setPassword(userId, await hashPassword(generated));
+  await setPassword(userId, await hashPassword(generated), true);
 
   /*
    * Handed back in a short-lived cookie, not in the query string.

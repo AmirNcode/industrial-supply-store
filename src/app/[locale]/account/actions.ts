@@ -122,7 +122,8 @@ export async function signInAction(formData: FormData): Promise<void> {
   // The stored preference decides where you land, and only that. Every page
   // still reads its language from the URL, so a link someone shares opens in
   // the language they meant rather than the language the recipient prefers.
-  redirect(`/${isLocale(user.locale) ? user.locale : locale}/account`);
+  const landing = isLocale(user.locale) ? user.locale : locale;
+  redirect(user.mustChangePassword ? `/${landing}/account/password` : `/${landing}/account`);
 }
 
 export async function signOutAction(formData: FormData): Promise<void> {
@@ -222,6 +223,38 @@ export async function changePasswordAction(formData: FormData): Promise<void> {
     redirect(`/${locale}/account?error=mismatch#profile`);
   }
 
-  await setPassword(user.id, await hashPassword(next));
+  await setPassword(user.id, await hashPassword(next), false);
+  redirect(`/${locale}/account?ok=password#profile`);
+}
+
+/**
+ * The first password a customer chooses after a rep or admin set one for them.
+ *
+ * No current password asked: the session was opened with the temporary one
+ * moments ago. Refused for anyone not flagged, so it cannot become a way
+ * around the current-password check on the ordinary change form.
+ */
+export async function setInitialPasswordAction(formData: FormData): Promise<void> {
+  const locale = safeLocale(formData);
+  const user = await currentUser();
+  if (!user) redirect(`/${locale}/account/signin`);
+  if (!user.mustChangePassword) redirect(`/${locale}/account`);
+  const back = `/${locale}/account/password`;
+  const limit = await consumeRateLimit("account:write", RATE_LIMITS.accountWrite, {
+    accountId: user.id,
+  });
+  if (!limit.allowed) redirect(`${back}?error=rate-limit`);
+
+  const next = boundedString(formData.get("newPassword"), REQUEST_LIMITS.passwordChars, {
+    trim: false,
+  });
+  const confirm = boundedString(formData.get("passwordAgain"), REQUEST_LIMITS.passwordChars, {
+    trim: false,
+  });
+  if (!next || !confirm) redirect(`${back}?error=invalid`);
+  if (next.length < MIN_PASSWORD_LENGTH) redirect(`${back}?error=short`);
+  if (next !== confirm) redirect(`${back}?error=mismatch`);
+
+  await setPassword(user.id, await hashPassword(next), false);
   redirect(`/${locale}/account?ok=password#profile`);
 }

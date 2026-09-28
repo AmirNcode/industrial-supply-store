@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { currentUser } from "@/lib/session";
 import { listOrdersForUser } from "@/db/accountQueries";
 import { getFxRate, getPriceDisplayMode } from "@/lib/fx";
@@ -55,6 +55,7 @@ export default async function AccountPage({
       </main>
     );
   }
+  if (user.mustChangePassword) redirect(`/${l}/account/password`);
 
   const [orders, rate, priceDisplayMode] = await Promise.all([
     listOrdersForUser(user.id),

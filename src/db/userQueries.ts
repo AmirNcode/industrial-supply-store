@@ -130,8 +130,20 @@ export async function updateProfile(
   `;
 }
 
-export async function setPassword(userId: string, passwordHash: string): Promise<void> {
-  await sql`UPDATE users SET password_hash = ${passwordHash} WHERE id = ${userId}`;
+/**
+ * `mustChange` is true for a password someone else chose — a rep or admin
+ * reset — so the customer replaces it at their next sign-in, and false for one
+ * the customer chose themselves.
+ */
+export async function setPassword(
+  userId: string,
+  passwordHash: string,
+  mustChange: boolean,
+): Promise<void> {
+  await sql`
+    UPDATE users SET password_hash = ${passwordHash}, must_change_password = ${mustChange}
+    WHERE id = ${userId}
+  `;
 }
 
 /**
