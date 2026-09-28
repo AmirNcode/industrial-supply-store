@@ -14,6 +14,16 @@ import {
   setRepPassword,
 } from "./repQueries";
 import { createUser, findUserForSignIn, setPassword, getUserById } from "./userQueries";
+import {
+  assignCustomer,
+  createCustomerForRep,
+  getCustomerForRep,
+  listCustomersForRep,
+  resetCustomerPasswordForRep,
+  setFollowUpForRep,
+  updateCustomerForRep,
+} from "./customerQueries";
+import { addNoteForRep, listNotes } from "./noteQueries";
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 type Tx = TransactionSql<{}>;
@@ -232,5 +242,83 @@ test("a reset password must be replaced; the replacement clears the flag", async
     assert.equal((await getUserById(created.id))?.mustChangePassword, false);
   } finally {
     await sql`DELETE FROM users WHERE id = ${created.id}`;
+  }
+});
+
+function randomPhone(): string {
+  return `0912${String(Math.floor(Math.random() * 10_000_000)).padStart(7, "0")}`;
+}
+
+test("a rep reads and changes only their own customers", async () => {
+  assertLocalDatabase();
+  const suffix = randomUUID().slice(0, 8);
+  const repIds: string[] = [];
+  const userIds: string[] = [];
+  try {
+    const a = await createRep({ username: `ca-${suffix}`, name: "A", phone: "", email: "", commissionRateBp: 250, passwordHash: "x" });
+    const b = await createRep({ username: `cb-${suffix}`, name: "B", phone: "", email: "", commissionRateBp: 250, passwordHash: "x" });
+    if (a === "username-taken" || b === "username-taken") throw new Error("username clash");
+    repIds.push(a.id, b.id);
+
+    const phone = randomPhone();
+    const input = { company: `Co ${suffix}`, contactName: "N", phone, email: null, address: "", city: "" };
+    const created = await createCustomerForRep(a.id, { ...input, codeChoice: "phone", passwordHash: "x", locale: "fa" });
+    if (created.kind !== "created") throw new Error(created.kind);
+    userIds.push(created.id);
+    assert.equal(created.customerCode, phone.slice(-7));
+
+    const mine = await getCustomerForRep(a.id, created.id);
+    assert.equal(mine?.origin, "rep");
+    assert.equal(mine?.repEarnsCommission, true);
+    const [flag] = await sql<{ must: boolean }[]>`SELECT must_change_password AS must FROM users WHERE id = ${created.id}`;
+    assert.equal(flag.must, true);
+
+    // Rep B: every path reads as not found and changes nothing.
+    assert.equal(await getCustomerForRep(b.id, created.id), null);
+    assert.equal(await updateCustomerForRep(b.id, created.id, { ...input, company: "Hijacked" }), "not-found");
+    assert.equal(await resetCustomerPasswordForRep(b.id, created.id, "y"), null);
+    assert.equal(await setFollowUpForRep(b.id, created.id, "2030-01-01"), false);
+    assert.equal(await addNoteForRep(b.id, created.id, "sneaky"), false);
+    assert.equal((await listCustomersForRep(b.id, "")).some((c) => c.id === created.id), false);
+    assert.equal((await getCustomerForRep(a.id, created.id))?.company, `Co ${suffix}`);
+    assert.equal((await listNotes(created.id)).length, 0);
+
+    // Rep A can, and search finds by ID and by phone digits.
+    assert.equal(await addNoteForRep(a.id, created.id, "Called about O-rings"), true);
+    assert.equal((await listNotes(created.id))[0]?.body, "Called about O-rings");
+    assert.equal(await setFollowUpForRep(a.id, created.id, "2030-01-01"), true);
+    assert.equal((await listCustomersForRep(a.id, created.customerCode))[0]?.id, created.id);
+    assert.equal((await listCustomersForRep(a.id, phone.slice(-5))).some((c) => c.id === created.id), true);
+
+    // The same phone again: its digits are taken, and the rep is told so.
+    assert.deepEqual(
+      await createCustomerForRep(a.id, { ...input, codeChoice: "phone", passwordHash: "x", locale: "fa" }),
+      { kind: "code-taken" },
+    );
+    const random = await createCustomerForRep(a.id, { ...input, codeChoice: "random", passwordHash: "x", locale: "fa" });
+    if (random.kind !== "created") throw new Error(random.kind);
+    userIds.push(random.id);
+    assert.notEqual(random.customerCode, created.customerCode);
+    assert.deepEqual(
+      await createCustomerForRep(a.id, { ...input, phone: "123", codeChoice: "phone", passwordHash: "x", locale: "fa" }),
+      { kind: "no-phone-code" },
+    );
+
+    const email = `${suffix}@example.invalid`;
+    const withEmail = await createCustomerForRep(a.id, { ...input, phone: randomPhone(), email, codeChoice: "phone", passwordHash: "x", locale: "fa" });
+    if (withEmail.kind !== "created") throw new Error(withEmail.kind);
+    userIds.push(withEmail.id);
+    assert.deepEqual(
+      await createCustomerForRep(a.id, { ...input, phone: randomPhone(), email: email.toUpperCase(), codeChoice: "phone", passwordHash: "x", locale: "fa" }),
+      { kind: "email-taken" },
+    );
+
+    // Moving the customer hands access and notes to the new rep.
+    assert.equal(await assignCustomer(created.id, b.id, false), "ok");
+    assert.equal(await getCustomerForRep(a.id, created.id), null);
+    assert.equal((await getCustomerForRep(b.id, created.id))?.repEarnsCommission, false);
+    assert.equal((await listNotes(created.id)).length, 1);
+  } finally {
+    await cleanupReps(repIds, userIds);
   }
 });
