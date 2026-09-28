@@ -12,6 +12,7 @@ import { isUuid } from "@/lib/ids";
 import { generateTempPassword } from "@/lib/tempPassword";
 import { tehranDatePlusDays } from "@/lib/persianCalendar";
 import { setShownOnce } from "@/lib/shownOnce";
+import { redirectFresh } from "@/lib/redirectFresh";
 import {
   findRepForSignIn,
   getRepPasswordHash,
@@ -220,5 +221,5 @@ export async function setFollowUpAction(formData: FormData): Promise<void> {
         : undefined;
   if (date === undefined) redirect(`/${locale}/rep/customers/${id}?error=invalid#follow-up`);
   if (!(await setFollowUpForRep(rep.id, id, date))) redirect(`/${locale}/rep/customers`);
-  redirect(`/${locale}/rep/customers/${id}#follow-up`);
+  redirectFresh(`/${locale}/rep/customers/${id}#follow-up`);
 }
