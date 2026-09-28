@@ -1,4 +1,5 @@
 import type { Locale } from "./i18n";
+import { latinDigits } from "./digits";
 
 /** Product prices are stored once, in USD cents. */
 export type Currency = "USD" | "IRR";
@@ -91,6 +92,18 @@ export function formatPrice(
 ): string {
   if (currency === "USD") return usdFmt.format(cents / 100);
   return rialWithUnit(toCatalogRial(cents, rate), locale);
+}
+
+/**
+ * A whole-rial amount typed by the admin — a payout or a target. Persian or
+ * ASCII digits, with whichever thousands separator was typed. A decimal point
+ * is refused rather than guessed at: rial has no fractions, and "12.500"
+ * could mean twelve and a half or twelve thousand five hundred.
+ */
+export function parseRialAmount(raw: string): number | null {
+  const value = latinDigits(raw.trim()).replace(/[\s,٬'_]/g, "");
+  if (!/^\d{1,15}$/.test(value)) return null;
+  return Number(value);
 }
 
 /**

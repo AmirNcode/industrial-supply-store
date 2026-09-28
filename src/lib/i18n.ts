@@ -827,6 +827,19 @@ const en = {
   inProgress: "Orders in progress",
   expectedCommission: "Expected commission",
   estimateShort: "estimate",
+  recordPayout: "Record payout",
+  payoutAmount: "Amount (rial)",
+  note: "Note",
+  payoutSaved: "Payout recorded.",
+  payoutDeleted: "Payout deleted.",
+  deletePayout: "Delete",
+  confirmDeletePayout: "Delete this payout record?",
+  amountInvalid: "Enter a whole number of rial.",
+  setTarget: "Set target",
+  targetFromThisMonth: "Applies from {month} until changed.",
+  targetSaved: "Target saved.",
+  repThisMonth: "Sales this month",
+  monthlyTargetOptional: "Monthly target in rial (optional)",
 };
 
 /**
@@ -1600,6 +1613,19 @@ const fa: typeof en = {
   inProgress: "سفارش‌های در جریان",
   expectedCommission: "پورسانت مورد انتظار",
   estimateShort: "برآورد",
+  recordPayout: "ثبت پرداخت",
+  payoutAmount: "مبلغ (ریال)",
+  note: "توضیح",
+  payoutSaved: "پرداخت ثبت شد.",
+  payoutDeleted: "پرداخت حذف شد.",
+  deletePayout: "حذف",
+  confirmDeletePayout: "این پرداخت حذف شود؟",
+  amountInvalid: "مبلغ را به ریال و بدون اعشار وارد کنید.",
+  setTarget: "تعیین هدف",
+  targetFromThisMonth: "از {month} تا زمان تغییر اعمال می‌شود.",
+  targetSaved: "هدف ذخیره شد.",
+  repThisMonth: "فروش این ماه",
+  monthlyTargetOptional: "هدف فروش ماهانه به ریال (اختیاری)",
 };
 
 export type Dict = typeof en;

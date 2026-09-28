@@ -10,6 +10,9 @@ import { generateTempPassword } from "@/lib/tempPassword";
 import { isValidUsername, normalizeUsername, parseCommissionPercent } from "@/lib/repAccount";
 import { isUuid } from "@/lib/ids";
 import { setShownOnce } from "@/lib/shownOnce";
+import { parseRialAmount } from "@/lib/money";
+import { persianYearMonth } from "@/lib/persianCalendar";
+import { addPayout, deletePayout, setTarget } from "@/db/repMoney";
 import {
   createRep,
   deactivateRep,
@@ -46,6 +49,10 @@ export async function createRepAction(formData: FormData): Promise<void> {
   const locale = safeLocale(formData);
   const parsed = parseRepForm(formData);
   if ("error" in parsed) redirect(`/${locale}/admin/reps?error=${parsed.error}`);
+  // Parsed before anything is written, so a bad target creates no rep.
+  const rawTarget = String(formData.get("target") ?? "").trim();
+  const target = rawTarget === "" ? null : parseRialAmount(rawTarget);
+  if (rawTarget !== "" && target === null) redirect(`/${locale}/admin/reps?error=amount`);
 
   const password = generateTempPassword();
   const created = await createRep({
@@ -53,6 +60,7 @@ export async function createRepAction(formData: FormData): Promise<void> {
     passwordHash: await hashPassword(normalizeRepPassword(password)),
   });
   if (created === "username-taken") redirect(`/${locale}/admin/reps?error=username-taken`);
+  if (target !== null) await setTarget(created.id, persianYearMonth(new Date()), target);
 
   await setShownOnce({ kind: "rep", subjectId: created.id, login: created.username, password });
   redirect(`/${locale}/admin/reps/${created.id}?ok=created`);
@@ -106,4 +114,41 @@ export async function reactivateRepAction(formData: FormData): Promise<void> {
   if (!isUuid(id)) redirect(`/${locale}/admin/reps`);
   await reactivateRep(id);
   redirect(`/${locale}/admin/reps/${id}?ok=reactivated`);
+}
+
+/** A payment made to the rep outside the site, recorded so "owed" stays true. */
+export async function addPayoutAction(formData: FormData): Promise<void> {
+  await assertAdminWrite();
+  const locale = safeLocale(formData);
+  const id = String(formData.get("repId") ?? "");
+  if (!isUuid(id)) redirect(`/${locale}/admin/reps`);
+  const amount = parseRialAmount(String(formData.get("amount") ?? ""));
+  const note = boundedString(formData.get("note"), 500, { allowEmpty: true });
+  if (amount === null || amount <= 0 || note === null) {
+    redirect(`/${locale}/admin/reps/${id}?error=amount#payouts`);
+  }
+  await addPayout(id, amount, note);
+  redirect(`/${locale}/admin/reps/${id}?ok=payout#payouts`);
+}
+
+export async function deletePayoutAction(formData: FormData): Promise<void> {
+  await assertAdminWrite();
+  const locale = safeLocale(formData);
+  const id = String(formData.get("repId") ?? "");
+  const payoutId = Number(formData.get("payoutId"));
+  if (!isUuid(id) || !Number.isSafeInteger(payoutId)) redirect(`/${locale}/admin/reps`);
+  await deletePayout(id, payoutId);
+  redirect(`/${locale}/admin/reps/${id}?ok=payout-deleted#payouts`);
+}
+
+/** A target from the current Persian month on, until changed. */
+export async function setTargetAction(formData: FormData): Promise<void> {
+  await assertAdminWrite();
+  const locale = safeLocale(formData);
+  const id = String(formData.get("repId") ?? "");
+  if (!isUuid(id)) redirect(`/${locale}/admin/reps`);
+  const amount = parseRialAmount(String(formData.get("target") ?? ""));
+  if (amount === null) redirect(`/${locale}/admin/reps/${id}?error=amount#target`);
+  await setTarget(id, persianYearMonth(new Date()), amount);
+  redirect(`/${locale}/admin/reps/${id}?ok=target#target`);
 }

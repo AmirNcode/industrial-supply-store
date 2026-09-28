@@ -10,6 +10,7 @@ import {
   invoiceCurrencyFor,
   isCurrency,
   isPriceDisplayMode,
+  parseRialAmount,
 } from "./money";
 
 const RATE = 1_100_000;
@@ -87,4 +88,16 @@ test("a whole-rial amount reads with the reader's digits and unit", () => {
   assert.equal(formatRial(1234567, "en"), "1,234,567 IRR");
   assert.equal(formatRial(1234567, "fa"), "۱٬۲۳۴٬۵۶۷ ریال");
   assert.equal(formatRial(0, "en"), "0 IRR");
+});
+
+test("a typed rial amount: any keyboard, any thousands separator, whole numbers only", () => {
+  assert.equal(parseRialAmount("12500000"), 12_500_000);
+  assert.equal(parseRialAmount("۱۲٬۵۰۰٬۰۰۰"), 12_500_000);
+  assert.equal(parseRialAmount("12,500,000"), 12_500_000);
+  assert.equal(parseRialAmount(" 12 500 000 "), 12_500_000);
+  assert.equal(parseRialAmount("12.5"), null);
+  assert.equal(parseRialAmount("-5"), null);
+  assert.equal(parseRialAmount(""), null);
+  assert.equal(parseRialAmount("abc"), null);
+  assert.equal(parseRialAmount("1".repeat(16)), null);
 });
