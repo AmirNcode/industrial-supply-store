@@ -31,6 +31,8 @@ import {
   updateCustomerForRep,
 } from "./customerQueries";
 import { addNoteForRep, listNotes } from "./noteQueries";
+import { submitOrderFromCartInTransaction } from "./orderSubmissionQueries";
+import { quoteCartFingerprint } from "@/lib/quoteSubmission";
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 type Tx = TransactionSql<{}>;
@@ -378,4 +380,85 @@ test("a customer sees their rep only while the rep is active; the profile keeps 
   } finally {
     await cleanupReps(repIds, userIds);
   }
+});
+
+async function cartWithOneLine(tx: Tx): Promise<{ cartId: string; fingerprint: string }> {
+  const suffix = randomUUID();
+  const [category] = await tx<{ id: number }[]>`
+    INSERT INTO categories (slug, path, name_en, name_fa)
+    VALUES (${`rep-${suffix}`}, ${`rep-${suffix}`}, 'Rep test', 'آزمایش') RETURNING id`;
+  const [family] = await tx<{ id: number }[]>`
+    INSERT INTO product_families (slug, category_id, name_en, name_fa)
+    VALUES (${`rep-family-${suffix}`}, ${category.id}, 'Rep family', 'خانواده') RETURNING id`;
+  const [product] = await tx<{ id: number }[]>`
+    INSERT INTO products (part_number, family_id, specs, price_cents,
+                          inventory_available, inventory_on_hold, inventory_sold)
+    VALUES (${`REP-${suffix}`}, ${family.id}, '{}'::jsonb, 1000, 100, 0, 0) RETURNING id`;
+  const [cart] = await tx<{ id: string }[]>`INSERT INTO carts DEFAULT VALUES RETURNING id`;
+  await tx`INSERT INTO cart_items (cart_id, product_id, qty) VALUES (${cart.id}, ${product.id}, 2)`;
+  return {
+    cartId: cart.id,
+    fingerprint: quoteCartFingerprint([{ productId: product.id, qty: 2, unitPriceCents: 1000 }]),
+  };
+}
+
+async function place(tx: Tx, userId: string | null, placedByRepId: string | null) {
+  const { cartId, fingerprint } = await cartWithOneLine(tx);
+  return submitOrderFromCartInTransaction(tx, {
+    cartId,
+    cartFingerprint: fingerprint,
+    submissionKey: randomUUID(),
+    locale: "en",
+    currency: "USD",
+    userId,
+    placedByRepId,
+    contact: { company: "C", contactName: "N", email: "", phone: "1", poNumber: "", address: "", city: "", country: "", notes: "" },
+  });
+}
+
+async function stampOf(tx: Tx, ref: string) {
+  const [row] = await tx<{ repId: string | null; rateBp: number | null; placedByRep: boolean }[]>`
+    SELECT rep_id AS "repId", commission_rate_bp AS "rateBp", placed_by_rep AS "placedByRep"
+    FROM orders WHERE ref = ${ref}`;
+  return row;
+}
+
+function created(result: Awaited<ReturnType<typeof place>>): string {
+  if (result.kind !== "created") throw new Error(`expected an order, got ${result.kind}`);
+  return result.ref;
+}
+
+test("the customer's rep, rate and eligibility are locked onto an order when it is placed", async () => {
+  assertLocalDatabase();
+  await rolledBack(async (tx) => {
+    const rep = await insertRep(tx, { rateBp: 250 });
+    const other = await insertRep(tx, { rateBp: 900 });
+    const eligible = await insertCustomer(tx, { repId: rep, earns: true });
+    const ineligible = await insertCustomer(tx, { repId: rep, earns: false });
+
+    const own = created(await place(tx, eligible, null));
+    assert.deepEqual(await stampOf(tx, own), { repId: rep, rateBp: 250, placedByRep: false });
+
+    const noCommission = created(await place(tx, ineligible, null));
+    assert.deepEqual(await stampOf(tx, noCommission), { repId: rep, rateBp: 0, placedByRep: false });
+
+    const byRep = created(await place(tx, eligible, rep));
+    assert.deepEqual(await stampOf(tx, byRep), { repId: rep, rateBp: 250, placedByRep: true });
+
+    // Later changes cannot reach back into a placed order.
+    await tx`UPDATE sales_reps SET commission_rate_bp = 900 WHERE id = ${rep}`;
+    await tx`UPDATE users SET rep_id = ${other} WHERE id = ${eligible}`;
+    assert.deepEqual(await stampOf(tx, own), { repId: rep, rateBp: 250, placedByRep: false });
+
+    // The first rep may no longer order for a customer who is now someone else's.
+    assert.deepEqual(await place(tx, eligible, rep), { kind: "customer-moved" });
+
+    // A locked-out rep is credited with nothing.
+    await tx`UPDATE sales_reps SET active = false WHERE id = ${other}`;
+    const afterLockout = created(await place(tx, eligible, null));
+    assert.deepEqual(await stampOf(tx, afterLockout), { repId: null, rateBp: null, placedByRep: false });
+
+    const guest = created(await place(tx, null, null));
+    assert.deepEqual(await stampOf(tx, guest), { repId: null, rateBp: null, placedByRep: false });
+  });
 });

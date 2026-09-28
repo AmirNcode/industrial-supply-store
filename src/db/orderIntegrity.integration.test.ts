@@ -117,6 +117,7 @@ test("quote replay and reservation allocation stay correct through the order lif
       locale: "en",
       currency: "USD",
       userId: null,
+      placedByRepId: null,
       contact: {
         company: "Integration Test",
         contactName: "Test Buyer",

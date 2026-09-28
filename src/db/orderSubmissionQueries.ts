@@ -32,6 +32,8 @@ export type SubmitOrderInput = {
   /** Currency selected by the customer-facing display policy at submission. */
   currency: Currency;
   userId: string | null;
+  /** The rep building this order for `userId`, or null when the customer or a guest places it. */
+  placedByRepId: string | null;
   contact: QuoteContact;
 };
 
@@ -39,7 +41,8 @@ export type SubmitOrderResult =
   | { kind: "created" | "replayed"; ref: string }
   | { kind: "cart-changed" }
   | { kind: "empty-cart" }
-  | { kind: "missing-cart" };
+  | { kind: "missing-cart" }
+  | { kind: "customer-moved" };
 
 const REF_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
@@ -63,6 +66,29 @@ async function cartLinesInTransaction(tx: Tx, cartId: string): Promise<CartLine[
     WHERE ci.cart_id = ${cartId}
     ORDER BY ci.added_at, ci.product_id
   `;
+}
+
+/**
+ * Who is credited, and at what rate — decided once, here, as the order is
+ * written. The customer's rep and that rep's rate are read inside the same
+ * transaction and copied onto the order, so moving the customer or changing
+ * the rate later cannot reach back into it. A customer who is not
+ * commission-eligible still credits their rep, at 0: the sale counts toward
+ * the rep's numbers, just not their commission. An inactive rep is credited
+ * with nothing — deactivation moves customers, so this is only the window
+ * between the two, and a locked-out rep earning from it would be wrong.
+ */
+async function creditFor(tx: Tx, userId: string): Promise<{ repId: string; rateBp: number } | null> {
+  const [row] = await tx<
+    { repId: string | null; active: boolean | null; rateBp: number | null; earns: boolean }[]
+  >`
+    SELECT u.rep_id AS "repId", r.active, r.commission_rate_bp AS "rateBp",
+           u.rep_earns_commission AS earns
+    FROM users u LEFT JOIN sales_reps r ON r.id = u.rep_id
+    WHERE u.id = ${userId}
+  `;
+  if (!row || row.repId === null || !row.active) return null;
+  return { repId: row.repId, rateBp: row.earns ? (row.rateBp ?? 0) : 0 };
 }
 
 /**
@@ -113,6 +139,14 @@ export async function submitOrderFromCartInTransaction(
     0,
   );
 
+  const credit = input.userId ? await creditFor(tx, input.userId) : null;
+  // A rep may only order for their own customer. Checked again here, inside
+  // the transaction, because the customer can be moved between the checkout
+  // page rendering and this write.
+  if (input.placedByRepId !== null && credit?.repId !== input.placedByRepId) {
+    return { kind: "customer-moved" };
+  }
+
   let order: { id: number; ref: string } | undefined;
   for (let attempt = 0; attempt < 10 && !order; attempt++) {
     const ref = quoteRef();
@@ -120,7 +154,7 @@ export async function submitOrderFromCartInTransaction(
       INSERT INTO orders (submission_key, ref, company, contact_name, email,
                           phone, po_number, address, city, country, notes,
                           locale, currency, total_cents, requested_total_cents,
-                          status, user_id)
+                          status, user_id, rep_id, commission_rate_bp, placed_by_rep)
       VALUES (
         ${input.submissionKey},
         ${ref},
@@ -138,7 +172,10 @@ export async function submitOrderFromCartInTransaction(
         ${totalCents},
         ${totalCents},
         'received',
-        ${input.userId}
+        ${input.userId},
+        ${credit?.repId ?? null},
+        ${credit ? credit.rateBp : null},
+        ${input.placedByRepId !== null}
       )
       ON CONFLICT DO NOTHING
       RETURNING id, ref

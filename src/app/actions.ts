@@ -195,6 +195,7 @@ export async function submitQuoteAction(formData: FormData) {
     locale,
     currency,
     userId,
+    placedByRepId: null,
     contact,
   });
 
@@ -204,6 +205,9 @@ export async function submitQuoteAction(formData: FormData) {
   if (result.kind === "empty-cart" || result.kind === "missing-cart") {
     redirect(`/${locale}/cart`);
   }
+  // Only a rep's order can be refused this way; kept so the handling stays
+  // exhaustive if this path ever passes a rep.
+  if (result.kind === "customer-moved") redirect(`/${locale}/quote?error=invalid`);
 
   // The order, item snapshots, stock hold and cart clear have all committed at
   // this point. A replay returns the same reference through the same redirect.
