@@ -9,8 +9,11 @@ import {
 } from "@/lib/fx";
 import { FxRatePanel } from "@/components/FxRatePanel";
 import { getSiteContact } from "@/lib/siteContact";
+import { getBankFields } from "@/lib/bankSettings";
+import { BankDetailsForm } from "@/components/BankDetailsForm";
 import {
   refreshFxRateAction,
+  saveBankDetailsAction,
   saveFxAction,
   savePriceDisplayModeAction,
   saveSiteContactAction,
@@ -24,22 +27,38 @@ export default async function AdminSettingsPage({
   searchParams,
 }: {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{ fx?: string; contact?: string; currency?: string }>;
+  searchParams: Promise<{ fx?: string; contact?: string; currency?: string; bank?: string }>;
 }) {
   const { locale } = await params;
   if (!isLocale(locale)) notFound();
   const l = locale as Locale;
   const t = getDict(l);
-  const { fx, contact: contactStatus, currency: currencyStatus } = await searchParams;
+  const {
+    fx,
+    contact: contactStatus,
+    currency: currencyStatus,
+    bank: bankStatus,
+  } = await searchParams;
 
-  const [fxSettings, rate, autoRate, market, priceDisplayMode, contact] = await Promise.all([
-    getFxSettings(),
-    getFxRate(),
-    getAutomaticRate(),
-    getMarketSummary(),
-    getPriceDisplayMode(),
-    getSiteContact(),
-  ]);
+  const [fxSettings, rate, autoRate, market, priceDisplayMode, contact, bankFields] =
+    await Promise.all([
+      getFxSettings(),
+      getFxRate(),
+      getAutomaticRate(),
+      getMarketSummary(),
+      getPriceDisplayMode(),
+      getSiteContact(),
+      getBankFields(),
+    ]);
+  const BANK_PROBLEM_KEY = {
+    card: "bankInvalidCard",
+    sheba: "bankInvalidSheba",
+    account: "bankInvalidAccount",
+    length: "bankTooLong",
+  } as const;
+  const bankProblems = (bankStatus ?? "")
+    .split(",")
+    .filter((problem): problem is keyof typeof BANK_PROBLEM_KEY => problem in BANK_PROBLEM_KEY);
 
   return (
     <>
@@ -109,6 +128,50 @@ export default async function AdminSettingsPage({
             {t.siteContactSave}
           </button>
         </form>
+      </section>
+
+      <section id="bank" className="mb-4 border border-[var(--color-rule)] p-3">
+        <h2 className="mb-1 text-[13px] font-bold">{t.bankSection}</h2>
+        <p className="mb-3 max-w-[680px] text-[11px] text-[var(--color-ink-muted)]">
+          {t.bankSectionHint}
+        </p>
+        {bankStatus === "saved" && <SuccessBanner>{t.bankSaved}</SuccessBanner>}
+        {/* The no-JavaScript path: the form checks in the browser first. */}
+        {bankProblems.length > 0 && (
+          <ErrorBanner>
+            {bankProblems.map((problem) => (
+              <span key={problem} className="block">
+                {t[BANK_PROBLEM_KEY[problem]]}
+              </span>
+            ))}
+          </ErrorBanner>
+        )}
+        <BankDetailsForm
+          action={saveBankDetailsAction}
+          locale={l}
+          initial={bankFields}
+          disabled={DEMO_MODE}
+          labels={{
+            fields: {
+              nameEn: t.bankNameEn,
+              nameFa: t.bankNameFa,
+              holderEn: t.bankHolderEn,
+              holderFa: t.bankHolderFa,
+              card: t.bankCard,
+              sheba: t.bankSheba,
+              account: t.bankAccount,
+              noteEn: t.bankNoteEn,
+              noteFa: t.bankNoteFa,
+            },
+            problems: {
+              card: t.bankInvalidCard,
+              sheba: t.bankInvalidSheba,
+              account: t.bankInvalidAccount,
+              length: t.bankTooLong,
+            },
+            save: t.bankSave,
+          }}
+        />
       </section>
 
       <section className="mb-4 border border-[var(--color-rule)] p-3">

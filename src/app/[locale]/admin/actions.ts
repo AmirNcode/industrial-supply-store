@@ -13,6 +13,8 @@ import { isFxMode, isPlausibleRate, parseRate } from "@/lib/fxRate";
 import { refreshMarketRate } from "@/lib/fxMarketUpdate";
 import { safeLocale } from "@/lib/i18n";
 import { saveSiteContact } from "@/lib/siteContact";
+import { validateBankFields } from "@/lib/bankDetails";
+import { saveBankFields } from "@/lib/bankSettings";
 import {
   normalizeContactEmail,
   normalizeContactPhone,
@@ -432,4 +434,31 @@ export async function addCommentAction(formData: FormData): Promise<void> {
 
   await addComment(id, body.slice(0, 4000));
   redirect(withFilter(`/${locale}/admin/orders?ok=comment`, statusFilter));
+}
+
+/**
+ * The bank account customers pay into by transfer. Every field is optional;
+ * card and Sheba numbers must pass their check digits, and one bad number
+ * refuses the whole save so a half-updated account is never shown.
+ */
+export async function saveBankDetailsAction(formData: FormData): Promise<void> {
+  await assertAdminWrite();
+  const locale = safeLocale(formData);
+  const read = (name: string) => String(formData.get(name) ?? "");
+  const result = validateBankFields({
+    nameEn: read("bankNameEn"),
+    nameFa: read("bankNameFa"),
+    holderEn: read("bankHolderEn"),
+    holderFa: read("bankHolderFa"),
+    card: read("bankCard"),
+    sheba: read("bankSheba"),
+    account: read("bankAccount"),
+    noteEn: read("bankNoteEn"),
+    noteFa: read("bankNoteFa"),
+  });
+  if (!result.ok) redirect(`/${locale}/admin/settings?bank=${result.problems.join(",")}#bank`);
+  await saveBankFields(result.values);
+  // No revalidation: bank details render only on dynamic pages (pay links and
+  // a customer's own order page), never on a cached one.
+  redirect(`/${locale}/admin/settings?bank=saved#bank`);
 }
