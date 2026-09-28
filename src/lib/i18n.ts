@@ -786,6 +786,18 @@ const en = {
   newOrder: "New order",
   change: "Change",
   reorderSkipped: "Not added — no longer sold:",
+  ordersTab: "Orders",
+  repOrderCreated: "Order placed. Share the pay link once it is priced — its status shows here.",
+  payLink: "Pay link",
+  sharePayLink: "Share pay link",
+  openPayPage: "Open pay page",
+  payLinkMessage: "{company}: your TEMEX order {ref}. View and pay here: {url}",
+  reorder: "Reorder",
+  reorderNotYours: "This customer is no longer yours, so the order cannot be repeated for them.",
+  reorderCartFull: "Your cart has no room for these items. Empty it and try again.",
+  commissionLocked: "Commission {percent}, locked when placed",
+  commissionNone: "No commission on this order",
+  filterAll: "All",
 };
 
 /**
@@ -1518,6 +1530,18 @@ const fa: typeof en = {
   newOrder: "سفارش جدید",
   change: "تغییر",
   reorderSkipped: "افزوده نشد — دیگر فروخته نمی‌شود:",
+  ordersTab: "سفارش‌ها",
+  repOrderCreated: "سفارش ثبت شد. پس از قیمت‌گذاری، لینک پرداخت را ارسال کنید؛ وضعیت آن همین‌جا نمایش داده می‌شود.",
+  payLink: "لینک پرداخت",
+  sharePayLink: "ارسال لینک پرداخت",
+  openPayPage: "باز کردن صفحهٔ پرداخت",
+  payLinkMessage: "{company}: سفارش {ref} شما در تمکس. مشاهده و پرداخت: {url}",
+  reorder: "سفارش دوباره",
+  reorderNotYours: "این مشتری دیگر به شما واگذار نشده، بنابراین تکرار سفارش برای او ممکن نیست.",
+  reorderCartFull: "سبد شما جای این اقلام را ندارد. آن را خالی کنید و دوباره تلاش کنید.",
+  commissionLocked: "پورسانت {percent}، ثابت‌شده هنگام ثبت",
+  commissionNone: "این سفارش پورسانت ندارد",
+  filterAll: "همه",
 };
 
 export type Dict = typeof en;

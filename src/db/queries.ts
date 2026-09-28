@@ -138,7 +138,8 @@ const CATEGORY_VISIBLE = sql`
   )
 `;
 
-const FAMILY_VISIBLE = sql`f.is_visible AND ${CATEGORY_VISIBLE}`;
+/** Exported for Reorder, which must refuse what quick order refuses. Aliases `f` and `c`. */
+export const FAMILY_VISIBLE = sql`f.is_visible AND ${CATEGORY_VISIBLE}`;
 
 export async function getTopCategories(): Promise<CategoryRow[]> {
   return sql<CategoryRow[]>`

@@ -116,7 +116,12 @@ export default async function RepCustomerPage({
       />
       <CustomerNotes locale={l} notes={notes} action={addCustomerNoteAction} hidden={hidden} />
 
-      <CustomerOrderList locale={l} orders={orders} liveRate={liveRate} />
+      <CustomerOrderList
+        locale={l}
+        orders={orders}
+        liveRate={liveRate}
+        orderHref={(ref) => `/${l}/rep/orders/${ref}`}
+      />
 
       <section className={section}>
         <h2 className="mb-3 text-[13px] font-bold">{t.details}</h2>

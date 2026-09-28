@@ -14,6 +14,8 @@ import { tehranDatePlusDays } from "@/lib/persianCalendar";
 import { setShownOnce } from "@/lib/shownOnce";
 import { redirectFresh } from "@/lib/redirectFresh";
 import { setOrderingFor } from "@/lib/repOrderContext";
+import { CartCapacityError, addLines } from "@/lib/cart";
+import { getReorderLines } from "@/db/repOrderQueries";
 import {
   findRepForSignIn,
   getRepPasswordHash,
@@ -235,4 +237,28 @@ export async function startOrderAction(formData: FormData): Promise<void> {
   // Quick order first: reps usually know the part numbers. The catalog is one
   // click away in the masthead, and the choice survives either route.
   redirect(`/${locale}/quick-order`);
+}
+
+/**
+ * Repeat an order for the same customer: its lines go into the rep's cart,
+ * the customer is remembered for checkout, and anything no longer sold is
+ * named on the cart page rather than silently dropped.
+ */
+export async function reorderAction(formData: FormData): Promise<void> {
+  const { rep, locale } = await repForWrite(formData);
+  const ref = boundedString(formData.get("ref"), 20) ?? "";
+  const found = await getReorderLines(rep.id, ref);
+  if (!found) redirect(`/${locale}/rep/orders`);
+  if (!found.customerId) redirect(`/${locale}/rep/orders/${ref}?error=not-yours`);
+  try {
+    await addLines(found.lines);
+  } catch (error) {
+    if (error instanceof CartCapacityError) redirect(`/${locale}/rep/orders/${ref}?error=cart-full`);
+    throw error;
+  }
+  await setOrderingFor(found.customerId);
+  // Part numbers are not sensitive, and the list is short: carried in the URL
+  // so the cart can say what was left out.
+  const skipped = found.missing.slice(0, 20).join(",");
+  redirect(`/${locale}/cart${skipped ? `?skipped=${encodeURIComponent(skipped)}` : ""}`);
 }

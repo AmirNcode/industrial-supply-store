@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { getDict, type Locale } from "@/lib/i18n";
 import { formatPrice } from "@/lib/money";
 import { formatPersianDate } from "@/lib/persianCalendar";
@@ -13,10 +14,13 @@ export function CustomerOrderList({
   locale,
   orders,
   liveRate,
+  orderHref,
 }: {
   locale: Locale;
   orders: AccountOrderRow[];
   liveRate: number;
+  /** Where a reference links to, when the viewer has a page for one order. */
+  orderHref?: (ref: string) => string;
 }) {
   const t = getDict(locale);
   return (
@@ -28,9 +32,15 @@ export function CustomerOrderList({
         <ul className="grid gap-1 text-[12px]">
           {orders.map((order) => (
             <li key={order.id} className="flex flex-wrap items-baseline gap-3">
-              <span className="tech" dir="ltr">
-                {order.ref}
-              </span>
+              {orderHref ? (
+                <Link href={orderHref(order.ref)} className="tech" dir="ltr">
+                  {order.ref}
+                </Link>
+              ) : (
+                <span className="tech" dir="ltr">
+                  {order.ref}
+                </span>
+              )}
               <OrderStatusPill locale={locale} status={order.status} />
               <span className="text-[var(--color-ink-muted)]">
                 {formatPersianDate(order.createdAt, locale)}

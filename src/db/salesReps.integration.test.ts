@@ -34,6 +34,7 @@ import { addNoteForRep, listNotes } from "./noteQueries";
 import { submitOrderFromCartInTransaction } from "./orderSubmissionQueries";
 import { quoteCartFingerprint } from "@/lib/quoteSubmission";
 import { getOrderByPayToken } from "./accountQueries";
+import { getOrderForRep, getReorderLines, listOrdersForRep } from "./repOrderQueries";
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 type Tx = TransactionSql<{}>;
@@ -475,5 +476,124 @@ test("a pay token opens its own order and nothing else", async () => {
     assert.equal(await getOrderByPayToken("0".repeat(64)), null);
   } finally {
     await sql`DELETE FROM orders WHERE id = ${order.id}`;
+  }
+});
+
+test("a rep sees their customers' orders and their own credit, and nothing else", async () => {
+  assertLocalDatabase();
+  const suffix = randomUUID().slice(0, 8);
+  const repIds: string[] = [];
+  const userIds: string[] = [];
+  const orderIds: number[] = [];
+  try {
+    const a = await createRep({ username: `oa-${suffix}`, name: "A", phone: "", email: "", commissionRateBp: 250, passwordHash: "x" });
+    const b = await createRep({ username: `ob-${suffix}`, name: "B", phone: "", email: "", commissionRateBp: 250, passwordHash: "x" });
+    if (a === "username-taken" || b === "username-taken") throw new Error("username clash");
+    repIds.push(a.id, b.id);
+    const [customer] = await sql<{ id: string }[]>`
+      INSERT INTO users (email, password_hash, customer_code, rep_id, origin, origin_rep_id, rep_earns_commission)
+      VALUES (${`${suffix}@example.invalid`}, 'x', ${randomCustomerCode()}, ${a.id}, 'rep', ${a.id}, true)
+      RETURNING id`;
+    userIds.push(customer.id);
+    const [order] = await sql<{ id: number; ref: string }[]>`
+      INSERT INTO orders (ref, company, contact_name, email, total_cents, requested_total_cents,
+                          user_id, rep_id, commission_rate_bp, placed_by_rep)
+      VALUES (${`ORD-${suffix.slice(0, 6).toUpperCase()}`}, 'Co', 'N', '', 1000, 1000,
+              ${customer.id}, ${a.id}, 250, true)
+      RETURNING id, ref`;
+    orderIds.push(order.id);
+    await sql`
+      INSERT INTO order_items (order_id, product_id, part_number, family_name, qty,
+                               unit_price_cents, requested_unit_price_cents)
+      VALUES (${order.id}, NULL, 'GONE-1', 'F', 2, 500, 500)`;
+
+    assert.equal((await listOrdersForRep(a.id, null)).some((o) => o.ref === order.ref), true);
+    assert.equal((await listOrdersForRep(b.id, null)).some((o) => o.ref === order.ref), false);
+    assert.equal(await getOrderForRep(b.id, order.ref), null);
+    assert.equal(await getReorderLines(b.id, order.ref), null);
+
+    const mine = await getOrderForRep(a.id, order.ref);
+    assert.equal(mine?.order.creditedToMe, true);
+    assert.equal(mine?.order.commissionRateBp, 250);
+    assert.deepEqual(await getReorderLines(a.id, order.ref), {
+      customerId: customer.id,
+      lines: [],
+      missing: ["GONE-1"],
+    });
+
+    // Moved to rep B: A keeps sight of the order it is credited with, but can
+    // no longer reorder for the customer; B sees it without the credit.
+    await sql`UPDATE users SET rep_id = ${b.id} WHERE id = ${customer.id}`;
+    assert.equal((await getOrderForRep(a.id, order.ref))?.order.customerIsMine, false);
+    assert.equal((await getReorderLines(a.id, order.ref))?.customerId, null);
+    assert.equal((await getOrderForRep(b.id, order.ref))?.order.creditedToMe, false);
+  } finally {
+    if (orderIds.length) await sql`DELETE FROM orders WHERE id = ANY(${orderIds})`;
+    await cleanupReps(repIds, userIds);
+  }
+});
+
+test("reorder leaves out products the admin has since hidden from the catalog", async () => {
+  assertLocalDatabase();
+  const suffix = randomUUID().slice(0, 8);
+  const repIds: string[] = [];
+  const userIds: string[] = [];
+  let orderId: number | null = null;
+  let categoryId: number | null = null;
+  try {
+    const rep = await createRep({ username: `oh-${suffix}`, name: "H", phone: "", email: "", commissionRateBp: 250, passwordHash: "x" });
+    if (rep === "username-taken") throw new Error("username clash");
+    repIds.push(rep.id);
+    const [customer] = await sql<{ id: string }[]>`
+      INSERT INTO users (email, password_hash, customer_code, rep_id, origin, origin_rep_id, rep_earns_commission)
+      VALUES (${`${suffix}-h@example.invalid`}, 'x', ${randomCustomerCode()}, ${rep.id}, 'rep', ${rep.id}, true)
+      RETURNING id`;
+    userIds.push(customer.id);
+    const [category] = await sql<{ id: number }[]>`
+      INSERT INTO categories (slug, path, name_en, name_fa)
+      VALUES (${`hid-${suffix}`}, ${`hid-${suffix}`}, 'Hidden test', 'آزمایش') RETURNING id`;
+    categoryId = category.id;
+    const [visible] = await sql<{ id: number }[]>`
+      INSERT INTO product_families (slug, category_id, name_en, name_fa)
+      VALUES (${`vis-${suffix}`}, ${category.id}, 'Visible', 'دیده') RETURNING id`;
+    const [hidden] = await sql<{ id: number }[]>`
+      INSERT INTO product_families (slug, category_id, name_en, name_fa, is_visible)
+      VALUES (${`hid-${suffix}`}, ${category.id}, 'Hidden', 'پنهان', false) RETURNING id`;
+    const product = async (partNumber: string, familyId: number) => {
+      const [row] = await sql<{ id: number }[]>`
+        INSERT INTO products (part_number, family_id, specs, price_cents,
+                              inventory_available, inventory_on_hold, inventory_sold)
+        VALUES (${partNumber}, ${familyId}, '{}'::jsonb, 100, 100, 0, 0) RETURNING id`;
+      return row.id;
+    };
+    const kept = await product(`KEEP-${suffix}`, visible.id);
+    const gone = await product(`HIDE-${suffix}`, hidden.id);
+    const [order] = await sql<{ id: number; ref: string }[]>`
+      INSERT INTO orders (ref, company, contact_name, email, total_cents, requested_total_cents,
+                          user_id, rep_id, commission_rate_bp, placed_by_rep)
+      VALUES (${`ORD-H${suffix.slice(0, 5).toUpperCase()}`}, 'Co', 'N', '', 200, 200,
+              ${customer.id}, ${rep.id}, 250, true)
+      RETURNING id, ref`;
+    orderId = order.id;
+    await sql`
+      INSERT INTO order_items (order_id, product_id, part_number, family_name, qty,
+                               unit_price_cents, requested_unit_price_cents)
+      VALUES (${order.id}, ${kept}, ${`KEEP-${suffix}`}, 'Visible', 1, 100, 100),
+             (${order.id}, ${gone}, ${`HIDE-${suffix}`}, 'Hidden', 1, 100, 100)`;
+
+    // Quick order refuses hidden products; Reorder must not bring them back.
+    assert.deepEqual(await getReorderLines(rep.id, order.ref), {
+      customerId: customer.id,
+      lines: [{ productId: kept, qty: 1 }],
+      missing: [`HIDE-${suffix}`],
+    });
+  } finally {
+    if (orderId !== null) await sql`DELETE FROM orders WHERE id = ${orderId}`;
+    if (categoryId !== null) {
+      await sql`DELETE FROM products WHERE family_id IN (SELECT id FROM product_families WHERE category_id = ${categoryId})`;
+      await sql`DELETE FROM product_families WHERE category_id = ${categoryId}`;
+      await sql`DELETE FROM categories WHERE id = ${categoryId}`;
+    }
+    await cleanupReps(repIds, userIds);
   }
 });
