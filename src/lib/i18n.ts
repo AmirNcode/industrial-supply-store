@@ -798,6 +798,8 @@ const en = {
   commissionLocked: "Commission {percent}, locked when placed",
   commissionNone: "No commission on this order",
   filterAll: "All",
+  repLabel: "Rep",
+  placedByRep: "placed by rep",
 };
 
 /**
@@ -1542,6 +1544,8 @@ const fa: typeof en = {
   commissionLocked: "پورسانت {percent}، ثابت‌شده هنگام ثبت",
   commissionNone: "این سفارش پورسانت ندارد",
   filterAll: "همه",
+  repLabel: "نماینده",
+  placedByRep: "ثبت‌شده توسط نماینده",
 };
 
 export type Dict = typeof en;

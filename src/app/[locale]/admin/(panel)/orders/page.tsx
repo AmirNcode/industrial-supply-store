@@ -9,6 +9,9 @@ import { cookies } from "next/headers";
 import { emailsWithAccounts } from "@/db/userQueries";
 import { OrderStatusPill, STATUS_LABEL_KEY } from "@/components/OrderStatusPill";
 import { ConfirmSubmit } from "@/components/ConfirmSubmit";
+import { ShareButton } from "@/components/ShareButton";
+import { siteOrigin } from "@/lib/siteOrigin";
+import { commissionPercentLabel } from "@/lib/repAccount";
 import { listCommentsForOrders, type OrderComment } from "@/db/commentQueries";
 import { findShortfalls } from "@/db/inventoryQueries";
 import {
@@ -42,6 +45,12 @@ type OrderRow = {
   invoiceNumber: string | null;
   fxRateToRial: number | null;
   paymentUrl: string;
+  /** Locked onto the order when it was placed; null when no rep is credited. */
+  repName: string | null;
+  placedByRep: boolean;
+  commissionRateBp: number | null;
+  customerCode: string | null;
+  payToken: string;
 };
 
 type OrderItemRow = {
@@ -79,9 +88,10 @@ export default async function AdminPage({
   // The sign-in gate lives in the panel layout, which wraps this page. FX and
   // the queue have no dependency, so do not spend one database round trip
   // waiting to start the other.
-  const [rate, priceDisplayMode, orders] = await Promise.all([
+  const [rate, priceDisplayMode, origin, orders] = await Promise.all([
     getFxRate(),
     getPriceDisplayMode(),
+    siteOrigin(),
     sql<OrderRow[]>`
       SELECT q.id, q.ref, q.company, q.contact_name AS "contactName", q.email,
              q.phone, q.po_number AS "poNumber", q.city, q.country, q.notes,
@@ -91,8 +101,13 @@ export default async function AdminPage({
              q.invoice_number AS "invoiceNumber",
              q.fx_rate_to_rial AS "fxRateToRial",
              q.payment_url AS "paymentUrl",
-             (SELECT count(*)::int FROM order_items i WHERE i.order_id = q.id) AS "itemCount"
+             (SELECT count(*)::int FROM order_items i WHERE i.order_id = q.id) AS "itemCount",
+             r.name AS "repName", q.placed_by_rep AS "placedByRep",
+             q.commission_rate_bp AS "commissionRateBp",
+             u.customer_code AS "customerCode", q.pay_token AS "payToken"
       FROM orders q
+      LEFT JOIN sales_reps r ON r.id = q.rep_id
+      LEFT JOIN users u ON u.id = q.user_id
       ${statusFilter ? sql`WHERE q.status = ${statusFilter}` : sql`WHERE q.status <> 'delivered' AND q.status <> 'cancelled'`}
       ORDER BY q.created_at DESC LIMIT 200
     `,
@@ -190,6 +205,17 @@ export default async function AdminPage({
             <strong className="tech">{q.ref}</strong>
             <OrderStatusPill locale={l} status={q.status} />
             <span>{q.company}</span>
+            {q.customerCode && (
+              <span className="tech text-[var(--color-ink-muted)]" dir="ltr">
+                {q.customerCode}
+              </span>
+            )}
+            {q.repName && (
+              <span className="border border-[var(--color-rule)] px-1.5 text-[11px]">
+                {t.repLabel}: {q.repName}
+                {q.placedByRep && ` · ${t.placedByRep}`}
+              </span>
+            )}
             <span className="text-[var(--color-ink-muted)]">{q.contactName}</span>
             <span className="tech text-[var(--color-ink-muted)]">{q.email}</span>
             <span className="ms-auto tech text-[var(--color-ink-faint)]">
@@ -210,6 +236,29 @@ export default async function AdminPage({
           <div className="px-3 py-2">
             <dl className="mb-2 grid gap-x-6 gap-y-0.5 text-[11px] [grid-template-columns:repeat(auto-fit,minmax(180px,1fr))]">
               {q.phone && <Row label={t.phone} value={q.phone} tech />}
+              {q.repName && (
+                <Row
+                  label={t.repLabel}
+                  value={`${q.repName} · ${
+                    q.commissionRateBp && q.commissionRateBp > 0
+                      ? commissionPercentLabel(q.commissionRateBp, l)
+                      : t.commissionNone
+                  }`}
+                />
+              )}
+              <div className="flex items-baseline gap-1.5">
+                <dt className="font-bold">{t.payLink}:</dt>
+                <dd>
+                  {/* In the customer's language, like the rest of the row. */}
+                  <ShareButton
+                    text={`${origin}/${q.locale === "fa" ? "fa" : "en"}/pay/${q.payToken}`}
+                    label={t.copy}
+                    copiedLabel={t.copied}
+                    copyOnly
+                    className="underline"
+                  />
+                </dd>
+              </div>
               {q.poNumber && <Row label={t.poNumber} value={q.poNumber} tech />}
               {withAccounts.has(q.email.toLowerCase()) && (
                 <div className="flex items-baseline gap-1.5">
