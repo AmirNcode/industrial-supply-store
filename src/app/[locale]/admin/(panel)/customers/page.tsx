@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { DEMO_MODE } from "@/lib/demo";
 import { listCustomersAdmin, type RepFilter } from "@/db/customerQueries";
 import { listReps } from "@/db/repQueries";
 import { formatPersianDate } from "@/lib/persianCalendar";
@@ -22,6 +23,10 @@ export default async function AdminCustomersPage({
   searchParams: Promise<{ q?: string | string[]; rep?: string | string[]; page?: string | string[] }>;
 }) {
   const { locale } = await params;
+  // The demo's admin is public, and sign-ups there were never warned that
+  // their contact details would be shown to anyone (lib/demo.ts). Reps cannot
+  // be created in demo mode, so the page has nothing to demonstrate there.
+  if (DEMO_MODE) notFound();
   if (!isLocale(locale)) notFound();
   const l = locale as Locale;
   const t = getDict(l);

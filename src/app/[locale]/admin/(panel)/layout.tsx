@@ -48,7 +48,8 @@ export default async function AdminPanelLayout({
   const sections = [
     { href: `/${l}/admin/orders`, label: t.quoteRequests },
     { href: `/${l}/admin/reps`, label: t.salesReps },
-    { href: `/${l}/admin/customers`, label: t.customers },
+    // Not on the public demo: see customers/page.tsx.
+    ...(DEMO_MODE ? [] : [{ href: `/${l}/admin/customers`, label: t.customers }]),
     { href: `/${l}/admin/products`, label: t.products },
     { href: `/${l}/admin/settings`, label: t.settings },
   ];

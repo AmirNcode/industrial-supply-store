@@ -89,9 +89,11 @@ export default async function AdminRepPage({
         <span className="text-[11px] text-[var(--color-ink-muted)]">
           {rep.active ? t.repStatusActive : t.repStatusInactive}
         </span>
-        <Link href={`/${l}/admin/customers?rep=${rep.id}`} className="text-[12px]">
-          {t.customers}
-        </Link>
+        {!DEMO_MODE && (
+          <Link href={`/${l}/admin/customers?rep=${rep.id}`} className="text-[12px]">
+            {t.customers}
+          </Link>
+        )}
       </div>
 
       {credential && (

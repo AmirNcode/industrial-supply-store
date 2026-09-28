@@ -43,6 +43,8 @@ export default async function AdminCustomerPage({
   searchParams: Promise<{ ok?: string; error?: string }>;
 }) {
   const { locale, id } = await params;
+  // Not on the public demo: see ../page.tsx.
+  if (DEMO_MODE) notFound();
   if (!isLocale(locale) || !isUuid(id)) notFound();
   const l = locale as Locale;
   const t = getDict(l);
