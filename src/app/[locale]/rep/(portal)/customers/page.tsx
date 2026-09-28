@@ -40,7 +40,7 @@ export default async function RepCustomersPage({
           placeholder={t.customerSearchPlaceholder}
           aria-label={t.search}
           maxLength={REQUEST_LIMITS.searchChars}
-          className="min-w-0 flex-1"
+          className="search-field min-w-0 flex-1"
         />
         <button type="submit" className="btn-small">
           {t.search}

@@ -1410,6 +1410,9 @@ input[type="email"],
 input[type="url"],
 input[type="tel"],
 input[type="password"],
+/* Search boxes opt in by class: the catalog, facet and taxonomy searches are
+   each styled on their own, and a bare type="search" would inherit both. */
+input.search-field,
 textarea,
 select {
   border: 1px solid var(--color-control-border);

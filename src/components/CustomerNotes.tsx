@@ -49,8 +49,10 @@ export function CustomerNotes({
           {notes.map((note) => (
             <li key={note.id} className="border-t border-[var(--color-rule)] pt-2 text-[12px]">
               <p className="whitespace-pre-line">{note.body}</p>
+              {/* Isolated: a Latin rep name beside a Persian date otherwise pulls
+                  the day's digit into the name's left-to-right run. */}
               <p className="mt-0.5 text-[11px] text-[var(--color-ink-muted)]">
-                {note.authorName ?? t.noteByAdmin} · {formatPersianDate(note.createdAt, locale)}
+                <bdi>{note.authorName ?? t.noteByAdmin}</bdi> · <bdi>{formatPersianDate(note.createdAt, locale)}</bdi>
               </p>
             </li>
           ))}
