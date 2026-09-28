@@ -46,6 +46,8 @@ export type InvoiceOrder = {
   invoicedAt: string;
   /** Null for a guest order — nobody but staff may read that invoice. */
   userId: string | null;
+  /** The pay link's key; `?key=` on the invoice URL must match it. */
+  payToken: string;
 };
 
 export type InvoiceItem = {
@@ -75,7 +77,8 @@ export async function getInvoiceByRef(
            company, contact_name AS "contactName", email, phone,
            po_number AS "poNumber", address, city, country,
            payment_url AS "paymentUrl", total_cents AS "totalCents",
-           status, invoiced_at AS "invoicedAt", user_id AS "userId"
+           status, invoiced_at AS "invoicedAt", user_id AS "userId",
+           pay_token AS "payToken"
     FROM orders
     WHERE ref = ${ref}
       AND invoice_number IS NOT NULL

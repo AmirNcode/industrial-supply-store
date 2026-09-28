@@ -33,6 +33,7 @@ import {
 import { addNoteForRep, listNotes } from "./noteQueries";
 import { submitOrderFromCartInTransaction } from "./orderSubmissionQueries";
 import { quoteCartFingerprint } from "@/lib/quoteSubmission";
+import { getOrderByPayToken } from "./accountQueries";
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 type Tx = TransactionSql<{}>;
@@ -461,4 +462,18 @@ test("the customer's rep, rate and eligibility are locked onto an order when it 
     const guest = created(await place(tx, null, null));
     assert.deepEqual(await stampOf(tx, guest), { repId: null, rateBp: null, placedByRep: false });
   });
+});
+
+test("a pay token opens its own order and nothing else", async () => {
+  assertLocalDatabase();
+  const [order] = await sql<{ id: number; payToken: string }[]>`
+    INSERT INTO orders (ref, company, contact_name, email, total_cents, requested_total_cents)
+    VALUES (${`ORD-${randomUUID().slice(0, 6).toUpperCase()}`}, 'Pay Co', 'N', '', 1000, 1000)
+    RETURNING id, pay_token AS "payToken"`;
+  try {
+    assert.equal((await getOrderByPayToken(order.payToken))?.order.company, "Pay Co");
+    assert.equal(await getOrderByPayToken("0".repeat(64)), null);
+  } finally {
+    await sql`DELETE FROM orders WHERE id = ${order.id}`;
+  }
 });

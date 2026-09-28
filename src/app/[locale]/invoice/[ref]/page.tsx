@@ -7,6 +7,7 @@ import { getSiteContact } from "@/lib/siteContact";
 import { isAdmin } from "@/lib/admin";
 import { DEMO_MODE } from "@/lib/demo";
 import { currentUserId } from "@/lib/session";
+import { isPayToken, payTokensEqual } from "@/lib/payToken";
 import { PrintButton } from "@/components/PrintButton";
 import { isLocale, getDict, type Locale } from "@/lib/i18n";
 import { getPriceDisplayMode } from "@/lib/fx";
@@ -56,14 +57,17 @@ export default async function InvoicePage({
   searchParams,
 }: {
   params: Promise<{ locale: string; ref: string }>;
-  searchParams: Promise<{ cur?: string }>;
+  searchParams: Promise<{ cur?: string; key?: string }>;
 }) {
   const { locale, ref } = await params;
   if (!isLocale(locale)) notFound();
   const l = locale as Locale;
   const t = getDict(l);
 
-  const { cur } = await searchParams;
+  const { cur, key } = await searchParams;
+  // A pay link carries its order's key. Its shape is checked before any query,
+  // like the signed-out refusal below, so junk costs nothing and says nothing.
+  const payKey = typeof key === "string" && isPayToken(key) ? key : null;
 
   /*
    * Staff may read any invoice; a customer may read one that is theirs.
@@ -85,7 +89,7 @@ export default async function InvoicePage({
   // latency an existence oracle over a six-character reference — exactly the
   // confirmation "404, not 403" exists to withhold, and it would let
   // unauthenticated traffic drive unbounded database load.
-  if (!staff && !uid) notFound();
+  if (!staff && !uid && !payKey) notFound();
 
   const [found, contact, priceDisplayMode] = await Promise.all([
     getInvoiceByRef(ref),
@@ -95,14 +99,25 @@ export default async function InvoicePage({
   if (!found) notFound();
   const { order, items } = found;
 
-  if (!staff && (order.userId === null || order.userId !== uid)) notFound();
+  const owner = uid !== null && order.userId !== null && order.userId === uid;
+  const keyed = payKey !== null && payTokensEqual(payKey, order.payToken);
+  // 404 rather than 403, as before: a key for another order confirms nothing.
+  if (!staff && !owner && !keyed) notFound();
 
   const currency = invoiceCurrencyFor(priceDisplayMode, l, cur);
   const other: Locale = l === "fa" ? "en" : "fa";
   const otherCurrency: Currency = currency === "USD" ? "IRR" : "USD";
-  const languageHref = `/${other}/invoice/${order.ref}${
-    priceDisplayMode === "both" ? `?cur=${currency}` : ""
-  }`;
+  // The switch links keep the pay link's key, or a customer who opened the
+  // invoice from it would lose access the moment they change language.
+  const withKey = (query: Record<string, string>) => {
+    const next = new URLSearchParams(query);
+    if (keyed && payKey) next.set("key", payKey);
+    const qs = next.toString();
+    return qs ? `?${qs}` : "";
+  };
+  const languageHref = `/${other}/invoice/${order.ref}${withKey(
+    priceDisplayMode === "both" ? { cur: currency } : {},
+  )}`;
   const rate = order.fxRateToRial;
   const seller = { ...getSeller(l), email: contact.email, phone: contact.phone };
   const subtotal = subtotalCents(items);
@@ -131,7 +146,7 @@ export default async function InvoicePage({
           <span className="tech">{currency}</span>
           {priceDisplayMode === "both" && (
             <Link
-              href={`/${l}/invoice/${order.ref}?cur=${otherCurrency}`}
+              href={`/${l}/invoice/${order.ref}${withKey({ cur: otherCurrency })}`}
               prefetch={false}
               className="tech"
             >

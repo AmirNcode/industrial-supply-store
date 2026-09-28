@@ -767,6 +767,14 @@ const en = {
   bankInvalidSheba: "That Sheba number is mistyped — it is IR followed by 24 digits.",
   bankInvalidAccount: "An account number is 4–30 digits, optionally with dashes or dots.",
   bankTooLong: "A name is limited to 200 characters and a note to 1,000.",
+  bankName: "Bank",
+  bankHolder: "Account holder",
+  payByTransfer: "Pay by bank transfer",
+  payBeingPriced: "We are preparing the final price for this order. This page will show the amount to pay once it is ready.",
+  payAmountDue: "This order is ready to pay.",
+  payPaidThanks: "Paid — thank you.",
+  payCancelled: "This order was cancelled. Nothing is due.",
+  priceEstimate: "Estimate at today's catalog prices.",
 };
 
 /**
@@ -1480,6 +1488,14 @@ const fa: typeof en = {
   bankInvalidSheba: "شماره شبا نادرست است؛ IR و سپس ۲۴ رقم.",
   bankInvalidAccount: "شماره حساب ۴ تا ۳۰ رقم است و می‌تواند خط تیره یا نقطه داشته باشد.",
   bankTooLong: "نام حداکثر ۲۰۰ و توضیح حداکثر ۱٬۰۰۰ نویسه است.",
+  bankName: "بانک",
+  bankHolder: "صاحب حساب",
+  payByTransfer: "پرداخت با انتقال بانکی",
+  payBeingPriced: "در حال آماده‌سازی قیمت نهایی این سفارش هستیم. پس از آماده شدن، مبلغ قابل پرداخت در همین صفحه نمایش داده می‌شود.",
+  payAmountDue: "این سفارش آمادهٔ پرداخت است.",
+  payPaidThanks: "پرداخت شد — سپاسگزاریم.",
+  payCancelled: "این سفارش لغو شده است و مبلغی قابل پرداخت نیست.",
+  priceEstimate: "برآورد بر اساس قیمت‌های امروز کاتالوگ.",
 };
 
 export type Dict = typeof en;

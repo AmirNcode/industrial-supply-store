@@ -4,9 +4,10 @@ import { currentUser } from "@/lib/session";
 import { getOrderForUser } from "@/db/accountQueries";
 import { getFxRate, getPriceDisplayMode } from "@/lib/fx";
 import { OrderStatusPill } from "@/components/OrderStatusPill";
-import { OrderTimeline } from "@/components/OrderTimeline";
+import { OrderView } from "@/components/OrderView";
+import { getBankDetails } from "@/lib/bankSettings";
 import { isLocale, getDict, type Locale } from "@/lib/i18n";
-import { customerCurrencyFor, formatPrice, formatInt } from "@/lib/money";
+import { customerCurrencyFor } from "@/lib/money";
 
 /**
  * One order, read-only.
@@ -58,87 +59,37 @@ export default async function AccountOrderPage({
         )}
       </div>
 
-      <OrderTimeline
+      <OrderView
         locale={l}
-        status={order.status}
-        stamps={{
-          createdAt: order.createdAt,
-          invoicedAt: order.invoicedAt,
-          paidAt: order.paidAt,
-          shippedAt: order.shippedAt,
-          deliveredAt: order.deliveredAt,
-        }}
+        order={order}
+        items={items}
+        currency={currency}
+        rate={rate}
+        bank={order.status === "invoiced" ? await getBankDetails(l) : null}
+        estimate={!invoiced}
+        actions={
+          (order.paymentUrl || invoiced) && order.status !== "cancelled" ? (
+            <>
+              {/* New tab, matching the Pay control on the order list. */}
+              {order.status === "invoiced" && order.paymentUrl && (
+                <a
+                  href={order.paymentUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn-primary"
+                >
+                  {t.payNow}
+                </a>
+              )}
+              {invoiced && (
+                <Link href={`/${l}/invoice/${order.ref}`} className="btn-small" prefetch={false}>
+                  {t.viewInvoice}
+                </Link>
+              )}
+            </>
+          ) : null
+        }
       />
-
-      {(order.paymentUrl || invoiced) && order.status !== "cancelled" && (
-        <div className="mb-4 flex flex-wrap items-center gap-3">
-          {/* New tab, matching the Pay control on the order list. */}
-          {order.status === "invoiced" && order.paymentUrl && (
-            <a
-              href={order.paymentUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="btn-primary"
-            >
-              {t.payNow}
-            </a>
-          )}
-          {invoiced && (
-            <Link href={`/${l}/invoice/${order.ref}`} className="btn-small" prefetch={false}>
-              {t.viewInvoice}
-            </Link>
-          )}
-        </div>
-      )}
-
-      {order.status === "shipped" && order.trackingNumber && (
-        <dl className="mb-4 flex flex-wrap gap-x-6 gap-y-1 border border-[var(--color-rule)] p-3 text-[12px]">
-          <div className="flex gap-1.5">
-            <dt className="font-bold">{t.courier}:</dt>
-            <dd>{order.courier}</dd>
-          </div>
-          <div className="flex gap-1.5">
-            <dt className="font-bold">{t.trackingNumber}:</dt>
-            <dd className="tech">{order.trackingNumber}</dd>
-          </div>
-        </dl>
-      )}
-
-      <table className="spec-table">
-        <thead>
-          <tr>
-            <th>{t.partNumber}</th>
-            <th>{t.invoiceDescription}</th>
-            <th className="num">{t.qty}</th>
-            <th className="num">{t.unitPrice}</th>
-            <th className="num">{t.lineTotal}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {items.map((i) => (
-            <tr key={i.id}>
-              <td className="tech font-bold">{i.partNumber}</td>
-              <td className="whitespace-normal">{i.familyName}</td>
-              <td className="num tech tech-num">{formatInt(i.qty, l)}</td>
-              <td className="num tech tech-num">
-                {formatPrice(i.unitPriceCents, currency, l, rate)}
-              </td>
-              <td className="num tech tech-num">
-                {formatPrice(i.unitPriceCents * i.qty, currency, l, rate)}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-
-      <div className="mt-3 flex justify-end text-[13px]">
-        <span>
-          {t.total}:{" "}
-          <strong className="tech text-[15px]">
-            {formatPrice(order.totalCents, currency, l, rate)}
-          </strong>
-        </span>
-      </div>
     </main>
   );
 }

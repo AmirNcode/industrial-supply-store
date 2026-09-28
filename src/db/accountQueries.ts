@@ -51,6 +51,25 @@ export type AccountOrderItem = {
   requestedUnitPriceCents: number;
 };
 
+const DETAIL_COLS = sql`o.id, o.ref, o.status, o.created_at AS "createdAt",
+  o.total_cents AS "totalCents",
+  o.fx_rate_to_rial AS "fxRateToRial",
+  o.invoice_number AS "invoiceNumber",
+  o.payment_url AS "paymentUrl", o.courier,
+  o.tracking_number AS "trackingNumber", o.po_number AS "poNumber",
+  o.invoiced_at AS "invoicedAt", o.paid_at AS "paidAt",
+  o.shipped_at AS "shippedAt", o.delivered_at AS "deliveredAt",
+  (SELECT count(*)::int FROM order_items i WHERE i.order_id = o.id) AS "itemCount"`;
+
+export async function listOrderItems(orderId: number): Promise<AccountOrderItem[]> {
+  return sql<AccountOrderItem[]>`
+    SELECT id, part_number AS "partNumber", family_name AS "familyName", qty,
+           unit_price_cents AS "unitPriceCents",
+           requested_unit_price_cents AS "requestedUnitPriceCents"
+    FROM order_items WHERE order_id = ${orderId} ORDER BY id
+  `;
+}
+
 /**
  * Ownership is a predicate in the query, not a check after it.
  *
@@ -65,27 +84,30 @@ export async function getOrderForUser(
   ref: string,
 ): Promise<{ order: AccountOrderDetail; items: AccountOrderItem[] } | null> {
   const rows = await sql<AccountOrderDetail[]>`
-    SELECT o.id, o.ref, o.status, o.created_at AS "createdAt",
-           o.total_cents AS "totalCents",
-           o.fx_rate_to_rial AS "fxRateToRial",
-           o.invoice_number AS "invoiceNumber",
-           o.payment_url AS "paymentUrl", o.courier,
-           o.tracking_number AS "trackingNumber", o.po_number AS "poNumber",
-           o.invoiced_at AS "invoicedAt", o.paid_at AS "paidAt",
-           o.shipped_at AS "shippedAt", o.delivered_at AS "deliveredAt",
-           (SELECT count(*)::int FROM order_items i WHERE i.order_id = o.id) AS "itemCount"
+    SELECT ${DETAIL_COLS}
     FROM orders o
     WHERE o.ref = ${ref} AND o.user_id = ${userId}
     LIMIT 1
   `;
   const order = rows[0];
   if (!order) return null;
+  return { order, items: await listOrderItems(order.id) };
+}
 
-  const items = await sql<AccountOrderItem[]>`
-    SELECT id, part_number AS "partNumber", family_name AS "familyName", qty,
-           unit_price_cents AS "unitPriceCents",
-           requested_unit_price_cents AS "requestedUnitPriceCents"
-    FROM order_items WHERE order_id = ${order.id} ORDER BY id
+export type PayOrderDetail = AccountOrderDetail & { company: string; payToken: string };
+
+/**
+ * The private pay link's order. The token is the whole authority here —
+ * whoever holds the link sees this one order, exactly as whoever holds an
+ * emailed invoice PDF does.
+ */
+export async function getOrderByPayToken(
+  token: string,
+): Promise<{ order: PayOrderDetail; items: AccountOrderItem[] } | null> {
+  const [order] = await sql<PayOrderDetail[]>`
+    SELECT ${DETAIL_COLS}, o.company, o.pay_token AS "payToken"
+    FROM orders o WHERE o.pay_token = ${token} LIMIT 1
   `;
-  return { order, items };
+  if (!order) return null;
+  return { order, items: await listOrderItems(order.id) };
 }
