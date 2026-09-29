@@ -83,7 +83,7 @@ deployment · `ALL` = everywhere.
 | H-5 | High | Self-hosted: every rate limit (incl. admin login) is bypassed by a spoofed forwarding header | SELF-HOST | CODE |
 | H-6 | High | Self-hosted compose publishes Postgres to the network with password `isupply`; cron secret never reaches the app | SELF-HOST | CODE |
 | H-7 | High | A fresh database prices the catalog at 1,100,000 rial/USD (~47% of market) with no warning | SELF-HOST / ALL | CODE |
-| H-8 | High | `DEMO_MODE` publishes pay tokens, receipts and the product table to the public | BRANCH | CODE |
+| H-8 | High | `DEMO_MODE` publishes pay tokens, receipts and the product table to the public | BRANCH | **FIXED 2026-09-29 in `{{H-8}}`** |
 | H-9 | High | Admin "session" is a permanent, unrevocable password-derived bearer token without the `Secure` flag | LIVE | CODE |
 | H-10 | High | Applying the sales-rep migration first (as the deploy doc says) breaks live sign-up until the new code is live — and again after a rollback | BRANCH → LIVE | CONFIRMED |
 | H-11 | High | Admin "Reset password" on an order resets whichever account owns the email typed on that order | LIVE | CODE |
@@ -483,6 +483,16 @@ deployment · `ALL` = everywhere.
 - **Tests**: `fxRate` / `fxMarket` unit tests for the never-read state.
 
 ### H-8 — `DEMO_MODE` publishes pay tokens, receipts and the product table
+
+> **Fix status (2026-09-29): FIXED in `{{H-8}}` (local `main`, not pushed).**
+> Under `DEMO_MODE` the issued invoice and the admin draft render no pay link
+> (the queue renders none at all since C-3); `receivePaymentProof` and the
+> pay-link upload action refuse every receipt and the pay page offers no
+> upload; the receipt route serves nothing (no `?key=` since C-3, and
+> `isAdmin()` is false for a demo visitor); the product-table JSON is gated
+> like the CSV export. Test: `e2e/demo-mode.spec.ts` (runs when the server is
+> started with `DEMO_MODE=1` and `E2E_DEMO_MODE=1` is set) — passed against a
+> local demo-mode production server. Not done: a separate demo database.
 
 - **Scope**: BRANCH (`DEMO_MODE` is off on the live site today — the admin
   pages redirect — but the flag exists for the hosted demo).

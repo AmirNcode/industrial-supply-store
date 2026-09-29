@@ -3,6 +3,7 @@
 import { getOrderByPayToken } from "@/db/accountQueries";
 import { acceptsPaymentProof } from "@/lib/orders";
 import { isPayToken } from "@/lib/payToken";
+import { DEMO_MODE } from "@/lib/demo";
 import { RATE_LIMITS, consumeRateLimit } from "@/lib/rateLimit";
 import { receivePaymentProof, type ProofUploadResult } from "@/lib/paymentProofUpload";
 
@@ -16,7 +17,7 @@ export async function uploadPaymentProofWithKeyAction(
   token: string,
   formData: FormData,
 ): Promise<ProofUploadResult> {
-  if (typeof token !== "string" || !isPayToken(token)) return { ok: false, problem: "closed" };
+  if (DEMO_MODE || typeof token !== "string" || !isPayToken(token)) return { ok: false, problem: "closed" };
   const limit = await consumeRateLimit("proof:upload", RATE_LIMITS.proofUpload, { accountId: token });
   if (!limit.allowed) return { ok: false, problem: "rate-limited" };
   const found = await getOrderByPayToken(token);

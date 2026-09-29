@@ -1,5 +1,4 @@
 import { isAdmin } from "@/lib/admin";
-import { DEMO_MODE } from "@/lib/demo";
 import { getFamilyForImport, getProductsForExport } from "@/db/importQueries";
 import type { ProductRecord, ProductTableDef } from "@/lib/productTable";
 
@@ -14,14 +13,16 @@ export type FamilyProductsResponse = {
  * Fetched by the table itself rather than rendered with the products page: the
  * workbench changes family in the browser without a server round trip, and
  * the page would otherwise have to ship every family's rows to show one.
- * Readable under DEMO_MODE like the rest of the panel; the save refuses there.
- * The same values as the CSV export, from the same query.
+ * The same values as the CSV export, from the same query — and the same gate:
+ * signed-in staff only, including under DEMO_MODE. The demo's panel pages are
+ * public, but this is every row of a family, hidden ones included, with stock
+ * and prices, which the demo has no reason to publish.
  */
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  if (!DEMO_MODE && !(await isAdmin())) return new Response("Not found", { status: 404 });
+  if (!(await isAdmin())) return new Response("Not found", { status: 404 });
 
   const { id } = await params;
   const family = await getFamilyForImport(Number(id));

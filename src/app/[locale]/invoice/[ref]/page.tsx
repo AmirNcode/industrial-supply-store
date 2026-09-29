@@ -169,8 +169,10 @@ export default async function InvoicePage({
         bank={bank}
         // The pay page, not the account page: it needs no sign-in, so the
         // same address works for a guest, a rep's customer and a printout.
+        // Never under DEMO_MODE, where every visitor reads every invoice: the
+        // link is the order's key.
         proofUrl={
-          isOrderStatus(order.status) && acceptsPaymentProof(order.status)
+          !DEMO_MODE && isOrderStatus(order.status) && acceptsPaymentProof(order.status)
             ? `${origin}/${l}/pay/${order.payToken}`
             : null
         }

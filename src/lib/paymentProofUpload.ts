@@ -1,6 +1,7 @@
 import "server-only";
 
 import { addPaymentProof } from "@/db/paymentProofQueries";
+import { DEMO_MODE } from "./demo";
 import { PROOF_MAX_BYTES, proofProblem, sniffProofType } from "./paymentProof";
 import { discardPaymentProof, storePaymentProof } from "./paymentProofStorage";
 
@@ -25,12 +26,17 @@ export type ProofUploadResult = { ok: true } | { ok: false; problem: ProofUpload
  * database transaction. When the row is then refused — the order was confirmed
  * or cancelled a moment ago, or already holds the maximum — the stored file
  * is removed again.
+ *
+ * Refused outright under DEMO_MODE, whose admin panel is public: a receipt
+ * would be stored where no one may read it, and moving the order to payment
+ * review is a write the demo promises not to allow.
  */
 export async function receivePaymentProof(
   orderId: number,
   entry: FormDataEntryValue | null,
   by: { kind: "customer" } | { kind: "rep"; repId: string },
 ): Promise<ProofUploadResult> {
+  if (DEMO_MODE) return { ok: false, problem: "closed" };
   if (!(entry instanceof File) || entry.size === 0) return { ok: false, problem: "empty" };
   // Refused before the body is read into memory.
   if (entry.size > PROOF_MAX_BYTES) return { ok: false, problem: "too-large" };

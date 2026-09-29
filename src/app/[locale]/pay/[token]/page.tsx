@@ -5,6 +5,7 @@ import { getOrderByPayToken } from "@/db/accountQueries";
 import { getFxRate, getPriceDisplayMode } from "@/lib/fx";
 import { getBankDetails } from "@/lib/bankSettings";
 import { isPayToken } from "@/lib/payToken";
+import { DEMO_MODE } from "@/lib/demo";
 import { OrderView } from "@/components/OrderView";
 import { OrderStatusPill } from "@/components/OrderStatusPill";
 import { getDict, isLocale, type Locale } from "@/lib/i18n";
@@ -42,7 +43,8 @@ export default async function PayPage({ params }: { params: Promise<{ locale: st
   if (!found) notFound();
   const { order, items } = found;
 
-  const takesProof = acceptsPaymentProof(order.status);
+  // The demo takes no receipts (`receivePaymentProof`), so it offers no upload.
+  const takesProof = acceptsPaymentProof(order.status) && !DEMO_MODE;
   const [liveRate, displayMode, bank, proofs] = await Promise.all([
     getFxRate(),
     getPriceDisplayMode(),
