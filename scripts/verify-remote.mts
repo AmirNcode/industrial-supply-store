@@ -279,6 +279,15 @@ const [{ hasSeq }] = await sql<{ hasSeq: boolean }[]>`
 `;
 console.log(`invoice_seq ${hasSeq ? "✓" : "✗ MISSING — invoice numbers will restart at 1"}`);
 
+// The previous release's sign-up names no customer code; this trigger gives it
+// one. Without it, sign-up on a rolled-back deployment fails (review H-10).
+const [{ hasCodeTrigger }] = await sql<{ hasCodeTrigger: boolean }[]>`
+  SELECT EXISTS (
+    SELECT 1 FROM pg_trigger WHERE tgname = 'users_customer_code_default' AND NOT tgisinternal
+  ) AS "hasCodeTrigger"
+`;
+console.log(`code default ${hasCodeTrigger ? "✓" : "✗ MISSING — an insert without a customer code fails"}`);
+
 // queries.ts calls these in every search and suggest query; without them the
 // search page and /api/suggest 500 outright. They are dropped-and-forgotten
 // candidates just like the indexes, so they are checked, not assumed.
@@ -443,6 +452,7 @@ const ok =
   hasRateLimitExpiryIndex &&
   missingMigrations.length === 0 &&
   hasSeq &&
+  hasCodeTrigger &&
   rlsOff.length === 0 &&
   integrityIssues.length === 0 &&
   numbersOk &&

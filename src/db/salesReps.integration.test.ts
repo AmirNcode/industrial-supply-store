@@ -807,3 +807,42 @@ test("a rep resets only a customer they created who has never chosen a password"
     await cleanupReps(repIds, userIds);
   }
 });
+
+test("the previous release's writes still succeed against the migrated schema", async () => {
+  // Review finding H-10. The live site's code (before the sales-rep release)
+  // runs against this schema from the moment the migration is applied until
+  // the new deployment is live, and again after any rollback. These are its
+  // exact insert shapes.
+  assertLocalDatabase();
+  await rolledBack(async (tx) => {
+    const phone = `0912 ${String(Math.floor(Math.random() * 10_000_000)).padStart(7, "0")}`;
+    const [user] = await tx<{ code: string; origin: string; chose: boolean }[]>`
+      INSERT INTO users (email, password_hash, company, contact_name, phone, locale)
+      VALUES (${`${randomUUID()}@example.invalid`}, 'x', 'Old Co', 'N', ${phone}, 'fa')
+      RETURNING customer_code AS code, origin, chose_own_password AS chose
+    `;
+    assert.match(user.code, /^[0-9]{7}$/);
+    assert.equal(user.origin, "self");
+    assert.equal(user.chose, true);
+
+    // A second old-style sign-up with the same phone gets a different code.
+    const [second] = await tx<{ code: string }[]>`
+      INSERT INTO users (email, password_hash, company, contact_name, phone, locale)
+      VALUES (${`${randomUUID()}@example.invalid`}, 'x', 'Old Co 2', 'N', ${phone}, 'fa')
+      RETURNING customer_code AS code
+    `;
+    assert.notEqual(second.code, user.code);
+
+    // The old checkout's order insert: no rep columns, no pay token.
+    const [order] = await tx<{ token: string; placedByRep: boolean }[]>`
+      INSERT INTO orders (ref, company, contact_name, email, phone, po_number, address,
+                          city, country, notes, locale, currency, total_cents,
+                          requested_total_cents)
+      VALUES (${`ORD-${randomUUID().slice(0, 6).toUpperCase()}`}, 'Old Co', 'N',
+              'old@example.invalid', '', '', '', '', '', '', 'fa', 'IRR', 100, 100)
+      RETURNING pay_token AS token, placed_by_rep AS "placedByRep"
+    `;
+    assert.match(order.token, /^[0-9a-f]{64}$/);
+    assert.equal(order.placedByRep, false);
+  });
+});

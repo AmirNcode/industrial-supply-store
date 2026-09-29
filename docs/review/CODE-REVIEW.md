@@ -85,7 +85,7 @@ deployment · `ALL` = everywhere.
 | H-7 | High | A fresh database prices the catalog at 1,100,000 rial/USD (~47% of market) with no warning | SELF-HOST / ALL | CODE |
 | H-8 | High | `DEMO_MODE` publishes pay tokens, receipts and the product table to the public | BRANCH | **FIXED 2026-09-29 in `{{H-8}}`** |
 | H-9 | High | Admin "session" is a permanent, unrevocable password-derived bearer token without the `Secure` flag | LIVE | CODE |
-| H-10 | High | Applying the sales-rep migration first (as the deploy doc says) breaks live sign-up until the new code is live — and again after a rollback | BRANCH → LIVE | CONFIRMED |
+| H-10 | High | Applying the sales-rep migration first (as the deploy doc says) breaks live sign-up until the new code is live — and again after a rollback | BRANCH → LIVE | **FIXED 2026-09-29 in `{{H-10}}`** |
 | H-11 | High | Admin "Reset password" on an order resets whichever account owns the email typed on that order | LIVE | **FIXED 2026-09-29 in `{{H-11}}`** |
 | M-1 | Medium | Customer sign-in is rate-limited per IP only | LIVE | CODE |
 | M-2 | Medium | Customer sessions cannot be revoked; password change/reset leaves other sessions alive 30 days | LIVE | CODE |
@@ -619,6 +619,21 @@ deployment · `ALL` = everywhere.
   gap in ARCHITECTURE.md).
 
 ### H-10 — The sales-rep migration breaks live sign-up if applied before the new code (as the deploy doc instructs)
+
+> **Fix status (2026-09-29): FIXED in `{{H-10}}` (local `main`, not pushed).**
+> `20260927120000_add_sales_reps.sql` edited in place (not yet on live): a
+> `BEFORE INSERT` trigger `users_customer_code_default` assigns the phone's
+> last seven digits (or a free random code) whenever an insert names no code,
+> mirroring the backfill loop; the new code always supplies one. Every other
+> new `NOT NULL` column has a default (checked: `users` origin,
+> rep_earns_commission, must_change_password, chose_own_password, address,
+> city; `orders` placed_by_rep, pay_token); the new checks accept the old
+> writes. Local database updated; `db:verify` checks the trigger.
+> `DEPLOYMENT.md` gains the "accept the previous release's writes" rule.
+> Test: `salesReps.integration.test.ts` runs live `main`'s user and order
+> insert shapes against the migrated schema. Residual: two old-code sign-ups
+> with the same phone digits at the same instant can collide on the code's
+> unique index, which old code reports as "email taken"; retrying works.
 
 - **Scope**: BRANCH migration, damage on LIVE. **Status**: CONFIRMED (code on
   both branches).

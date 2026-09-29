@@ -124,10 +124,23 @@ page reads its columns — `users.customer_code`, the rep columns on `users` and
 moment the new code runs. The migration gives every existing customer a
 seven-digit ID (the last seven digits of their phone where free, otherwise a
 random one) and every existing order a pay token; it moves no data between
-customers and credits no rep with any past order. `db:verify:remote` checks
-its four tables, the new columns and constraints, the four unique indexes
-(`users_customer_code_key`, `orders_pay_token_key`, `sales_reps_username_key`,
-`sales_reps_referral_code_key`) and the migration version.
+customers and credits no rep with any past order. A trigger
+(`users_customer_code_default`) gives the same kind of ID to any new account
+whose insert names none, so the live site's current sign-up keeps working
+between the migration and the deploy, and after a rollback. `db:verify:remote`
+checks its four tables, the new columns and constraints, the four unique
+indexes (`users_customer_code_key`, `orders_pay_token_key`,
+`sales_reps_username_key`, `sales_reps_referral_code_key`), the trigger and
+the migration version.
+
+**Every migration must accept the previous release's writes.** Migrations are
+applied before the code that needs them is live, and a rollback runs old code
+against the new schema. So a migration may add a `NOT NULL` column only with
+a default (or a trigger that fills it), may not add a check the old code's
+inserts or status moves can violate, and may not drop or rename anything the
+old code reads. Review each new migration against the live code's insert and
+update shapes; `salesReps.integration.test.ts` runs the pre-rep release's
+user and order inserts against the migrated schema as an example.
 
 For the invoice VAT release, apply `20260928120000_add_invoice_vat.sql`
 **before pushing the new application to main**. Every invoice, order and

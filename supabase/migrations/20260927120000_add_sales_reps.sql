@@ -85,6 +85,39 @@ BEGIN
   END LOOP;
 END $$;
 
+-- The same choice for any insert that names no code — above all the previous
+-- release's sign-up, which does not know the column exists. The deploy order
+-- is migration first, code second, and a rollback runs the old code against
+-- this schema again; without a default every sign-up in those windows failed
+-- on the NOT NULL below (review finding H-10). The new code always supplies a
+-- code, so this fires only for older writers. Kept in step with the loop
+-- above and with `codeFromPhone` in src/lib/customerCode.ts.
+CREATE OR REPLACE FUNCTION users_assign_customer_code() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE
+  candidate text;
+BEGIN
+  IF NEW.customer_code IS NOT NULL THEN
+    RETURN NEW;
+  END IF;
+  candidate := right(
+    regexp_replace(translate(coalesce(NEW.phone, ''), '۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩', '01234567890123456789'),
+                   '[^0-9]', '', 'g'),
+    7);
+  IF length(candidate) <> 7
+     OR EXISTS (SELECT 1 FROM users WHERE customer_code = candidate) THEN
+    LOOP
+      candidate := (1000000 + floor(random() * 9000000))::int::text;
+      EXIT WHEN NOT EXISTS (SELECT 1 FROM users WHERE customer_code = candidate);
+    END LOOP;
+  END IF;
+  NEW.customer_code := candidate;
+  RETURN NEW;
+END $$;
+DROP TRIGGER IF EXISTS users_customer_code_default ON users;
+CREATE TRIGGER users_customer_code_default BEFORE INSERT ON users
+  FOR EACH ROW EXECUTE FUNCTION users_assign_customer_code();
+
 ALTER TABLE users ALTER COLUMN customer_code SET NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS users_customer_code_key ON users (customer_code);
 ALTER TABLE users DROP CONSTRAINT IF EXISTS users_customer_code_check;
