@@ -2,7 +2,7 @@ import { after, test } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { sql } from "./index";
-import { consumeRateLimit } from "@/lib/rateLimit";
+import { consumeAccountCounter, consumeRateLimit, peekAccountCounter } from "@/lib/rateLimit";
 
 function assertLocalDatabase(): void {
   const raw = process.env.DATABASE_URL;
@@ -44,4 +44,24 @@ test("a shared counter atomically refuses requests after its fixed-window allowa
 
 after(async () => {
   await sql.end({ timeout: 5 });
+});
+
+test("account failures are counted per login, whatever the address, and peeking adds none", async () => {
+  // Review M-1: the per-address limit alone let a spread-out guesser try one
+  // account without end. lib/signInGuard.ts reads and writes these counters.
+  assertLocalDatabase();
+  const scope = `integration:${randomUUID()}`;
+  const policy = { limit: 3, windowSeconds: 60 };
+  try {
+    assert.equal(await peekAccountCounter(scope, policy, "code:1234567"), 0);
+    for (let i = 0; i < 3; i++) await consumeAccountCounter(scope, policy, "code:1234567");
+    assert.equal(await peekAccountCounter(scope, policy, "code:1234567"), 3);
+    assert.equal(await peekAccountCounter(scope, policy, "code:1234567"), 3, "peeking must not count");
+    assert.equal(await peekAccountCounter(scope, policy, "code:7654321"), 0, "another login is unaffected");
+    // An expired window reads as empty.
+    await sql`UPDATE request_rate_limits SET window_started_at = now() - interval '2 minutes' WHERE scope = ${scope}`;
+    assert.equal(await peekAccountCounter(scope, policy, "code:1234567"), 0);
+  } finally {
+    await sql`DELETE FROM request_rate_limits WHERE scope = ${scope}`;
+  }
 });

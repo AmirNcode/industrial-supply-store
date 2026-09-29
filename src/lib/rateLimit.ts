@@ -19,6 +19,11 @@ export const RATE_LIMITS = {
   // addresses meets only this ceiling. Far above what a small staff uses.
   adminLoginGlobal: { limit: 60, windowSeconds: 15 * 60 },
   accountSignIn: { limit: 10, windowSeconds: 15 * 60 },
+  // Failed sign-ins against one account (customer or rep), from any address.
+  // Counted on failure only, and a device that has signed in to the account
+  // before is let through (lib/signInGuard.ts), so strangers cannot lock the
+  // owner out by failing on purpose.
+  signInFailures: { limit: 10, windowSeconds: 15 * 60 },
   accountSignUp: { limit: 5, windowSeconds: 60 * 60 },
   accountWrite: { limit: 30, windowSeconds: 10 * 60 },
   cartWrite: { limit: 120, windowSeconds: 60 },
@@ -146,6 +151,31 @@ async function consumeCounter(
 }
 
 export type RateLimitResult = { allowed: boolean; retryAfter: number };
+
+/** Count one event against an account alone, whatever the caller's address. */
+export async function consumeAccountCounter(
+  scope: string,
+  policy: RateLimitPolicy,
+  accountKey: string,
+): Promise<number> {
+  const row = await consumeCounter(scope, rateLimitIdentityHash("account", accountKey), policy);
+  return row.count;
+}
+
+/** How many events an account has in its current window, without adding one. */
+export async function peekAccountCounter(
+  scope: string,
+  policy: RateLimitPolicy,
+  accountKey: string,
+): Promise<number> {
+  const [row] = await sql<{ count: number }[]>`
+    SELECT request_count::int AS count FROM request_rate_limits
+    WHERE scope = ${scope}
+      AND identity_hash = ${rateLimitIdentityHash("account", accountKey)}
+      AND window_started_at > now() - make_interval(secs => ${policy.windowSeconds})
+  `;
+  return row?.count ?? 0;
+}
 
 /**
  * One counter for every caller together — for the shared admin password,

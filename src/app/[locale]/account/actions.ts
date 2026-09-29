@@ -18,6 +18,7 @@ import {
   getPasswordHash,
 } from "@/db/userQueries";
 import { RATE_LIMITS, consumeRateLimit } from "@/lib/rateLimit";
+import { recordSignInFailure, rememberSignInDevice, signInLocked } from "@/lib/signInGuard";
 import { REQUEST_LIMITS, boundedString } from "@/lib/requestLimits";
 import { parseLogin } from "@/lib/customerCode";
 import { clearReferralCookie, readReferralCode } from "@/lib/referral";
@@ -122,12 +123,20 @@ export async function signInAction(formData: FormData): Promise<void> {
   });
 
   const login = raw ? parseLogin(raw) : null;
+  // The login as typed, normalised — not the user id — so an unknown login
+  // is counted and refused exactly like a real one (lib/signInGuard.ts).
+  const loginKey = login ? (login.kind === "code" ? `code:${login.code}` : `email:${login.email}`) : null;
+  if (loginKey && (await signInLocked("customer", loginKey))) {
+    redirect(`/${locale}/account/signin?error=rate-limit`);
+  }
   const user = login ? await findUserForSignIn(login) : null;
   const ok = await verifyPassword(password ?? "", user ? user.passwordHash : DUMMY_HASH);
 
   if (!user || !ok) {
+    if (loginKey) await recordSignInFailure("customer", loginKey);
     redirect(`/${locale}/account/signin?error=failed`);
   }
+  if (loginKey) await rememberSignInDevice("customer", loginKey);
 
   await setSessionCookie(user.id);
   await touchLastLogin(user.id);

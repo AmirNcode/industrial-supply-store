@@ -87,7 +87,7 @@ deployment · `ALL` = everywhere.
 | H-9 | High | Admin "session" is a permanent, unrevocable password-derived bearer token without the `Secure` flag | LIVE | **FIXED 2026-09-29 in `{{H-9}}`** |
 | H-10 | High | Applying the sales-rep migration first (as the deploy doc says) breaks live sign-up until the new code is live — and again after a rollback | BRANCH → LIVE | **FIXED 2026-09-29 in `{{H-10}}`** |
 | H-11 | High | Admin "Reset password" on an order resets whichever account owns the email typed on that order | LIVE | **FIXED 2026-09-29 in `{{H-11}}`** |
-| M-1 | Medium | Customer sign-in is rate-limited per IP only | LIVE | CODE |
+| M-1 | Medium | Customer sign-in is rate-limited per IP only | LIVE | **FIXED 2026-09-29 in `{{M-1}}`** |
 | M-2 | Medium | Customer sessions cannot be revoked; password change/reset leaves other sessions alive 30 days | LIVE | CODE |
 | M-3 | Medium | `/api/cart` adds any product id, including hidden and non-existent ones | LIVE | CODE |
 | M-4 | Medium | Heavy public pages have no rate limit (`/search`, family `?view=all`) | LIVE | CODE + live data |
@@ -740,6 +740,16 @@ deployment · `ALL` = everywhere.
 ## Medium
 
 ### M-1 — Customer sign-in is rate-limited per IP only
+
+> **Fix status (2026-09-29): FIXED in `{{M-1}}`.** Failed sign-ins now also
+> count against the account, keyed on the normalised login string (so an
+> unknown login costs the same): 10 failures / 15 min from any addresses
+> locks further attempts (`src/lib/signInGuard.ts`). To avoid the M-14
+> lock-out problem, only failures count and a browser that has signed in to
+> that account before (a signed "known device" cookie) is let through. The
+> per-address limit is unchanged. Test: `rateLimit.integration.test.ts`.
+> Not done: exponential backoff (the fixed window plus known-device bypass
+> was judged enough).
 
 `src/app/[locale]/account/actions.ts:116` consumes only the IP counter;
 `accountId` is never passed even though the login identifier is known after
