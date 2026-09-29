@@ -12,14 +12,20 @@
 /** `order_items.unit_price_cents` is a Postgres integer. */
 const MAX_CENTS = 2_147_483_647;
 
-/** "12.50" → 1250. Blank, negative, non-numeric or out of range → null. */
+/**
+ * "12.50" → 1250. Blank, zero, negative, non-numeric or out of range → null.
+ *
+ * Zero is refused: a product with no list price is stored at 0 ("call for
+ * price"), so an invoice line at 0 is almost always a line nobody priced, and
+ * issuing it gives the goods away. `issueInvoice` refuses one too.
+ */
 export function parsePriceDollars(raw: unknown): number | null {
   if (typeof raw !== "string") return null;
   const text = raw.trim();
   const dollars = Number(text);
   if (text === "" || !Number.isFinite(dollars) || dollars < 0) return null;
   const cents = Math.round(dollars * 100);
-  return cents <= MAX_CENTS ? cents : null;
+  return cents > 0 && cents <= MAX_CENTS ? cents : null;
 }
 
 export function priceParamName(lineId: number): string {
@@ -33,8 +39,9 @@ export function priceParamValue(cents: number): string {
 
 /**
  * Each line's price for the draft: the one in the query when it is there, the
- * line's own price when it is not. Null when a price is present but unusable —
- * the caller sends the admin back to the queue rather than guessing.
+ * line's own price when it is not. Null when a price is present but unusable,
+ * or when a line would be invoiced at 0 — the caller sends the admin back to
+ * the queue rather than guessing.
  */
 export function draftLinePrices(
   query: Record<string, string | string[] | undefined>,
@@ -44,6 +51,7 @@ export function draftLinePrices(
   for (const line of lines) {
     const raw = query[priceParamName(line.id)];
     if (raw === undefined) {
+      if (line.unitPriceCents <= 0) return null;
       prices.set(line.id, line.unitPriceCents);
       continue;
     }

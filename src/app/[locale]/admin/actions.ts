@@ -205,7 +205,7 @@ export async function setOrderStatusAction(formData: FormData): Promise<void> {
     // `invoiced` this is the admin confirming a payment made without an
     // upload; from `payment_review`, confirming the receipts. `assertTransition`
     // above already limits `row.status` to those two.
-    const moved = await confirmPayment(id, row.status as "invoiced" | "payment_review", null);
+    const moved = await confirmPayment(id, row.status as "invoiced" | "payment_review");
     if (!moved) {
       redirect(withFilter(`/${locale}/admin/orders?error=conflict`, statusFilter));
     }
@@ -312,7 +312,8 @@ export async function issueInvoiceAction(formData: FormData): Promise<void> {
     vatRateBp,
     prices: [...prices].map(([lineId, cents]) => ({ id: lineId, cents })),
   });
-  if (!issued) redirect(withFilter(`/${locale}/admin/orders?error=conflict`, statusFilter));
+  if (issued === "unpriced") redirect(withFilter(`/${locale}/admin/orders?error=prices`, statusFilter));
+  if (issued === "conflict") redirect(withFilter(`/${locale}/admin/orders?error=conflict`, statusFilter));
 
   // Invoicing changes an order, and no cached page renders orders.
   redirect(withFilter(`/${locale}/admin/orders?ok=invoiced`, statusFilter));

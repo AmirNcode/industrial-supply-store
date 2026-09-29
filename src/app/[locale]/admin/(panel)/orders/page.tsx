@@ -55,8 +55,6 @@ type OrderRow = {
   placedByRep: boolean;
   commissionRateBp: number | null;
   customerCode: string | null;
-  /** The rep who confirmed payment; null when the admin did or nobody has. */
-  paidByRepName: string | null;
 };
 
 type OrderItemRow = {
@@ -113,11 +111,9 @@ export default async function AdminPage({
              (SELECT count(*)::int FROM order_items i WHERE i.order_id = q.id) AS "itemCount",
              r.name AS "repName", q.placed_by_rep AS "placedByRep",
              q.commission_rate_bp AS "commissionRateBp",
-             u.customer_code AS "customerCode",
-             pr.name AS "paidByRepName"
+             u.customer_code AS "customerCode"
       FROM orders q
       LEFT JOIN sales_reps r ON r.id = q.rep_id
-      LEFT JOIN sales_reps pr ON pr.id = q.paid_confirmed_by_rep_id
       LEFT JOIN users u ON u.id = q.user_id
       ${statusFilter ? sql`WHERE q.status = ${statusFilter}` : sql`WHERE q.status <> 'delivered' AND q.status <> 'cancelled'`}
       ORDER BY q.created_at DESC LIMIT 200
@@ -322,11 +318,6 @@ export default async function AdminPage({
               {q.city && <Row label={t.city} value={q.city} />}
               {q.country && <Row label={t.country} value={q.country} />}
               <Row label={t.status} value={q.status} />
-              {q.paidByRepName && (
-                <div className="flex gap-1.5">
-                  <dd className="font-bold">{t.paidConfirmedByRep.replace("{name}", q.paidByRepName)}</dd>
-                </div>
-              )}
               {q.courier && <Row label={t.courier} value={q.courier} />}
               {q.trackingNumber && <Row label={t.trackingNumber} value={q.trackingNumber} tech />}
               {q.invoiceNumber && (
@@ -467,7 +458,7 @@ export default async function AdminPage({
                           <input
                             type="number"
                             step="0.01"
-                            min="0"
+                            min="0.01"
                             dir="ltr"
                             name={priceParamName(i.id)}
                             defaultValue={priceParamValue(

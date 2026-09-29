@@ -37,6 +37,15 @@ export function subtotalCents(lines: readonly InvoiceLine[]): number {
 }
 
 /**
+ * True when a line would be invoiced at 0 — a "call for price" product nobody
+ * priced. No invoice is issued while one is (`issueInvoice`); a rep, who never
+ * changes a price, hands such an order to the admin.
+ */
+export function hasUnpricedLine(lines: readonly { unitPriceCents: number }[]): boolean {
+  return lines.some((line) => line.unitPriceCents <= 0);
+}
+
+/**
  * Subtotal, VAT and total in the invoice's own unit: cents for USD, whole
  * rial for IRR. The three always add up — total is subtotal plus VAT, never
  * rounded on its own.

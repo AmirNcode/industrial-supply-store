@@ -9,7 +9,7 @@ import { getSeller } from "@/lib/seller";
 import { getSiteContact } from "@/lib/siteContact";
 import { getBankDetails } from "@/lib/bankSettings";
 import { siteOrigin } from "@/lib/siteOrigin";
-import { invoiceAmounts, subtotalCents } from "@/lib/invoice";
+import { hasUnpricedLine, invoiceAmounts, subtotalCents } from "@/lib/invoice";
 import { formatAmount } from "@/lib/money";
 import { isLocale, getDict, type Locale } from "@/lib/i18n";
 import { InvoiceDocument } from "@/components/InvoiceDocument";
@@ -52,6 +52,7 @@ export default async function RepInvoiceDraftPage({
   const orderPage = `/${l}/rep/orders/${order.ref}`;
   // Invoiced meanwhile — by the admin, or in another tab.
   if (order.status !== "received") redirect(orderPage);
+  if (hasUnpricedLine(items)) redirect(`${orderPage}?error=unpriced`);
 
   const totalCents = subtotalCents(items);
   const due = invoiceAmounts(totalCents, vatRateBp, "IRR", rate).total;

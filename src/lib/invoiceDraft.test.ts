@@ -4,7 +4,6 @@ import { draftLinePrices, draftQuery, parsePriceDollars, priceParamValue } from 
 
 test("a typed price becomes whole cents, rounded once", () => {
   assert.equal(parsePriceDollars("12.50"), 1250);
-  assert.equal(parsePriceDollars(" 0 "), 0);
   assert.equal(parsePriceDollars("0.333"), 33);
   assert.equal(parsePriceDollars("19.99"), 1999);
 });
@@ -17,6 +16,16 @@ test("a price that cannot be a price is refused", () => {
   assert.equal(parsePriceDollars("30000000"), null);
   assert.equal(parsePriceDollars(["1", "2"]), null);
   assert.equal(parsePriceDollars(undefined), null);
+});
+
+test("a line priced 0 cannot be invoiced", () => {
+  assert.equal(parsePriceDollars(" 0 "), null);
+  assert.equal(parsePriceDollars("0.00"), null);
+  assert.equal(parsePriceDollars("0.004"), null);
+  assert.equal(parsePriceDollars("0.01"), 1);
+  // A call-for-price line left as ordered is refused too, not carried at 0.
+  assert.equal(draftLinePrices({}, [{ id: 7, unitPriceCents: 0 }]), null);
+  assert.deepEqual([...draftLinePrices({ price_7: "3" }, [{ id: 7, unitPriceCents: 0 }])!], [[7, 300]]);
 });
 
 test("the draft takes the typed price where there is one and the line's own price otherwise", () => {

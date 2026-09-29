@@ -17,12 +17,11 @@ import { setOrderingFor } from "@/lib/repOrderContext";
 import { CartCapacityError, addLines } from "@/lib/cart";
 import { getReorderLines, repCanSeeOrder } from "@/db/repOrderQueries";
 import { getInvoiceDraft, issueInvoice } from "@/db/invoiceQueries";
-import { confirmPayment } from "@/db/paymentProofQueries";
 import { acceptsPaymentProof, isOrderStatus } from "@/lib/orders";
 import { receivePaymentProof, type ProofUploadResult } from "@/lib/paymentProofUpload";
 import { getFxRate } from "@/lib/fx";
 import { getVatRateBp } from "@/lib/vatSettings";
-import { subtotalCents } from "@/lib/invoice";
+import { hasUnpricedLine, subtotalCents } from "@/lib/invoice";
 import {
   findRepForSignIn,
   getRepPasswordHash,
@@ -288,6 +287,7 @@ export async function issueInvoiceForRepAction(formData: FormData): Promise<void
   if (!found) redirect(`/${locale}/rep/orders`);
   const page = `/${locale}/rep/orders/${ref}`;
   if (found.order.status !== "received") redirect(`${page}?error=conflict`);
+  if (hasUnpricedLine(found.items)) redirect(`${page}?error=unpriced`);
 
   const [rate, vatRateBp] = await Promise.all([getFxRate(), getVatRateBp()]);
   if (
@@ -298,7 +298,8 @@ export async function issueInvoiceForRepAction(formData: FormData): Promise<void
     redirect(`${page}/invoice?changed=1`);
   }
 
-  if (!(await issueInvoice(found.order.id, { rate, vatRateBp }))) redirect(`${page}?error=conflict`);
+  const issued = await issueInvoice(found.order.id, { rate, vatRateBp });
+  if (issued !== "issued") redirect(`${page}?error=${issued}`);
   redirect(`${page}?ok=invoiced`);
 }
 
@@ -323,22 +324,3 @@ export async function uploadPaymentProofForRepAction(
   return receivePaymentProof(found.order.id, formData.get("file"), { kind: "rep", repId: rep.id });
 }
 
-/**
- * The rep has compared the receipts with the bank account: the order moves to
- * preparing and its stock is sold, recorded as this rep's confirmation. Only
- * from `payment_review` — a payment with no receipt at all is the admin's to
- * confirm.
- */
-export async function confirmPaymentForRepAction(formData: FormData): Promise<void> {
-  const { rep, locale } = await repForWrite(formData);
-  const ref = boundedString(formData.get("ref"), 20) ?? "";
-  if (!(await repCanSeeOrder(rep.id, ref))) redirect(`/${locale}/rep/orders`);
-  const found = await getInvoiceDraft(ref);
-  if (!found) redirect(`/${locale}/rep/orders`);
-  const page = `/${locale}/rep/orders/${ref}`;
-  if (found.order.status !== "payment_review") redirect(`${page}?error=conflict`);
-  if (!(await confirmPayment(found.order.id, "payment_review", rep.id))) {
-    redirect(`${page}?error=conflict`);
-  }
-  redirect(`${page}?ok=paid`);
-}

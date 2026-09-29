@@ -100,6 +100,12 @@ counted before VAT on purpose. VAT is computed in the currency printed, from
 the subtotal as printed (`invoiceAmounts` in `src/lib/invoice.ts`), because a
 cent of VAT is about 12,000 rial and would not survive conversion.
 
+**No invoice is issued with a line at 0.** A product with no list price is
+stored at 0 ("call for price"), so a zero line is one nobody priced.
+`issueInvoice` refuses it inside its transaction, for the admin and the rep
+alike; the admin's price inputs refuse 0, and a rep — who never changes a
+price — is told the admin must price the order.
+
 **A draft writes nothing, and Finalize locks only what the draft showed.**
 "Create invoice" opens the draft (admin: prices in the URL, `lib/invoiceDraft.ts`;
 rep: the order's own prices). The finalize form posts the exchange rate and
@@ -158,12 +164,14 @@ anything remains; it never repairs canonical order or ownership data by guess.
 **Payment is by bank transfer, and a receipt is what moves it.** A customer
 (order page or pay link) or their rep uploads a photo or PDF of the transfer;
 the first one moves `invoiced → payment_review` ("Confirming payment") inside
-the same locked transaction (`addPaymentProof`). The admin or the order's rep
-compares it with the bank account and confirms (`confirmPayment`), which is
-`→ preparing` plus the stock sale, and records the rep who did. There is no
-reject: a receipt that does not match is settled by phone or the order
-cancelled. The admin alone can still confirm straight from `invoiced`, for a
-payment with no upload. Files are judged by their first bytes, not their name
+the same locked transaction (`addPaymentProof`). The admin compares it with
+the bank account and confirms (`confirmPayment`), which is `→ preparing` plus
+the stock sale. **Only the admin confirms**: a rep may upload a receipt but
+never confirm one, or a rep could mark their own order paid with any photo.
+`confirmPayment` takes no rep, and `salesReps.integration.test.ts` fails if
+rep code reaches it. There is no reject: a receipt that does not match is
+settled by phone or the order cancelled. The admin can also confirm straight
+from `invoiced`, for a payment with no upload. Files are judged by their first bytes, not their name
 (`lib/paymentProof.ts`), stored in a private Storage bucket the app creates
 itself (`payment-proofs`), and only ever read through the route above — there
 is no public URL. `payment_review` holds stock like `received` and `invoiced`
@@ -482,8 +490,7 @@ matter, and refusing it would mean refusing the catalog.
    does at the order's prices; either checks the draft and finalizes.
    `issueInvoice` (`src/db/invoiceQueries.ts`) freezes the FX and VAT rates,
    assigns an invoice number from `invoice_seq`, and sets `invoiced`.
-3. A receipt upload moves it to `payment_review`; the admin or the rep
-   confirms, and `confirmPayment` moves it to `preparing` and calls
+3. A receipt upload moves it to `payment_review`; the admin confirms, and `confirmPayment` moves it to `preparing` and calls
    `sellHeldStock`. `setOrderStatusAction` then walks `preparing → shipped →
    delivered`. `cancelled` calls `releaseHeldStock`, but only from a held
    status (`received`, `invoiced`, `payment_review`).

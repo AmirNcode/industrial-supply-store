@@ -139,9 +139,8 @@ migration version.
 
 For the proof-of-payment release, apply `20260929120000_add_payment_proofs.sql`
 **before pushing the new application to main**. It adds the `payment_review`
-status (replacing three order check constraints), two order columns
-(`payment_submitted_at`, `paid_confirmed_by_rep_id`) and the `payment_proofs`
-table. Receipt files need Storage configured on the deployment (the same
+status (replacing three order check constraints), one order column
+(`payment_submitted_at`) and the `payment_proofs` table. Receipt files need Storage configured on the deployment (the same
 `SUPABASE_URL` and secret as catalog images); the bucket creates itself.
 
 The storefront's bare root redirects to `/fa`; `/en/...` remains available

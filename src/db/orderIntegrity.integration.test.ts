@@ -330,7 +330,7 @@ test("an invoice locks its prices, exchange rate and VAT rate once, and only onc
         vatRateBp: 1000,
         prices: [{ id: line.id, cents: 450 }],
       }),
-      true,
+      "issued",
     );
     const issued = await read();
     assert.equal(issued.status, "invoiced");
@@ -345,7 +345,7 @@ test("an invoice locks its prices, exchange rate and VAT rate once, and only onc
     // its price update is rolled back with it.
     assert.equal(
       await issueInvoice(order.id, { rate: 2_000_000, vatRateBp: 900, prices: [{ id: line.id, cents: 1 }] }),
-      false,
+      "conflict",
     );
     assert.deepEqual(await read(), issued);
   } finally {
@@ -353,7 +353,7 @@ test("an invoice locks its prices, exchange rate and VAT rate once, and only onc
   }
 });
 
-test("a receipt moves an invoice to review; confirming sells the stock and records who", async () => {
+test("a receipt moves an invoice to review; confirming sells the stock", async () => {
   assertLocalDatabase();
   const suffix = randomUUID().slice(0, 8);
   const [order] = await sql<{ id: number }[]>`
@@ -370,9 +370,8 @@ test("a receipt moves an invoice to review; confirming sells the stock and recor
   `;
   const file = (n: number) => ({ path: `test/${suffix}/${n}.jpg`, type: "image/jpeg" as const, size: 10 });
   const status = async () =>
-    (await sql<{ status: string; submitted: boolean; paid: boolean; by: string | null }[]>`
-      SELECT status, payment_submitted_at IS NOT NULL AS submitted, paid_at IS NOT NULL AS paid,
-             paid_confirmed_by_rep_id AS by
+    (await sql<{ status: string; submitted: boolean; paid: boolean }[]>`
+      SELECT status, payment_submitted_at IS NOT NULL AS submitted, paid_at IS NOT NULL AS paid
       FROM orders WHERE id = ${order.id}`)[0];
   try {
     // Nothing to pay for yet.
@@ -380,7 +379,7 @@ test("a receipt moves an invoice to review; confirming sells the stock and recor
 
     await issueInvoice(order.id, { rate: 1_000_000, vatRateBp: 1000 });
     assert.equal(await addPaymentProof(order.id, file(1), { kind: "customer" }), "added");
-    assert.deepEqual(await status(), { status: "payment_review", submitted: true, paid: false, by: null });
+    assert.deepEqual(await status(), { status: "payment_review", submitted: true, paid: false });
     assert.equal(await addPaymentProof(order.id, file(2), { kind: "rep", repId: rep.id }), "added");
     const proofs = (await listPaymentProofs([order.id])).get(order.id) ?? [];
     assert.deepEqual(proofs.map((p) => [p.uploadedBy, p.repName]), [["customer", null], ["rep", "Proof Rep"]]);
@@ -391,17 +390,17 @@ test("a receipt moves an invoice to review; confirming sells the stock and recor
     }
     assert.equal(await addPaymentProof(order.id, file(99), { kind: "customer" }), "full");
 
-    // A confirmation from the wrong status changes nothing; the right one records the rep.
-    assert.equal(await confirmPayment(order.id, "invoiced", null), false);
-    assert.equal(await confirmPayment(order.id, "payment_review", rep.id), true);
-    assert.deepEqual(await status(), { status: "preparing", submitted: true, paid: true, by: rep.id });
+    // A confirmation from the wrong status changes nothing.
+    assert.equal(await confirmPayment(order.id, "invoiced"), false);
+    assert.equal(await confirmPayment(order.id, "payment_review"), true);
+    assert.deepEqual(await status(), { status: "preparing", submitted: true, paid: true });
     // And no receipt can be added once payment is confirmed.
     assert.equal(await addPaymentProof(order.id, file(100), { kind: "customer" }), "closed");
 
     // The database refuses a review with no receipt date, and a rep upload with no rep.
     await assert.rejects(
-      sql`UPDATE orders SET status = 'payment_review', paid_at = NULL, payment_submitted_at = NULL,
-            paid_confirmed_by_rep_id = NULL WHERE id = ${order.id}`,
+      sql`UPDATE orders SET status = 'payment_review', paid_at = NULL, payment_submitted_at = NULL
+          WHERE id = ${order.id}`,
       { code: "23514" },
     );
     await assert.rejects(

@@ -1,15 +1,13 @@
 -- Proof of payment: receipts customers (or their rep) upload after a bank
 -- transfer, and the new `payment_review` status an order waits in until the
--- admin or its rep confirms the money arrived. Files live in a private Storage
--- bucket; this table says whose they are.
+-- admin confirms the money arrived. Reps may upload receipts but never confirm
+-- payment (review finding C-2), so no column records a rep's confirmation.
+-- Files live in a private Storage bucket; this table says whose they are.
 -- Forward-only and idempotent. Constraint names match what drizzle-kit
 -- generates from src/db/schema.ts.
 
 ALTER TABLE orders
-  ADD COLUMN IF NOT EXISTS payment_submitted_at timestamptz,
-  ADD COLUMN IF NOT EXISTS paid_confirmed_by_rep_id uuid
-    CONSTRAINT orders_paid_confirmed_by_rep_id_sales_reps_id_fk
-    REFERENCES sales_reps (id) ON DELETE RESTRICT;
+  ADD COLUMN IF NOT EXISTS payment_submitted_at timestamptz;
 
 ALTER TABLE orders DROP CONSTRAINT IF EXISTS orders_status_check;
 ALTER TABLE orders ADD CONSTRAINT orders_status_check
@@ -20,7 +18,6 @@ ALTER TABLE orders ADD CONSTRAINT orders_timestamp_chain_check CHECK (
   (invoiced_at IS NULL OR invoiced_at >= created_at)
   AND (payment_submitted_at IS NULL OR (invoiced_at IS NOT NULL AND payment_submitted_at >= invoiced_at))
   AND (paid_at IS NULL OR (invoiced_at IS NOT NULL AND paid_at >= invoiced_at))
-  AND (paid_confirmed_by_rep_id IS NULL OR paid_at IS NOT NULL)
   AND (shipped_at IS NULL OR (paid_at IS NOT NULL AND shipped_at >= paid_at))
   AND (delivered_at IS NULL OR (shipped_at IS NOT NULL AND delivered_at >= shipped_at))
 );

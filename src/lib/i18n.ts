@@ -185,7 +185,7 @@ const en = {
   changePrices: "Change prices",
   invoiceNumber: "Invoice no.",
   finalUnitPrice: "Final price",
-  pricesRequired: "Every line needs a price of at least zero.",
+  pricesRequired: "Every line needs a price above zero. An invoice cannot be issued with a line priced 0.",
   // Action feedback
   orderUpdated: "Order updated.",
   invoiceIssued: "Invoice issued.",
@@ -298,10 +298,8 @@ const en = {
     "We have your receipt and are confirming the payment. We start preparing your order as soon as it is confirmed.",
   confirmPayment: "Confirm payment received",
   confirmConfirmPayment: "Confirm the money has arrived?",
-  confirmPaymentHint:
-    "Compare the receipts with the bank account first. Confirming moves the order to preparing for shipment.",
-  paymentConfirmed: "Payment confirmed. The order is now being prepared.",
-  paidConfirmedByRep: "Payment confirmed by {name}",
+  repAwaitingConfirmation: "Receipt received. The admin checks it against the bank account and confirms the payment.",
+  repInvoiceUnpriced: "A line on this order has no price yet. The admin prices it and issues the invoice.",
   invoiceDraft: "Draft",
   invoiceDraftNotice:
     "Draft — nothing has been issued or sent yet. Check every line, the VAT and the total, then finalize. Finalizing numbers the invoice and locks today's exchange rate and VAT rate onto it.",
@@ -1056,7 +1054,7 @@ const fa: typeof en = {
   changePrices: "تغییر قیمت‌ها",
   invoiceNumber: "شماره صورتحساب",
   finalUnitPrice: "قیمت نهایی",
-  pricesRequired: "برای همه ردیف‌ها باید قیمت وارد شود.",
+  pricesRequired: "همهٔ ردیف‌ها باید قیمتی بیشتر از صفر داشته باشند. صورتحساب با ردیف صفر صادر نمی‌شود.",
   orderUpdated: "سفارش به‌روزرسانی شد.",
   invoiceIssued: "صورتحساب صادر شد.",
   orderNotFound: "این سفارش دیگر وجود ندارد.",
@@ -1163,10 +1161,8 @@ const fa: typeof en = {
     "رسید شما دریافت شد و در حال تأیید پرداخت هستیم. به محض تأیید، آماده‌سازی سفارش آغاز می‌شود.",
   confirmPayment: "تأیید دریافت وجه",
   confirmConfirmPayment: "دریافت وجه تأیید شود؟",
-  confirmPaymentHint:
-    "پیش از تأیید، رسیدها را با حساب بانکی مقایسه کنید. با تأیید، سفارش به مرحلهٔ آماده‌سازی برای ارسال می‌رود.",
-  paymentConfirmed: "پرداخت تأیید شد. سفارش در حال آماده‌سازی است.",
-  paidConfirmedByRep: "پرداخت توسط {name} تأیید شد",
+  repAwaitingConfirmation: "رسید دریافت شد. مدیر آن را با حساب بانکی مقایسه و پرداخت را تأیید می‌کند.",
+  repInvoiceUnpriced: "یکی از ردیف‌های این سفارش هنوز قیمت ندارد. مدیر آن را قیمت‌گذاری و صورتحساب را صادر می‌کند.",
   invoiceDraft: "پیش‌نویس",
   invoiceDraftNotice:
     "پیش‌نویس — هنوز چیزی صادر یا ارسال نشده است. همهٔ ردیف‌ها، ارزش افزوده و مبلغ کل را بررسی و سپس صورتحساب را نهایی کنید. با نهایی‌سازی، صورتحساب شماره می‌گیرد و نرخ ارز و نرخ ارزش افزودهٔ امروز روی آن ثابت می‌شود.",

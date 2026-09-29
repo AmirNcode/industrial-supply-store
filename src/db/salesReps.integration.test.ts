@@ -1,6 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 import type { TransactionSql } from "postgres";
 import { sql } from "./index";
 import { randomReferralCode } from "@/lib/repAccount";
@@ -31,6 +33,8 @@ import {
   updateCustomerForRep,
 } from "./customerQueries";
 import { addNoteForRep, listNotes } from "./noteQueries";
+import { issueInvoice } from "./invoiceQueries";
+import { confirmPayment } from "./paymentProofQueries";
 import { submitOrderFromCartInTransaction } from "./orderSubmissionQueries";
 import { quoteCartFingerprint } from "@/lib/quoteSubmission";
 import { getOrderByPayToken } from "./accountQueries";
@@ -674,4 +678,77 @@ test("an order not yet invoiced is estimated at today's rate", async () => {
     assert.equal(row.salesRial, 100_000_000);
     assert.equal(row.commissionRial, 5_000_000);
   });
+});
+
+test("no invoice is issued while a line is priced 0, by a rep or the admin", async () => {
+  assertLocalDatabase();
+  const [order] = await sql<{ id: number }[]>`
+    INSERT INTO orders (ref, company, contact_name, email, total_cents, requested_total_cents)
+    VALUES (${`ORD-${randomUUID().slice(0, 6).toUpperCase()}`}, 'Zero Co', 'Tester',
+            'zero@example.invalid', 500, 500)
+    RETURNING id
+  `;
+  try {
+    const [priced, free] = await sql<{ id: number }[]>`
+      INSERT INTO order_items (order_id, product_id, part_number, family_name, qty,
+                               unit_price_cents, requested_unit_price_cents)
+      VALUES (${order.id}, NULL, 'ZERO-1', 'Integration Family', 1, 500, 500),
+             (${order.id}, NULL, 'ZERO-2', 'Integration Family', 3, 0, 0)
+      RETURNING id
+    `;
+    const status = async () =>
+      (await sql<{ status: string; invoice: string | null }[]>`
+        SELECT status, invoice_number AS invoice FROM orders WHERE id = ${order.id}`)[0];
+
+    // A rep invoices at the order's own prices, one of which is 0.
+    assert.equal(await issueInvoice(order.id, { rate: 1_000_000, vatRateBp: 0 }), "unpriced");
+    // The admin leaving that line at 0 is refused the same way, and the price
+    // written on the way in is rolled back with it.
+    assert.equal(
+      await issueInvoice(order.id, {
+        rate: 1_000_000,
+        vatRateBp: 0,
+        prices: [{ id: priced.id, cents: 700 }, { id: free.id, cents: 0 }],
+      }),
+      "unpriced",
+    );
+    assert.deepEqual(await status(), { status: "received", invoice: null });
+    const [line] = await sql<{ cents: number }[]>`
+      SELECT unit_price_cents AS cents FROM order_items WHERE id = ${priced.id}`;
+    assert.equal(line.cents, 500);
+
+    // Priced by the admin, it issues.
+    assert.equal(
+      await issueInvoice(order.id, {
+        rate: 1_000_000,
+        vatRateBp: 0,
+        prices: [{ id: priced.id, cents: 500 }, { id: free.id, cents: 250 }],
+      }),
+      "issued",
+    );
+    assert.equal((await status()).status, "invoiced");
+  } finally {
+    await sql`DELETE FROM orders WHERE id = ${order.id}`;
+  }
+});
+
+test("a rep cannot move an order to preparing: no rep code reaches confirmPayment", () => {
+  // Confirming payment is the admin's alone (review finding C-2). The query
+  // takes no rep, so the only way a rep could reach it is by code under the
+  // rep routes calling it — which this refuses.
+  assert.equal(confirmPayment.length, 2);
+  const files = (dir: string): string[] =>
+    readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+      const path = join(dir, entry.name);
+      return entry.isDirectory() ? files(path) : /\.tsx?$/.test(entry.name) ? [path] : [];
+    });
+  const repCode = [
+    ...files(join(process.cwd(), "src", "app", "[locale]", "rep")),
+    join(process.cwd(), "src", "db", "repOrderQueries.ts"),
+    join(process.cwd(), "src", "db", "customerQueries.ts"),
+  ];
+  for (const file of repCode) {
+    const source = readFileSync(file, "utf8");
+    assert.ok(!/confirmPayment|'preparing'|paid_at\s*=/.test(source), `${file} can confirm a payment`);
+  }
 });

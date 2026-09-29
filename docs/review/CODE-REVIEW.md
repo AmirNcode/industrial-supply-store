@@ -74,7 +74,7 @@ deployment · `ALL` = everywhere.
 | ID | Sev | Title | Scope | Status |
 | --- | --- | --- | --- | --- |
 | C-1 | Critical | Every admin page is sent to anonymous visitors inside the login redirect | LIVE | **FIXED in `f205741` (local `main`, not pushed); the live site leaks until it is pushed** |
-| C-2 | Critical | A sales rep alone can mark an order paid (own "receipt" + own confirmation), including a zero-price invoice | BRANCH | CODE |
+| C-2 | Critical | A sales rep alone can mark an order paid (own "receipt" + own confirmation), including a zero-price invoice | BRANCH | **FIXED 2026-09-29 in `{{C-2}}`** |
 | C-3 | Critical | Pay tokens (a bearer credential) are rendered on admin pages; with C-1 anyone can change order state and read bank receipts | BRANCH | **FIXED 2026-09-29 in `{{C-3}}`** |
 | H-1 | High | Admin price changes do not reach customers for 94% of live products (stale seeded quantity-break prices win) | LIVE | CONFIRMED |
 | H-2 | High | Production is running out of database connections right now (342 × EMAXCONN, 140 × 60 s timeouts in 7 days) | LIVE | CONFIRMED-LIVE / cause PLAUSIBLE |
@@ -204,6 +204,20 @@ deployment · `ALL` = everywhere.
   told.
 
 ### C-2 — A sales rep alone can mark an order paid, including a zero-price invoice
+
+> **Fix status (2026-09-29): FIXED in `{{C-2}}` (local `main`, not pushed).**
+> Amir's decision: reps may upload receipts, only the admin confirms payment;
+> no invoice (rep or admin) while any line is priced 0. The rep confirm
+> action and button are gone (reps see "the admin confirms"); `confirmPayment`
+> takes no rep id, and `orders.paid_confirmed_by_rep_id` was removed from the
+> not-yet-live migration `20260929120000_add_payment_proofs.sql` (and from the
+> schema, verifier, integrity check and local database). `issueInvoice`
+> returns `"unpriced"` when any line is ≤ 0 after the admin's prices apply;
+> the admin price input and `parsePriceDollars` refuse 0; a rep sees "the
+> admin prices it" instead of Create invoice. Tests:
+> `salesReps.integration.test.ts` (zero line refused for rep and admin paths,
+> price rollback; no rep code reaches `confirmPayment`) and
+> `invoiceDraft.test.ts`.
 
 - **Scope**: BRANCH. **Status**: CODE. Needs a product decision (below).
 - **Where**:

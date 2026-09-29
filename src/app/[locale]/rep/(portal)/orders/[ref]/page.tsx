@@ -2,15 +2,11 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireRep } from "@/lib/repSession";
 import { getOrderForRep } from "@/db/repOrderQueries";
-import {
-  confirmPaymentForRepAction,
-  reorderAction,
-  uploadPaymentProofForRepAction,
-} from "../../../actions";
+import { reorderAction, uploadPaymentProofForRepAction } from "../../../actions";
 import { acceptsPaymentProof } from "@/lib/orders";
+import { hasUnpricedLine } from "@/lib/invoice";
 import { listPaymentProofs } from "@/db/paymentProofQueries";
 import { PaymentProofSection } from "@/components/PaymentProofSection";
-import { ConfirmSubmit } from "@/components/ConfirmSubmit";
 import { getFxRate } from "@/lib/fx";
 import { siteOrigin } from "@/lib/siteOrigin";
 import { commissionPercentLabel } from "@/lib/repAccount";
@@ -24,6 +20,7 @@ const ERROR_KEY = {
   "not-yours": "reorderNotYours",
   "cart-full": "reorderCartFull",
   conflict: "orderConflict",
+  unpriced: "repInvoiceUnpriced",
 } as const;
 
 /**
@@ -85,7 +82,6 @@ export default async function RepOrderPage({
 
       {ok === "created" && <SuccessBanner>{t.repOrderCreated}</SuccessBanner>}
       {ok === "invoiced" && <SuccessBanner>{t.invoiceIssued}</SuccessBanner>}
-      {ok === "paid" && <SuccessBanner>{t.paymentConfirmed}</SuccessBanner>}
       {errorKey && <ErrorBanner>{t[errorKey]}</ErrorBanner>}
       {order.creditedToMe && (
         <p className="mb-3 text-[12px]" data-testid="commission-line">
@@ -97,10 +93,17 @@ export default async function RepOrderPage({
 
       {order.status === "received" && (
         <section className="mb-4 flex flex-wrap items-center gap-3 border border-[var(--color-rule)] p-3 text-[12px]">
-          <Link href={`/${l}/rep/orders/${order.ref}/invoice`} className="btn-primary" prefetch={false}>
-            {t.createInvoice}
-          </Link>
-          <span className="text-[var(--color-ink-muted)]">{t.repInvoiceHint}</span>
+          {/* A rep never changes a price, so a line at 0 is the admin's to price. */}
+          {hasUnpricedLine(items) ? (
+            <span data-testid="rep-invoice-unpriced">{t.repInvoiceUnpriced}</span>
+          ) : (
+            <>
+              <Link href={`/${l}/rep/orders/${order.ref}/invoice`} className="btn-primary" prefetch={false}>
+                {t.createInvoice}
+              </Link>
+              <span className="text-[var(--color-ink-muted)]">{t.repInvoiceHint}</span>
+            </>
+          )}
         </section>
       )}
 
@@ -115,25 +118,11 @@ export default async function RepOrderPage({
             : undefined
         }
       >
-        {/* Only once a receipt is in: a payment with none is the admin's call. */}
+        {/* Confirming the money arrived is the admin's alone. */}
         {order.status === "payment_review" && (
-          <form action={confirmPaymentForRepAction} className="grid gap-1.5 border-t border-[var(--color-rule)] pt-3">
-            <input type="hidden" name="locale" value={l} />
-            <input type="hidden" name="ref" value={order.ref} />
-            <p className="text-[12px] text-[var(--color-ink-muted)]">{t.confirmPaymentHint}</p>
-            <ConfirmSubmit
-              label={t.confirmPayment}
-              title={t.confirmConfirmPayment}
-              continueLabel={t.confirmContinue}
-              discardLabel={t.confirmDiscard}
-              className="btn-primary justify-self-start"
-              details={[
-                { label: t.confirmSendingTo, value: order.company },
-                { label: t.confirmOrder, value: order.ref, tech: true },
-                { label: t.confirmNewStatus, value: t.statusPreparing },
-              ]}
-            />
-          </form>
+          <p className="border-t border-[var(--color-rule)] pt-3 text-[12px] text-[var(--color-ink-muted)]">
+            {t.repAwaitingConfirmation}
+          </p>
         )}
       </PaymentProofSection>
 

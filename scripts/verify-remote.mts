@@ -93,7 +93,7 @@ const COLUMNS: readonly (readonly [string, string])[] = [
   // Added by the 2026-09-28 VAT migration. Every invoice and order page reads it.
   ["orders", "vat_rate_bp"],
   // Added by the 2026-09-29 payment proof migration. Every order page reads them.
-  ["orders", "payment_submitted_at"], ["orders", "paid_confirmed_by_rep_id"],
+  ["orders", "payment_submitted_at"],
 ];
 
 const present = await sql<{ name: string }[]>`
@@ -186,7 +186,7 @@ const REQUIRED_CONSTRAINTS = [
   "orders_pay_token_check", "customer_notes_body_check", "rep_payouts_amount_check",
   "rep_payouts_note_check", "rep_targets_month_check", "rep_targets_amount_check",
   "orders_vat_rate_check",
-  "orders_paid_confirmed_by_rep_id_sales_reps_id_fk", "payment_proofs_order_id_orders_id_fk",
+  "payment_proofs_order_id_orders_id_fk",
   "payment_proofs_rep_id_sales_reps_id_fk", "payment_proofs_content_type_check",
   "payment_proofs_size_check", "payment_proofs_uploaded_by_check",
 ] as const;

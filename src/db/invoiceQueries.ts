@@ -35,6 +35,11 @@ export async function updateOrderItemPrices(
  */
 class InvoiceConflict extends Error {}
 
+/** Thrown inside the same transaction when a line would be invoiced at 0. */
+class InvoiceUnpriced extends Error {}
+
+export type IssueOutcome = "issued" | "conflict" | "unpriced";
+
 /**
  * Prices the order, assigns an invoice number, and locks the exchange rate
  * and the VAT rate — in one transaction, shared by the admin and the rep.
@@ -52,18 +57,26 @@ class InvoiceConflict extends Error {}
  * race rolls them back too rather than committing a half-applied invoice.
  *
  * `prices` is the admin's; a rep invoices at the prices already on the order.
- * Returns false when the order was no longer waiting to be invoiced.
+ * Returns "conflict" when the order was no longer waiting to be invoiced, and
+ * "unpriced" when any line would be invoiced at 0: 384 live products carry
+ * price 0 ("call for price"), and an invoice at their stored price gives the
+ * goods away. Checked after the admin's prices are applied, inside the same
+ * transaction, so no caller can skip it.
  */
 export async function issueInvoice(
   orderId: number,
   locked: { rate: number; vatRateBp: number; prices?: readonly OrderItemPrice[] },
-): Promise<boolean> {
+): Promise<IssueOutcome> {
   try {
     await sql.begin(async (tx) => {
       if (locked.prices) {
         const updated = await updateOrderItemPrices(tx, orderId, locked.prices);
         if (updated !== locked.prices.length) throw new InvoiceConflict();
       }
+      const [unpriced] = await tx`
+        SELECT 1 FROM order_items WHERE order_id = ${orderId} AND unit_price_cents <= 0 LIMIT 1
+      `;
+      if (unpriced) throw new InvoiceUnpriced();
       const result = await tx`
         UPDATE orders o
         SET status = 'invoiced',
@@ -80,9 +93,10 @@ export async function issueInvoice(
       `;
       if (result.count === 0) throw new InvoiceConflict();
     });
-    return true;
+    return "issued";
   } catch (err) {
-    if (err instanceof InvoiceConflict) return false;
+    if (err instanceof InvoiceConflict) return "conflict";
+    if (err instanceof InvoiceUnpriced) return "unpriced";
     throw err;
   }
 }

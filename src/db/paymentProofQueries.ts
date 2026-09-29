@@ -97,17 +97,21 @@ export async function getProofAccess(id: number): Promise<ProofAccess | null> {
  * The money arrived: the order moves to `preparing` and its held stock
  * becomes sold, together or not at all. `from` repeats the status the caller
  * read, so a lost race changes nothing (the same guard every status move
- * uses). `repId` records the rep who confirmed; null for the admin.
+ * uses).
+ *
+ * The admin's alone. A rep may upload receipts but never confirm one: a rep
+ * could otherwise upload any photo as "the receipt" for their own order and
+ * mark it paid, and the next step is shipping the goods. There is no rep
+ * parameter, so no rep code path can reach this.
  */
 export async function confirmPayment(
   orderId: number,
   from: "invoiced" | "payment_review",
-  repId: string | null,
 ): Promise<boolean> {
   return sql.begin(async (tx) => {
     const result = await tx`
       UPDATE orders
-      SET status = 'preparing', paid_at = now(), paid_confirmed_by_rep_id = ${repId}
+      SET status = 'preparing', paid_at = now()
       WHERE id = ${orderId} AND status = ${from}
     `;
     if (result.count === 0) return false;

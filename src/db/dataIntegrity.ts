@@ -282,7 +282,6 @@ export async function inspectDatabaseIntegrity(
           (invoiced_at IS NULL OR invoiced_at >= created_at)
           AND (payment_submitted_at IS NULL OR (invoiced_at IS NOT NULL AND payment_submitted_at >= invoiced_at))
           AND (paid_at IS NULL OR (invoiced_at IS NOT NULL AND paid_at >= invoiced_at))
-          AND (paid_confirmed_by_rep_id IS NULL OR paid_at IS NOT NULL)
           AND (shipped_at IS NULL OR (paid_at IS NOT NULL AND shipped_at >= paid_at))
           AND (delivered_at IS NULL OR (shipped_at IS NOT NULL AND delivered_at >= shipped_at))
         )

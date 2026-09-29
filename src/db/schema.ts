@@ -470,15 +470,6 @@ export const orders = pgTable(
     /** When the first receipt arrived and the order moved to `payment_review`. */
     paymentSubmittedAt: timestamp("payment_submitted_at", { withTimezone: true }),
     paidAt: timestamp("paid_at", { withTimezone: true }),
-    /**
-     * The rep who confirmed the money arrived; null when the admin did, or
-     * before anyone has. Reps can move money-relevant state now, so it is
-     * recorded who did.
-     */
-    paidConfirmedByRepId: uuid("paid_confirmed_by_rep_id").references(
-      (): AnyPgColumn => salesReps.id,
-      { onDelete: "restrict" },
-    ),
     shippedAt: timestamp("shipped_at", { withTimezone: true }),
     deliveredAt: timestamp("delivered_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -554,7 +545,6 @@ export const orders = pgTable(
       sql`(${t.invoicedAt} IS NULL OR ${t.invoicedAt} >= ${t.createdAt})
         AND (${t.paymentSubmittedAt} IS NULL OR (${t.invoicedAt} IS NOT NULL AND ${t.paymentSubmittedAt} >= ${t.invoicedAt}))
         AND (${t.paidAt} IS NULL OR (${t.invoicedAt} IS NOT NULL AND ${t.paidAt} >= ${t.invoicedAt}))
-        AND (${t.paidConfirmedByRepId} IS NULL OR ${t.paidAt} IS NOT NULL)
         AND (${t.shippedAt} IS NULL OR (${t.paidAt} IS NOT NULL AND ${t.shippedAt} >= ${t.paidAt}))
         AND (${t.deliveredAt} IS NULL OR (${t.shippedAt} IS NOT NULL AND ${t.deliveredAt} >= ${t.shippedAt}))`,
     ),
