@@ -134,6 +134,14 @@ all of it. The schedule is Vercel-only — see "Moving off Vercel" in
 nearest-1,000 Rial rounding `formatPrice` does, or a column of lines disagrees with its
 own total.
 
+**The price is `products.price_cents`; `price_tiers` only adds bulk breaks.**
+Every write (import, product table, Add a product) sets `price_cents` and
+nothing writes tiers except the seeder, whose first rung merely copied the
+price. So a rung at one unit is never read, the breaks above it apply by
+highest `minQty` whatever the stored order, and `writeImport` clears the tiers
+whenever the price changes — a bulk price is a discount on a price that no
+longer exists. The rules live in `src/lib/priceTiers.ts` with tests.
+
 **Customer currency is a global setting.** `usd` and `irr` force that currency
 in both languages. `both` preserves language-driven display (English USD,
 Persian IRR) and enables the invoice currency switch. Query parameters cannot

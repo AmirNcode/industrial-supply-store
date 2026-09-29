@@ -11,6 +11,7 @@ import {
   type Currency,
 } from "@/lib/money";
 import { specValueLabel, isTechnicalValue } from "@/lib/specValues";
+import { priceLadder } from "@/lib/priceTiers";
 import { ProductIcon } from "./ProductIcon";
 
 /**
@@ -218,13 +219,15 @@ function OrderPanel({
   locale,
 }: OrderPanelProps & { locale: Locale }) {
   const t = getDict(locale);
-  const base = priceTiers[0]?.priceCents ?? priceCents;
+  // The price is `price_cents`; a stored rung at one unit is never read
+  // (`lib/priceTiers.ts`).
+  const base = priceCents;
   const onRequest = isPriceOnRequest(base);
   // Quantity breaks used to be a second price column charged to every row. Only
   // a reader who has opened this panel is choosing a quantity, so the whole
   // ladder can be spelled out here instead of the top rung being shown to
   // everyone and the rest to nobody.
-  const tiers = priceTiers.length > 1 ? priceTiers : [];
+  const tiers = priceLadder(priceCents, priceTiers);
   const leadLabel =
     leadDays >= 7
       ? `${t.shipsIn} ${formatInt(Math.round(leadDays / 7), locale)} ${t.weeks}`

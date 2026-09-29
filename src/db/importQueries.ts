@@ -530,6 +530,12 @@ export async function writeImport(
           ON CONFLICT (part_number) DO UPDATE SET
             specs = EXCLUDED.specs,
             price_cents = EXCLUDED.price_cents,
+            -- Quantity breaks are discounts on a price. When the price
+            -- changes they are stale, and nothing here writes new ones, so
+            -- they go (lib/priceTiers.ts). \`products.price_cents\` on the
+            -- right is the row's value before this update.
+            price_tiers = CASE WHEN products.price_cents = EXCLUDED.price_cents
+                               THEN products.price_tiers ELSE '[]'::jsonb END,
             pack_qty = EXCLUDED.pack_qty,
             lead_days = EXCLUDED.lead_days,
             in_stock = EXCLUDED.in_stock,

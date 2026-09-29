@@ -467,3 +467,46 @@ test("the pending migration attaches old live reservations without renumbering p
     assert.equal((await writeImport(familyId, [importRow(row.partNumber, 200)])).updated, 1);
   });
 });
+
+test("an import that changes a price changes what the customer is charged", async () => {
+  // Review finding H-1: seeded quantity breaks outlived every price edit.
+  const slug = `pn-price-${Date.now()}`;
+  await withFamily(slug, async (familyId) => {
+    const { unitPriceAt } = await import("@/lib/priceTiers");
+    const partNumber = `PRICE-${Date.now()}`;
+    const row = {
+      partNumber,
+      specs: {},
+      priceCents: 100,
+      packQty: 1,
+      leadDays: 0,
+      inStock: true,
+      inventoryAvailable: 0,
+      inventoryOnHold: 0,
+      inventorySold: 0,
+    };
+    await writeImport(familyId, [row]);
+    // The seeder's shape: a one-unit rung copying the price, and a bulk break.
+    await sql`
+      UPDATE products
+      SET price_tiers = '[{"minQty":1,"priceCents":100},{"minQty":10,"priceCents":90}]'::jsonb
+      WHERE part_number = ${partNumber}
+    `;
+    const read = async () =>
+      (await sql<{ priceCents: number; priceTiers: { minQty: number; priceCents: number }[] }[]>`
+        SELECT price_cents AS "priceCents", price_tiers AS "priceTiers"
+        FROM products WHERE part_number = ${partNumber}
+      `)[0];
+
+    // Same price: the breaks are still discounts on it and stay.
+    await writeImport(familyId, [row]);
+    assert.equal(unitPriceAt(await read(), 10), 90);
+
+    // A new price: the stale breaks go, and every quantity pays the new price.
+    await writeImport(familyId, [{ ...row, priceCents: 200 }]);
+    const after = await read();
+    assert.deepEqual(after.priceTiers, []);
+    assert.equal(unitPriceAt(after, 1), 200);
+    assert.equal(unitPriceAt(after, 10), 200);
+  });
+});

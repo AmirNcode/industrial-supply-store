@@ -164,7 +164,7 @@ export function ProductCardList({
   return (
     <ul className="divide-y divide-[var(--color-rule-light)] border-y border-[var(--color-rule-light)]">
       {products.map((p) => {
-        const base = p.priceTiers[0]?.priceCents ?? p.priceCents;
+        const base = p.priceCents;
         const name = p.familyEn
           ? locale === "fa"
             ? p.familyFa

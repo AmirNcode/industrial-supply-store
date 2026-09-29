@@ -4,6 +4,7 @@ import type { TransactionSql } from "postgres";
 import { sql } from "@/db";
 import type { SpecBag, PriceTier } from "@/db/schema";
 import { REQUEST_LIMITS } from "./requestLimits";
+import { unitPriceAt } from "./priceTiers";
 
 const COOKIE = "isupply_cart";
 const YEAR = 60 * 60 * 24 * 365;
@@ -253,14 +254,8 @@ export async function clearCart(): Promise<void> {
   });
 }
 
-/** Unit price at a given quantity, honouring the quantity breaks. */
-export function unitPriceAt(line: { priceCents: number; priceTiers: PriceTier[] }, qty: number): number {
-  let price = line.priceCents;
-  for (const tier of line.priceTiers) {
-    if (qty >= tier.minQty) price = tier.priceCents;
-  }
-  return price;
-}
+/** Re-exported: the rule is pure and tested in `priceTiers.ts`. */
+export { unitPriceAt };
 
 export function lineTotal(line: CartLine): number {
   return unitPriceAt(line, line.qty) * line.qty;

@@ -539,7 +539,7 @@ function SpecTable({
       <tbody>
         {products.map((p) => {
           const isHit = highlighted && p.partNumber.toUpperCase() === highlighted;
-          const base = p.priceTiers[0]?.priceCents ?? p.priceCents;
+          const base = p.priceCents;
           const onRequest = isPriceOnRequest(base);
 
           return (

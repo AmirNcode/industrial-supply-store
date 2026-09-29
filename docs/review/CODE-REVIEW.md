@@ -76,7 +76,7 @@ deployment · `ALL` = everywhere.
 | C-1 | Critical | Every admin page is sent to anonymous visitors inside the login redirect | LIVE | **FIXED in `f205741` (local `main`, not pushed); the live site leaks until it is pushed** |
 | C-2 | Critical | A sales rep alone can mark an order paid (own "receipt" + own confirmation), including a zero-price invoice | BRANCH | **FIXED 2026-09-29 in `{{C-2}}`** |
 | C-3 | Critical | Pay tokens (a bearer credential) are rendered on admin pages; with C-1 anyone can change order state and read bank receipts | BRANCH | **FIXED 2026-09-29 in `{{C-3}}`** |
-| H-1 | High | Admin price changes do not reach customers for 94% of live products (stale seeded quantity-break prices win) | LIVE | CONFIRMED |
+| H-1 | High | Admin price changes do not reach customers for 94% of live products (stale seeded quantity-break prices win) | LIVE | **FIXED 2026-09-29 in `{{H-1}}`** |
 | H-2 | High | Production is running out of database connections right now (342 × EMAXCONN, 140 × 60 s timeouts in 7 days) | LIVE | CONFIRMED-LIVE / cause PLAUSIBLE |
 | H-3 | High | Invoice numbers collide after invoice #9,999; the repair script then winds the sequence backwards | ALL | CONFIRMED |
 | H-4 | High | A rep can take over any assigned customer's account via "reset password" | BRANCH | **FIXED 2026-09-29 in `{{H-4}}`** |
@@ -303,6 +303,19 @@ deployment · `ALL` = everywhere.
 ## High
 
 ### H-1 — Admin price changes do not reach customers for 94% of live products
+
+> **Fix status (2026-09-29): FIXED in `{{H-1}}` (local `main`, not pushed).**
+> `price_cents` is now the price everywhere: `src/lib/priceTiers.ts` ignores
+> any stored rung at one unit and applies only breaks above it (highest
+> `minQty ≤ qty`, any stored order — this also fixes L-20); the family page,
+> product panel and card list display `price_cents`. `writeImport` (used by
+> the CSV import, the product table and Add a product) clears `price_tiers`
+> whenever a product's price changes and keeps them when it does not. No data
+> migration: the review found tier[0] equal to `price_cents` on every live
+> product, so nothing a customer sees changes until a price is edited.
+> Tests: `src/lib/priceTiers.test.ts`; `partNumbers.integration.test.ts`
+> "an import that changes a price changes what the customer is charged"
+> (fails with the upsert change removed).
 
 - **Scope**: LIVE. **Status**: CONFIRMED (code + live data).
 - **Evidence**: on the live database, 33,427 of 35,717 products carry seeded
@@ -916,7 +929,7 @@ Scope BRANCH (process), status CODE.
 | L-17 | `scripts/verify-remote.mts:318-322` prints "only an empty database may use db:bootstrap:empty:remote" when the schema is merely behind on migrations, and exits before the integrity checks | verifier | say "run db:migrate:remote" |
 | L-18 | `/quote/submitted?ref=<anything>` prints any text as "your order reference" (content spoofing in a trusted frame) | `src/app/[locale]/quote/submitted/page.tsx:16-26` | show it only when it matches the reference format |
 | L-19 | CI actions pinned by major tag, not commit SHA; dev-only audit findings (esbuild via drizzle-kit, js-yaml, path-to-regexp via `@vercel/config`) | `.github/workflows/ci.yml`, `npm audit` | pin SHAs; upgrade when compatible |
-| L-20 | `unitPriceAt` takes the *last* tier in array order whose `minQty ≤ qty`, so unsorted tiers price wrongly (no live product is unsorted today; see H-1 for tiers generally) | `src/lib/cart.ts:257-263` | choose the highest `minQty ≤ qty` |
+| L-20 | **FIXED 2026-09-29 with H-1 in `{{H-1}}`.** `unitPriceAt` takes the *last* tier in array order whose `minQty ≤ qty`, so unsorted tiers price wrongly (no live product is unsorted today; see H-1 for tiers generally) | `src/lib/cart.ts:257-263` | choose the highest `minQty ≤ qty` |
 | L-21 | Re-running `npm run db:seed:reps` aborts once a demo rep owns a customer created through the UI (it deletes only its own `demo.*@example.invalid` users before `DELETE FROM sales_reps`, and the rep foreign keys are `RESTRICT`), although its header promises re-runs replace its rows | `scripts/seed-reps.mts:67` | reassign or delete dependants first |
 | L-22 | Wasted round trips: the admin rep page and the rep commission page await `getFxRate()` serially before their fan-out, and read payouts twice (`loadRepSummary` already reads them) | `admin/(panel)/reps/[id]/page.tsx:67`, `rep/(portal)/commission/page.tsx:19-24` | start in parallel; return payouts from `loadRepSummary` |
 | L-23 | `HELD_STATUSES` exists in `src/lib/orders.ts`, but the held-status list is still hard-coded as SQL literals in `src/db/importQueries.ts:710`, `src/db/dataIntegrity.ts:104` and `:191`, `src/db/inventoryQueries.ts:101` — the next new held status repeats the grep hunt, and a missed site makes imports, reconcile and the shortfall warning disagree | as listed | pass the constant as an array parameter |
