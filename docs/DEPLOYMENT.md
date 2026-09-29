@@ -206,7 +206,11 @@ reading in the panel proves both are reachable from there.
 
 ### Moving off Vercel: the job needs a new scheduler
 
-**Open item.** A self-hosted deployment — the client's servers in Iran — gets
+**Chosen: option 1.** `docker-compose.yml` now has a `scheduler` service
+(profile `full`) that calls the route at 17:30 UTC with `CRON_SECRET`; set
+that variable on the server. The reasoning is kept below.
+
+A self-hosted deployment — the client's servers in Iran — gets
 no cron from `vercel.ts`. Nothing calls the route, the automatic rate freezes
 at its last reading, and the only symptom is the 36-hour warning in admin.
 Before cutting over, decide what calls the route once a day. Options found so

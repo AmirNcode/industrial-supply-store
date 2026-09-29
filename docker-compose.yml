@@ -5,13 +5,18 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: isupply
-      POSTGRES_PASSWORD: isupply
+      # Set POSTGRES_PASSWORD on any server. The default is for this laptop
+      # only; it is printed in the repository.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-isupply}
       POSTGRES_DB: isupply
       # Deterministic collation so ORDER BY on part numbers is stable.
       POSTGRES_INITDB_ARGS: "--locale=C --encoding=UTF8"
     ports:
       # 5432 is taken by other stacks on this machine; expose on 5433.
-      - "5433:5432"
+      # Loopback only: on a server with a public address "5433:5432" would
+      # publish Postgres to the internet (review finding H-6). The app reaches
+      # it as db:5432 inside the compose network and needs no published port.
+      - "127.0.0.1:5433:5432"
     volumes:
       - isupply-pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -35,9 +40,16 @@ services:
       db:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgres://isupply:isupply@db:5432/isupply
+      DATABASE_URL: postgres://isupply:${POSTGRES_PASSWORD:-isupply}@db:5432/isupply
       AUTH_SECRET_FILE: /run/secrets/auth_secret
+      # Production refuses "changeme": set ADMIN_PASSWORD before `up`.
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-changeme}
+      # The evening exchange-rate job's bearer secret; `scheduler` below sends it.
+      CRON_SECRET: ${CRON_SECRET:-}
+      SELLER_ADDRESS: ${SELLER_ADDRESS:-}
+      SELLER_ADDRESS_FA: ${SELLER_ADDRESS_FA:-}
+      SELLER_TAX_ID: ${SELLER_TAX_ID:-}
+      SUPABASE_PAYMENT_PROOF_BUCKET: ${SUPABASE_PAYMENT_PROOF_BUCKET:-payment-proofs}
       USD_TO_RIAL: ${USD_TO_RIAL:-1100000}
       SUPABASE_URL: ${SUPABASE_URL:-}
       SUPABASE_PUBLIC_URL: ${SUPABASE_PUBLIC_URL:-}
@@ -59,6 +71,30 @@ services:
     profiles:
       # Only starts with `--profile full`. Day-to-day you run the app on the
       # host against the dockerised db, which is far faster to iterate on.
+      - full
+
+  # The evening exchange-rate reading. Vercel's cron does not exist here, and
+  # without this the automatic rate freezes at its last reading with nothing
+  # but a 36-hour warning in admin (DEPLOYMENT.md, "Moving off Vercel").
+  # 17:30 UTC is 21:00 in Tehran, as on Vercel. The secret is written into the
+  # container's crontab at start, because busybox crond does not pass the
+  # container environment to its jobs.
+  scheduler:
+    image: alpine:3.20
+    container_name: isupply-scheduler
+    restart: unless-stopped
+    depends_on:
+      - app
+    environment:
+      CRON_SECRET: ${CRON_SECRET:-}
+    command:
+      - sh
+      - -c
+      - >-
+        apk add --no-cache curl >/dev/null &&
+        echo "30 17 * * * curl -fsS -H 'Authorization: Bearer $$CRON_SECRET' http://app:3000/api/cron/fx-rate" | crontab - &&
+        exec crond -f -l 8
+    profiles:
       - full
 
   proxy:

@@ -81,7 +81,7 @@ deployment · `ALL` = everywhere.
 | H-3 | High | Invoice numbers collide after invoice #9,999; the repair script then winds the sequence backwards | ALL | **FIXED 2026-09-29 in `{{H-3}}`** |
 | H-4 | High | A rep can take over any assigned customer's account via "reset password" | BRANCH | **FIXED 2026-09-29 in `{{H-4}}`** |
 | H-5 | High | Self-hosted: every rate limit (incl. admin login) is bypassed by a spoofed forwarding header | SELF-HOST | **FIXED 2026-09-29 in `{{H-5}}`** |
-| H-6 | High | Self-hosted compose publishes Postgres to the network with password `isupply`; cron secret never reaches the app | SELF-HOST | CODE |
+| H-6 | High | Self-hosted compose publishes Postgres to the network with password `isupply`; cron secret never reaches the app | SELF-HOST | **FIXED 2026-09-29 in `{{H-6}}`** |
 | H-7 | High | A fresh database prices the catalog at 1,100,000 rial/USD (~47% of market) with no warning | SELF-HOST / ALL | CODE |
 | H-8 | High | `DEMO_MODE` publishes pay tokens, receipts and the product table to the public | BRANCH | **FIXED 2026-09-29 in `{{H-8}}`** |
 | H-9 | High | Admin "session" is a permanent, unrevocable password-derived bearer token without the `Secure` flag | LIVE | **FIXED 2026-09-29 in `{{H-9}}`** |
@@ -529,6 +529,18 @@ deployment · `ALL` = everywhere.
 - **Tests**: unit tests for `clientAddress` with each configuration.
 
 ### H-6 — Self-hosted compose publishes Postgres with password `isupply`; the cron secret never reaches the app
+
+> **Fix status (2026-09-29): FIXED in `{{H-6}}` (local `main`, not pushed).**
+> Postgres is published on `127.0.0.1` only; its password comes from
+> `POSTGRES_PASSWORD` (default kept for the laptop) and the app's URL follows
+> it. The app now receives `CRON_SECRET`, `SELLER_ADDRESS[_FA]`,
+> `SELLER_TAX_ID` and `SUPABASE_PAYMENT_PROOF_BUCKET`. A `scheduler` service
+> (busybox crond) calls `/api/cron/fx-rate` at 17:30 UTC — the option
+> `DEPLOYMENT.md` already preferred. `docker compose config` renders; the
+> stack itself was not started here. `ADMIN_PASSWORD` still defaults to
+> `changeme`, which production refuses (fails closed) — the compose comment
+> says to set it. Not done: a compose *secret* for the DB password (the app
+> reads `DATABASE_URL` from the environment, so the password must be in it).
 
 - **Scope**: SELF-HOST (compose is the documented path for the Iran servers).
   **Status**: CODE.
