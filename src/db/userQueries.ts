@@ -46,6 +46,14 @@ export async function findUserForSignIn(
   return rows[0] ?? null;
 }
 
+/** The session version a cookie must carry; null for no such account. */
+export async function getSessionVersion(userId: string): Promise<number | null> {
+  const [row] = await sql<{ version: number }[]>`
+    SELECT session_version AS version FROM users WHERE id = ${userId}
+  `;
+  return row?.version ?? null;
+}
+
 export type NewUser = {
   email: string;
   passwordHash: string;
@@ -141,7 +149,9 @@ export async function setPassword(
     UPDATE users
     SET password_hash = ${passwordHash}, must_change_password = ${mustChange},
         -- A password nobody forces them to replace is one they chose.
-        chose_own_password = chose_own_password OR ${!mustChange}
+        chose_own_password = chose_own_password OR ${!mustChange},
+        -- Every other open session ends (lib/sessionToken.ts).
+        session_version = session_version + 1
     WHERE id = ${userId}
   `;
 }

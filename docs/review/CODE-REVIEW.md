@@ -88,7 +88,7 @@ deployment · `ALL` = everywhere.
 | H-10 | High | Applying the sales-rep migration first (as the deploy doc says) breaks live sign-up until the new code is live — and again after a rollback | BRANCH → LIVE | **FIXED 2026-09-29 in `{{H-10}}`** |
 | H-11 | High | Admin "Reset password" on an order resets whichever account owns the email typed on that order | LIVE | **FIXED 2026-09-29 in `{{H-11}}`** |
 | M-1 | Medium | Customer sign-in is rate-limited per IP only | LIVE | **FIXED 2026-09-29 in `{{M-1}}`** |
-| M-2 | Medium | Customer sessions cannot be revoked; password change/reset leaves other sessions alive 30 days | LIVE | CODE |
+| M-2 | Medium | Customer sessions cannot be revoked; password change/reset leaves other sessions alive 30 days | LIVE | **FIXED 2026-09-29 in `{{M-2}}`** |
 | M-3 | Medium | `/api/cart` adds any product id, including hidden and non-existent ones | LIVE | CODE |
 | M-4 | Medium | Heavy public pages have no rate limit (`/search`, family `?view=all`) | LIVE | CODE + live data |
 | M-5 | Medium | `/_next/image` is an open image proxy for any HTTPS host | LIVE | CODE |
@@ -761,6 +761,16 @@ login string, not the user id, so unknown logins cost the same), add an
 exponential backoff per account. Scope LIVE, status CODE.
 
 ### M-2 — Customer sessions cannot be revoked
+
+> **Fix status (2026-09-29): FIXED in `{{M-2}}`.** New `users.session_version`
+> (default 1; added to the not-yet-live `add_sales_reps` migration, the schema
+> and the verifier) is carried in the customer cookie and re-read by
+> `currentUserId()` each request. `setPassword`, the rep reset and the admin
+> reset all bump it, ending every other session; the customer's own change
+> reissues their current cookie. Cookies issued before this read as version 1,
+> so nobody is signed out by the deploy. Tests: `sessionToken.test.ts`,
+> `salesReps.integration.test.ts`. Cost: one indexed read per request that
+> checks a customer session.
 
 `src/lib/sessionToken.ts` signs only `userId.expiry` (30 days). Password
 change (`changePasswordAction`), admin reset and rep reset (H-4) leave every

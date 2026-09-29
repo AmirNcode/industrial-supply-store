@@ -53,6 +53,9 @@ ALTER TABLE users
   -- creates starts false. A rep may reset only an account they created that
   -- has never had one (review finding H-4).
   ADD COLUMN IF NOT EXISTS chose_own_password boolean NOT NULL DEFAULT true,
+  -- Carried in the session cookie and bumped by every password change or
+  -- reset, so those end every other open session (review finding M-2).
+  ADD COLUMN IF NOT EXISTS session_version integer NOT NULL DEFAULT 1,
   ADD COLUMN IF NOT EXISTS address text NOT NULL DEFAULT '',
   ADD COLUMN IF NOT EXISTS city text NOT NULL DEFAULT '',
   ADD COLUMN IF NOT EXISTS next_follow_up_on date;

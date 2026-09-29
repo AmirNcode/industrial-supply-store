@@ -171,7 +171,9 @@ export async function resetCustomerPasswordForRep(
   passwordHash: string,
 ): Promise<CustomerRow | null> {
   const [row] = await sql<CustomerRow[]>`
-    UPDATE users u SET password_hash = ${passwordHash}, must_change_password = true
+    UPDATE users u
+    SET password_hash = ${passwordHash}, must_change_password = true,
+        session_version = u.session_version + 1
     WHERE u.id = ${customerId} AND u.rep_id = ${repId}
       AND u.origin = 'rep' AND u.origin_rep_id = ${repId} AND NOT u.chose_own_password
     RETURNING ${COLS}
@@ -279,7 +281,9 @@ export async function resetCustomerPasswordAdmin(
   passwordHash: string,
 ): Promise<CustomerRow | null> {
   const [row] = await sql<CustomerRow[]>`
-    UPDATE users u SET password_hash = ${passwordHash}, must_change_password = true
+    UPDATE users u
+    SET password_hash = ${passwordHash}, must_change_password = true,
+        session_version = u.session_version + 1
     WHERE u.id = ${customerId}
     RETURNING ${COLS}
   `;

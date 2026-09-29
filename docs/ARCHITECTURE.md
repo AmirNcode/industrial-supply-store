@@ -73,7 +73,9 @@ They share nothing on purpose.
   `DEMO_MODE`.
 - **Customers** — per-account scrypt passwords, signed session cookie
   (`src/lib/session.ts`, `sessionToken.ts`). No sessions table; the cookie is
-  an HMAC of `userId.expiry`. Verification accepts only canonical UUID-shaped
+  an HMAC of `userId.version.expiry`, and `currentUserId()` checks the version
+  against `users.session_version`, which every password change or reset
+  bumps — so those end the account's other sessions. Verification accepts only canonical UUID-shaped
   user IDs, so ownership queries compare UUID to UUID and retain their indexes.
   A password someone else set (a rep's or the admin's reset) flags the account,
   and the account pages send it to choose its own first. A rep may reset only

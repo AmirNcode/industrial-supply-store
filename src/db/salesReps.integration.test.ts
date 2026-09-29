@@ -846,3 +846,35 @@ test("the previous release's writes still succeed against the migrated schema", 
     assert.equal(order.placedByRep, false);
   });
 });
+
+test("every password change or reset ends the account's other sessions", async () => {
+  // Review M-2: the session cookie carries users.session_version.
+  assertLocalDatabase();
+  const suffix = randomUUID().slice(0, 8);
+  const repIds: string[] = [];
+  const userIds: string[] = [];
+  try {
+    const rep = await createRep({ username: `sv-${suffix}`, name: "S", phone: "", email: "", commissionRateBp: 0, passwordHash: "x" });
+    if (rep === "username-taken") throw new Error("username clash");
+    repIds.push(rep.id);
+    const created = await createCustomerForRep(rep.id, {
+      company: `SV ${suffix}`, contactName: "N", phone: randomPhone(), email: null, address: "", city: "",
+      codeChoice: "random", passwordHash: "x", locale: "fa",
+    });
+    if (created.kind !== "created") throw new Error(created.kind);
+    userIds.push(created.id);
+    const { getSessionVersion } = await import("./userQueries");
+    const { resetCustomerPasswordAdmin } = await import("./customerQueries");
+
+    const start = await getSessionVersion(created.id);
+    assert.equal(start, 1);
+    assert.ok(await resetCustomerPasswordForRep(rep.id, created.id, "temp"));
+    assert.equal(await getSessionVersion(created.id), 2);
+    await setPassword(created.id, "own", false);
+    assert.equal(await getSessionVersion(created.id), 3);
+    assert.ok(await resetCustomerPasswordAdmin(created.id, "admin-temp"));
+    assert.equal(await getSessionVersion(created.id), 4);
+  } finally {
+    await cleanupReps(repIds, userIds);
+  }
+});

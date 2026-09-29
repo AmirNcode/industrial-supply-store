@@ -216,8 +216,8 @@ export async function updateProfileAction(formData: FormData): Promise<void> {
  * to lock the owner out. Re-entering the current one costs the real user a few
  * seconds and stops that.
  *
- * Known gap, shared with the staff reset: this does not end the account's other
- * sessions, because the signed cookie commits only to a user id and an expiry.
+ * It ends every other session on the account (the cookie carries
+ * `session_version`, which `setPassword` bumps); this one is reissued.
  */
 export async function changePasswordAction(formData: FormData): Promise<void> {
   const locale = safeLocale(formData);
@@ -255,16 +255,18 @@ export async function changePasswordAction(formData: FormData): Promise<void> {
   }
 
   await setPassword(user.id, await hashPassword(next), false);
+  // The change ended every session, this one too; reissue this one.
+  await setSessionCookie(user.id);
   redirect(`/${locale}/account?ok=password#profile`);
 }
 
 /**
  * The first password a customer chooses after a rep or admin set one for them.
  *
- * The temporary password is asked for again. A reset does not end the
- * account's other sessions (see changePasswordAction), so without it any
- * session still open from before — including one someone else took — could
- * choose the password first and lock the customer out for good. Refused for
+ * The temporary password is asked for again. The reset ended every session
+ * opened before it, but anyone who learnt the temporary password could have
+ * signed in since, and without this could choose the password first and lock
+ * the customer out for good. Refused for
  * anyone not flagged, so it cannot become a way around the ordinary form.
  */
 export async function setInitialPasswordAction(formData: FormData): Promise<void> {
@@ -294,6 +296,8 @@ export async function setInitialPasswordAction(formData: FormData): Promise<void
   if (next !== confirm) redirect(`${back}?error=mismatch`);
 
   await setPassword(user.id, await hashPassword(next), false);
+  // The change ended every session, this one too; reissue this one.
+  await setSessionCookie(user.id);
   redirect(`/${locale}/account?ok=password#profile`);
 }
 
