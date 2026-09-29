@@ -24,6 +24,9 @@ jobs:
       AUTH_SECRET: ci-only-auth-secret-at-least-32-characters
       ADMIN_PASSWORD: ci-admin-password
       E2E_ADMIN_PASSWORD: ci-admin-password
+      # next start is a production server; tell it which header holds the
+      # client address (src/lib/rateLimit.ts). Next fills this one locally.
+      TRUSTED_PROXY_HEADER: x-forwarded-for
       USD_TO_TOMAN: "110000"
     services:
       postgres:

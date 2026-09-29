@@ -48,6 +48,7 @@ Set in Vercel → Settings → Environment Variables → Production.
 | `AUTH_SECRET` | **build and runtime** | **build fails** |
 | `ADMIN_PASSWORD` | runtime | build fine, `/admin` throws |
 | `USD_TO_RIAL` | runtime | falls back to 1,100,000 Rial / USD; only used before the first market reading |
+| `TRUSTED_PROXY_HEADER` | runtime, **self-hosted only** | every rate-limited action (sign-in, sign-up, checkout, uploads) throws. Set it to the header your reverse proxy *overwrites* with the client address — `x-real-ip` with `deploy/nginx.conf`. Leave unset on Vercel, which uses its own header |
 | `CRON_SECRET` | runtime (evening rate job) | the job is refused and the automatic rate stops moving; admin warns after 36 h |
 | `SELLER_*` | runtime | invoices print no seller address or tax ID; the name is always TEMEX, and email/phone come from Admin → Settings |
 | `SUPABASE_URL` | runtime Storage access | URL images still work; image/CSV upload reports not configured |

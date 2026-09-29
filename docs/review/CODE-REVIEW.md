@@ -80,7 +80,7 @@ deployment · `ALL` = everywhere.
 | H-2 | High | Production is running out of database connections right now (342 × EMAXCONN, 140 × 60 s timeouts in 7 days) | LIVE | **Main driver FIXED 2026-09-29 in `{{H-2}}`; confirm on live after the push** |
 | H-3 | High | Invoice numbers collide after invoice #9,999; the repair script then winds the sequence backwards | ALL | **FIXED 2026-09-29 in `{{H-3}}`** |
 | H-4 | High | A rep can take over any assigned customer's account via "reset password" | BRANCH | **FIXED 2026-09-29 in `{{H-4}}`** |
-| H-5 | High | Self-hosted: every rate limit (incl. admin login) is bypassed by a spoofed forwarding header | SELF-HOST | CODE |
+| H-5 | High | Self-hosted: every rate limit (incl. admin login) is bypassed by a spoofed forwarding header | SELF-HOST | **FIXED 2026-09-29 in `{{H-5}}`** |
 | H-6 | High | Self-hosted compose publishes Postgres to the network with password `isupply`; cron secret never reaches the app | SELF-HOST | CODE |
 | H-7 | High | A fresh database prices the catalog at 1,100,000 rial/USD (~47% of market) with no warning | SELF-HOST / ALL | CODE |
 | H-8 | High | `DEMO_MODE` publishes pay tokens, receipts and the product table to the public | BRANCH | **FIXED 2026-09-29 in `{{H-8}}`** |
@@ -492,6 +492,20 @@ deployment · `ALL` = everywhere.
   customer's password.
 
 ### H-5 — Self-hosted: every rate limit (including admin login) is bypassed by a spoofed header
+
+> **Fix status (2026-09-29): FIXED in `{{H-5}}` (local `main`, not pushed).**
+> `clientAddress` reads exactly one header (`trustedAddressHeader`):
+> `TRUSTED_PROXY_HEADER` when set, `x-vercel-forwarded-for` on Vercel,
+> `x-forwarded-for` in development — and a production server with none of
+> these throws instead of guessing. `docker-compose.yml` now ships an nginx
+> `proxy` service (`deploy/nginx.conf`) that overwrites `X-Real-IP` and
+> `X-Forwarded-For` and blanks `X-Vercel-Forwarded-For`; the app is no longer
+> published directly and runs with `TRUSTED_PROXY_HEADER=x-real-ip`. Admin
+> sign-in also consumes a site-wide ceiling (60 attempts / 15 min, logged when
+> tripped). Playwright and CI set `TRUSTED_PROXY_HEADER=x-forwarded-for` for
+> their local `next start`. Tests: `rateLimit.test.ts`. Not verified: the
+> nginx config was not run (no self-hosted stack here); TLS is still to be
+> added on that server.
 
 - **Scope**: SELF-HOST. **Status**: CODE (plus Next.js source).
 - **Where**: `src/lib/rateLimit.ts:43-49` trusts, in order,

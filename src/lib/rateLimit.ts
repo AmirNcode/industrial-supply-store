@@ -14,6 +14,10 @@ export type RateLimitPolicy = Readonly<{
 /** Deliberately named policies make call sites reviewable at a glance. */
 export const RATE_LIMITS = {
   adminLogin: { limit: 8, windowSeconds: 15 * 60 },
+  // Every admin sign-in attempt from anywhere, together. The admin password is
+  // shared and has no account to key on, so a guesser spread over many
+  // addresses meets only this ceiling. Far above what a small staff uses.
+  adminLoginGlobal: { limit: 60, windowSeconds: 15 * 60 },
   accountSignIn: { limit: 10, windowSeconds: 15 * 60 },
   accountSignUp: { limit: 5, windowSeconds: 60 * 60 },
   accountWrite: { limit: 30, windowSeconds: 10 * 60 },
@@ -35,17 +39,40 @@ export const RATE_LIMITS = {
 type HeaderSource = Pick<Headers, "get">;
 
 /**
- * Vercel overwrites X-Forwarded-For with the public client address. Its
- * Vercel-specific twin is checked first so a proxy in front of Vercel cannot
- * replace the value the platform supplied. Self-hosters must likewise let
- * only their trusted reverse proxy set these headers.
+ * The one request header the client address is read from — never a list.
+ *
+ * Reading the first of several forwarding headers let a client choose its own
+ * address on any server where the platform does not overwrite them: Next only
+ * fills `x-forwarded-for` when it is absent and nothing strips
+ * `x-vercel-forwarded-for`, so on the self-hosted server a random header per
+ * request voided every limit, the admin sign-in included (review H-5).
+ *
+ *   - `TRUSTED_PROXY_HEADER`, when set: the header the deployment's own reverse
+ *     proxy *overwrites* (the compose stack's nginx sets `x-real-ip`).
+ *   - on Vercel: `x-vercel-forwarded-for`, which the platform sets.
+ *   - in development: `x-forwarded-for`, which Next fills for local requests.
+ *   - a production server with neither is refused (`clientAddress` throws),
+ *     because there is no header it could trust.
  */
-export function clientAddress(source: HeaderSource): string {
-  for (const name of ["x-vercel-forwarded-for", "x-forwarded-for", "x-real-ip"]) {
-    const candidate = source.get(name)?.split(",", 1)[0]?.trim();
-    if (candidate && isIP(candidate)) return candidate;
+export function trustedAddressHeader(env: NodeJS.ProcessEnv = process.env): string | null {
+  const configured = env.TRUSTED_PROXY_HEADER?.trim().toLowerCase();
+  if (configured) {
+    if (!/^[a-z0-9-]{1,64}$/.test(configured)) throw new Error("TRUSTED_PROXY_HEADER is not a header name");
+    return configured;
   }
-  return "unknown";
+  if (env.VERCEL) return "x-vercel-forwarded-for";
+  if (env.NODE_ENV !== "production") return "x-forwarded-for";
+  return null;
+}
+
+export function clientAddress(source: HeaderSource, header = trustedAddressHeader()): string {
+  if (header === null) {
+    throw new Error(
+      "Set TRUSTED_PROXY_HEADER to the header your reverse proxy overwrites with the client address (e.g. x-real-ip)",
+    );
+  }
+  const candidate = source.get(header)?.split(",", 1)[0]?.trim();
+  return candidate && isIP(candidate) ? candidate : "unknown";
 }
 
 export function rateLimitIdentityHash(kind: "ip" | "account", value: string): string {
@@ -119,6 +146,23 @@ async function consumeCounter(
 }
 
 export type RateLimitResult = { allowed: boolean; retryAfter: number };
+
+/**
+ * One counter for every caller together — for the shared admin password,
+ * where no address or account identifies the guesser. Logged when it trips,
+ * because it means someone is guessing and every admin is now locked out
+ * until the window passes.
+ */
+export async function consumeGlobalRateLimit(
+  scope: string,
+  policy: RateLimitPolicy,
+): Promise<RateLimitResult> {
+  const row = await consumeCounter(scope, rateLimitIdentityHash("account", "global"), policy);
+  if (row.count === policy.limit + 1) {
+    console.error(`rate limit ${scope}: ${policy.limit} attempts in ${policy.windowSeconds}s from all addresses`);
+  }
+  return { allowed: row.count <= policy.limit, retryAfter: row.retryAfter };
+}
 
 /**
  * Consume the IP counter and, when known, a second account counter. Both are

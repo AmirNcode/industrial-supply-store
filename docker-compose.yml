@@ -48,13 +48,30 @@ services:
       SUPABASE_CATALOG_BUCKET: ${SUPABASE_CATALOG_BUCKET:-catalog-images}
       SUPABASE_IMPORT_BUCKET: ${SUPABASE_IMPORT_BUCKET:-catalog-imports}
       NODE_ENV: production
+      # The one header the proxy below overwrites with the client address.
+      TRUSTED_PROXY_HEADER: x-real-ip
     secrets:
       - auth_secret
-    ports:
-      - "3000:3000"
+    # No published port: every request comes through `proxy`, which is what
+    # makes the client address trustworthy (deploy/nginx.conf).
+    expose:
+      - "3000"
     profiles:
       # Only starts with `--profile full`. Day-to-day you run the app on the
       # host against the dockerised db, which is far faster to iterate on.
+      - full
+
+  proxy:
+    image: nginx:1.27-alpine
+    container_name: isupply-proxy
+    restart: unless-stopped
+    depends_on:
+      - app
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "80:80"
+    profiles:
       - full
 
 volumes:

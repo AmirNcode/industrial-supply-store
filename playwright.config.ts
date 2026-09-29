@@ -23,6 +23,9 @@ export default defineConfig({
   },
   webServer: {
     command: `npm run start -- --hostname 127.0.0.1 --port ${port}`,
+    // A production server needs to be told which header carries the client
+    // address (src/lib/rateLimit.ts). Locally Next fills x-forwarded-for.
+    env: { TRUSTED_PROXY_HEADER: process.env.TRUSTED_PROXY_HEADER ?? "x-forwarded-for" },
     url: `${baseURL}/en`,
     reuseExistingServer: !process.env.CI,
     timeout: 180_000,
