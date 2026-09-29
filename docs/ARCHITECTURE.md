@@ -73,7 +73,10 @@ They share nothing on purpose.
   an HMAC of `userId.expiry`. Verification accepts only canonical UUID-shaped
   user IDs, so ownership queries compare UUID to UUID and retain their indexes.
   A password someone else set (a rep's or the admin's reset) flags the account,
-  and the account pages send it to choose its own first.
+  and the account pages send it to choose its own first. A rep may reset only
+  an account they created that has never chosen its own password
+  (`users.chose_own_password`, enforced in `resetCustomerPasswordForRep`'s
+  WHERE); every other reset is the admin's.
 - **Sales reps** — their own `sales_reps` table and `isupply_rep` cookie
   (`src/lib/repSession.ts`, `repSessionToken.ts`), signed with a key derived
   from `AUTH_SECRET` for this purpose alone. The cookie carries the rep's

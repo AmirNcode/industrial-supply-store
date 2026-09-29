@@ -752,3 +752,58 @@ test("a rep cannot move an order to preparing: no rep code reaches confirmPaymen
     assert.ok(!/confirmPayment|'preparing'|paid_at\s*=/.test(source), `${file} can confirm a payment`);
   }
 });
+
+test("a rep resets only a customer they created who has never chosen a password", async () => {
+  assertLocalDatabase();
+  const suffix = randomUUID().slice(0, 8);
+  const repIds: string[] = [];
+  const userIds: string[] = [];
+  try {
+    const a = await createRep({ username: `ra-${suffix}`, name: "A", phone: "", email: "", commissionRateBp: 0, passwordHash: "x" });
+    const b = await createRep({ username: `rb-${suffix}`, name: "B", phone: "", email: "", commissionRateBp: 0, passwordHash: "x" });
+    if (a === "username-taken" || b === "username-taken") throw new Error("username clash");
+    repIds.push(a.id, b.id);
+    const input = { contactName: "N", email: null, address: "", city: "" };
+
+    // Created by rep A, never signed in: A may reset it.
+    const own = await createCustomerForRep(a.id, {
+      ...input, company: `Own ${suffix}`, phone: randomPhone(), codeChoice: "random", passwordHash: "x", locale: "fa",
+    });
+    if (own.kind !== "created") throw new Error(own.kind);
+    userIds.push(own.id);
+    assert.ok(await resetCustomerPasswordForRep(a.id, own.id, "temp-1"));
+
+    // Once the customer chooses their own, only the admin can reset it.
+    await setPassword(own.id, "their-own", false);
+    assert.equal(await resetCustomerPasswordForRep(a.id, own.id, "temp-2"), null);
+
+    // A self sign-up assigned to rep A: never A's to reset.
+    const self = await createUser({
+      email: `${randomUUID()}@example.invalid`, passwordHash: "x", company: `Self ${suffix}`,
+      contactName: "N", phone: "12", locale: "en", origin: "self", repId: null,
+    });
+    if (self === "email-taken") throw new Error("unexpected");
+    userIds.push(self.id);
+    assert.equal(await assignCustomer(self.id, a.id, false), "ok");
+    assert.equal(await resetCustomerPasswordForRep(a.id, self.id, "temp-3"), null);
+
+    // Created by rep B, then moved to rep A before signing in: not A's either.
+    const moved = await createCustomerForRep(b.id, {
+      ...input, company: `Moved ${suffix}`, phone: randomPhone(), codeChoice: "random", passwordHash: "x", locale: "fa",
+    });
+    if (moved.kind !== "created") throw new Error(moved.kind);
+    userIds.push(moved.id);
+    assert.equal(await assignCustomer(moved.id, a.id, false), "ok");
+    assert.equal(await resetCustomerPasswordForRep(a.id, moved.id, "temp-4"), null);
+
+    // Nothing refused changed a password.
+    const hashes = await sql<{ id: string; hash: string }[]>`
+      SELECT id, password_hash AS hash FROM users WHERE id = ANY(${[own.id, self.id, moved.id]})`;
+    assert.deepEqual(
+      Object.fromEntries(hashes.map((row) => [row.id, row.hash])),
+      { [own.id]: "their-own", [self.id]: "x", [moved.id]: "x" },
+    );
+  } finally {
+    await cleanupReps(repIds, userIds);
+  }
+});

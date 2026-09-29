@@ -79,7 +79,7 @@ deployment · `ALL` = everywhere.
 | H-1 | High | Admin price changes do not reach customers for 94% of live products (stale seeded quantity-break prices win) | LIVE | CONFIRMED |
 | H-2 | High | Production is running out of database connections right now (342 × EMAXCONN, 140 × 60 s timeouts in 7 days) | LIVE | CONFIRMED-LIVE / cause PLAUSIBLE |
 | H-3 | High | Invoice numbers collide after invoice #9,999; the repair script then winds the sequence backwards | ALL | CONFIRMED |
-| H-4 | High | A rep can take over any assigned customer's account via "reset password" | BRANCH | CODE |
+| H-4 | High | A rep can take over any assigned customer's account via "reset password" | BRANCH | **FIXED 2026-09-29 in `{{H-4}}`** |
 | H-5 | High | Self-hosted: every rate limit (incl. admin login) is bypassed by a spoofed forwarding header | SELF-HOST | CODE |
 | H-6 | High | Self-hosted compose publishes Postgres to the network with password `isupply`; cron secret never reaches the app | SELF-HOST | CODE |
 | H-7 | High | A fresh database prices the catalog at 1,100,000 rial/USD (~47% of market) with no warning | SELF-HOST / ALL | CODE |
@@ -402,6 +402,20 @@ deployment · `ALL` = everywhere.
   9,999 and 10,000 and gets distinct numbers.
 
 ### H-4 — A rep can take over any assigned customer's account
+
+> **Fix status (2026-09-29): FIXED in `{{H-4}}` (local `main`, not pushed).**
+> Amir's decision: reps may reset only customers they created themselves who
+> have never set their own password. New column `users.chose_own_password`
+> (default true, so every existing account counts as self-chosen; false only
+> for rep-created accounts; set true by any password the customer is not
+> forced to replace) added to the not-yet-live migration
+> `20260927120000_add_sales_reps.sql`, the schema and the verifier. The rule
+> is in `resetCustomerPasswordForRep`'s WHERE (`origin = 'rep' AND
+> origin_rep_id = rep AND NOT chose_own_password`); the rep page shows "only
+> the admin can reset" otherwise. Tests: `salesReps.integration.test.ts`
+> (own-before-choosing allowed; after choosing, self sign-up, and a
+> customer created by another rep all refused, hashes unchanged) and
+> `repAccount.test.ts`. The session-version bump the fix mentions is M-2.
 
 - **Scope**: BRANCH. **Status**: CODE. Needs a product decision.
 - **Where**: `src/app/[locale]/rep/actions.ts:200` →

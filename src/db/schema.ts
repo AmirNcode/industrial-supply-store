@@ -721,6 +721,13 @@ export const users = pgTable(
       onDelete: "restrict",
     }),
     mustChangePassword: boolean("must_change_password").notNull().default(false),
+    /**
+     * True once the customer has chosen a password themselves; only an
+     * account a rep creates starts false. A rep may reset only an account
+     * they created that has never had one — otherwise "reset" is a way into
+     * someone else's account (review finding H-4).
+     */
+    choseOwnPassword: boolean("chose_own_password").notNull().default(true),
     address: text("address").notNull().default(""),
     city: text("city").notNull().default(""),
     nextFollowUpOn: date("next_follow_up_on", { mode: "string" }),

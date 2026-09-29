@@ -155,7 +155,10 @@ export async function setPassword(
   mustChange: boolean,
 ): Promise<void> {
   await sql`
-    UPDATE users SET password_hash = ${passwordHash}, must_change_password = ${mustChange}
+    UPDATE users
+    SET password_hash = ${passwordHash}, must_change_password = ${mustChange},
+        -- A password nobody forces them to replace is one they chose.
+        chose_own_password = chose_own_password OR ${!mustChange}
     WHERE id = ${userId}
   `;
 }

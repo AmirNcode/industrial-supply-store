@@ -87,6 +87,7 @@ const COLUMNS: readonly (readonly [string, string])[] = [
   // reads customer_code, pay_token or the rep columns.
   ["users", "customer_code"], ["users", "rep_id"], ["users", "rep_earns_commission"],
   ["users", "origin"], ["users", "origin_rep_id"], ["users", "must_change_password"],
+  ["users", "chose_own_password"],
   ["users", "address"], ["users", "city"], ["users", "next_follow_up_on"],
   ["orders", "rep_id"], ["orders", "commission_rate_bp"], ["orders", "placed_by_rep"],
   ["orders", "pay_token"],

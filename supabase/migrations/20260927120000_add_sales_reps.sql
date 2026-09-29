@@ -48,6 +48,11 @@ ALTER TABLE users
   ADD COLUMN IF NOT EXISTS origin_rep_id uuid
     CONSTRAINT users_origin_rep_id_sales_reps_id_fk REFERENCES sales_reps (id) ON DELETE RESTRICT,
   ADD COLUMN IF NOT EXISTS must_change_password boolean NOT NULL DEFAULT false,
+  -- True once the customer has chosen a password themselves. Every existing
+  -- account signed up with its own, hence the default; only an account a rep
+  -- creates starts false. A rep may reset only an account they created that
+  -- has never had one (review finding H-4).
+  ADD COLUMN IF NOT EXISTS chose_own_password boolean NOT NULL DEFAULT true,
   ADD COLUMN IF NOT EXISTS address text NOT NULL DEFAULT '',
   ADD COLUMN IF NOT EXISTS city text NOT NULL DEFAULT '',
   ADD COLUMN IF NOT EXISTS next_follow_up_on date;

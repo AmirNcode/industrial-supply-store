@@ -202,7 +202,9 @@ export async function resetCustomerPasswordAction(formData: FormData): Promise<v
   if (!id) redirect(`/${locale}/rep/customers`);
   const password = generateTempPassword();
   const customer = await resetCustomerPasswordForRep(rep.id, id, await hashPassword(password));
-  if (!customer) redirect(`/${locale}/rep/customers`);
+  // Not theirs, not created by them, or already chosen by the customer: the
+  // customer page 404s for the first and explains the rest.
+  if (!customer) redirect(`/${locale}/rep/customers/${id}?error=reset-admin-only`);
   await setShownOnce({ kind: "customer", subjectId: customer.id, login: customer.customerCode, password });
   redirect(`/${locale}/rep/customers/${customer.id}?ok=password`);
 }

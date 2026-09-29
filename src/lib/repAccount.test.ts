@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   commissionPercentLabel,
+  repMayResetPassword,
   formatCommissionPercent,
   isReferralCode,
   isValidUsername,
@@ -59,4 +60,13 @@ test("referral codes use the read-aloud alphabet", () => {
   assert.equal(isReferralCode("ABC123"), false);
   assert.equal(isReferralCode("abcdef"), false);
   assert.equal(isReferralCode("ABCDE"), false);
+});
+
+test("a rep may reset only a customer they created who has never chosen a password", () => {
+  const own = { origin: "rep", originRepId: "rep-a", choseOwnPassword: false };
+  assert.equal(repMayResetPassword(own, "rep-a"), true);
+  assert.equal(repMayResetPassword({ ...own, choseOwnPassword: true }, "rep-a"), false);
+  assert.equal(repMayResetPassword(own, "rep-b"), false);
+  assert.equal(repMayResetPassword({ origin: "self", originRepId: null, choseOwnPassword: false }, "rep-a"), false);
+  assert.equal(repMayResetPassword({ ...own, origin: "referral" }, "rep-a"), false);
 });

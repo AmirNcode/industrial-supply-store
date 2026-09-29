@@ -58,3 +58,16 @@ export function randomReferralCode(): string {
 export function isReferralCode(value: string): boolean {
   return /^[A-HJ-NP-Z2-9]{6}$/.test(value);
 }
+
+/**
+ * Whether a rep may issue this customer a temporary password: only an account
+ * the rep created, before the customer has ever chosen their own. The same
+ * rule as `resetCustomerPasswordForRep`'s WHERE clause, which enforces it;
+ * this only decides whether to offer the button.
+ */
+export function repMayResetPassword(
+  customer: { origin: string; originRepId: string | null; choseOwnPassword: boolean },
+  repId: string,
+): boolean {
+  return customer.origin === "rep" && customer.originRepId === repId && !customer.choseOwnPassword;
+}

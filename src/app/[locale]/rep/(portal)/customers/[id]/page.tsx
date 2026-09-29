@@ -23,12 +23,14 @@ import { siteOrigin } from "@/lib/siteOrigin";
 import { getFxRate } from "@/lib/fx";
 import { tehranToday } from "@/lib/persianCalendar";
 import { isUuid } from "@/lib/ids";
+import { repMayResetPassword } from "@/lib/repAccount";
 import { isLocale, getDict, type Locale } from "@/lib/i18n";
 
 const ERROR_KEY = {
   incomplete: "required",
   invalid: "invalidInput",
   "email-taken": "customerEmailTaken",
+  "reset-admin-only": "repResetAdminOnly",
 } as const;
 
 const OK_KEY = {
@@ -137,17 +139,23 @@ export default async function RepCustomerPage({
 
       <section className={section}>
         <h2 className="mb-2 text-[13px] font-bold">{t.password}</h2>
-        <form action={resetCustomerPasswordAction}>
-          <input type="hidden" name="locale" value={l} />
-          <input type="hidden" name="customerId" value={id} />
-          <ConfirmSubmit
-            label={t.issueTempPassword}
-            title={t.confirmIssueTempPassword}
-            continueLabel={t.confirmContinue}
-            discardLabel={t.confirmDiscard}
-            details={[{ label: t.customerId, value: customer.customerCode, tech: true }]}
-          />
-        </form>
+        {repMayResetPassword(customer, rep.id) ? (
+          <form action={resetCustomerPasswordAction}>
+            <input type="hidden" name="locale" value={l} />
+            <input type="hidden" name="customerId" value={id} />
+            <ConfirmSubmit
+              label={t.issueTempPassword}
+              title={t.confirmIssueTempPassword}
+              continueLabel={t.confirmContinue}
+              discardLabel={t.confirmDiscard}
+              details={[{ label: t.customerId, value: customer.customerCode, tech: true }]}
+            />
+          </form>
+        ) : (
+          <p className="text-[12px] text-[var(--color-ink-muted)]" data-testid="rep-reset-admin-only">
+            {t.repResetAdminOnly}
+          </p>
+        )}
       </section>
     </>
   );

@@ -19,6 +19,8 @@ export type CustomerRow = {
   repId: string | null;
   repEarnsCommission: boolean;
   origin: CustomerOrigin;
+  originRepId: string | null;
+  choseOwnPassword: boolean;
   nextFollowUpOn: string | null;
   createdAt: string;
 };
@@ -42,6 +44,7 @@ const COLS = sql`u.id, u.customer_code AS "customerCode", u.company,
   u.contact_name AS "contactName", u.phone, u.email, u.address, u.city,
   u.default_po_number AS "defaultPoNumber", u.locale, u.rep_id AS "repId",
   u.rep_earns_commission AS "repEarnsCommission", u.origin,
+  u.origin_rep_id AS "originRepId", u.chose_own_password AS "choseOwnPassword",
   u.next_follow_up_on::text AS "nextFollowUpOn", u.created_at AS "createdAt"`;
 
 function uniqueViolation(err: unknown): string | null {
@@ -117,10 +120,10 @@ export async function createCustomerForRep(
       const [row] = await sql<{ id: string; customerCode: string }[]>`
         INSERT INTO users (email, password_hash, company, contact_name, phone, address, city,
                            locale, customer_code, rep_id, origin, origin_rep_id,
-                           rep_earns_commission, must_change_password)
+                           rep_earns_commission, must_change_password, chose_own_password)
         VALUES (${input.email}, ${input.passwordHash}, ${input.company}, ${input.contactName},
                 ${input.phone}, ${input.address}, ${input.city}, ${input.locale}, ${code},
-                ${repId}, 'rep', ${repId}, true, true)
+                ${repId}, 'rep', ${repId}, true, true, false)
         RETURNING id, customer_code AS "customerCode"
       `;
       return { kind: "created", id: row.id, customerCode: row.customerCode };
@@ -154,6 +157,14 @@ export async function updateCustomerForRep(
   }
 }
 
+/**
+ * A new temporary password for a customer this rep created and who has never
+ * chosen their own. Anyone else — a self sign-up, a referral, a customer
+ * moved to this rep, or one who has set a password — goes through the admin:
+ * a rep who could reset them could sign in as them and lock them out. The
+ * rule is in the WHERE clause, so no caller can skip it; `repMayResetPassword`
+ * is the same rule for deciding whether to show the button.
+ */
 export async function resetCustomerPasswordForRep(
   repId: string,
   customerId: string,
@@ -162,6 +173,7 @@ export async function resetCustomerPasswordForRep(
   const [row] = await sql<CustomerRow[]>`
     UPDATE users u SET password_hash = ${passwordHash}, must_change_password = true
     WHERE u.id = ${customerId} AND u.rep_id = ${repId}
+      AND u.origin = 'rep' AND u.origin_rep_id = ${repId} AND NOT u.chose_own_password
     RETURNING ${COLS}
   `;
   return row ?? null;
