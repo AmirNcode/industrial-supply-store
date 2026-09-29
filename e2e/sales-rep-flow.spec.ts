@@ -89,16 +89,29 @@ for (const locale of locales) {
     const order = admin.locator("details").filter({ hasText: company }).first();
     await order.locator("summary").click();
     await expect(order.getByText("E2E Rep").first()).toBeVisible();
-    await order.locator('input[name="paymentUrl"]').fill("https://example.com/pay/e2e");
-    await order.getByRole("button", { name: t.issueInvoice }).click();
-    await admin
-      .getByRole("dialog", { name: t.confirmIssueInvoice })
+
+    // The rep invoices at the order's prices: a draft first, then finalize.
+    await rep.getByRole("link", { name: t.createInvoice }).click();
+    await expect(rep).toHaveURL(new RegExp(`/${locale}/rep/orders/ORD-[^/]+/invoice$`));
+    await expect(rep.getByText(t.invoiceDraftNotice)).toBeVisible();
+    await rep.getByRole("button", { name: t.finalizeInvoice }).click();
+    await rep
+      .getByRole("dialog", { name: t.confirmFinalizeInvoice })
       .getByRole("button", { name: t.confirmContinue })
       .click();
-    await expect(admin).toHaveURL(/ok=invoiced/);
+    await expect(rep).toHaveURL(/ok=invoiced/);
+    await expect(rep.getByRole("link", { name: t.createInvoice })).toHaveCount(0);
 
+    // Payable now — by bank transfer, so the page offers the invoice, no Pay button.
     await visitor.reload();
-    await expect(visitor.getByRole("link", { name: t.payNow })).toBeVisible();
+    await expect(visitor.getByText(t.payAmountDue)).toBeVisible();
+    await expect(visitor.getByRole("link", { name: t.viewInvoice })).toBeVisible();
+    // The receipt upload is the next step, and says so. (Uploading itself needs
+    // Storage, which the CI database service does not have.)
+    await expect(visitor.getByRole("button", { name: t.proofUpload })).toBeVisible();
+    await visitor.getByRole("link", { name: t.viewInvoice }).click();
+    await expect(visitor.getByText(t.invoiceProofTitle)).toBeVisible();
+    await admin.goto(`/${locale}/admin/orders`);
 
     // Paid, shipped, delivered — then the sale and its commission reach the rep.
     // The queue keeps a card open after acting on it (its <details> survives

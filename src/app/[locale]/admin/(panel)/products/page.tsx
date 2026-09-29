@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { requireAdmin } from "@/lib/admin";
 import { notFound } from "next/navigation";
 import { DEMO_MODE } from "@/lib/demo";
 import { getAdminTaxonomyNodes } from "@/db/familyQueries";
@@ -11,7 +12,7 @@ import { TaxonomyWorkbench } from "./TaxonomyWorkbench";
  * Readable under DEMO_MODE like the rest of the panel, but every write control
  * is disabled — and `assertAdminWrite` refuses the action regardless, so a
  * hand-made POST gets the same answer as a disabled button. The sign-in gate
- * lives in the panel layout.
+ * is `requireAdmin()` below, not the panel layout (see `lib/admin.ts`).
  */
 export default async function AdminProductsPage({
   params,
@@ -21,6 +22,7 @@ export default async function AdminProductsPage({
   const { locale } = await params;
   if (!isLocale(locale)) notFound();
   const l = locale as Locale;
+  await requireAdmin(l);
   const t = getDict(l);
 
   const nodes = await getAdminTaxonomyNodes();

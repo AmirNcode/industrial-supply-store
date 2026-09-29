@@ -10,6 +10,7 @@
 export const ORDER_STATUSES = [
   "received",
   "invoiced",
+  "payment_review",
   "preparing",
   "shipped",
   "delivered",
@@ -22,10 +23,17 @@ export type OrderStatus = (typeof ORDER_STATUSES)[number];
  * Forward one step only. `cancelled` is reachable until the goods are with a
  * courier, after which stopping the order is a return, not a cancellation, and
  * that is a different process this version does not model.
+ *
+ * `payment_review` is entered only by a receipt upload, and left only by
+ * someone confirming the money arrived. There is no way back to `invoiced`:
+ * a receipt that does not match is settled by phone, or the order cancelled.
+ * `invoiced → preparing` stays for the admin alone, for a payment confirmed
+ * without an upload; a rep confirms only from `payment_review`.
  */
 const TRANSITIONS: Record<OrderStatus, readonly OrderStatus[]> = {
   received: ["invoiced", "cancelled"],
-  invoiced: ["preparing", "cancelled"],
+  invoiced: ["payment_review", "preparing", "cancelled"],
+  payment_review: ["preparing", "cancelled"],
   preparing: ["shipped", "cancelled"],
   shipped: ["delivered"],
   delivered: [],
@@ -48,4 +56,12 @@ export function assertTransition(from: OrderStatus, to: OrderStatus): void {
   if (!canTransition(from, to)) {
     throw new Error(`Illegal order transition: ${from} → ${to}`);
   }
+}
+
+/** Unpaid and not cancelled: the order's stock is held for it. */
+export const HELD_STATUSES = ["received", "invoiced", "payment_review"] as const satisfies readonly OrderStatus[];
+
+/** A receipt can be added while payment is owed or being checked, and not after. */
+export function acceptsPaymentProof(status: OrderStatus): boolean {
+  return status === "invoiced" || status === "payment_review";
 }

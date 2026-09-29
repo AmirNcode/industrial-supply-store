@@ -159,3 +159,84 @@ test("a family row opens an add-a-product form built from its own columns", asyn
   await page.getByRole("button", { name: t.newProduct }).click();
   await expect(page.getByText(t.newProductBadPrice)).toBeVisible();
 });
+
+test("a family's product table edits in place, refuses a bad cell, and saves", async (
+  { page, isMobile },
+  testInfo,
+) => {
+  test.skip(isMobile, "The tree rail and the wide product table are desktop controls.");
+  const locale: Locale = "en";
+  const t = getDict(locale);
+  await openProducts(page, locale, `203.0.113.${100 + testInfo.workerIndex}`);
+
+  await page.getByRole("searchbox", { name: t.taxonomyFindCategory }).fill("o-ring");
+  await page.locator(".taxonomy-tree-row.is-family .taxonomy-node-name").first().click();
+  await expect(page).toHaveURL(/cat=f(%3A|:)\d+$/);
+  // The tree writes `f%3A12`, a plain link `f:12`: the same address.
+  const familyId = /cat=f(?:%3A|:)(\d+)$/.exec(page.url())![1];
+  const familyUrl = new RegExp(`cat=f(%3A|:)${familyId}$`);
+  const table = page.locator(".product-table");
+  await expect(table).toBeVisible();
+
+  // Part number and the family's first column lead; stock and price follow.
+  const headers = await table.locator("thead th").allInnerTexts();
+  expect(headers[0]).toBe(t.partNumber);
+  expect(headers.slice(2, 4)).toEqual([t.productsQty, t.productsPriceUsd]);
+
+  const edit = page.getByRole("button", { name: t.productsEdit, exact: true });
+  const save = page.getByRole("button", { name: t.productsSave, exact: true });
+  const discard = page.getByRole("button", { name: t.orderDiscard, exact: true });
+  await edit.click();
+  await expect(edit).toBeHidden();
+  await expect(save).toBeVisible();
+  await expect(discard).toBeVisible();
+  await expectNoAccessibilityViolations(page, testInfo, ".taxonomy-pane");
+
+  // Not the first row: the order tests buy that product in parallel, and an
+  // order moving its stock mid-edit is refused as stale — correctly.
+  const row = table.locator("tbody tr").nth(20);
+  const partNumber = (await row.locator("th").innerText()).trim();
+  const price = page.getByLabel(`${t.productsPriceUsd} — ${partNumber}`, { exact: true });
+  const original = await price.inputValue();
+
+  // One bad cell refuses the whole save and is marked.
+  await price.fill("not-a-price");
+  await save.click();
+  await expect(page.locator(".taxonomy-error-banner")).toContainText(
+    t.productsInvalid.replace("{n}", "1"),
+  );
+  await expect(price).toHaveAttribute("aria-invalid", "true");
+
+  const changed = (Number(original) + 0.01).toFixed(2);
+  await price.fill(changed);
+  await save.click();
+  await expect(page.locator(".taxonomy-success-banner")).toContainText(
+    t.productsSaved.replace("{n}", "1"),
+  );
+  await expect(edit).toBeVisible();
+  await expect(row).toContainText(changed);
+
+  // Put it back, the same way.
+  await edit.click();
+  await price.fill(original);
+  await save.click();
+  await expect(row).toContainText(original);
+
+  // Unsaved rows are guarded when another family is picked in the tree.
+  await edit.click();
+  await price.fill(changed);
+  await page.locator(".taxonomy-tree-row.is-family .taxonomy-node-name").nth(1).click();
+  const guard = page.getByRole("dialog", { name: t.productsUnsavedTitle });
+  await expect(guard).toBeVisible();
+  await guard.getByRole("button", { name: t.orderStay }).click();
+  await expect(page).toHaveURL(familyUrl);
+  await discard.click();
+  await expect(edit).toBeVisible();
+
+  // The columns page returns to this same family.
+  await page.getByRole("link", { name: t.editColumns }).first().click();
+  await expect(page).toHaveURL(/\/admin\/products\/\d+\/columns$/);
+  await page.getByRole("link", { name: t.columnsBack }).click();
+  await expect(page).toHaveURL(familyUrl);
+  await expect(table).toBeVisible();
+});

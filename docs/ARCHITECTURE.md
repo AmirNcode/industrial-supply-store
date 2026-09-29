@@ -31,18 +31,34 @@ connects to either hosted Supabase project.
 | `/[locale]/track` | public | guest tracking: reference **plus** email |
 | `/[locale]/account/**` | customer | signed cookie session; sign-in by email or 7-digit customer ID |
 | `/[locale]/invoice/[ref]` | customer, staff, or pay-link key | language in path, currency in `?cur=`, pay-link key in `?key=` |
-| `/[locale]/pay/[token]` | anyone holding the link | one order per 64-hex token; no sign-in, `noindex`, no referrer |
+| `/[locale]/pay/[token]` | anyone holding the link | one order per 64-hex token; no sign-in, `noindex`, no referrer; shows the bank account once invoiced |
 | `/[locale]/r/[code]` | public (route handler) | a rep's referral link: remembers an active rep for 30 days, lands on the catalog |
 | `/[locale]/rep/**` | sales rep | own signed cookie; `(session)` holds only the forced-password page, `(portal)` the rest |
+| `/[locale]/rep/orders/[ref]/invoice` | sales rep | draft invoice for an order the rep may see, at its own prices, in rial |
 | `/[locale]/admin/login` | public | the only password form |
-| `/[locale]/admin/(panel)/{orders,reps,customers,products,settings}` | staff | gate lives in the panel layout |
+| `/[locale]/admin/(panel)/{orders,reps,customers,products,settings}` | staff | every page calls `requireAdmin()` first; the layout's check is not a gate |
+| `/[locale]/admin/(panel)/orders/[ref]/invoice` | staff | draft invoice; the queue's typed prices ride in `?price_<line id>=` |
 | `/api/admin/family/[id]/{template,export}` | staff | CSV, 404 when signed out |
+| `/api/admin/family/[id]/products` | staff (and `DEMO_MODE`) | the product table's rows as JSON; the same query as the export |
 | `/api/admin/import` | staff | small signed-upload control messages; CSV bytes go to private Storage |
+| `/api/payment-proofs/[id]` | staff, the order's rep, its customer, or `?key=` | one receipt, streamed from the private bucket; 404 to everyone else, including DEMO_MODE visitors |
 | `/api/cron/fx-rate` | scheduler | evening exchange-rate reading; `Authorization: Bearer $CRON_SECRET` |
 
-`(panel)` is a route group — it does not appear in URLs. The sign-in gate is in
-its `layout.tsx`, which is why `/admin/login` sits **outside** it: a gate
-wrapping the login page would redirect the login page to itself.
+`(panel)` is a route group — it does not appear in URLs. Its `layout.tsx`
+checks the session too, which is why `/admin/login` sits **outside** it: a
+check wrapping the login page would redirect the login page to itself.
+
+**A layout is not an auth boundary.** Next renders a page independently of its
+layout, so a layout's `redirect()` sets the 307 while the page underneath still
+runs its queries and streams them into the same response body. Until
+2026-09-29 every admin page leaked its data that way to anyone who fetched the
+URL (a browser follows the redirect, so nothing looked wrong). Every protected
+page therefore checks its own caller before its first query —
+`requireAdmin()` in each `admin/(panel)` page, `requireRep()` in each rep page,
+`currentUser()` in each account page — and `src/lib/adminGate.test.ts` fails
+if an admin page is added without it. Next's own guide says the same
+("Layouts and auth checks" in
+`node_modules/next/dist/docs/01-app/02-guides/authentication.md`).
 
 ## Three independent auth systems
 
@@ -75,6 +91,21 @@ a forgotten setting or rate is a compile error, not silently stale prices.
 
 **An issued invoice uses `orders.fx_rate_to_rial`, never `getFxRate()`.** The
 rate is frozen at issuance so reprinting later cannot change what is owed.
+VAT follows the same rule: the setting (`app_settings.vat_rate_bp`) is read
+only by drafts and by `issueInvoice`, which locks it onto
+`orders.vat_rate_bp`. NULL there means an invoice issued before VAT existed,
+and it prints no VAT line. `total_cents` stays the pre-VAT subtotal — the
+integrity check compares it with the lines, and rep sales and commission are
+counted before VAT on purpose. VAT is computed in the currency printed, from
+the subtotal as printed (`invoiceAmounts` in `src/lib/invoice.ts`), because a
+cent of VAT is about 12,000 rial and would not survive conversion.
+
+**A draft writes nothing, and Finalize locks only what the draft showed.**
+"Create invoice" opens the draft (admin: prices in the URL, `lib/invoiceDraft.ts`;
+rep: the order's own prices). The finalize form posts the exchange rate and
+VAT rate the page was drawn at, and the action sends the person back to an
+updated draft if either has moved. Payment is by bank transfer only; the old
+`payment_url` column is kept for its data and read by nothing.
 
 **The automatic exchange rate is one market reading a day, not a live feed.**
 `/api/cron/fx-rate` takes the Tether price from Nobitex and Wallex each
@@ -123,6 +154,20 @@ tests, and `db:reconcile:*`. It compares family/category counts, filter facets,
 inventory, ownership, order line totals, and invoice/status timestamps. The
 apply command repairs only values with a deterministic source and rolls back if
 anything remains; it never repairs canonical order or ownership data by guess.
+
+**Payment is by bank transfer, and a receipt is what moves it.** A customer
+(order page or pay link) or their rep uploads a photo or PDF of the transfer;
+the first one moves `invoiced → payment_review` ("Confirming payment") inside
+the same locked transaction (`addPaymentProof`). The admin or the order's rep
+compares it with the bank account and confirms (`confirmPayment`), which is
+`→ preparing` plus the stock sale, and records the rep who did. There is no
+reject: a receipt that does not match is settled by phone or the order
+cancelled. The admin alone can still confirm straight from `invoiced`, for a
+payment with no upload. Files are judged by their first bytes, not their name
+(`lib/paymentProof.ts`), stored in a private Storage bucket the app creates
+itself (`payment-proofs`), and only ever read through the route above — there
+is no public URL. `payment_review` holds stock like `received` and `invoiced`
+(`HELD_STATUSES`); every on-hold query lists all three.
 
 **Order status transitions are guarded twice**: `assertTransition` for legality,
 and `WHERE id = $1 AND status = <source>` with a row-count check for
@@ -407,6 +452,21 @@ is nothing to be done about that. It deliberately ignores `download` links,
 modified clicks and same-page anchors. Any new screen holding unsaved state
 should reuse it.
 
+**The product table is a CSV upload typed in place.** A family's pane in
+`/admin/products` lists its products (`FamilyProductTable`, 100 rows a page,
+fetched from the JSON route because the workbench changes family without a
+server round trip). Save sends only the edited rows to
+`saveFamilyProductsAction`, which rebuilds each as a complete import row —
+untouched cells carry their stored value, because `writeImport` replaces the
+whole row — and writes through `writeImport`, so facets, search text, counts
+and stock reconciliation move exactly as for a file. Each row carries a
+fingerprint of what the table showed (`lib/productTable.ts`); a row an import,
+an order or another tab changed since is refused and reloaded, not overwritten.
+Cell rules are the CSV's (`lib/productEdits.ts`): typed stock must be zero or
+more, so a shortfall shown as a negative number can be left as it is but not
+typed back in. The workbench's one leave-the-page guard covers the table's
+unsaved rows too, including picking another family in the tree.
+
 **Limits on the catalog are advice, not rules.** `MAX_LEGIBLE_COLUMNS` warns in
 red beside Save on both the column editor and the import review, and neither
 blocks. A supplier's file sometimes genuinely carries twelve dimensions that all
@@ -416,11 +476,15 @@ matter, and refusing it would mean refusing the catalog.
 
 1. `submitQuoteAction` (`src/app/actions.ts`) writes `orders` + `order_items`
    and calls `holdStockForOrder` — all in one transaction.
-2. Staff price it and `issueInvoiceAction` freezes the FX rate, assigns an
-   invoice number from `invoice_seq`, and sets `invoiced`.
-3. `setOrderStatusAction` walks `invoiced → preparing → shipped → delivered`.
-   `preparing` means payment received and calls `sellHeldStock`. `cancelled`
-   calls `releaseHeldStock`, but only from `received`/`invoiced`.
+2. Staff price it in the queue and press Create invoice, or the order's rep
+   does at the order's prices; either checks the draft and finalizes.
+   `issueInvoice` (`src/db/invoiceQueries.ts`) freezes the FX and VAT rates,
+   assigns an invoice number from `invoice_seq`, and sets `invoiced`.
+3. A receipt upload moves it to `payment_review`; the admin or the rep
+   confirms, and `confirmPayment` moves it to `preparing` and calls
+   `sellHeldStock`. `setOrderStatusAction` then walks `preparing → shipped →
+   delivered`. `cancelled` calls `releaseHeldStock`, but only from a held
+   status (`received`, `invoiced`, `payment_review`).
 
 Statuses and legal transitions live in `src/lib/orders.ts`, which has zero
 imports so it is testable standalone.
@@ -428,8 +492,9 @@ imports so it is testable standalone.
 A rep's order takes the same path. `submitQuoteAction` sees the rep's session
 and hands off to `submitForCustomer`, which checks the customer is the rep's,
 writes the order in the customer's name and language with `placed_by_rep`, and
-lands the rep on `/rep/orders/[ref]` with the pay link to send. The rep is
-credited, and the order counts toward their numbers once it is delivered.
+lands the rep on `/rep/orders/[ref]` with Create invoice and the pay link to
+send. The rep is credited, and the order counts toward their numbers once it
+is delivered.
 
 ## Where things live
 

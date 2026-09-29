@@ -116,6 +116,7 @@ export default async function TrackPage({
             stamps={{
               createdAt: order.createdAt,
               invoicedAt: order.invoicedAt,
+              paymentSubmittedAt: order.paymentSubmittedAt,
               paidAt: order.paidAt,
               shippedAt: order.shippedAt,
               deliveredAt: order.deliveredAt,

@@ -49,13 +49,14 @@ Set in Vercel → Settings → Environment Variables → Production.
 | `ADMIN_PASSWORD` | runtime | build fine, `/admin` throws |
 | `USD_TO_RIAL` | runtime | falls back to 1,100,000 Rial / USD; only used before the first market reading |
 | `CRON_SECRET` | runtime (evening rate job) | the job is refused and the automatic rate stops moving; admin warns after 36 h |
-| `SELLER_*` | runtime | invoices print "set SELLER_NAME" |
+| `SELLER_*` | runtime | invoices print no seller address or tax ID; the name is always TEMEX, and email/phone come from Admin → Settings |
 | `SUPABASE_URL` | runtime Storage access | URL images still work; image/CSV upload reports not configured |
 | `SUPABASE_PUBLIC_URL` | runtime Storage access | falls back to `SUPABASE_URL` |
 | `SUPABASE_PUBLISHABLE_KEY` or `SUPABASE_ANON_KEY` | runtime CSV import | signed browser upload reports not configured |
 | `SUPABASE_SECRET_KEY` or `SUPABASE_SERVICE_ROLE_KEY` | runtime Storage access | image/CSV upload reports not configured |
 | `SUPABASE_CATALOG_BUCKET` | runtime image upload | defaults to public `catalog-images` |
 | `SUPABASE_IMPORT_BUCKET` | runtime CSV import | defaults to private `catalog-imports` |
+| `SUPABASE_PAYMENT_PROOF_BUCKET` | runtime receipt upload | defaults to private `payment-proofs`, created on first upload; without `SUPABASE_URL` and a secret, receipt uploads fail with "could not be uploaded" |
 
 CSV imports deliberately read only the unprefixed runtime Supabase variables
 in this table. The authenticated import route returns the public URL and
@@ -127,6 +128,21 @@ customers and credits no rep with any past order. `db:verify:remote` checks
 its four tables, the new columns and constraints, the four unique indexes
 (`users_customer_code_key`, `orders_pay_token_key`, `sales_reps_username_key`,
 `sales_reps_referral_code_key`) and the migration version.
+
+For the invoice VAT release, apply `20260928120000_add_invoice_vat.sql`
+**before pushing the new application to main**. Every invoice, order and
+account page reads `orders.vat_rate_bp`. The migration adds that one nullable
+column and its check; existing invoices keep NULL and print exactly as before.
+The rate itself is set afterwards in Admin → Settings → VAT and starts at 0%.
+`db:verify:remote` checks the column, `orders_vat_rate_check` and the
+migration version.
+
+For the proof-of-payment release, apply `20260929120000_add_payment_proofs.sql`
+**before pushing the new application to main**. It adds the `payment_review`
+status (replacing three order check constraints), two order columns
+(`payment_submitted_at`, `paid_confirmed_by_rep_id`) and the `payment_proofs`
+table. Receipt files need Storage configured on the deployment (the same
+`SUPABASE_URL` and secret as catalog images); the bucket creates itself.
 
 The storefront's bare root redirects to `/fa`; `/en/...` remains available
 through the language switch. This is a fixed application default, with no admin

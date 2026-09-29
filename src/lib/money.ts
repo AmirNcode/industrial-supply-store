@@ -115,6 +115,15 @@ export function formatRial(rial: number, locale: Locale): string {
   return rialWithUnit(Math.round(rial), locale);
 }
 
+/**
+ * An amount already in its currency's own unit — cents for USD, whole rial for
+ * IRR — such as an invoice's VAT or total from `invoiceAmounts`. Nothing is
+ * converted or rounded here; that was decided where the amount was computed.
+ */
+export function formatAmount(amount: number, currency: Currency, locale: Locale): string {
+  return currency === "USD" ? usdFmt.format(amount / 100) : rialWithUnit(amount, locale);
+}
+
 /** Exact conversion to a whole Rial, for invoices where catalog rounding is invalid. */
 export function formatPriceExact(
   cents: number,

@@ -8,6 +8,10 @@ import { OrderView } from "@/components/OrderView";
 import { getBankDetails } from "@/lib/bankSettings";
 import { isLocale, getDict, type Locale } from "@/lib/i18n";
 import { customerCurrencyFor } from "@/lib/money";
+import { acceptsPaymentProof } from "@/lib/orders";
+import { listPaymentProofs } from "@/db/paymentProofQueries";
+import { PaymentProofSection } from "@/components/PaymentProofSection";
+import { uploadPaymentProofAction } from "../../actions";
 
 /**
  * One order, read-only.
@@ -35,9 +39,14 @@ export default async function AccountOrderPage({
   if (!found) notFound();
   const { order, items } = found;
 
-  const [liveRate, priceDisplayMode] = await Promise.all([
+  const takesProof = acceptsPaymentProof(order.status);
+  const [liveRate, priceDisplayMode, proofs, bank] = await Promise.all([
     getFxRate(),
     getPriceDisplayMode(),
+    listPaymentProofs([order.id]),
+    // While payment is owed or being checked: a second transfer, or the
+    // customer re-reading the account after uploading, is normal.
+    takesProof ? getBankDetails(l) : Promise.resolve(null),
   ]);
   const rate = order.fxRateToRial ?? liveRate;
   const currency = customerCurrencyFor(priceDisplayMode, l);
@@ -65,28 +74,20 @@ export default async function AccountOrderPage({
         items={items}
         currency={currency}
         rate={rate}
-        bank={order.status === "invoiced" ? await getBankDetails(l) : null}
+        bank={bank}
+        proof={
+          <PaymentProofSection
+            locale={l}
+            proofs={proofs.get(order.id) ?? []}
+            upload={takesProof ? uploadPaymentProofAction.bind(null, order.ref) : undefined}
+          />
+        }
         estimate={!invoiced}
         actions={
-          (order.paymentUrl || invoiced) && order.status !== "cancelled" ? (
-            <>
-              {/* New tab, matching the Pay control on the order list. */}
-              {order.status === "invoiced" && order.paymentUrl && (
-                <a
-                  href={order.paymentUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="btn-primary"
-                >
-                  {t.payNow}
-                </a>
-              )}
-              {invoiced && (
-                <Link href={`/${l}/invoice/${order.ref}`} className="btn-small" prefetch={false}>
-                  {t.viewInvoice}
-                </Link>
-              )}
-            </>
+          invoiced && order.status !== "cancelled" ? (
+            <Link href={`/${l}/invoice/${order.ref}`} className="btn-small" prefetch={false}>
+              {t.viewInvoice}
+            </Link>
           ) : null
         }
       />

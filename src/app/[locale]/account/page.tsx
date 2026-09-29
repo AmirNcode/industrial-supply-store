@@ -13,7 +13,8 @@ import {
   changePasswordAction,
 } from "./actions";
 import { isLocale, getDict, locales, type Locale } from "@/lib/i18n";
-import { customerCurrencyFor, formatPrice, formatInt } from "@/lib/money";
+import { customerCurrencyFor, formatInt } from "@/lib/money";
+import { formatOrderTotal } from "@/lib/invoice";
 import { REQUEST_LIMITS } from "@/lib/requestLimits";
 
 const ERROR_KEY = {
@@ -150,30 +151,12 @@ export default async function AccountPage({
                   <span className="text-[11px] text-[var(--color-ink-muted)]">
                     <span className="tech">{formatInt(o.itemCount, l)}</span> {t.itemsInOrder}
                   </span>
-                  {/* An invoiced order shows the rate it was invoiced at; one
-                      still being priced has none, so the live rate is honest. */}
+                  {/* An invoiced order shows the rate and VAT it was invoiced
+                      at; one still being priced has neither, so the live rate
+                      is honest. */}
                   <strong className="tech ms-auto text-[13px]">
-                    {formatPrice(o.totalCents, currency, l, o.fxRateToRial ?? rate)}
+                    {formatOrderTotal(o.totalCents, o.vatRateBp, currency, l, o.fxRateToRial ?? rate)}
                   </strong>
-
-                  {/* The action comes to the customer rather than waiting to be
-                      found. An order sitting at `invoiced` is waiting on them,
-                      and that was previously only discoverable by opening it. */}
-                  {o.status === "invoiced" && o.paymentUrl && (
-                    // New tab: paying leaves the site for a bank's gateway, and
-                    // losing the order list behind it means coming back is a
-                    // navigation rather than closing a tab. `noopener` is what
-                    // stops the payment page reaching back through
-                    // `window.opener`, and is required once `target` is set.
-                    <a
-                      href={o.paymentUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="btn-primary shrink-0 text-[11px] hover:no-underline"
-                    >
-                      {t.payNow}
-                    </a>
-                  )}
                   {o.invoiceNumber && (
                     <Link
                       href={`/${l}/invoice/${o.ref}`}

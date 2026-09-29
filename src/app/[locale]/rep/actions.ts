@@ -15,7 +15,14 @@ import { setShownOnce } from "@/lib/shownOnce";
 import { redirectFresh } from "@/lib/redirectFresh";
 import { setOrderingFor } from "@/lib/repOrderContext";
 import { CartCapacityError, addLines } from "@/lib/cart";
-import { getReorderLines } from "@/db/repOrderQueries";
+import { getReorderLines, repCanSeeOrder } from "@/db/repOrderQueries";
+import { getInvoiceDraft, issueInvoice } from "@/db/invoiceQueries";
+import { confirmPayment } from "@/db/paymentProofQueries";
+import { acceptsPaymentProof, isOrderStatus } from "@/lib/orders";
+import { receivePaymentProof, type ProofUploadResult } from "@/lib/paymentProofUpload";
+import { getFxRate } from "@/lib/fx";
+import { getVatRateBp } from "@/lib/vatSettings";
+import { subtotalCents } from "@/lib/invoice";
 import {
   findRepForSignIn,
   getRepPasswordHash,
@@ -261,4 +268,77 @@ export async function reorderAction(formData: FormData): Promise<void> {
   // so the cart can say what was left out.
   const skipped = found.missing.slice(0, 20).join(",");
   redirect(`/${locale}/cart${skipped ? `?skipped=${encodeURIComponent(skipped)}` : ""}`);
+}
+
+/**
+ * Finalize the draft a rep has just checked: number the invoice and lock the
+ * exchange rate and VAT rate, at the prices already on the order — a rep
+ * never changes a price (`issueInvoice`).
+ *
+ * The draft posted the rate, VAT rate and subtotal it showed. If any has
+ * moved since, the rep goes back to the draft, updated, rather than locking
+ * figures they never saw.
+ */
+export async function issueInvoiceForRepAction(formData: FormData): Promise<void> {
+  const { rep, locale } = await repForWrite(formData);
+  const ref = boundedString(formData.get("ref"), 20) ?? "";
+  // 404-shaped, like every other rep read: an order this rep may not see.
+  if (!(await repCanSeeOrder(rep.id, ref))) redirect(`/${locale}/rep/orders`);
+  const found = await getInvoiceDraft(ref);
+  if (!found) redirect(`/${locale}/rep/orders`);
+  const page = `/${locale}/rep/orders/${ref}`;
+  if (found.order.status !== "received") redirect(`${page}?error=conflict`);
+
+  const [rate, vatRateBp] = await Promise.all([getFxRate(), getVatRateBp()]);
+  if (
+    Number(formData.get("rate")) !== rate ||
+    Number(formData.get("vatRateBp")) !== vatRateBp ||
+    Number(formData.get("subtotalCents")) !== subtotalCents(found.items)
+  ) {
+    redirect(`${page}/invoice?changed=1`);
+  }
+
+  if (!(await issueInvoice(found.order.id, { rate, vatRateBp }))) redirect(`${page}?error=conflict`);
+  redirect(`${page}?ok=invoiced`);
+}
+
+/**
+ * A receipt the customer sent the rep — on WhatsApp, usually — uploaded on
+ * their behalf and recorded as the rep's. Any order the rep may see.
+ */
+export async function uploadPaymentProofForRepAction(
+  ref: string,
+  formData: FormData,
+): Promise<ProofUploadResult> {
+  const locale = safeLocale(formData);
+  const rep = await requireRep(locale);
+  const limit = await consumeRateLimit("rep:write", RATE_LIMITS.repWrite, { accountId: rep.id });
+  if (!limit.allowed) return { ok: false, problem: "rate-limited" };
+  const safeRef = typeof ref === "string" ? ref.slice(0, 20) : "";
+  if (!(await repCanSeeOrder(rep.id, safeRef))) return { ok: false, problem: "closed" };
+  const found = await getInvoiceDraft(safeRef);
+  if (!found || !isOrderStatus(found.order.status) || !acceptsPaymentProof(found.order.status)) {
+    return { ok: false, problem: "closed" };
+  }
+  return receivePaymentProof(found.order.id, formData.get("file"), { kind: "rep", repId: rep.id });
+}
+
+/**
+ * The rep has compared the receipts with the bank account: the order moves to
+ * preparing and its stock is sold, recorded as this rep's confirmation. Only
+ * from `payment_review` — a payment with no receipt at all is the admin's to
+ * confirm.
+ */
+export async function confirmPaymentForRepAction(formData: FormData): Promise<void> {
+  const { rep, locale } = await repForWrite(formData);
+  const ref = boundedString(formData.get("ref"), 20) ?? "";
+  if (!(await repCanSeeOrder(rep.id, ref))) redirect(`/${locale}/rep/orders`);
+  const found = await getInvoiceDraft(ref);
+  if (!found) redirect(`/${locale}/rep/orders`);
+  const page = `/${locale}/rep/orders/${ref}`;
+  if (found.order.status !== "payment_review") redirect(`${page}?error=conflict`);
+  if (!(await confirmPayment(found.order.id, "payment_review", rep.id))) {
+    redirect(`${page}?error=conflict`);
+  }
+  redirect(`${page}?ok=paid`);
 }

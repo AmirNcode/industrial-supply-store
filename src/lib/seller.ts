@@ -4,12 +4,10 @@ import type { Locale } from "./i18n";
 /**
  * Who the invoice is from.
  *
- * Legal identity, address and tax ID stay in deployment configuration. Email
- * and phone are also the deployment fallbacks, but the invoice page overlays
- * the administrator's site-contact settings when they have been saved. The
- * defaults are deliberately obviously-placeholder, so an unconfigured
- * deployment produces an invoice that looks unfinished instead of one that
- * looks real and is wrong.
+ * The name is TEMEX, in both languages — the owner's decision, so it is not a
+ * setting. Address and tax ID stay in deployment configuration. Email and
+ * phone are only fallbacks: the invoice prints the site-contact values saved
+ * in Admin → Settings, and these apply only until they are.
  */
 export type Seller = {
   name: string;
@@ -23,10 +21,9 @@ export type Seller = {
 export function getSeller(locale: Locale): Seller {
   const suffix = locale === "fa" ? "_FA" : "";
   // An empty value counts as unset, not as an answer. `.env.example` ships
-  // `SELLER_TAX_ID=` and so teaches the blank-assignment habit; a deployment
-  // that blanks SELLER_NAME= the same way would otherwise get an empty seller
-  // name instead of the loud placeholder, which is the only thing standing
-  // between an unconfigured install and an emailed invoice that looks real.
+  // `SELLER_TAX_ID=` and so teaches the blank-assignment habit; a Persian
+  // variant blanked the same way would otherwise print an empty address
+  // instead of falling back to the Latin one.
   const pick = (key: string, fallback: string) => {
     const candidates = [process.env[`SELLER_${key}${suffix}`], process.env[`SELLER_${key}`]];
     for (const c of candidates) if (c !== undefined && c.trim() !== "") return c;
@@ -34,7 +31,7 @@ export function getSeller(locale: Locale): Seller {
   };
 
   return {
-    name: pick("NAME", "TEMEX — set SELLER_NAME"),
+    name: "TEMEX",
     addressLines: pick("ADDRESS", "")
       .split("|")
       .map((s) => s.trim())

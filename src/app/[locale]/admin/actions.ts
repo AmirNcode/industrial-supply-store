@@ -19,13 +19,17 @@ import {
   normalizeContactEmail,
   normalizeContactPhone,
 } from "@/lib/siteContactValues";
-import { assertTransition, isOrderStatus } from "@/lib/orders";
+import { HELD_STATUSES, assertTransition, isOrderStatus } from "@/lib/orders";
 import { addComment } from "@/db/commentQueries";
-import { sellHeldStock, releaseHeldStock } from "@/db/inventoryQueries";
+import { releaseHeldStock } from "@/db/inventoryQueries";
+import { confirmPayment } from "@/db/paymentProofQueries";
 import { RATE_LIMITS, consumeRateLimit } from "@/lib/rateLimit";
 import { REQUEST_LIMITS, boundedString } from "@/lib/requestLimits";
-import { updateOrderItemPrices } from "@/db/invoiceQueries";
+import { issueInvoice } from "@/db/invoiceQueries";
 import { isPriceDisplayMode } from "@/lib/money";
+import { draftQuery, parsePriceDollars, priceParamName } from "@/lib/invoiceDraft";
+import { parseVatPercent } from "@/lib/vat";
+import { getVatRateBp, saveVatRateBp } from "@/lib/vatSettings";
 
 /**
  * Signing in and out live here, alongside every other admin action, so
@@ -195,17 +199,11 @@ export async function setOrderStatusAction(formData: FormData): Promise<void> {
     }
   } else if (to === "preparing") {
     // Payment turns the reservation into a sale, so the count move and the
-    // status move go together or neither happens. `count === 0` inside the
-    // transaction means this lost the race and the stock must not move.
-    const moved = await sql.begin(async (tx) => {
-      const result = await tx`
-        UPDATE orders SET status = 'preparing', paid_at = now()
-        WHERE id = ${id} AND status = ${row.status}
-      `;
-      if (result.count === 0) return false;
-      await sellHeldStock(tx, id);
-      return true;
-    });
+    // status move go together or neither happens (`confirmPayment`). From
+    // `invoiced` this is the admin confirming a payment made without an
+    // upload; from `payment_review`, confirming the receipts. `assertTransition`
+    // above already limits `row.status` to those two.
+    const moved = await confirmPayment(id, row.status as "invoiced" | "payment_review", null);
     if (!moved) {
       redirect(withFilter(`/${locale}/admin/orders?error=conflict`, statusFilter));
     }
@@ -222,7 +220,7 @@ export async function setOrderStatusAction(formData: FormData): Promise<void> {
     // already paid for would need a refund path, which does not exist yet, so
     // the released quantity is decided by the status being left, not the one
     // being entered.
-    const stillHeld = row.status === "received" || row.status === "invoiced";
+    const stillHeld = (HELD_STATUSES as readonly string[]).includes(row.status);
     const moved = await sql.begin(async (tx) => {
       const result = await tx`
         UPDATE orders SET status = 'cancelled'
@@ -237,8 +235,8 @@ export async function setOrderStatusAction(formData: FormData): Promise<void> {
     }
   } else {
     // 'received' and 'invoiced' are not reachable here: nothing transitions to
-    // 'received', and 'invoiced' belongs to issueInvoiceAction, which has the
-    // prices and the payment link this action does not.
+    // 'received', and 'invoiced' belongs to issueInvoice, which prices the
+    // order and locks its exchange and VAT rates.
     redirect(withFilter(`/${locale}/admin/orders?error=bad-request`, statusFilter));
   }
 
@@ -247,33 +245,15 @@ export async function setOrderStatusAction(formData: FormData): Promise<void> {
   redirect(withFilter(`/${locale}/admin/orders?ok=status`, statusFilter));
 }
 
-/** True for a string that parses as an absolute `http:`/`https:` URL. */
-function isHttpUrl(value: string): boolean {
-  try {
-    const { protocol } = new URL(value);
-    return protocol === "http:" || protocol === "https:";
-  } catch {
-    return false;
-  }
-}
-
 /**
- * Thrown inside `issueInvoiceAction`'s transaction when the order UPDATE
- * matches no row, and caught outside it once the transaction has settled.
- * `redirect()` throws its own control-flow error to unwind, so it cannot be
- * called from inside a `sql.begin()` callback: the transaction machinery
- * would catch that throw like any other query failure instead of letting it
- * propagate. A plain error here, redirected on from the `catch` below, keeps
- * the two unrelated kinds of "throw" from colliding.
- */
-class OrderConflict extends Error {}
-
-/**
- * Prices the order, assigns an invoice number, and freezes the exchange rate.
+ * Finalize the draft the admin has just checked: price the order, number the
+ * invoice, and lock the exchange rate and VAT rate (`issueInvoice`).
  *
- * All three happen in one transaction. An order carrying an invoice number but
- * no frozen rate would render a Persian invoice at whatever the rate happened
- * to be when someone opened it — a different amount owed on every viewing.
+ * The draft showed a rate and a VAT rate. If either has moved since — the
+ * evening market job, or someone saving Settings in another tab — the invoice
+ * would lock figures nobody looked at, so it goes back to the draft, updated,
+ * instead. The prices come from the draft's own form, parsed by the same rule
+ * the draft used, so what was shown is what is written.
  */
 export async function issueInvoiceAction(formData: FormData): Promise<void> {
   await assertAdminWrite();
@@ -285,87 +265,70 @@ export async function issueInvoiceAction(formData: FormData): Promise<void> {
     redirect(withFilter(`/${locale}/admin/orders?error=bad-request`, statusFilter));
   }
 
-  const paymentUrl = String(formData.get("paymentUrl") ?? "").trim();
-  if (!paymentUrl) redirect(withFilter(`/${locale}/admin/orders?error=payment-link`, statusFilter));
-
-  // The `type="url"` input is a client-side check only, trivially bypassed by
-  // posting the form directly. This renders as plain text today, but a later
-  // phase turns it into a link a customer clicks — at that point a
-  // `javascript:` value stops being an inert string and becomes live code, so
-  // the scheme is validated here, at write time, rather than trusted from the
-  // browser.
-  if (!isHttpUrl(paymentUrl)) {
-    redirect(withFilter(`/${locale}/admin/orders?error=payment-link`, statusFilter));
-  }
-
-  const [order] = await sql<{ status: string }[]>`
-    SELECT status FROM orders WHERE id = ${id}
+  const [order] = await sql<{ status: string; ref: string }[]>`
+    SELECT status, ref FROM orders WHERE id = ${id}
   `;
   if (!order || !isOrderStatus(order.status)) {
     redirect(withFilter(`/${locale}/admin/orders?error=not-found`, statusFilter));
   }
-  assertTransition(order.status, "invoiced");
+  // A rep can invoice the same order while this draft is open, so an order
+  // already past `received` is a lost race, not a forged post.
+  if (order.status !== "received") {
+    redirect(withFilter(`/${locale}/admin/orders?error=conflict`, statusFilter));
+  }
 
-  const [itemRows, rate] = await Promise.all([
+  const [itemRows, rate, vatRateBp] = await Promise.all([
     sql<{ id: number }[]>`
       SELECT id FROM order_items WHERE order_id = ${id} ORDER BY id
     `,
     getFxRate(),
+    getVatRateBp(),
   ]);
 
   // Parse every price before writing anything, so a bad value on the last line
   // cannot leave the order half-priced.
-  const priced: { id: number; cents: number }[] = [];
+  const prices = new Map<number, number>();
   for (const row of itemRows) {
-    const raw = String(formData.get(`price_${row.id}`) ?? "").trim();
-    const dollars = Number(raw);
-    if (raw === "" || !Number.isFinite(dollars) || dollars < 0) {
+    const cents = parsePriceDollars(formData.get(priceParamName(row.id)));
+    if (cents === null) {
       redirect(withFilter(`/${locale}/admin/orders?error=prices`, statusFilter));
     }
-    priced.push({ id: row.id, cents: Math.round(dollars * 100) });
+    prices.set(row.id, cents);
   }
 
-  // The order UPDATE repeats `AND o.status = 'received'` rather than trusting
-  // the SELECT above, for the same reason setOrderStatusAction's UPDATEs do:
-  // the read can go stale before the write lands. Without the predicate, two
-  // concurrent invoice submissions could both pass `assertTransition` and
-  // both reach this UPDATE — each consuming a `nextval('invoice_seq')` — and
-  // the second write would overwrite the first, leaving an invoice number
-  // that may already be in a customer's inbox attached to no row. The line
-  // item price updates run first, inside the same transaction, so if the
-  // order UPDATE matches no row the whole transaction must not commit either —
-  // hence the throw below, rather than a `count` check that lets the
-  // function carry on and commit a half-applied invoice.
-  try {
-    await sql.begin(async (tx) => {
-      const pricesUpdated = await updateOrderItemPrices(tx, id, priced);
-      if (pricesUpdated !== priced.length) throw new OrderConflict();
-
-      const result = await tx`
-        UPDATE orders o
-        SET status = 'invoiced',
-            invoiced_at = now(),
-            payment_url = ${paymentUrl},
-            fx_rate_to_rial = ${rate},
-            invoice_number = 'INV-' || to_char(now(), 'YYYY') || '-' ||
-                             lpad(nextval('invoice_seq')::text, 4, '0'),
-            total_cents = (
-              SELECT COALESCE(SUM(i.unit_price_cents * i.qty), 0)
-              FROM order_items i WHERE i.order_id = o.id
-            )
-        WHERE o.id = ${id} AND o.status = 'received'
-      `;
-      if (result.count === 0) throw new OrderConflict();
+  if (Number(formData.get("rate")) !== rate || Number(formData.get("vatRateBp")) !== vatRateBp) {
+    const query = draftQuery(prices, {
+      statusFilter,
+      cur: String(formData.get("cur") ?? ""),
+      changed: "1",
     });
-  } catch (err) {
-    if (err instanceof OrderConflict) {
-      redirect(withFilter(`/${locale}/admin/orders?error=conflict`, statusFilter));
-    }
-    throw err;
+    redirect(`/${locale}/admin/orders/${order.ref}/invoice?${query}`);
   }
 
-  // As above: invoicing changes an order, and no cached page renders orders.
+  const issued = await issueInvoice(id, {
+    rate,
+    vatRateBp,
+    prices: [...prices].map(([lineId, cents]) => ({ id: lineId, cents })),
+  });
+  if (!issued) redirect(withFilter(`/${locale}/admin/orders?error=conflict`, statusFilter));
+
+  // Invoicing changes an order, and no cached page renders orders.
   redirect(withFilter(`/${locale}/admin/orders?ok=invoiced`, statusFilter));
+}
+
+/**
+ * The VAT rate the next invoice will carry. Invoices already issued keep the
+ * rate locked onto them, so this never restates one.
+ */
+export async function saveVatRateAction(formData: FormData): Promise<void> {
+  await assertAdminWrite();
+  const locale = safeLocale(formData);
+  const bp = parseVatPercent(String(formData.get("vatRate") ?? ""));
+  if (bp === null) redirect(`/${locale}/admin/settings?vat=invalid#vat`);
+  await saveVatRateBp(bp);
+  // No revalidation: VAT appears only on invoices, drafts and order pages,
+  // every one of them rendered per request.
+  redirect(`/${locale}/admin/settings?vat=saved#vat`);
 }
 
 /**

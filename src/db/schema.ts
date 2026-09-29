@@ -446,6 +446,11 @@ export const orders = pgTable(
     requestedTotalCents: integer("requested_total_cents").notNull().default(0),
     /** Total at the prices staff finally set. Equal until the order is priced. */
     totalCents: integer("total_cents").notNull().default(0),
+    /**
+     * The online-payment address staff used to type in when issuing. Payment
+     * is by bank transfer only now; nothing writes or shows this, and it is
+     * kept only so the older invoices' data is not dropped.
+     */
     paymentUrl: text("payment_url").notNull().default(""),
     courier: text("courier").notNull().default(""),
     trackingNumber: text("tracking_number").notNull().default(""),
@@ -455,8 +460,25 @@ export const orders = pgTable(
      * the rate would restate the amount owed on invoices already emailed.
      */
     fxRateToRial: integer("fx_rate_to_rial"),
+    /**
+     * VAT in basis points, locked when the invoice is finalized, for the same
+     * reason as the rate above. Null on an order not yet invoiced, and on an
+     * invoice issued before VAT existed — which printed none and still must not.
+     */
+    vatRateBp: integer("vat_rate_bp"),
     invoicedAt: timestamp("invoiced_at", { withTimezone: true }),
+    /** When the first receipt arrived and the order moved to `payment_review`. */
+    paymentSubmittedAt: timestamp("payment_submitted_at", { withTimezone: true }),
     paidAt: timestamp("paid_at", { withTimezone: true }),
+    /**
+     * The rep who confirmed the money arrived; null when the admin did, or
+     * before anyone has. Reps can move money-relevant state now, so it is
+     * recorded who did.
+     */
+    paidConfirmedByRepId: uuid("paid_confirmed_by_rep_id").references(
+      (): AnyPgColumn => salesReps.id,
+      { onDelete: "restrict" },
+    ),
     shippedAt: timestamp("shipped_at", { withTimezone: true }),
     deliveredAt: timestamp("delivered_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -497,7 +519,7 @@ export const orders = pgTable(
     // recognise.
     check(
       "orders_status_check",
-      sql`${t.status} IN ('received','invoiced','preparing','shipped','delivered','cancelled')`,
+      sql`${t.status} IN ('received','invoiced','payment_review','preparing','shipped','delivered','cancelled')`,
     ),
     check(
       "orders_currency_check",
@@ -520,21 +542,31 @@ export const orders = pgTable(
         AND ${t.invoicedAt} IS NOT NULL
       )`,
     ),
+    // Only an invoice carries a VAT rate: a rate on an unpriced order would be
+    // a number nobody locked.
+    check(
+      "orders_vat_rate_check",
+      sql`${t.vatRateBp} IS NULL
+        OR (${t.invoiceNumber} IS NOT NULL AND ${t.vatRateBp} BETWEEN 0 AND 10000)`,
+    ),
     check(
       "orders_timestamp_chain_check",
       sql`(${t.invoicedAt} IS NULL OR ${t.invoicedAt} >= ${t.createdAt})
+        AND (${t.paymentSubmittedAt} IS NULL OR (${t.invoicedAt} IS NOT NULL AND ${t.paymentSubmittedAt} >= ${t.invoicedAt}))
         AND (${t.paidAt} IS NULL OR (${t.invoicedAt} IS NOT NULL AND ${t.paidAt} >= ${t.invoicedAt}))
+        AND (${t.paidConfirmedByRepId} IS NULL OR ${t.paidAt} IS NOT NULL)
         AND (${t.shippedAt} IS NULL OR (${t.paidAt} IS NOT NULL AND ${t.shippedAt} >= ${t.paidAt}))
         AND (${t.deliveredAt} IS NULL OR (${t.shippedAt} IS NOT NULL AND ${t.deliveredAt} >= ${t.shippedAt}))`,
     ),
     check(
       "orders_status_timestamps_check",
       sql`(${t.status} <> 'received' OR ${t.invoicedAt} IS NULL)
-        AND (${t.status} NOT IN ('invoiced','preparing','shipped','delivered') OR ${t.invoicedAt} IS NOT NULL)
+        AND (${t.status} NOT IN ('invoiced','payment_review','preparing','shipped','delivered') OR ${t.invoicedAt} IS NOT NULL)
         AND (${t.status} NOT IN ('preparing','shipped','delivered') OR ${t.paidAt} IS NOT NULL)
         AND (${t.status} NOT IN ('shipped','delivered') OR ${t.shippedAt} IS NOT NULL)
         AND (${t.status} <> 'delivered' OR ${t.deliveredAt} IS NOT NULL)
-        AND (${t.status} <> 'invoiced' OR ${t.paidAt} IS NULL)
+        AND (${t.status} NOT IN ('invoiced','payment_review') OR ${t.paidAt} IS NULL)
+        AND (${t.status} <> 'payment_review' OR ${t.paymentSubmittedAt} IS NOT NULL)
         AND (${t.status} <> 'preparing' OR ${t.shippedAt} IS NULL)
         AND (${t.status} <> 'shipped' OR ${t.deliveredAt} IS NULL)
         AND (${t.status} <> 'cancelled' OR (${t.shippedAt} IS NULL AND ${t.deliveredAt} IS NULL))`,
@@ -600,6 +632,44 @@ export const orderComments = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("order_comments_order_idx").on(t.orderId, t.createdAt)],
+);
+
+/**
+ * Receipts a customer — or their rep, on their behalf — uploads after paying
+ * by bank transfer. The file is in a private Storage bucket; this row is what
+ * says whose it is. Shown to the admin, the order's rep and the customer, and
+ * to nobody else: `/api/payment-proofs/[id]` checks, then streams it.
+ */
+export const paymentProofs = pgTable(
+  "payment_proofs",
+  {
+    id: serial("id").primaryKey(),
+    orderId: integer("order_id")
+      .notNull()
+      .references(() => orders.id, { onDelete: "cascade" }),
+    storagePath: text("storage_path").notNull(),
+    contentType: text("content_type").notNull(),
+    byteSize: integer("byte_size").notNull(),
+    /** 'customer' or 'rep'; a rep upload names the rep. */
+    uploadedBy: text("uploaded_by").notNull(),
+    repId: uuid("rep_id").references((): AnyPgColumn => salesReps.id, { onDelete: "restrict" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("payment_proofs_storage_path_key").on(t.storagePath),
+    index("payment_proofs_order_idx").on(t.orderId, t.createdAt),
+    // Mirrors PROOF_TYPES and PROOF_MAX_BYTES in lib/paymentProof.ts.
+    check(
+      "payment_proofs_content_type_check",
+      sql`${t.contentType} IN ('image/jpeg','image/png','image/webp','application/pdf')`,
+    ),
+    check("payment_proofs_size_check", sql`${t.byteSize} BETWEEN 1 AND 4000000`),
+    check(
+      "payment_proofs_uploaded_by_check",
+      sql`(${t.uploadedBy} = 'customer' AND ${t.repId} IS NULL)
+        OR (${t.uploadedBy} = 'rep' AND ${t.repId} IS NOT NULL)`,
+    ),
+  ],
 );
 
 // ---------------------------------------------------------------------------

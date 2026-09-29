@@ -7,10 +7,10 @@ import { useModalFocus } from "@/lib/useModalFocus";
  * A confirmation step in front of a form that is already filled in.
  *
  * Every button this wraps does something a customer sees and staff cannot take
- * back from the queue: issuing an invoice, recording a payment, marking goods
- * shipped. The summary is built from the form's own current values at the
- * moment of the click, not from props alone, so what it shows is what will
- * actually be submitted — including the prices someone just typed.
+ * back from the queue: finalizing an invoice, recording a payment, marking
+ * goods shipped. The summary is built from the form's own current values at
+ * the moment of the click, not from props alone, so what it shows is what will
+ * actually be submitted — including the tracking number someone just typed.
  *
  * The overlay is a plain element rendered inside the form rather than a
  * <dialog>. That keeps Continue an ordinary submit button belonging to the
@@ -19,10 +19,8 @@ import { useModalFocus } from "@/lib/useModalFocus";
  */
 
 export type ConfirmDetail = { label: string; value: string; tech?: boolean };
-/** A field to read off the form and show, e.g. the payment link just pasted. */
+/** A field to read off the form and show, e.g. the tracking number just typed. */
 export type ConfirmEcho = { name: string; label: string; tech?: boolean };
-/** Lines whose `price_<id>` inputs are totalled for the summary. */
-export type ConfirmLine = { id: number; qty: number };
 
 export function ConfirmSubmit({
   label,
@@ -32,8 +30,6 @@ export function ConfirmSubmit({
   disabled,
   details = [],
   echo = [],
-  lines = [],
-  totalLabel,
   className = "btn-small",
 }: {
   label: string;
@@ -43,13 +39,10 @@ export function ConfirmSubmit({
   disabled?: boolean;
   details?: ConfirmDetail[];
   echo?: ConfirmEcho[];
-  lines?: ConfirmLine[];
-  totalLabel?: string;
   className?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [live, setLive] = useState<ConfirmDetail[]>([]);
-  const [total, setTotal] = useState<string | null>(null);
   const openerRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
 
@@ -69,14 +62,6 @@ export function ConfirmSubmit({
         .filter((d) => d.value !== ""),
     );
 
-    if (lines.length > 0) {
-      // Mirrors the server: cents per unit, rounded once, then multiplied.
-      const cents = lines.reduce((sum, ln) => {
-        const price = Number(data.get(`price_${ln.id}`) ?? 0);
-        return sum + (Number.isFinite(price) ? Math.round(price * 100) * ln.qty : 0);
-      }, 0);
-      setTotal((cents / 100).toFixed(2));
-    }
     setOpen(true);
   };
 
@@ -119,16 +104,6 @@ export function ConfirmSubmit({
                   <dd className={d.tech ? "tech break-all" : "break-words"}>{d.value}</dd>
                 </div>
               ))}
-              {total !== null && totalLabel && (
-                <div className="contents">
-                  <dt className="border-t border-[var(--color-rule)] pt-1 font-bold">
-                    {totalLabel}
-                  </dt>
-                  <dd className="tech border-t border-[var(--color-rule)] pt-1 font-bold">
-                    ${total}
-                  </dd>
-                </div>
-              )}
             </dl>
 
             <div className="mt-4 flex justify-end gap-2 border-t border-[var(--color-rule)] pt-3">

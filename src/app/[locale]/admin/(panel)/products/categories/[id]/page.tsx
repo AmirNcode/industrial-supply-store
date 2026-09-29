@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { requireAdmin } from "@/lib/admin";
 import { notFound } from "next/navigation";
 import { getCatalogCategoryEditor } from "@/db/familyQueries";
 import { DEMO_MODE } from "@/lib/demo";
@@ -13,6 +14,7 @@ export default async function CatalogCategoryEditPage({
   const { locale, id } = await params;
   if (!isLocale(locale)) notFound();
   const l = locale as Locale;
+  await requireAdmin(l);
   const editor = await getCatalogCategoryEditor(Number(id));
   if (!editor) notFound();
   const t = getDict(l);

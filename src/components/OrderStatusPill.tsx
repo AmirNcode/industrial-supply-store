@@ -5,6 +5,7 @@ import type { OrderStatus } from "@/lib/orders";
 export const STATUS_LABEL_KEY = {
   received: "statusReceived",
   invoiced: "statusInvoiced",
+  payment_review: "statusPaymentReview",
   preparing: "statusPreparing",
   shipped: "statusShipped",
   delivered: "statusDelivered",
@@ -15,6 +16,7 @@ export const STATUS_LABEL_KEY = {
 const TONE: Record<OrderStatus, string> = {
   received: "pill",
   invoiced: "pill pill-warn",
+  payment_review: "pill pill-warn",
   preparing: "pill pill-warn",
   shipped: "pill",
   delivered: "pill pill-ok",

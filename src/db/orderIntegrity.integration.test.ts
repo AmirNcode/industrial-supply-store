@@ -10,7 +10,10 @@ import {
   sellHeldStock,
 } from "./inventoryQueries";
 import { submitOrderFromCart, type SubmitOrderInput } from "./orderSubmissionQueries";
-import { updateOrderItemPrices } from "./invoiceQueries";
+import { getInvoiceByRef, issueInvoice, updateOrderItemPrices } from "./invoiceQueries";
+import { addPaymentProof, confirmPayment, listPaymentProofs } from "./paymentProofQueries";
+import { PROOF_MAX_PER_ORDER } from "@/lib/paymentProof";
+import { randomReferralCode } from "@/lib/repAccount";
 import { quoteCartFingerprint } from "@/lib/quoteSubmission";
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
@@ -285,4 +288,129 @@ test("quote replay and reservation allocation stay correct through the order lif
 
 after(async () => {
   await sql.end({ timeout: 5 });
+});
+
+test("an invoice locks its prices, exchange rate and VAT rate once, and only once", async () => {
+  assertLocalDatabase();
+  const [order] = await sql<{ id: number; ref: string }[]>`
+    INSERT INTO orders (ref, company, contact_name, email, total_cents, requested_total_cents)
+    VALUES (${`ORD-${randomUUID().slice(0, 6).toUpperCase()}`}, 'VAT Co', 'Tester',
+            'vat@example.invalid', 1000, 1000)
+    RETURNING id, ref
+  `;
+  try {
+    const [line] = await sql<{ id: number }[]>`
+      INSERT INTO order_items (order_id, product_id, part_number, family_name, qty,
+                               unit_price_cents, requested_unit_price_cents)
+      VALUES (${order.id}, NULL, 'VAT-1', 'Integration Family', 2, 500, 500)
+      RETURNING id
+    `;
+    // A VAT rate belongs to an invoice; an order still being priced has none.
+    await assert.rejects(sql`UPDATE orders SET vat_rate_bp = 1000 WHERE id = ${order.id}`, {
+      code: "23514",
+    });
+
+    const read = async () => {
+      const [row] = await sql<
+        { status: string; rate: number; vatRateBp: number; totalCents: number; invoiceNumber: string }[]
+      >`
+        SELECT status, fx_rate_to_rial AS rate, vat_rate_bp AS "vatRateBp",
+               total_cents AS "totalCents", invoice_number AS "invoiceNumber"
+        FROM orders WHERE id = ${order.id}
+      `;
+      const [item] = await sql<{ cents: number }[]>`
+        SELECT unit_price_cents AS cents FROM order_items WHERE id = ${line.id}
+      `;
+      return { ...row, lineCents: item.cents };
+    };
+
+    assert.equal(
+      await issueInvoice(order.id, {
+        rate: 1_094_889,
+        vatRateBp: 1000,
+        prices: [{ id: line.id, cents: 450 }],
+      }),
+      true,
+    );
+    const issued = await read();
+    assert.equal(issued.status, "invoiced");
+    assert.equal(issued.rate, 1_094_889);
+    assert.equal(issued.vatRateBp, 1000);
+    assert.equal(issued.totalCents, 900);
+    assert.equal(issued.lineCents, 450);
+    assert.match(issued.invoiceNumber, /^INV-\d{4}-\d{4,}$/);
+    assert.equal((await getInvoiceByRef(order.ref))?.order.vatRateBp, 1000);
+
+    // The admin and a rep finalizing at once: the second changes nothing, and
+    // its price update is rolled back with it.
+    assert.equal(
+      await issueInvoice(order.id, { rate: 2_000_000, vatRateBp: 900, prices: [{ id: line.id, cents: 1 }] }),
+      false,
+    );
+    assert.deepEqual(await read(), issued);
+  } finally {
+    await sql`DELETE FROM orders WHERE id = ${order.id}`;
+  }
+});
+
+test("a receipt moves an invoice to review; confirming sells the stock and records who", async () => {
+  assertLocalDatabase();
+  const suffix = randomUUID().slice(0, 8);
+  const [order] = await sql<{ id: number }[]>`
+    INSERT INTO orders (ref, company, contact_name, email, total_cents, requested_total_cents)
+    VALUES (${`ORD-${suffix.slice(0, 6).toUpperCase()}`}, 'Proof Co', 'Tester',
+            'proof@example.invalid', 500, 500)
+    RETURNING id
+  `;
+  const [rep] = await sql<{ id: string }[]>`
+    INSERT INTO sales_reps (username, password_hash, name, referral_code)
+    VALUES (${`proof-${suffix}`}, 'x', 'Proof Rep',
+            ${randomReferralCode()})
+    RETURNING id
+  `;
+  const file = (n: number) => ({ path: `test/${suffix}/${n}.jpg`, type: "image/jpeg" as const, size: 10 });
+  const status = async () =>
+    (await sql<{ status: string; submitted: boolean; paid: boolean; by: string | null }[]>`
+      SELECT status, payment_submitted_at IS NOT NULL AS submitted, paid_at IS NOT NULL AS paid,
+             paid_confirmed_by_rep_id AS by
+      FROM orders WHERE id = ${order.id}`)[0];
+  try {
+    // Nothing to pay for yet.
+    assert.equal(await addPaymentProof(order.id, file(0), { kind: "customer" }), "closed");
+
+    await issueInvoice(order.id, { rate: 1_000_000, vatRateBp: 1000 });
+    assert.equal(await addPaymentProof(order.id, file(1), { kind: "customer" }), "added");
+    assert.deepEqual(await status(), { status: "payment_review", submitted: true, paid: false, by: null });
+    assert.equal(await addPaymentProof(order.id, file(2), { kind: "rep", repId: rep.id }), "added");
+    const proofs = (await listPaymentProofs([order.id])).get(order.id) ?? [];
+    assert.deepEqual(proofs.map((p) => [p.uploadedBy, p.repName]), [["customer", null], ["rep", "Proof Rep"]]);
+
+    // The cap holds.
+    for (let n = 3; n <= PROOF_MAX_PER_ORDER; n++) {
+      assert.equal(await addPaymentProof(order.id, file(n), { kind: "customer" }), "added");
+    }
+    assert.equal(await addPaymentProof(order.id, file(99), { kind: "customer" }), "full");
+
+    // A confirmation from the wrong status changes nothing; the right one records the rep.
+    assert.equal(await confirmPayment(order.id, "invoiced", null), false);
+    assert.equal(await confirmPayment(order.id, "payment_review", rep.id), true);
+    assert.deepEqual(await status(), { status: "preparing", submitted: true, paid: true, by: rep.id });
+    // And no receipt can be added once payment is confirmed.
+    assert.equal(await addPaymentProof(order.id, file(100), { kind: "customer" }), "closed");
+
+    // The database refuses a review with no receipt date, and a rep upload with no rep.
+    await assert.rejects(
+      sql`UPDATE orders SET status = 'payment_review', paid_at = NULL, payment_submitted_at = NULL,
+            paid_confirmed_by_rep_id = NULL WHERE id = ${order.id}`,
+      { code: "23514" },
+    );
+    await assert.rejects(
+      sql`INSERT INTO payment_proofs (order_id, storage_path, content_type, byte_size, uploaded_by)
+          VALUES (${order.id}, ${`test/${suffix}/x.jpg`}, 'image/jpeg', 10, 'rep')`,
+      { code: "23514" },
+    );
+  } finally {
+    await sql`DELETE FROM orders WHERE id = ${order.id}`;
+    await sql`DELETE FROM sales_reps WHERE id = ${rep.id}`;
+  }
 });

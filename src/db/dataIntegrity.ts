@@ -101,7 +101,7 @@ export async function reconcileInventoryForProducts(
     WITH expected AS (
       SELECT p.id AS product_id,
              COALESCE(sum(i.qty) FILTER (
-               WHERE o.status IN ('received', 'invoiced')
+               WHERE o.status IN ('received', 'invoiced', 'payment_review')
              ), 0)::int AS on_hold,
              COALESCE(sum(i.qty) FILTER (
                WHERE o.paid_at IS NOT NULL
@@ -188,7 +188,7 @@ export async function inspectDatabaseIntegrity(
     ), inventory_expected AS (
       SELECT p.id AS product_id,
              COALESCE(sum(i.qty) FILTER (
-               WHERE o.status IN ('received', 'invoiced')
+               WHERE o.status IN ('received', 'invoiced', 'payment_review')
              ), 0)::int AS on_hold,
              COALESCE(sum(i.qty) FILTER (
                -- A paid order remains sold if it is cancelled before shipping;
@@ -275,18 +275,25 @@ export async function inspectDatabaseIntegrity(
           )
         )
         OR NOT (
+          vat_rate_bp IS NULL
+          OR (invoice_number IS NOT NULL AND vat_rate_bp BETWEEN 0 AND 10000)
+        )
+        OR NOT (
           (invoiced_at IS NULL OR invoiced_at >= created_at)
+          AND (payment_submitted_at IS NULL OR (invoiced_at IS NOT NULL AND payment_submitted_at >= invoiced_at))
           AND (paid_at IS NULL OR (invoiced_at IS NOT NULL AND paid_at >= invoiced_at))
+          AND (paid_confirmed_by_rep_id IS NULL OR paid_at IS NOT NULL)
           AND (shipped_at IS NULL OR (paid_at IS NOT NULL AND shipped_at >= paid_at))
           AND (delivered_at IS NULL OR (shipped_at IS NOT NULL AND delivered_at >= shipped_at))
         )
         OR NOT (
           (status <> 'received' OR invoiced_at IS NULL)
-          AND (status NOT IN ('invoiced','preparing','shipped','delivered') OR invoiced_at IS NOT NULL)
+          AND (status NOT IN ('invoiced','payment_review','preparing','shipped','delivered') OR invoiced_at IS NOT NULL)
           AND (status NOT IN ('preparing','shipped','delivered') OR paid_at IS NOT NULL)
           AND (status NOT IN ('shipped','delivered') OR shipped_at IS NOT NULL)
           AND (status <> 'delivered' OR delivered_at IS NOT NULL)
-          AND (status <> 'invoiced' OR paid_at IS NULL)
+          AND (status NOT IN ('invoiced','payment_review') OR paid_at IS NULL)
+          AND (status <> 'payment_review' OR payment_submitted_at IS NOT NULL)
           AND (status <> 'preparing' OR shipped_at IS NULL)
           AND (status <> 'shipped' OR delivered_at IS NULL)
           AND (status <> 'cancelled' OR (shipped_at IS NULL AND delivered_at IS NULL))

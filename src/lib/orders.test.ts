@@ -6,12 +6,14 @@ import {
   canTransition,
   assertTransition,
   nextStatuses,
+  acceptsPaymentProof,
 } from "./orders";
 
-test("the vocabulary is exactly the six agreed statuses", () => {
+test("the vocabulary is exactly the seven agreed statuses", () => {
   assert.deepEqual([...ORDER_STATUSES], [
     "received",
     "invoiced",
+    "payment_review",
     "preparing",
     "shipped",
     "delivered",
@@ -46,6 +48,7 @@ test("going backwards is refused", () => {
 test("cancelling is allowed before shipping and not after", () => {
   assert.equal(canTransition("received", "cancelled"), true);
   assert.equal(canTransition("invoiced", "cancelled"), true);
+  assert.equal(canTransition("payment_review", "cancelled"), true);
   assert.equal(canTransition("preparing", "cancelled"), true);
   assert.equal(canTransition("shipped", "cancelled"), false);
 });
@@ -67,4 +70,22 @@ test("assertTransition throws with both statuses named", () => {
     /received.*delivered/,
   );
   assert.doesNotThrow(() => assertTransition("received", "invoiced"));
+});
+
+test("a receipt moves an invoice to review, and only confirmation leaves review", () => {
+  assert.equal(canTransition("invoiced", "payment_review"), true);
+  assert.equal(canTransition("payment_review", "preparing"), true);
+  // No reject: a receipt that does not match is settled by phone or cancelled.
+  assert.equal(canTransition("payment_review", "invoiced"), false);
+  assert.equal(canTransition("received", "payment_review"), false);
+  assert.equal(canTransition("payment_review", "shipped"), false);
+  // The admin may still confirm a payment made without an upload.
+  assert.equal(canTransition("invoiced", "preparing"), true);
+});
+
+test("receipts are accepted while payment is owed or being checked, and never after", () => {
+  assert.deepEqual(
+    ORDER_STATUSES.filter(acceptsPaymentProof),
+    ["invoiced", "payment_review"],
+  );
 });

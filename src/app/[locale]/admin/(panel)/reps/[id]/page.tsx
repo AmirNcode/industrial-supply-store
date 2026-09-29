@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { requireAdmin } from "@/lib/admin";
 import { notFound } from "next/navigation";
 import { DEMO_MODE } from "@/lib/demo";
 import { getRepById, listActiveReps } from "@/db/repQueries";
@@ -57,6 +58,7 @@ export default async function AdminRepPage({
   const { locale, id } = await params;
   if (!isLocale(locale) || !isUuid(id)) notFound();
   const l = locale as Locale;
+  await requireAdmin(l);
   const t = getDict(l);
   const { ok, error, year: yearParam } = await searchParams;
   const year = typeof yearParam === "string" ? Number(yearParam) : NaN;

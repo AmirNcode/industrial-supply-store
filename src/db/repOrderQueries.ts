@@ -11,6 +11,7 @@ export type RepOrderRow = {
   createdAt: string;
   totalCents: number;
   fxRateToRial: number | null;
+  vatRateBp: number | null;
   invoiceNumber: string | null;
   payToken: string;
   company: string;
@@ -43,6 +44,7 @@ function visibleTo(repId: string) {
 
 const ROW_COLS = sql`o.id, o.ref, o.status, o.created_at AS "createdAt",
   o.total_cents AS "totalCents", o.fx_rate_to_rial AS "fxRateToRial",
+  o.vat_rate_bp AS "vatRateBp",
   o.invoice_number AS "invoiceNumber", o.pay_token AS "payToken",
   COALESCE(u.company, o.company) AS company, o.user_id AS "customerId",
   u.customer_code AS "customerCode", o.placed_by_rep AS "placedByRep"`;
@@ -63,8 +65,9 @@ export async function getOrderForRep(
 ): Promise<{ order: RepOrderDetail; items: AccountOrderItem[] } | null> {
   const [order] = await sql<RepOrderDetail[]>`
     SELECT ${ROW_COLS},
-           o.payment_url AS "paymentUrl", o.courier, o.tracking_number AS "trackingNumber",
-           o.po_number AS "poNumber", o.invoiced_at AS "invoicedAt", o.paid_at AS "paidAt",
+           o.courier, o.tracking_number AS "trackingNumber",
+           o.po_number AS "poNumber", o.invoiced_at AS "invoicedAt",
+           o.payment_submitted_at AS "paymentSubmittedAt", o.paid_at AS "paidAt",
            o.shipped_at AS "shippedAt", o.delivered_at AS "deliveredAt",
            (SELECT count(*)::int FROM order_items i WHERE i.order_id = o.id) AS "itemCount",
            o.commission_rate_bp AS "commissionRateBp",
@@ -76,6 +79,15 @@ export async function getOrderForRep(
   `;
   if (!order) return null;
   return { order, items: await listOrderItems(order.id) };
+}
+
+/**
+ * Whether this rep may see the order — and so create its invoice. The same
+ * rule as every read above, for pages that then load the order another way.
+ */
+export async function repCanSeeOrder(repId: string, ref: string): Promise<boolean> {
+  const rows = await sql`SELECT 1 FROM orders o WHERE o.ref = ${ref} AND ${visibleTo(repId)} LIMIT 1`;
+  return rows.length > 0;
 }
 
 /**

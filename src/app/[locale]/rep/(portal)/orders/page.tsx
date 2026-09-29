@@ -4,7 +4,7 @@ import { requireRep } from "@/lib/repSession";
 import { listOrdersForRep } from "@/db/repOrderQueries";
 import { getFxRate } from "@/lib/fx";
 import { siteOrigin } from "@/lib/siteOrigin";
-import { formatPrice } from "@/lib/money";
+import { formatOrderTotal } from "@/lib/invoice";
 import { formatPersianDate } from "@/lib/persianCalendar";
 import { ORDER_STATUSES, isOrderStatus } from "@/lib/orders";
 import { OrderStatusPill, STATUS_LABEL_KEY } from "@/components/OrderStatusPill";
@@ -89,7 +89,13 @@ export default async function RepOrdersPage({
                   {formatPersianDate(order.createdAt, l)}
                 </span>
                 <span className="num tech">
-                  {formatPrice(order.totalCents, "IRR", l, order.fxRateToRial ?? liveRate)}
+                  {formatOrderTotal(
+                    order.totalCents,
+                    order.vatRateBp,
+                    "IRR",
+                    l,
+                    order.fxRateToRial ?? liveRate,
+                  )}
                 </span>
                 <span className="ms-auto">
                   <ShareButton

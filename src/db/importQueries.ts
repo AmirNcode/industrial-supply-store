@@ -2,6 +2,7 @@ import "server-only";
 import type { TransactionSql } from "postgres";
 import { sql } from "./index";
 import type { ImportSpecDef, ImportRow } from "@/lib/importCsv";
+import { specText } from "@/lib/productTable";
 import { plannedAliases, plannedDefs, type ImportPlan } from "@/lib/columnPlan";
 import type { FieldAliases } from "./schema";
 import { reconcileInventoryForProducts } from "./dataIntegrity";
@@ -154,14 +155,25 @@ export type ExportProduct = {
   imageUrl: string;
 };
 
-export async function getProductsForExport(familyId: number): Promise<ExportProduct[]> {
+/**
+ * A family's products in catalog order — for the CSV export and the admin
+ * product table, which must agree on every value. `partNumbers` narrows it to
+ * the rows an edit names, re-read at save to compare against what was shown.
+ */
+export async function getProductsForExport(
+  familyId: number,
+  partNumbers?: readonly string[],
+): Promise<ExportProduct[]> {
   return sql<ExportProduct[]>`
     SELECT part_number AS "partNumber", specs, price_cents AS "priceCents",
            pack_qty AS "packQty", lead_days AS "leadDays", in_stock AS "inStock",
            inventory_available AS "inventoryAvailable",
            inventory_on_hold AS "inventoryOnHold",
            inventory_sold AS "inventorySold", image_url AS "imageUrl"
-    FROM products WHERE family_id = ${familyId} ORDER BY sort, id
+    FROM products
+    WHERE family_id = ${familyId}
+      ${partNumbers ? sql`AND part_number = ANY(${partNumbers as string[]}::text[])` : sql``}
+    ORDER BY sort, id
   `;
 }
 
@@ -170,13 +182,11 @@ export async function getProductsForExport(familyId: number): Promise<ExportProd
  *
  * Matches `specValueToText` in `src/seed/index.ts` — the four-decimal clamp is
  * what stops a stored 0.06999999999999999 from being written back as an
- * eighteen-digit string that no longer matches the facet it came from.
+ * eighteen-digit string that no longer matches the facet it came from. Defined
+ * once in `lib/productTable.ts`, because the admin product table shows and
+ * compares cells with the very same rule.
  */
-export function specCell(value: unknown): string {
-  if (value === null || value === undefined) return "";
-  if (typeof value === "number") return String(Number(value.toFixed(4)));
-  return String(value);
-}
+export const specCell = specText;
 
 /**
  * One product as a CSV record, in `columnsFor(defs)` order.
@@ -697,7 +707,7 @@ export async function writeImport(
       >`
         SELECT p.part_number AS "partNumber",
                COALESCE(SUM(i.qty) FILTER (
-                 WHERE o.status IN ('received', 'invoiced')), 0)::int AS "onHold",
+                 WHERE o.status IN ('received', 'invoiced', 'payment_review')), 0)::int AS "onHold",
                COALESCE(SUM(i.qty) FILTER (
                  WHERE o.paid_at IS NOT NULL), 0)::int AS "sold"
         FROM products p

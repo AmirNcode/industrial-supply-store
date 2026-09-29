@@ -26,12 +26,71 @@ export async function updateOrderItemPrices(
   return result.count;
 }
 
-export type InvoiceOrder = {
+/**
+ * Thrown inside `issueInvoice`'s transaction when a write matches fewer rows
+ * than it must, and caught outside it once the transaction has rolled back.
+ * Callers get `false` and redirect: `redirect()` throws its own control-flow
+ * error, which the transaction machinery would catch like any query failure,
+ * so it cannot be called from inside the callback.
+ */
+class InvoiceConflict extends Error {}
+
+/**
+ * Prices the order, assigns an invoice number, and locks the exchange rate
+ * and the VAT rate — in one transaction, shared by the admin and the rep.
+ *
+ * An order carrying an invoice number but no frozen rate would render a
+ * Persian invoice at whatever the rate happened to be when someone opened it:
+ * a different amount owed on every viewing. VAT is locked for the same reason.
+ *
+ * The order UPDATE repeats `AND o.status = 'received'` rather than trusting
+ * the caller's earlier read, which can go stale before the write lands.
+ * Without it, two concurrent submissions could each consume a
+ * `nextval('invoice_seq')` and the second would overwrite the first, leaving
+ * an invoice number that may already be in a customer's inbox attached to no
+ * row. The price updates run first inside the same transaction, so a lost
+ * race rolls them back too rather than committing a half-applied invoice.
+ *
+ * `prices` is the admin's; a rep invoices at the prices already on the order.
+ * Returns false when the order was no longer waiting to be invoiced.
+ */
+export async function issueInvoice(
+  orderId: number,
+  locked: { rate: number; vatRateBp: number; prices?: readonly OrderItemPrice[] },
+): Promise<boolean> {
+  try {
+    await sql.begin(async (tx) => {
+      if (locked.prices) {
+        const updated = await updateOrderItemPrices(tx, orderId, locked.prices);
+        if (updated !== locked.prices.length) throw new InvoiceConflict();
+      }
+      const result = await tx`
+        UPDATE orders o
+        SET status = 'invoiced',
+            invoiced_at = now(),
+            fx_rate_to_rial = ${locked.rate},
+            vat_rate_bp = ${locked.vatRateBp},
+            invoice_number = 'INV-' || to_char(now(), 'YYYY') || '-' ||
+                             lpad(nextval('invoice_seq')::text, 4, '0'),
+            total_cents = (
+              SELECT COALESCE(SUM(i.unit_price_cents * i.qty), 0)
+              FROM order_items i WHERE i.order_id = o.id
+            )
+        WHERE o.id = ${orderId} AND o.status = 'received'
+      `;
+      if (result.count === 0) throw new InvoiceConflict();
+    });
+    return true;
+  } catch (err) {
+    if (err instanceof InvoiceConflict) return false;
+    throw err;
+  }
+}
+
+/** Who the invoice is addressed to — the same fields on a draft and an issued one. */
+export type InvoiceParty = {
   id: number;
   ref: string;
-  invoiceNumber: string;
-  /** Rial per USD, frozen when the invoice was issued. Never null here. */
-  fxRateToRial: number;
   company: string;
   contactName: string;
   email: string;
@@ -40,14 +99,21 @@ export type InvoiceOrder = {
   address: string;
   city: string;
   country: string;
-  paymentUrl: string;
   totalCents: number;
   status: string;
+  /** The pay link's key: the invoice points customers there to upload a receipt. */
+  payToken: string;
+};
+
+export type InvoiceOrder = InvoiceParty & {
+  invoiceNumber: string;
+  /** Rial per USD, frozen when the invoice was issued. Never null here. */
+  fxRateToRial: number;
+  /** Locked with the rate; null on an invoice issued before VAT existed. */
+  vatRateBp: number | null;
   invoicedAt: string;
   /** Null for a guest order — nobody but staff may read that invoice. */
   userId: string | null;
-  /** The pay link's key; `?key=` on the invoice URL must match it. */
-  payToken: string;
 };
 
 export type InvoiceItem = {
@@ -57,6 +123,18 @@ export type InvoiceItem = {
   qty: number;
   unitPriceCents: number;
 };
+
+const PARTY_COLS = sql`id, ref, company, contact_name AS "contactName", email, phone,
+  po_number AS "poNumber", address, city, country, total_cents AS "totalCents", status,
+  pay_token AS "payToken"`;
+
+async function listInvoiceItems(orderId: number): Promise<InvoiceItem[]> {
+  return sql<InvoiceItem[]>`
+    SELECT id, part_number AS "partNumber", family_name AS "familyName",
+           qty, unit_price_cents AS "unitPriceCents"
+    FROM order_items WHERE order_id = ${orderId} ORDER BY id
+  `;
+}
 
 /**
  * An invoice exists only once a number has been assigned.
@@ -72,13 +150,9 @@ export async function getInvoiceByRef(
   ref: string,
 ): Promise<{ order: InvoiceOrder; items: InvoiceItem[] } | null> {
   const rows = await sql<InvoiceOrder[]>`
-    SELECT id, ref, invoice_number AS "invoiceNumber",
-           fx_rate_to_rial AS "fxRateToRial",
-           company, contact_name AS "contactName", email, phone,
-           po_number AS "poNumber", address, city, country,
-           payment_url AS "paymentUrl", total_cents AS "totalCents",
-           status, invoiced_at AS "invoicedAt", user_id AS "userId",
-           pay_token AS "payToken"
+    SELECT ${PARTY_COLS}, invoice_number AS "invoiceNumber",
+           fx_rate_to_rial AS "fxRateToRial", vat_rate_bp AS "vatRateBp",
+           invoiced_at AS "invoicedAt", user_id AS "userId"
     FROM orders
     WHERE ref = ${ref}
       AND invoice_number IS NOT NULL
@@ -87,11 +161,20 @@ export async function getInvoiceByRef(
   `;
   const order = rows[0];
   if (!order) return null;
+  return { order, items: await listInvoiceItems(order.id) };
+}
 
-  const items = await sql<InvoiceItem[]>`
-    SELECT id, part_number AS "partNumber", family_name AS "familyName",
-           qty, unit_price_cents AS "unitPriceCents"
-    FROM order_items WHERE order_id = ${order.id} ORDER BY id
+/**
+ * The order behind a draft invoice, in whatever status it is in — the draft
+ * pages send anything past `received` on to the real invoice. Access is the
+ * caller's: the admin panel's gate, or a rep's visibility check first.
+ */
+export async function getInvoiceDraft(
+  ref: string,
+): Promise<{ order: InvoiceParty; items: InvoiceItem[] } | null> {
+  const [order] = await sql<InvoiceParty[]>`
+    SELECT ${PARTY_COLS} FROM orders WHERE ref = ${ref} LIMIT 1
   `;
-  return { order, items };
+  if (!order) return null;
+  return { order, items: await listInvoiceItems(order.id) };
 }

@@ -1,7 +1,9 @@
 import "server-only";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { DEMO_MODE } from "./demo";
+import type { Locale } from "./i18n";
 
 /**
  * Single shared password for the local admin view.
@@ -72,6 +74,26 @@ export async function signInAdmin(password: string): Promise<boolean> {
 export async function signOutAdmin(): Promise<void> {
   const jar = await cookies();
   jar.delete(COOKIE);
+}
+
+/**
+ * Every admin page calls this first, before it reads anything.
+ *
+ * The panel layout's own check is not enough. Next renders a route's page
+ * independently of its layout, so while the layout's `redirect()` set the 307,
+ * the page under it still ran its queries and streamed its output into the
+ * same response: every order's contact details, pay links and staff notes went
+ * to anyone who requested the URL — invisible in a browser, which follows the
+ * redirect, and readable by anything that does not. The check therefore sits
+ * in the page, ahead of its first query. `src/lib/adminGate.test.ts` fails the
+ * build's tests if a panel page forgets it.
+ *
+ * `DEMO_MODE` reads as signed in, as it does in the layout: the demo's panel
+ * is public on purpose, and every write still refuses it (`assertAdminWrite`).
+ */
+export async function requireAdmin(locale: Locale): Promise<void> {
+  if (DEMO_MODE) return;
+  if (!(await isAdmin())) redirect(`/${locale}/admin/login`);
 }
 
 /**

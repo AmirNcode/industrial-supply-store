@@ -1,9 +1,12 @@
 import { notFound } from "next/navigation";
+import { requireAdmin } from "@/lib/admin";
 import Link from "next/link";
 import { sql } from "@/db";
 import { DEMO_MODE } from "@/lib/demo";
 import { isLocale, getDict, type Locale } from "@/lib/i18n";
 import { customerCurrencyFor, formatPrice, formatInt } from "@/lib/money";
+import { formatOrderTotal } from "@/lib/invoice";
+import { draftLinePrices, priceParamName, priceParamValue } from "@/lib/invoiceDraft";
 import { getFxRate, getPriceDisplayMode } from "@/lib/fx";
 import { cookies } from "next/headers";
 import { emailsWithAccounts } from "@/db/userQueries";
@@ -14,8 +17,9 @@ import { siteOrigin } from "@/lib/siteOrigin";
 import { commissionPercentLabel } from "@/lib/repAccount";
 import { listCommentsForOrders, type OrderComment } from "@/db/commentQueries";
 import { findShortfalls } from "@/db/inventoryQueries";
+import { listPaymentProofs } from "@/db/paymentProofQueries";
+import { PaymentProofSection } from "@/components/PaymentProofSection";
 import {
-  issueInvoiceAction,
   setOrderStatusAction,
   resetCustomerPasswordAction,
   addCommentAction,
@@ -44,13 +48,15 @@ type OrderRow = {
   trackingNumber: string;
   invoiceNumber: string | null;
   fxRateToRial: number | null;
-  paymentUrl: string;
+  vatRateBp: number | null;
   /** Locked onto the order when it was placed; null when no rep is credited. */
   repName: string | null;
   placedByRep: boolean;
   commissionRateBp: number | null;
   customerCode: string | null;
   payToken: string;
+  /** The rep who confirmed payment; null when the admin did or nobody has. */
+  paidByRepName: string | null;
 };
 
 type OrderItemRow = {
@@ -69,14 +75,18 @@ export default async function AdminPage({
   searchParams,
 }: {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{ error?: string; fx?: string; ok?: string; status?: string }>;
+  /** `edit` reopens one order with the prices a draft carried back as `price_<id>`. */
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { locale } = await params;
   if (!isLocale(locale)) notFound();
   const l = locale as Locale;
+  await requireAdmin(l);
   const t = getDict(l);
   const sp = await searchParams;
-  const { error, ok } = sp;
+  const error = typeof sp.error === "string" ? sp.error : undefined;
+  const ok = typeof sp.ok === "string" ? sp.ok : undefined;
+  const editRef = typeof sp.edit === "string" ? sp.edit : null;
   // Read from a 30-second cookie the reset action set, so the credential never
   // travels in a URL or reaches an access log.
   const newPassword =
@@ -85,9 +95,10 @@ export default async function AdminPage({
     ? sp.status
     : null;
 
-  // The sign-in gate lives in the panel layout, which wraps this page. FX and
-  // the queue have no dependency, so do not spend one database round trip
-  // waiting to start the other.
+  // `requireAdmin` above is the sign-in gate; the panel layout's check does not
+  // stop this page from rendering (see `lib/admin.ts`). FX and the queue have
+  // no dependency, so do not spend one database round trip waiting to start
+  // the other.
   const [rate, priceDisplayMode, origin, orders] = await Promise.all([
     getFxRate(),
     getPriceDisplayMode(),
@@ -99,14 +110,15 @@ export default async function AdminPage({
              q.created_at AS "createdAt", q.courier,
              q.tracking_number AS "trackingNumber",
              q.invoice_number AS "invoiceNumber",
-             q.fx_rate_to_rial AS "fxRateToRial",
-             q.payment_url AS "paymentUrl",
+             q.fx_rate_to_rial AS "fxRateToRial", q.vat_rate_bp AS "vatRateBp",
              (SELECT count(*)::int FROM order_items i WHERE i.order_id = q.id) AS "itemCount",
              r.name AS "repName", q.placed_by_rep AS "placedByRep",
              q.commission_rate_bp AS "commissionRateBp",
-             u.customer_code AS "customerCode", q.pay_token AS "payToken"
+             u.customer_code AS "customerCode", q.pay_token AS "payToken",
+             pr.name AS "paidByRepName"
       FROM orders q
       LEFT JOIN sales_reps r ON r.id = q.rep_id
+      LEFT JOIN sales_reps pr ON pr.id = q.paid_confirmed_by_rep_id
       LEFT JOIN users u ON u.id = q.user_id
       ${statusFilter ? sql`WHERE q.status = ${statusFilter}` : sql`WHERE q.status <> 'delivered' AND q.status <> 'cancelled'`}
       ORDER BY q.created_at DESC LIMIT 200
@@ -114,7 +126,7 @@ export default async function AdminPage({
   ]);
 
   const orderIds = orders.map((order) => order.id);
-  const [items, withAccounts, commentsByOrder, shortfalls] = await Promise.all([
+  const [items, withAccounts, commentsByOrder, shortfalls, proofsByOrder] = await Promise.all([
     orders.length
       ? sql<OrderItemRow[]>`
         SELECT id, order_id AS "orderId", part_number AS "partNumber",
@@ -133,6 +145,7 @@ export default async function AdminPage({
     // Advisory, not blocking: the order already exists. This is so staff see
     // the shortfall before they price it on the phone, not after.
     findShortfalls(orderIds),
+    listPaymentProofs(orderIds),
   ]);
 
   const byOrder = new Map<number, OrderItemRow[]>();
@@ -140,6 +153,9 @@ export default async function AdminPage({
     if (!byOrder.has(i.orderId)) byOrder.set(i.orderId, []);
     byOrder.get(i.orderId)!.push(i);
   }
+
+  const editOrder = editRef ? orders.find((order) => order.ref === editRef) : undefined;
+  const editPrices = editOrder ? draftLinePrices(sp, byOrder.get(editOrder.id) ?? []) : null;
 
   const formatOrderPrice = (cents: number, order: OrderRow) => {
     const orderLocale: Locale = order.locale === "fa" ? "fa" : "en";
@@ -181,7 +197,6 @@ export default async function AdminPage({
       {ok === "status" && <SuccessBanner>{t.orderUpdated}</SuccessBanner>}
       {ok === "comment" && <SuccessBanner>{t.noteAdded}</SuccessBanner>}
       {ok === "invoiced" && <SuccessBanner>{t.invoiceIssued}</SuccessBanner>}
-      {error === "payment-link" && <ErrorBanner>{t.paymentLinkRequired}</ErrorBanner>}
       {error === "prices" && <ErrorBanner>{t.pricesRequired}</ErrorBanner>}
       {error === "tracking" && <ErrorBanner>{t.trackingRequired}</ErrorBanner>}
       {error === "not-found" && <ErrorBanner>{t.orderNotFound}</ErrorBanner>}
@@ -200,7 +215,12 @@ export default async function AdminPage({
       )}
 
       {orders.map((q) => (
-        <details key={q.id} className="mb-2 border border-[var(--color-rule)]">
+        <details
+          key={q.id}
+          className="mb-2 border border-[var(--color-rule)]"
+          // Back from a draft's "Change prices": this order, open, prices kept.
+          open={q.ref === editRef || undefined}
+        >
           <summary className="flex flex-wrap items-baseline gap-x-4 gap-y-1 bg-[var(--color-panel-alt)] px-3 py-2 text-[12px] cursor-pointer">
             <strong className="tech">{q.ref}</strong>
             <OrderStatusPill locale={l} status={q.status} />
@@ -227,9 +247,15 @@ export default async function AdminPage({
                 exchange rate after their invoice has already gone out. The
                 live rate is only correct for an order that has not been
                 priced yet, which is exactly when fxRateToRial is still
-                null. */}
+                null. The same goes for its VAT rate. */}
             <span className="tech font-bold">
-              {formatOrderPrice(q.totalCents, q)}
+              {formatOrderTotal(
+                q.totalCents,
+                q.vatRateBp,
+                customerCurrencyFor(priceDisplayMode, q.locale === "fa" ? "fa" : "en"),
+                q.locale === "fa" ? "fa" : "en",
+                q.fxRateToRial ?? rate,
+              )}
             </span>
           </summary>
 
@@ -281,6 +307,11 @@ export default async function AdminPage({
               {q.city && <Row label={t.city} value={q.city} />}
               {q.country && <Row label={t.country} value={q.country} />}
               <Row label={t.status} value={q.status} />
+              {q.paidByRepName && (
+                <div className="flex gap-1.5">
+                  <dd className="font-bold">{t.paidConfirmedByRep.replace("{name}", q.paidByRepName)}</dd>
+                </div>
+              )}
               {q.courier && <Row label={t.courier} value={q.courier} />}
               {q.trackingNumber && <Row label={t.trackingNumber} value={q.trackingNumber} tech />}
               {q.invoiceNumber && (
@@ -293,7 +324,6 @@ export default async function AdminPage({
                   </dd>
                 </div>
               )}
-              {q.paymentUrl && <Row label={t.paymentLink} value={q.paymentUrl} tech />}
             </dl>
             {(shortfalls.get(q.id) ?? []).length > 0 && (
               <p className="mb-2 border border-[var(--color-warn)] bg-[var(--color-warn-soft)] px-2.5 py-1.5 text-[11px]">
@@ -314,12 +344,17 @@ export default async function AdminPage({
                 {q.notes}
               </p>
             )}
-            {/* 'invoiced' is a legal next status from 'received', but no button
-                renders for it here: issuing an invoice needs prices and a
-                payment link, which only issueInvoiceAction (Task 9) has. */}
-            {nextStatuses(q.status).filter((s) => s !== "invoiced").length > 0 && (
+            {/* Receipts, before the buttons that act on them. */}
+            {(q.status === "payment_review" || (proofsByOrder.get(q.id) ?? []).length > 0) && (
+              <PaymentProofSection locale={l} proofs={proofsByOrder.get(q.id) ?? []} showUploader />
+            )}
+            {/* 'invoiced' and 'payment_review' are legal next statuses, but no
+                button renders for either: an invoice is issued from its draft
+                page, reached by "Create invoice" below, and review begins when
+                a receipt is uploaded. */}
+            {nextStatuses(q.status).filter((s) => s !== "invoiced" && s !== "payment_review").length > 0 && (
               <div className="mb-2 flex flex-wrap items-center gap-2">
-                {nextStatuses(q.status).filter((s) => s !== "invoiced").map((next) => (
+                {nextStatuses(q.status).filter((s) => s !== "invoiced" && s !== "payment_review").map((next) => (
                   <form key={next} action={setOrderStatusAction} className="inline-flex items-center gap-1.5">
                     <input type="hidden" name="locale" value={l} />
                     <input type="hidden" name="orderId" value={q.id} />
@@ -350,14 +385,16 @@ export default async function AdminPage({
                     )}
                     <ConfirmSubmit
                       label={
-                        next === "preparing" ? t.markPaid
+                        next === "preparing"
+                          ? q.status === "payment_review" ? t.confirmPayment : t.markPaid
                           : next === "shipped" ? t.markShipped
                           : next === "delivered" ? t.markDelivered
                           : next === "cancelled" ? t.cancelOrder
                           : next
                       }
                       title={
-                        next === "preparing" ? t.confirmMarkPaid
+                        next === "preparing"
+                          ? q.status === "payment_review" ? t.confirmConfirmPayment : t.confirmMarkPaid
                           : next === "shipped" ? t.confirmMarkShipped
                           : next === "delivered" ? t.confirmMarkDelivered
                           : next === "cancelled" ? t.confirmCancelOrder
@@ -388,10 +425,10 @@ export default async function AdminPage({
               </div>
             )}
             {q.status === "received" ? (
-              <form action={issueInvoiceAction}>
-                <input type="hidden" name="locale" value={l} />
-                <input type="hidden" name="orderId" value={q.id} />
-                <input type="hidden" name="statusFilter" value={statusFilter ?? ""} />
+              // A plain GET to the draft: the typed prices ride in its URL, and
+              // nothing is written until the draft is finalized.
+              <form method="get" action={`/${l}/admin/orders/${q.ref}/invoice`}>
+                {statusFilter && <input type="hidden" name="statusFilter" value={statusFilter} />}
                 <table className="spec-table">
                   <thead>
                     <tr>
@@ -417,8 +454,11 @@ export default async function AdminPage({
                             step="0.01"
                             min="0"
                             dir="ltr"
-                            name={`price_${i.id}`}
-                            defaultValue={(i.unitPriceCents / 100).toFixed(2)}
+                            name={priceParamName(i.id)}
+                            defaultValue={priceParamValue(
+                              (q.ref === editRef ? editPrices?.get(i.id) : undefined) ??
+                                i.unitPriceCents,
+                            )}
                             className="tech w-20 text-end"
                             required
                           />
@@ -428,34 +468,10 @@ export default async function AdminPage({
                   </tbody>
                 </table>
 
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <input
-                    type="url"
-                    name="paymentUrl"
-                    dir="ltr"
-                    placeholder={t.paymentLink}
-                    className="w-72 text-[11px]"
-                    required
-                  />
-                  <ConfirmSubmit
-                    label={t.issueInvoice}
-                    title={t.confirmIssueInvoice}
-                    continueLabel={t.confirmContinue}
-                    discardLabel={t.confirmDiscard}
-                    disabled={DEMO_MODE}
-                    className="btn-primary"
-                    details={[
-                      { label: t.confirmSendingTo, value: `${q.company} — ${q.contactName}` },
-                      { label: t.email, value: q.email, tech: true },
-                      { label: t.confirmOrder, value: q.ref, tech: true },
-                    ]}
-                    echo={[{ name: "paymentUrl", label: t.paymentLink, tech: true }]}
-                    // Totalled from the price inputs as they stand, so the
-                    // figure confirmed is the figure the customer will be
-                    // billed — not the one the order arrived with.
-                    lines={(byOrder.get(q.id) ?? []).map((i) => ({ id: i.id, qty: i.qty }))}
-                    totalLabel={t.confirmInvoiceTotal}
-                  />
+                <div className="mt-2">
+                  <button type="submit" className="btn-primary">
+                    {t.createInvoice}
+                  </button>
                 </div>
               </form>
             ) : (

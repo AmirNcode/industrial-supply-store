@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  formatInvoiceDate,
   formatPersianDate,
   formatPersianDay,
   persianMonthLabel,
@@ -36,4 +37,11 @@ test("today and follow-up dates are Tehran calendar days", () => {
   assert.equal(tehranDatePlusDays(1, justAfterMidnight), "2026-09-28");
   assert.equal(tehranDatePlusDays(7, justAfterMidnight), "2026-10-04");
   assert.equal(tehranDatePlusDays(30, justAfterMidnight), "2026-10-27");
+});
+
+test("an invoice date is Persian in Persian, Gregorian in English, and the same Tehran day in both", () => {
+  // 00:30 in Tehran on 27 September (5 Mehr) is still the 26th in UTC.
+  const justAfterMidnight = "2026-09-26T21:00:00Z";
+  assert.equal(formatInvoiceDate(justAfterMidnight, "fa"), "۵ مهر ۱۴۰۵");
+  assert.equal(formatInvoiceDate(justAfterMidnight, "en"), "2026-09-27");
 });

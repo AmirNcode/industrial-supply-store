@@ -10,20 +10,18 @@ export type AccountOrderRow = {
   totalCents: number;
   /** Frozen at invoicing; null until then, when the live rate is correct. */
   fxRateToRial: number | null;
+  /** Locked at invoicing; null before, and on invoices issued before VAT. */
+  vatRateBp: number | null;
   invoiceNumber: string | null;
   itemCount: number;
-  /** Selected here so the list can offer Pay directly, without the customer
-   *  having to open an order to discover it is waiting on them. */
-  paymentUrl: string;
 };
 
 export async function listOrdersForUser(userId: string): Promise<AccountOrderRow[]> {
   return sql<AccountOrderRow[]>`
     SELECT o.id, o.ref, o.status, o.created_at AS "createdAt",
            o.total_cents AS "totalCents",
-           o.fx_rate_to_rial AS "fxRateToRial",
+           o.fx_rate_to_rial AS "fxRateToRial", o.vat_rate_bp AS "vatRateBp",
            o.invoice_number AS "invoiceNumber",
-           o.payment_url AS "paymentUrl",
            (SELECT count(*)::int FROM order_items i WHERE i.order_id = o.id) AS "itemCount"
     FROM orders o
     WHERE o.user_id = ${userId}
@@ -32,11 +30,11 @@ export async function listOrdersForUser(userId: string): Promise<AccountOrderRow
 }
 
 export type AccountOrderDetail = AccountOrderRow & {
-  paymentUrl: string;
   courier: string;
   trackingNumber: string;
   poNumber: string;
   invoicedAt: string | null;
+  paymentSubmittedAt: string | null;
   paidAt: string | null;
   shippedAt: string | null;
   deliveredAt: string | null;
@@ -53,11 +51,11 @@ export type AccountOrderItem = {
 
 const DETAIL_COLS = sql`o.id, o.ref, o.status, o.created_at AS "createdAt",
   o.total_cents AS "totalCents",
-  o.fx_rate_to_rial AS "fxRateToRial",
-  o.invoice_number AS "invoiceNumber",
-  o.payment_url AS "paymentUrl", o.courier,
+  o.fx_rate_to_rial AS "fxRateToRial", o.vat_rate_bp AS "vatRateBp",
+  o.invoice_number AS "invoiceNumber", o.courier,
   o.tracking_number AS "trackingNumber", o.po_number AS "poNumber",
-  o.invoiced_at AS "invoicedAt", o.paid_at AS "paidAt",
+  o.invoiced_at AS "invoicedAt", o.payment_submitted_at AS "paymentSubmittedAt",
+  o.paid_at AS "paidAt",
   o.shipped_at AS "shippedAt", o.delivered_at AS "deliveredAt",
   (SELECT count(*)::int FROM order_items i WHERE i.order_id = o.id) AS "itemCount"`;
 

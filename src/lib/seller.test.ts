@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { getSeller } from "./seller";
 
 const KEYS = [
-  "SELLER_NAME", "SELLER_NAME_FA", "SELLER_ADDRESS", "SELLER_ADDRESS_FA",
+  "SELLER_NAME", "SELLER_ADDRESS", "SELLER_ADDRESS_FA",
   "SELLER_EMAIL", "SELLER_PHONE", "SELLER_TAX_ID",
 ];
 
@@ -11,22 +11,23 @@ afterEach(() => {
   for (const k of KEYS) delete process.env[k];
 });
 
+test("the seller is TEMEX in both languages, whatever the environment says", () => {
+  process.env.SELLER_NAME = "Something Else Co.";
+  assert.equal(getSeller("en").name, "TEMEX");
+  assert.equal(getSeller("fa").name, "TEMEX");
+});
+
 test("Persian prefers the _FA variant when it is set", () => {
-  process.env.SELLER_NAME = "TEMEX Co.";
-  process.env.SELLER_NAME_FA = "پارس‌تک ساپلای";
-  assert.equal(getSeller("fa").name, "پارس‌تک ساپلای");
-  assert.equal(getSeller("en").name, "TEMEX Co.");
+  process.env.SELLER_ADDRESS = "Unit 4, Sanat Street";
+  process.env.SELLER_ADDRESS_FA = "خیابان صنعت، واحد ۴";
+  assert.deepEqual(getSeller("fa").addressLines, ["خیابان صنعت، واحد ۴"]);
+  assert.deepEqual(getSeller("en").addressLines, ["Unit 4, Sanat Street"]);
 });
 
 test("Persian falls back to the Latin value when no _FA variant is set", () => {
   // A deployment that has not translated its address should still print one.
-  process.env.SELLER_NAME = "TEMEX Co.";
-  assert.equal(getSeller("fa").name, "TEMEX Co.");
-});
-
-test("an unconfigured deployment prints an obviously unfinished name", () => {
-  // Better an invoice that looks wrong than one that looks right and is not.
-  assert.match(getSeller("en").name, /SELLER_NAME/);
+  process.env.SELLER_ADDRESS = "Unit 4, Sanat Street";
+  assert.deepEqual(getSeller("fa").addressLines, ["Unit 4, Sanat Street"]);
 });
 
 test("the address splits on pipes", () => {

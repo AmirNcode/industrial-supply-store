@@ -2472,6 +2472,128 @@ html[lang="fa"] .taxonomy-kind-chip {
   margin-inline-start: auto;
   color: var(--color-ink-faint);
 }
+/*
+ * The family's product table.
+ *
+ * It scrolls both ways inside its own box. Page-length scrolling would put the
+ * horizontal scrollbar at the bottom of a 100-row table, out of sight, and a
+ * sticky header binds to the nearest scroll container — so the box is what
+ * keeps both the header and the scrollbar on screen. The part number column
+ * stays pinned while the rest scrolls past it.
+ */
+.product-table-actions {
+  display: flex;
+  gap: 6px;
+}
+.product-table-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  margin-top: 10px;
+  color: var(--color-ink-muted);
+  font-size: 11px;
+}
+.product-table-pending {
+  color: var(--color-warn);
+}
+.product-table-pager {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-inline-start: auto;
+}
+.product-table-empty {
+  margin-top: 8px;
+  color: var(--color-ink-faint);
+  font-size: 12px;
+}
+.product-table-scroll {
+  max-height: 70vh;
+  overflow: auto;
+  margin-top: 6px;
+  border: 1px solid var(--color-rule);
+}
+.product-table {
+  min-width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 11.5px;
+}
+.product-table th,
+.product-table td {
+  border-bottom: 1px solid var(--color-rule-light);
+  border-inline-end: 1px solid var(--color-rule-light);
+  padding: 4px 8px;
+  text-align: start;
+  white-space: nowrap;
+}
+.product-table thead th {
+  position: sticky;
+  z-index: 2;
+  top: 0;
+  border-bottom: 1px solid var(--color-rule);
+  background: var(--color-panel-alt);
+  color: var(--color-ink-muted);
+  font-weight: 700;
+}
+.product-table .product-table-part {
+  position: sticky;
+  z-index: 1;
+  inset-inline-start: 0;
+  background: #fff;
+  font-weight: 600;
+}
+.product-table thead .product-table-part {
+  z-index: 3;
+  background: var(--color-panel-alt);
+}
+.product-table .num {
+  text-align: end;
+}
+.product-table-readonly {
+  color: var(--color-ink-faint);
+}
+.product-table-url {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.product-table.is-editing td {
+  padding: 2px 4px;
+}
+.product-table.is-editing .product-table-url {
+  max-width: none;
+}
+.product-table tr.is-changed .product-table-part,
+.product-table td.is-dirty {
+  background: var(--color-warn-soft);
+}
+.product-table td.is-invalid {
+  background: #fdf2f1;
+  outline: 1px solid var(--color-danger);
+  outline-offset: -1px;
+}
+.product-table .product-cell-input {
+  min-width: 6ch;
+  border: 1px solid var(--color-rule);
+  background: #fff;
+  padding: 2px 4px;
+  font: inherit;
+}
+.product-table .num .product-cell-input {
+  width: 10ch;
+  text-align: end;
+}
+.product-table-url .product-cell-input {
+  min-width: 30ch;
+}
+.product-table td.is-dirty .product-cell-input {
+  border-color: var(--color-warn);
+}
+.product-table td.is-invalid .product-cell-input {
+  border-color: var(--color-danger);
+}
 .taxonomy-save-bar {
   position: sticky;
   z-index: 20;
@@ -2651,11 +2773,20 @@ html[lang="fa"] .invoice-table thead th {
  * document. `@page` sets the margin because the browser's default leaves the
  * sheet floating in the middle of A4.
  */
+/* Printed instead of a control that paper cannot use — a link written out. */
+.print-only {
+  display: none;
+}
+
 @media print {
   body > header,
   body > footer,
   .no-print {
     display: none !important;
+  }
+
+  .print-only {
+    display: block;
   }
 
   body {

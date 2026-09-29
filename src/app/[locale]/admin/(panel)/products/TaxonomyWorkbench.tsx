@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   categoryNodeKey,
   moveSibling,
@@ -25,6 +25,7 @@ import {
 } from "./actions";
 import { DeleteControl } from "./DeleteControl";
 import { FamilyImportControl } from "./FamilyImportControl";
+import { FamilyProductTable, type ProductTableHandle } from "./FamilyProductTable";
 import { UnsavedOrderGuard } from "./UnsavedOrderGuard";
 
 type OrderMap = Record<string, number[]>;
@@ -116,6 +117,10 @@ export function TaxonomyWorkbench({
   );
   const [saving, setSaving] = useState(false);
   const [saveResult, setSaveResult] = useState<TaxonomySaveResult | null>(null);
+  // The product table's unsaved rows, and its Save/Discard for the guard.
+  const [productPending, setProductPending] = useState(0);
+  const productTable = useRef<ProductTableHandle | null>(null);
+  const guardRequest = useRef<((go: () => void) => void) | null>(null);
 
   const selected =
     (selectedKey ? model.byKey.get(selectedKey) : undefined) ?? model.first;
@@ -142,7 +147,21 @@ export function TaxonomyWorkbench({
     );
   }
 
+  /*
+   * Moving to another node swaps the pane in place, which would drop the
+   * product table's unsaved rows without anything that looks like leaving the
+   * page — so the move goes through the same Save / Discard / Stay dialog a
+   * link out does.
+   */
   function selectNode(key: TaxonomyNodeKey, mode: "push" | "replace" = "push") {
+    if (productPending > 0 && key !== selectedKey && guardRequest.current) {
+      guardRequest.current(() => showNode(key, mode));
+      return;
+    }
+    showNode(key, mode);
+  }
+
+  function showNode(key: TaxonomyNodeKey, mode: "push" | "replace") {
     setAdding(null);
     setEditing(null);
     setCreateError(null);
@@ -502,17 +521,26 @@ export function TaxonomyWorkbench({
 
   return (
     <div className="taxonomy-card">
+      {/* One guard for both kinds of unsaved work, so leaving never raises
+          two dialogs at once. Taxonomy work saves first, then the products. */}
       <UnsavedOrderGuard
-        dirtyCount={dirtyCount}
+        dirtyCount={dirtyCount + productPending}
         locale={locale}
-        onSave={saveAll}
-        onDiscard={discardAll}
+        requestRef={guardRequest}
+        onSave={async () => {
+          if (!(await saveAll())) return false;
+          return productTable.current ? productTable.current.save() : true;
+        }}
+        onDiscard={() => {
+          discardAll();
+          productTable.current?.discard();
+        }}
         copy={{
-          title: t.taxonomyUnsavedTitle,
+          title: productPending > 0 ? t.productsUnsavedTitle : t.taxonomyUnsavedTitle,
           body: t.taxonomyUnsavedBody,
-          scope: dirtyCount === 1
+          scope: dirtyCount + productPending === 1
             ? t.taxonomyPendingOne
-            : t.taxonomyPendingMany.replace("{n}", formatInt(dirtyCount, locale)),
+            : t.taxonomyPendingMany.replace("{n}", formatInt(dirtyCount + productPending, locale)),
         }}
       />
 
@@ -795,7 +823,17 @@ export function TaxonomyWorkbench({
           {saveResult === "saved" && <p className="taxonomy-success-banner">{t.taxonomySaved}</p>}
 
           {selected.kind === "family" ? (
-            <SelectedFamilyPane node={selected} ancestors={selectedAncestors} locale={locale} demo={demo} />
+            <SelectedFamilyPane
+              // A fresh table per family: edits never carry across families.
+              key={selected.key}
+              node={selected}
+              ancestors={selectedAncestors}
+              locale={locale}
+              demo={demo}
+              refreshKey={nodes}
+              productTable={productTable}
+              onProductPending={setProductPending}
+            />
           ) : hasSubcategories ? (
             <section className="taxonomy-section">
               <div className="taxonomy-section-heading">
@@ -1223,11 +1261,17 @@ function SelectedFamilyPane({
   ancestors,
   locale,
   demo,
+  refreshKey,
+  productTable,
+  onProductPending,
 }: {
   node: AdminTaxonomyNode;
   ancestors: AdminTaxonomyNode[];
   locale: Locale;
   demo: boolean;
+  refreshKey: unknown;
+  productTable: React.RefObject<ProductTableHandle | null>;
+  onProductPending: (changedProducts: number) => void;
 }) {
   const t = getDict(locale);
   return (
@@ -1241,16 +1285,26 @@ function SelectedFamilyPane({
           )}
         </span>
       </div>
-      <div className="taxonomy-selected-import">
-        <FamilyImportControl familyId={node.id} locale={locale} demo={demo} prominent />
-        <Link href={`/${locale}/admin/products/${node.id}/new`}>{t.newProduct}</Link>
-        <a href={`/api/admin/family/${node.id}/template`} download>{t.downloadTemplate}</a>
-        <a href={`/api/admin/family/${node.id}/export`} download>{t.exportProducts}</a>
-        <Link href={`/${locale}/admin/products/${node.id}/columns`}>{t.editColumns}</Link>
-        <span className="tech taxonomy-selected-import-note">
-          {node.productCount > 0 ? t.taxonomyImportUnknown : t.taxonomyNoRowsImported}
-        </span>
-      </div>
+      <FamilyProductTable
+        familyId={node.id}
+        locale={locale}
+        demo={demo}
+        refreshKey={refreshKey}
+        handleRef={productTable}
+        onPendingChange={onProductPending}
+        toolbar={
+          <>
+            <FamilyImportControl familyId={node.id} locale={locale} demo={demo} prominent />
+            <Link href={`/${locale}/admin/products/${node.id}/new`}>{t.newProduct}</Link>
+            <a href={`/api/admin/family/${node.id}/template`} download>{t.downloadTemplate}</a>
+            <a href={`/api/admin/family/${node.id}/export`} download>{t.exportProducts}</a>
+            <Link href={`/${locale}/admin/products/${node.id}/columns`}>{t.editColumns}</Link>
+            <span className="tech taxonomy-selected-import-note">
+              {node.productCount > 0 ? t.taxonomyImportUnknown : t.taxonomyNoRowsImported}
+            </span>
+          </>
+        }
+      />
     </section>
   );
 }

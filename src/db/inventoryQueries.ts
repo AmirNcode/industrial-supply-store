@@ -98,7 +98,7 @@ export async function findShortfalls(
              min(i.part_number) AS part_number, sum(i.qty)::int AS qty
       FROM orders o
       JOIN order_items i ON i.order_id = o.id
-      WHERE o.status IN ('received', 'invoiced')
+      WHERE o.status IN ('received', 'invoiced', 'payment_review')
         AND i.product_id IS NOT NULL
       GROUP BY o.id, o.created_at, i.product_id
     ), allocated AS (

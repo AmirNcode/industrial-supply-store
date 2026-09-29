@@ -3,11 +3,13 @@ import { STATUS_LABEL_KEY } from "./OrderStatusPill";
 import type { OrderStatus } from "@/lib/orders";
 
 /** The happy path, in order. `cancelled` is not a step — it ends the trail. */
-const STEPS = ["received", "invoiced", "preparing", "shipped", "delivered"] as const;
+const STEPS = ["received", "invoiced", "payment_review", "preparing", "shipped", "delivered"] as const;
 
 export type TimelineStamps = {
   createdAt: string;
   invoicedAt: string | null;
+  /** First receipt uploaded. Null when the admin confirmed payment without one. */
+  paymentSubmittedAt: string | null;
   paidAt: string | null;
   shippedAt: string | null;
   deliveredAt: string | null;
@@ -31,6 +33,7 @@ export function OrderTimeline({
   const at: Record<(typeof STEPS)[number], string | null> = {
     received: day(stamps.createdAt),
     invoiced: day(stamps.invoicedAt),
+    payment_review: day(stamps.paymentSubmittedAt),
     preparing: day(stamps.paidAt),
     shipped: day(stamps.shippedAt),
     delivered: day(stamps.deliveredAt),
@@ -38,9 +41,11 @@ export function OrderTimeline({
 
   const cancelled = status === "cancelled";
   // A cancelled order shows how far it actually got and then stops. Rendering
-  // the remaining steps greyed out would suggest they are still coming.
+  // the remaining steps greyed out would suggest they are still coming. The
+  // furthest dated step, not a count of dates: a payment confirmed without a
+  // receipt leaves the review step undated but passed.
   const reachedCount = cancelled
-    ? STEPS.filter((s) => at[s] !== null).length
+    ? Math.max(...STEPS.map((s, i) => (at[s] !== null ? i + 1 : 0)))
     : STEPS.indexOf(status as (typeof STEPS)[number]) + 1;
   const visible = cancelled ? STEPS.slice(0, Math.max(reachedCount, 1)) : STEPS;
 

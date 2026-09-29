@@ -18,6 +18,7 @@ export type TrackedOrder = {
   trackingNumber: string;
   createdAt: string;
   invoicedAt: string | null;
+  paymentSubmittedAt: string | null;
   paidAt: string | null;
   shippedAt: string | null;
   deliveredAt: string | null;
@@ -30,6 +31,7 @@ export async function findOrderForTracking(
   const rows = await sql<TrackedOrder[]>`
     SELECT ref, status, courier, tracking_number AS "trackingNumber",
            created_at AS "createdAt", invoiced_at AS "invoicedAt",
+           payment_submitted_at AS "paymentSubmittedAt",
            paid_at AS "paidAt", shipped_at AS "shippedAt",
            delivered_at AS "deliveredAt"
     FROM orders

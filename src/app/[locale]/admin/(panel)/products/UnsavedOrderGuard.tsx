@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import { useRouter } from "next/navigation";
 import { getDict, type Locale } from "@/lib/i18n";
 import { formatInt } from "@/lib/money";
@@ -28,13 +28,20 @@ import { formatInt } from "@/lib/money";
  * later. Anything that is not really a navigation is left alone: the CSV
  * template and export are downloads, and a middle-click or ⌘-click opens a new
  * tab and leaves this page exactly where it is.
+ *
+ * A third exit is not a link at all: choosing another family in the products
+ * tree swaps the pane in place, which would drop the product table's edits.
+ * `requestRef` lets the page route that through the same dialog, with the
+ * move to make once the person has chosen.
  */
+type Pending = { href: string } | { go: () => void };
 export function UnsavedOrderGuard({
   dirtyCount,
   locale,
   onSave,
   onDiscard,
   copy,
+  requestRef,
 }: {
   /** How many categories hold an unsaved arrangement. */
   dirtyCount: number;
@@ -44,10 +51,12 @@ export function UnsavedOrderGuard({
   onDiscard: () => void;
   /** Taxonomy work also includes descriptions/images, not only ordering. */
   copy?: { title: string; body: string; scope: string };
+  /** Filled with a function that opens this dialog for an in-page move. */
+  requestRef?: RefObject<((go: () => void) => void) | null>;
 }) {
   const t = getDict(locale);
   const router = useRouter();
-  const [pendingHref, setPendingHref] = useState<string | null>(null);
+  const [pending, setPending] = useState<Pending | null>(null);
   const [saving, setSaving] = useState(false);
 
   /*
@@ -56,14 +65,22 @@ export function UnsavedOrderGuard({
    * state would mean a window, however small, where a click lands between the
    * remove and the add.
   */
-  const state = useRef({ dirtyCount, pendingHref });
+  const state = useRef({ dirtyCount, pending });
   useEffect(() => {
-    state.current = { dirtyCount, pendingHref };
-  }, [dirtyCount, pendingHref]);
+    state.current = { dirtyCount, pending };
+  }, [dirtyCount, pending]);
+
+  useEffect(() => {
+    if (!requestRef) return;
+    requestRef.current = (go) => setPending({ go });
+    return () => {
+      requestRef.current = null;
+    };
+  }, [requestRef]);
 
   useEffect(() => {
     const onClick = (event: MouseEvent) => {
-      if (state.current.dirtyCount === 0 || state.current.pendingHref !== null) return;
+      if (state.current.dirtyCount === 0 || state.current.pending !== null) return;
 
       // Anything but a plain left click is the reader opening this elsewhere or
       // asking for a context menu; either way they are not leaving the page.
@@ -86,7 +103,7 @@ export function UnsavedOrderGuard({
 
       event.preventDefault();
       event.stopPropagation();
-      setPendingHref(href);
+      setPending({ href });
     };
 
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
@@ -105,12 +122,19 @@ export function UnsavedOrderGuard({
     };
   }, []);
 
-  if (pendingHref === null) return null;
+  if (pending === null) return null;
 
-  const leave = (href: string) => {
-    const url = new URL(href, window.location.href);
+  const leave = (to: Pending) => {
+    // An in-page move closes the dialog; a navigation leaves it up until the
+    // page goes, as before, so nothing else can be clicked on the way out.
+    if ("go" in to) {
+      setPending(null);
+      to.go();
+      return;
+    }
+    const url = new URL(to.href, window.location.href);
     if (url.origin === window.location.origin) router.push(url.pathname + url.search + url.hash);
-    else window.location.href = href;
+    else window.location.href = to.href;
   };
 
   const scope =
@@ -124,7 +148,7 @@ export function UnsavedOrderGuard({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-3"
-      onClick={() => setPendingHref(null)}
+      onClick={() => setPending(null)}
     >
       <div
         role="dialog"
@@ -143,7 +167,7 @@ export function UnsavedOrderGuard({
             type="button"
             className="btn-small"
             disabled={saving}
-            onClick={() => setPendingHref(null)}
+            onClick={() => setPending(null)}
           >
             {t.orderStay}
           </button>
@@ -153,7 +177,7 @@ export function UnsavedOrderGuard({
             disabled={saving}
             onClick={() => {
               onDiscard();
-              leave(pendingHref);
+              leave(pending);
             }}
           >
             {t.orderDiscardAndLeave}
@@ -168,8 +192,8 @@ export function UnsavedOrderGuard({
               setSaving(false);
               // A save that failed leaves the dialog up with the reason already
               // rendered behind it; leaving now would discard the work anyway.
-              if (ok) leave(pendingHref);
-              else setPendingHref(null);
+              if (ok) leave(pending);
+              else setPending(null);
             }}
           >
             {t.orderSaveAndLeave}

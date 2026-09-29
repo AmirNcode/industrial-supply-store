@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { requireAdmin } from "@/lib/admin";
 import { DEMO_MODE } from "@/lib/demo";
 import {
   getAutomaticRate,
@@ -11,12 +12,15 @@ import { FxRatePanel } from "@/components/FxRatePanel";
 import { getSiteContact } from "@/lib/siteContact";
 import { getBankFields } from "@/lib/bankSettings";
 import { BankDetailsForm } from "@/components/BankDetailsForm";
+import { getVatRateBp } from "@/lib/vatSettings";
+import { vatPercentInput } from "@/lib/vat";
 import {
   refreshFxRateAction,
   saveBankDetailsAction,
   saveFxAction,
   savePriceDisplayModeAction,
   saveSiteContactAction,
+  saveVatRateAction,
 } from "../../actions";
 import { isLocale, getDict, type Locale } from "@/lib/i18n";
 import { formatInt } from "@/lib/money";
@@ -27,20 +31,28 @@ export default async function AdminSettingsPage({
   searchParams,
 }: {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{ fx?: string; contact?: string; currency?: string; bank?: string }>;
+  searchParams: Promise<{
+    fx?: string;
+    contact?: string;
+    currency?: string;
+    bank?: string;
+    vat?: string;
+  }>;
 }) {
   const { locale } = await params;
   if (!isLocale(locale)) notFound();
   const l = locale as Locale;
+  await requireAdmin(l);
   const t = getDict(l);
   const {
     fx,
     contact: contactStatus,
     currency: currencyStatus,
     bank: bankStatus,
+    vat: vatStatus,
   } = await searchParams;
 
-  const [fxSettings, rate, autoRate, market, priceDisplayMode, contact, bankFields] =
+  const [fxSettings, rate, autoRate, market, priceDisplayMode, contact, bankFields, vatRateBp] =
     await Promise.all([
       getFxSettings(),
       getFxRate(),
@@ -49,6 +61,7 @@ export default async function AdminSettingsPage({
       getPriceDisplayMode(),
       getSiteContact(),
       getBankFields(),
+      getVatRateBp(),
     ]);
   const BANK_PROBLEM_KEY = {
     card: "bankInvalidCard",
@@ -172,6 +185,37 @@ export default async function AdminSettingsPage({
             save: t.bankSave,
           }}
         />
+      </section>
+
+      <section id="vat" className="mb-4 border border-[var(--color-rule)] p-3">
+        <h2 className="mb-1 text-[13px] font-bold">{t.vatSection}</h2>
+        <p className="mb-3 max-w-[680px] text-[11px] text-[var(--color-ink-muted)]">
+          {t.vatSectionHint}
+        </p>
+        {vatStatus === "saved" && <SuccessBanner>{t.vatSaved}</SuccessBanner>}
+        {vatStatus === "invalid" && <ErrorBanner>{t.vatInvalid}</ErrorBanner>}
+        <form action={saveVatRateAction} className="flex flex-wrap items-end gap-3">
+          <input type="hidden" name="locale" value={l} />
+          <label className="grid gap-0.5 text-[11px] font-semibold">
+            {t.vatRate}
+            {/* Text, not number: a Persian keyboard types ۱۰ and ۹٫۵, which a
+                number input refuses before the server can read them. */}
+            <input
+              type="text"
+              name="vatRate"
+              inputMode="decimal"
+              dir="ltr"
+              defaultValue={vatPercentInput(vatRateBp)}
+              autoComplete="off"
+              className="tech w-24"
+              disabled={DEMO_MODE}
+              required
+            />
+          </label>
+          <button type="submit" className="btn-small" disabled={DEMO_MODE}>
+            {t.vatSave}
+          </button>
+        </form>
       </section>
 
       <section className="mb-4 border border-[var(--color-rule)] p-3">

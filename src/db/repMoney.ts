@@ -87,7 +87,7 @@ export async function listInProgressForRep(
            ${salesRial(liveRate)} AS "salesRial", ${commissionRial(liveRate)} AS "commissionRial",
            (o.fx_rate_to_rial IS NULL) AS estimate
     FROM orders o LEFT JOIN users u ON u.id = o.user_id
-    WHERE o.rep_id = ${repId} AND o.status IN ('received', 'invoiced', 'preparing', 'shipped')
+    WHERE o.rep_id = ${repId} AND o.status IN ('received', 'invoiced', 'payment_review', 'preparing', 'shipped')
     ORDER BY o.created_at DESC
     LIMIT 200
   `;

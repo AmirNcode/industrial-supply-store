@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { requireAdmin } from "@/lib/admin";
 import { notFound } from "next/navigation";
 import { DEMO_MODE } from "@/lib/demo";
 import { listReps } from "@/db/repQueries";
@@ -32,6 +33,7 @@ export default async function AdminRepsPage({
   const { locale } = await params;
   if (!isLocale(locale)) notFound();
   const l = locale as Locale;
+  await requireAdmin(l);
   const t = getDict(l);
   const { error } = await searchParams;
   const [reps, totals, recent, targets] = await Promise.all([

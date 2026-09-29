@@ -6,10 +6,18 @@ import { PanelTabs } from "@/components/PanelTabs";
 import { isLocale, getDict, type Locale } from "@/lib/i18n";
 
 /**
- * The admin shell: side navigation, and the one place the sign-in gate lives.
+ * The admin shell: side navigation, plus a sign-in check that keeps the shell
+ * itself from rendering for a stranger.
+ *
+ * This check is not the gate. Next renders each page independently of its
+ * layout, so a redirect here does not stop the page below from running its
+ * queries and streaming them into the same response — which is how every
+ * admin page leaked its data to anonymous requests until 2026-09-29. Each
+ * page calls `requireAdmin()` itself, first; `src/lib/adminGate.test.ts`
+ * enforces it.
  *
  * It is a route group — `(panel)` does not appear in any URL — so /admin/login
- * sits outside it. A gate in a layout that also wrapped the login page would
+ * sits outside it. A check in a layout that also wrapped the login page would
  * redirect the login page to itself.
  *
  * The nav sits at the inline start, so it is on the left in English and on the
@@ -54,8 +62,10 @@ export default async function AdminPanelLayout({
     { href: `/${l}/admin/settings`, label: t.settings },
   ];
 
+  // The whole browser width, not a centred column: the product table and the
+  // order queue are the widest things in the app, and 1240px cut them short.
   return (
-    <div className="mx-auto max-w-[1240px] px-3 pt-3 pb-16">
+    <div className="px-3 pt-3 pb-16">
       {/*
         Tabs across the top rather than a rail down the side.
         The panel's tables are the widest thing in the app, and a 160px column

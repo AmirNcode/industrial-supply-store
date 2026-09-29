@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { getDict, type Locale } from "@/lib/i18n";
-import { formatPrice } from "@/lib/money";
+import { formatOrderTotal } from "@/lib/invoice";
 import { formatPersianDate } from "@/lib/persianCalendar";
 import { OrderStatusPill } from "@/components/OrderStatusPill";
 import type { AccountOrderRow } from "@/db/accountQueries";
@@ -46,7 +46,13 @@ export function CustomerOrderList({
                 {formatPersianDate(order.createdAt, locale)}
               </span>
               <span className="num">
-                {formatPrice(order.totalCents, "IRR", locale, order.fxRateToRial ?? liveRate)}
+                {formatOrderTotal(
+                  order.totalCents,
+                  order.vatRateBp,
+                  "IRR",
+                  locale,
+                  order.fxRateToRial ?? liveRate,
+                )}
               </span>
             </li>
           ))}

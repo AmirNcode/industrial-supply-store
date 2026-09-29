@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { requireAdmin } from "@/lib/admin";
 import { notFound } from "next/navigation";
 import { DEMO_MODE } from "@/lib/demo";
 import { listCustomersAdmin, type RepFilter } from "@/db/customerQueries";
@@ -29,6 +30,7 @@ export default async function AdminCustomersPage({
   if (DEMO_MODE) notFound();
   if (!isLocale(locale)) notFound();
   const l = locale as Locale;
+  await requireAdmin(l);
   const t = getDict(l);
   const query = await searchParams;
   const search = one(query.q).slice(0, REQUEST_LIMITS.searchChars);

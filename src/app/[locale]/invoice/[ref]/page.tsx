@@ -1,22 +1,20 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getInvoiceByRef } from "@/db/invoiceQueries";
-import { lineTotalCents, subtotalCents } from "@/lib/invoice";
 import { getSeller } from "@/lib/seller";
 import { getSiteContact } from "@/lib/siteContact";
+import { getBankDetails } from "@/lib/bankSettings";
+import { siteOrigin } from "@/lib/siteOrigin";
+import { acceptsPaymentProof, isOrderStatus } from "@/lib/orders";
 import { isAdmin } from "@/lib/admin";
 import { DEMO_MODE } from "@/lib/demo";
 import { currentUserId } from "@/lib/session";
 import { isPayToken, payTokensEqual } from "@/lib/payToken";
 import { PrintButton } from "@/components/PrintButton";
+import { InvoiceDocument } from "@/components/InvoiceDocument";
 import { isLocale, getDict, type Locale } from "@/lib/i18n";
 import { getPriceDisplayMode } from "@/lib/fx";
-import {
-  formatMoneyExact,
-  formatInt,
-  invoiceCurrencyFor,
-  type Currency,
-} from "@/lib/money";
+import { invoiceCurrencyFor, type Currency } from "@/lib/money";
 
 /**
  * The invoice document.
@@ -26,7 +24,8 @@ import {
  * The rate comes off the order, not from `getFxRate()`. It was frozen when the
  * invoice was issued so that reprinting a month later cannot change what is
  * owed; reading the live rate here would undo that silently, and the number
- * would look perfectly reasonable while being wrong.
+ * would look perfectly reasonable while being wrong. VAT comes off the order
+ * for the same reason, never from the current setting.
  *
  * The language comes from the path segment, not from the order. Staff email
  * whichever version the customer reads, and the same order can legitimately be
@@ -91,10 +90,12 @@ export default async function InvoicePage({
   // unauthenticated traffic drive unbounded database load.
   if (!staff && !uid && !payKey) notFound();
 
-  const [found, contact, priceDisplayMode] = await Promise.all([
+  const [found, contact, priceDisplayMode, bank, origin] = await Promise.all([
     getInvoiceByRef(ref),
     getSiteContact(),
     getPriceDisplayMode(),
+    getBankDetails(l),
+    siteOrigin(),
   ]);
   if (!found) notFound();
   const { order, items } = found;
@@ -118,13 +119,10 @@ export default async function InvoicePage({
   const languageHref = `/${other}/invoice/${order.ref}${withKey(
     priceDisplayMode === "both" ? { cur: currency } : {},
   )}`;
-  const rate = order.fxRateToRial;
   const seller = { ...getSeller(l), email: contact.email, phone: contact.phone };
-  const subtotal = subtotalCents(items);
-  const issued = new Date(order.invoicedAt).toISOString().slice(0, 10);
   // `invoiced → cancelled` is one click in the admin queue, and the emailed
-  // link keeps working afterwards. A voided invoice that still shows a total
-  // and a live payment link is how someone pays for a cancelled order.
+  // link keeps working afterwards. A voided invoice that still reads as an
+  // amount due is how someone pays for a cancelled order.
   const cancelled = order.status === "cancelled";
 
   return (
@@ -156,134 +154,27 @@ export default async function InvoicePage({
         </span>
       </div>
 
-      <header className="mb-8 flex items-start justify-between gap-6 border-b-2 border-[var(--color-ink)] pb-4">
-        <div>
-          <h1 className="text-[26px] font-bold text-[var(--color-navy)]">{t.invoice}</h1>
-          <p className="tech mt-1 text-[15px] font-bold">{order.invoiceNumber}</p>
-          {cancelled && (
-            <p className="mt-1 text-[15px] font-bold text-[var(--color-danger)]">
-              {t.invoiceCancelled}
-            </p>
-          )}
-        </div>
-        <div className="text-end text-[12px] leading-relaxed">
-          {/* The full lockup earns its place here: white paper, printed at a
-              size where the wordmark actually reads. `print-color-adjust`
-              keeps the yellow when the browser would otherwise drop
-              backgrounds from a print. */}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src="/temex-logo.svg"
-            alt={seller.name}
-            width={132}
-            height={132}
-            className="mb-2 ms-auto block h-[52px] w-[52px]"
-            style={{ printColorAdjust: "exact", WebkitPrintColorAdjust: "exact" }}
-          />
-          <p className="font-bold">{seller.name}</p>
-          {seller.addressLines.map((line, i) => (
-            <p key={i} className="text-[var(--color-ink-muted)]">{line}</p>
-          ))}
-          <p className="tech text-[var(--color-ink-muted)]">{seller.email}</p>
-          <p className="tech text-[var(--color-ink-muted)]">{seller.phone}</p>
-          {seller.taxId && (
-            <p className="text-[var(--color-ink-muted)]">
-              {t.invoiceTaxId}: <span className="tech">{seller.taxId}</span>
-            </p>
-          )}
-        </div>
-      </header>
-
-      <section className="mb-6 grid gap-6 sm:grid-cols-2">
-        <div>
-          <h2 className="mb-1 text-[11px] font-bold uppercase tracking-[0.08em] text-[var(--color-ink-muted)]">
-            {t.invoiceTo}
-          </h2>
-          <p className="text-[14px] font-bold">{order.company}</p>
-          <p className="text-[12px]">{order.contactName}</p>
-          {order.address && <p className="text-[12px]">{order.address}</p>}
-          {(order.city || order.country) && (
-            <p className="text-[12px]">{[order.city, order.country].filter(Boolean).join(", ")}</p>
-          )}
-          <p className="tech text-[12px] text-[var(--color-ink-muted)]">{order.email}</p>
-          {order.phone && (
-            <p className="tech text-[12px] text-[var(--color-ink-muted)]">{order.phone}</p>
-          )}
-        </div>
-
-        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 self-start text-[12px] sm:justify-self-end">
-          <dt className="font-bold">{t.invoiceDate}</dt>
-          <dd className="tech">{issued}</dd>
-          <dt className="font-bold">{t.invoiceOrderRef}</dt>
-          <dd className="tech">{order.ref}</dd>
-          {order.poNumber && (
-            <>
-              <dt className="font-bold">{t.poNumber}</dt>
-              <dd className="tech">{order.poNumber}</dd>
-            </>
-          )}
-        </dl>
-      </section>
-
-      <table className="invoice-table w-full">
-        <thead>
-          <tr>
-            <th className="text-start">{t.partNumber}</th>
-            <th className="text-start">{t.invoiceDescription}</th>
-            <th className="num">{t.qty}</th>
-            <th className="num">{t.unitPrice}</th>
-            <th className="num">{t.invoiceLineTotal}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {items.map((i) => (
-            <tr key={i.id}>
-              <td className="tech font-semibold">{i.partNumber}</td>
-              <td>{i.familyName}</td>
-              <td className="num tech tech-num">{formatInt(i.qty, l)}</td>
-              <td className="num tech tech-num">{formatMoneyExact(i.unitPriceCents, currency, l, rate)}</td>
-              <td className="num tech tech-num">
-                {formatMoneyExact(lineTotalCents(i), currency, l, rate)}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-
-      <section className="mt-4 flex justify-end">
-        <dl className="grid w-full max-w-[280px] grid-cols-[1fr_auto] gap-x-6 gap-y-1 text-[13px]">
-          <dt>{t.invoiceSubtotal}</dt>
-          <dd className="num tech tech-num">{formatMoneyExact(subtotal, currency, l, rate)}</dd>
-          <dt className="border-t border-[var(--color-ink)] pt-1.5 font-bold">
-            {cancelled ? t.invoiceVoid : t.invoiceTotal}
-          </dt>
-          <dd className="num tech tech-num border-t border-[var(--color-ink)] pt-1.5 text-[15px] font-bold">
-            {formatMoneyExact(order.totalCents, currency, l, rate)}
-          </dd>
-        </dl>
-      </section>
-
-      {order.paymentUrl && !cancelled && (
-        <p className="mt-6 text-[12px]">
-          <a href={order.paymentUrl} className="font-bold" rel="noopener noreferrer">
-            {t.invoicePay}
-          </a>{" "}
-          <span className="tech break-all text-[var(--color-ink-faint)]">{order.paymentUrl}</span>
-        </p>
-      )}
-
-      <footer className="mt-8 border-t border-[var(--color-rule)] pt-3 text-[11px] text-[var(--color-ink-muted)]">
-        <p>{t.invoiceThanks}</p>
-        {/* Keyed on the currency shown, not the language. An English invoice
-            priced in Rial is converted and must say so; a Persian invoice
-            priced in dollars is not, and the note would be a lie. */}
-        {currency === "IRR" && (
-          <p className="mt-1">
-            {t.invoiceFxNote}{" "}
-            <span className="tech">{formatInt(rate, l)}</span> {t.fxPerUsd}
-          </p>
-        )}
-      </footer>
+      <InvoiceDocument
+        locale={l}
+        seller={seller}
+        order={order}
+        items={items}
+        totalCents={order.totalCents}
+        currency={currency}
+        rate={order.fxRateToRial}
+        vatRateBp={order.vatRateBp}
+        invoiceNumber={order.invoiceNumber}
+        date={order.invoicedAt}
+        cancelled={cancelled}
+        bank={bank}
+        // The pay page, not the account page: it needs no sign-in, so the
+        // same address works for a guest, a rep's customer and a printout.
+        proofUrl={
+          isOrderStatus(order.status) && acceptsPaymentProof(order.status)
+            ? `${origin}/${l}/pay/${order.payToken}`
+            : null
+        }
+      />
 
       <div className="mt-6 flex justify-end no-print">
         <PrintButton locale={l} />

@@ -27,6 +27,9 @@ export const RATE_LIMITS = {
   repSignIn: { limit: 10, windowSeconds: 15 * 60 },
   repWrite: { limit: 60, windowSeconds: 10 * 60 },
   repOrderSubmit: { limit: 30, windowSeconds: 10 * 60 },
+  // Per pay link and per address: the link alone authorises an upload, so it
+  // is what bounds how much anyone holding one can store.
+  proofUpload: { limit: 20, windowSeconds: 60 * 60 },
 } as const satisfies Record<string, RateLimitPolicy>;
 
 type HeaderSource = Pick<Headers, "get">;

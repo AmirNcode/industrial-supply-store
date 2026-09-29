@@ -22,6 +22,9 @@ import { REQUEST_LIMITS, boundedString } from "@/lib/requestLimits";
 import { parseLogin } from "@/lib/customerCode";
 import { clearReferralCookie, readReferralCode } from "@/lib/referral";
 import { getActiveRepByReferralCode } from "@/db/repQueries";
+import { getOrderForUser } from "@/db/accountQueries";
+import { acceptsPaymentProof } from "@/lib/orders";
+import { receivePaymentProof, type ProofUploadResult } from "@/lib/paymentProofUpload";
 
 /**
  * None of these actions revalidate, deliberately.
@@ -283,4 +286,24 @@ export async function setInitialPasswordAction(formData: FormData): Promise<void
 
   await setPassword(user.id, await hashPassword(next), false);
   redirect(`/${locale}/account?ok=password#profile`);
+}
+
+/**
+ * A receipt for one of the signed-in customer's own orders. Ownership is in
+ * the query (`getOrderForUser`), so a reference that is someone else's
+ * matches nothing and reads the same as a closed order.
+ */
+export async function uploadPaymentProofAction(
+  ref: string,
+  formData: FormData,
+): Promise<ProofUploadResult> {
+  const user = await currentUser();
+  if (!user) return { ok: false, problem: "closed" };
+  const limit = await consumeRateLimit("account:write", RATE_LIMITS.accountWrite, {
+    accountId: user.id,
+  });
+  if (!limit.allowed) return { ok: false, problem: "rate-limited" };
+  const found = typeof ref === "string" ? await getOrderForUser(user.id, ref.slice(0, 20)) : null;
+  if (!found || !acceptsPaymentProof(found.order.status)) return { ok: false, problem: "closed" };
+  return receivePaymentProof(found.order.id, formData.get("file"), { kind: "customer" });
 }

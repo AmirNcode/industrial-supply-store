@@ -9,12 +9,15 @@ import { OrderView } from "@/components/OrderView";
 import { OrderStatusPill } from "@/components/OrderStatusPill";
 import { getDict, isLocale, type Locale } from "@/lib/i18n";
 import { customerCurrencyFor } from "@/lib/money";
-import type { OrderStatus } from "@/lib/orders";
+import { acceptsPaymentProof, type OrderStatus } from "@/lib/orders";
+import { listPaymentProofs } from "@/db/paymentProofQueries";
+import { PaymentProofSection } from "@/components/PaymentProofSection";
+import { uploadPaymentProofWithKeyAction } from "./actions";
 
 /**
- * Kept out of search results, and the page sends no referrer: the Pay button
- * leaves for a bank's page, which would otherwise receive this URL — and the
- * URL is the key.
+ * Kept out of search results, and the page sends no referrer: the URL is the
+ * key, and any third-party request the page makes — the footer's trust seal is
+ * one — would otherwise receive it.
  */
 export const metadata: Metadata = {
   robots: { index: false, follow: false },
@@ -24,7 +27,8 @@ export const metadata: Metadata = {
 /**
  * The private pay link. No sign-in: a customer opens it from a message on
  * their phone. It shows one order — the one whose token it carries — and what
- * to do next. Before the admin prices the order there is nothing to pay, so
+ * to do next. Payment is by bank transfer, so once the order is invoiced this
+ * page shows the account to pay into; before that there is nothing to pay and
  * no payment instructions are shown yet.
  */
 export default async function PayPage({ params }: { params: Promise<{ locale: string; token: string }> }) {
@@ -38,18 +42,14 @@ export default async function PayPage({ params }: { params: Promise<{ locale: st
   if (!found) notFound();
   const { order, items } = found;
 
-  const [liveRate, displayMode, bank] = await Promise.all([
+  const takesProof = acceptsPaymentProof(order.status);
+  const [liveRate, displayMode, bank, proofs] = await Promise.all([
     getFxRate(),
     getPriceDisplayMode(),
-    order.status === "invoiced" ? getBankDetails(l) : Promise.resolve(null),
+    takesProof ? getBankDetails(l) : Promise.resolve(null),
+    listPaymentProofs([order.id]),
   ]);
   const invoiced = order.invoiceNumber !== null;
-  const payNow =
-    order.status === "invoiced" && order.paymentUrl ? (
-      <a href={order.paymentUrl} target="_blank" rel="noopener noreferrer" className="btn-primary">
-        {t.payNow}
-      </a>
-    ) : null;
   const viewInvoice =
     invoiced && order.status !== "cancelled" ? (
       <Link href={`/${l}/invoice/${order.ref}?key=${token}`} className="btn-small" prefetch={false}>
@@ -59,6 +59,7 @@ export default async function PayPage({ params }: { params: Promise<{ locale: st
   const message: Record<OrderStatus, string> = {
     received: t.payBeingPriced,
     invoiced: t.payAmountDue,
+    payment_review: t.payConfirming,
     preparing: t.payPaidThanks,
     shipped: t.payPaidThanks,
     delivered: t.payPaidThanks,
@@ -80,15 +81,16 @@ export default async function PayPage({ params }: { params: Promise<{ locale: st
         currency={customerCurrencyFor(displayMode, l)}
         rate={order.fxRateToRial ?? liveRate}
         bank={bank}
-        estimate={!invoiced}
-        actions={
-          payNow || viewInvoice ? (
-            <>
-              {payNow}
-              {viewInvoice}
-            </>
-          ) : null
+        proof={
+          <PaymentProofSection
+            locale={l}
+            proofs={proofs.get(order.id) ?? []}
+            payKey={token}
+            upload={takesProof ? uploadPaymentProofWithKeyAction.bind(null, token) : undefined}
+          />
         }
+        estimate={!invoiced}
+        actions={viewInvoice}
       />
     </main>
   );

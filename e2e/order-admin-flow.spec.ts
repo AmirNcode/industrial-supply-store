@@ -49,11 +49,18 @@ for (const locale of locales) {
     const order = page.locator("details").filter({ hasText: marker }).first();
     await expect(order).toBeVisible();
     await order.locator("summary").click();
-    await order.locator('input[name="paymentUrl"]').fill("https://example.com/pay/e2e");
 
-    const issueInvoice = order.getByRole("button", { name: t.issueInvoice });
+    // Create invoice opens a draft; nothing is issued until Finalize.
+    await order.getByRole("button", { name: t.createInvoice }).click();
+    await expect(page).toHaveURL(new RegExp(`/${locale}/admin/orders/ORD-[^/]+/invoice\\?`));
+    await expect(page.getByText(t.invoiceDraftNotice)).toBeVisible();
+    // The VAT row itself, not the notice that mentions VAT.
+    await expect(page.getByText(new RegExp(`^${t.invoiceVat.split("(")[0].trim()} \\(`))).toBeVisible();
+    await expectNoAccessibilityViolations(page, testInfo);
+
+    const issueInvoice = page.getByRole("button", { name: t.finalizeInvoice });
     await issueInvoice.click();
-    const dialog = page.getByRole("dialog", { name: t.confirmIssueInvoice });
+    const dialog = page.getByRole("dialog", { name: t.confirmFinalizeInvoice });
     const discard = dialog.getByRole("button", { name: t.confirmDiscard });
     const continueButton = dialog.getByRole("button", { name: t.confirmContinue });
     await expect(discard).toBeFocused();

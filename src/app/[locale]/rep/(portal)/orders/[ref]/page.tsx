@@ -2,7 +2,15 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireRep } from "@/lib/repSession";
 import { getOrderForRep } from "@/db/repOrderQueries";
-import { reorderAction } from "../../../actions";
+import {
+  confirmPaymentForRepAction,
+  reorderAction,
+  uploadPaymentProofForRepAction,
+} from "../../../actions";
+import { acceptsPaymentProof } from "@/lib/orders";
+import { listPaymentProofs } from "@/db/paymentProofQueries";
+import { PaymentProofSection } from "@/components/PaymentProofSection";
+import { ConfirmSubmit } from "@/components/ConfirmSubmit";
 import { getFxRate } from "@/lib/fx";
 import { siteOrigin } from "@/lib/siteOrigin";
 import { commissionPercentLabel } from "@/lib/repAccount";
@@ -15,11 +23,13 @@ import { isLocale, getDict, type Locale } from "@/lib/i18n";
 const ERROR_KEY = {
   "not-yours": "reorderNotYours",
   "cart-full": "reorderCartFull",
+  conflict: "orderConflict",
 } as const;
 
 /**
- * One order as its rep sees it: the pay link to send, the commission locked
- * onto it, and the order itself exactly as the customer sees it — in rial.
+ * One order as its rep sees it: its invoice — to create, or to open — the pay
+ * link to send, the commission locked onto it, and the order itself exactly as
+ * the customer sees it, in rial.
  */
 export default async function RepOrderPage({
   params,
@@ -39,7 +49,12 @@ export default async function RepOrderPage({
   const found = await getOrderForRep(rep.id, ref);
   if (!found) notFound();
   const { order, items } = found;
-  const [liveRate, origin] = await Promise.all([getFxRate(), siteOrigin()]);
+  const [liveRate, origin, proofs] = await Promise.all([
+    getFxRate(),
+    siteOrigin(),
+    listPaymentProofs([order.id]),
+  ]);
+  const orderProofs = proofs.get(order.id) ?? [];
   const payUrl = `${origin}/${l}/pay/${order.payToken}`;
   const errorKey = error && error in ERROR_KEY ? ERROR_KEY[error as keyof typeof ERROR_KEY] : null;
   const rateBp = order.commissionRateBp ?? 0;
@@ -69,6 +84,8 @@ export default async function RepOrderPage({
       </div>
 
       {ok === "created" && <SuccessBanner>{t.repOrderCreated}</SuccessBanner>}
+      {ok === "invoiced" && <SuccessBanner>{t.invoiceIssued}</SuccessBanner>}
+      {ok === "paid" && <SuccessBanner>{t.paymentConfirmed}</SuccessBanner>}
       {errorKey && <ErrorBanner>{t[errorKey]}</ErrorBanner>}
       {order.creditedToMe && (
         <p className="mb-3 text-[12px]" data-testid="commission-line">
@@ -77,6 +94,48 @@ export default async function RepOrderPage({
             : t.commissionNone}
         </p>
       )}
+
+      {order.status === "received" && (
+        <section className="mb-4 flex flex-wrap items-center gap-3 border border-[var(--color-rule)] p-3 text-[12px]">
+          <Link href={`/${l}/rep/orders/${order.ref}/invoice`} className="btn-primary" prefetch={false}>
+            {t.createInvoice}
+          </Link>
+          <span className="text-[var(--color-ink-muted)]">{t.repInvoiceHint}</span>
+        </section>
+      )}
+
+      <PaymentProofSection
+        locale={l}
+        proofs={orderProofs}
+        showUploader
+        hint={t.proofHintRep}
+        upload={
+          acceptsPaymentProof(order.status)
+            ? uploadPaymentProofForRepAction.bind(null, order.ref)
+            : undefined
+        }
+      >
+        {/* Only once a receipt is in: a payment with none is the admin's call. */}
+        {order.status === "payment_review" && (
+          <form action={confirmPaymentForRepAction} className="grid gap-1.5 border-t border-[var(--color-rule)] pt-3">
+            <input type="hidden" name="locale" value={l} />
+            <input type="hidden" name="ref" value={order.ref} />
+            <p className="text-[12px] text-[var(--color-ink-muted)]">{t.confirmPaymentHint}</p>
+            <ConfirmSubmit
+              label={t.confirmPayment}
+              title={t.confirmConfirmPayment}
+              continueLabel={t.confirmContinue}
+              discardLabel={t.confirmDiscard}
+              className="btn-primary justify-self-start"
+              details={[
+                { label: t.confirmSendingTo, value: order.company },
+                { label: t.confirmOrder, value: order.ref, tech: true },
+                { label: t.confirmNewStatus, value: t.statusPreparing },
+              ]}
+            />
+          </form>
+        )}
+      </PaymentProofSection>
 
       <section className="mb-4 border border-[var(--color-rule)] p-3 text-[12px]">
         <h2 className="mb-1.5 text-[13px] font-bold">{t.payLink}</h2>
@@ -95,6 +154,12 @@ export default async function RepOrderPage({
           <Link href={`/${l}/pay/${order.payToken}`} target="_blank" prefetch={false}>
             {t.openPayPage}
           </Link>
+          {/* The pay link's key opens the invoice, as it does for the customer. */}
+          {order.invoiceNumber && order.status !== "cancelled" && (
+            <Link href={`/${l}/invoice/${order.ref}?key=${order.payToken}`} prefetch={false}>
+              {t.viewInvoice}
+            </Link>
+          )}
         </div>
       </section>
 

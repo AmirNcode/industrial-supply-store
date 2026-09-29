@@ -87,3 +87,13 @@ export function tehranDatePlusDays(days: number, now: Date = new Date()): string
   const [year, month, day] = tehranToday(now).split("-").map(Number);
   return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10);
 }
+
+/**
+ * An invoice's date: the Persian calendar on a Persian invoice, Gregorian
+ * `YYYY-MM-DD` on an English one. Both are read on Tehran time, so the two
+ * language copies of one invoice name the same day — at UTC an invoice issued
+ * after midnight Tehran would print yesterday in English and today in Persian.
+ */
+export function formatInvoiceDate(value: Date | string, locale: Locale): string {
+  return locale === "fa" ? formatPersianDate(value, "fa") : tehranToday(new Date(value));
+}

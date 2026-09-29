@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { requireAdmin } from "@/lib/admin";
 import { notFound } from "next/navigation";
 import { DEMO_MODE } from "@/lib/demo";
 import { getCustomerAdmin } from "@/db/customerQueries";
@@ -47,6 +48,7 @@ export default async function AdminCustomerPage({
   if (DEMO_MODE) notFound();
   if (!isLocale(locale) || !isUuid(id)) notFound();
   const l = locale as Locale;
+  await requireAdmin(l);
   const t = getDict(l);
   const { ok, error } = await searchParams;
 
