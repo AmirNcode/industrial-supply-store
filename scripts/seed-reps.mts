@@ -135,7 +135,7 @@ const printed = await sql.begin(async (tx) => {
               ${`demo.c-order@example.invalid`}, '', 'fa', 'IRR', ${total}, ${total}, ${status},
               ${customer.id}, ${customer.rep.id}, ${customer.earns ? customer.rep.rateBp : 0},
               ${n % 3 === 0},
-              ${invoiced ? tx`'INV-' || to_char(${at(1)}::timestamptz, 'YYYY') || '-' || lpad(nextval('invoice_seq')::text, 4, '0')` : null},
+              ${invoiced ? tx`(SELECT 'INV-' || to_char(${at(1)}::timestamptz, 'YYYY') || '-' || lpad(s.n::text, greatest(4, length(s.n::text)), '0') FROM (SELECT nextval('invoice_seq') AS n) s)` : null},
               ${invoiced ? 1_000_000 + Math.floor(random() * 100_000) : null},
               ${created.toISOString()}::timestamptz, ${invoiced ? at(1) : null}::timestamptz,
               ${paid ? at(3) : null}::timestamptz, ${shipped ? at(5) : null}::timestamptz,

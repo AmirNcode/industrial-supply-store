@@ -83,8 +83,14 @@ export async function issueInvoice(
             invoiced_at = now(),
             fx_rate_to_rial = ${locked.rate},
             vat_rate_bp = ${locked.vatRateBp},
-            invoice_number = 'INV-' || to_char(now(), 'YYYY') || '-' ||
-                             lpad(nextval('invoice_seq')::text, 4, '0'),
+            -- At least four digits, never truncated: lpad cuts a longer
+            -- string to the width, so a fixed width of 4 turned invoice
+            -- 10,000 into 1000 and collided from there on (review H-3).
+            invoice_number = (
+              SELECT 'INV-' || to_char(now(), 'YYYY') || '-' ||
+                     lpad(s.n::text, greatest(4, length(s.n::text)), '0')
+              FROM (SELECT nextval('invoice_seq') AS n) s
+            ),
             total_cents = (
               SELECT COALESCE(SUM(i.unit_price_cents * i.qty), 0)
               FROM order_items i WHERE i.order_id = o.id

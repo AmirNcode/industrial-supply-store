@@ -78,7 +78,7 @@ deployment · `ALL` = everywhere.
 | C-3 | Critical | Pay tokens (a bearer credential) are rendered on admin pages; with C-1 anyone can change order state and read bank receipts | BRANCH | **FIXED 2026-09-29 in `{{C-3}}`** |
 | H-1 | High | Admin price changes do not reach customers for 94% of live products (stale seeded quantity-break prices win) | LIVE | **FIXED 2026-09-29 in `{{H-1}}`** |
 | H-2 | High | Production is running out of database connections right now (342 × EMAXCONN, 140 × 60 s timeouts in 7 days) | LIVE | **Main driver FIXED 2026-09-29 in `{{H-2}}`; confirm on live after the push** |
-| H-3 | High | Invoice numbers collide after invoice #9,999; the repair script then winds the sequence backwards | ALL | CONFIRMED |
+| H-3 | High | Invoice numbers collide after invoice #9,999; the repair script then winds the sequence backwards | ALL | **FIXED 2026-09-29 in `{{H-3}}`** |
 | H-4 | High | A rep can take over any assigned customer's account via "reset password" | BRANCH | **FIXED 2026-09-29 in `{{H-4}}`** |
 | H-5 | High | Self-hosted: every rate limit (incl. admin login) is bypassed by a spoofed forwarding header | SELF-HOST | CODE |
 | H-6 | High | Self-hosted compose publishes Postgres to the network with password `isupply`; cron secret never reaches the app | SELF-HOST | CODE |
@@ -415,6 +415,18 @@ deployment · `ALL` = everywhere.
 - **Report back**: measured before/after error counts.
 
 ### H-3 — Invoice numbers collide after invoice #9,999; the repair script winds the sequence backwards
+
+> **Fix status (2026-09-29): FIXED in `{{H-3}}` (local `main`, not pushed).**
+> Amir's decision: keep one running sequence; just stop the truncation.
+> `issueInvoice` (and the demo seeder) pad to *at least* four digits
+> (`lpad(n, greatest(4, length(n)), '0')`), so #10,000 is `INV-YYYY-10000`.
+> `db:extensions` now calls `realignInvoiceSequence` (`src/db/invoiceSequence.ts`),
+> which takes the greater of the sequence's own position and the numeric
+> maximum of well-formed numbers, so it can only move forward and no longer
+> throws on an odd number. Test: `orderIntegrity.integration.test.ts` issues
+> invoices 9,999 / 10,000 / 10,001 and proves the realignment does not wind
+> back (including from a recreated sequence). L-5 (Gregorian year in the
+> number) is unchanged.
 
 - **Scope**: ALL (live: `src/app/[locale]/admin/actions.ts:349` on `main`;
   branch: `src/db/invoiceQueries.ts:73-74`). **Status**: CONFIRMED on local

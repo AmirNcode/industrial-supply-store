@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { sql, targetHost } from "@/db/script-client";
+import { realignInvoiceSequence } from "@/db/invoiceSequence";
 
 /**
  * Re-applies `src/db/extensions.sql`.
@@ -25,12 +26,7 @@ async function main() {
   console.log(`→ target: ${targetHost()}`);
   await sql.unsafe(readFileSync(join(here, "../src/db/extensions.sql"), "utf8"));
 
-  const [{ next }] = await sql<{ next: number }[]>`
-    SELECT COALESCE(
-      max(split_part(invoice_number, '-', 3)::int), 0
-    ) AS next FROM orders WHERE invoice_number IS NOT NULL
-  `;
-  await sql`SELECT setval('invoice_seq', ${next === 0 ? 1 : next}, ${next !== 0})`;
+  const next = await realignInvoiceSequence(sql);
 
   const [{ n }] = await sql<{ n: number }[]>`
     SELECT count(*)::int AS n FROM pg_indexes

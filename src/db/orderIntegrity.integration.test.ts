@@ -413,3 +413,42 @@ test("a receipt moves an invoice to review; confirming sells the stock", async (
     await sql`DELETE FROM sales_reps WHERE id = ${rep.id}`;
   }
 });
+
+test("invoice numbers stay unique past 9,999, and the realignment never winds back", async () => {
+  // Review finding H-3: lpad(…, 4) truncated 10000 to 1000.
+  assertLocalDatabase();
+  const [{ start }] = await sql<{ start: string }[]>`
+    SELECT (CASE WHEN is_called THEN last_value ELSE last_value - 1 END)::text AS start FROM invoice_seq`;
+  const ids: number[] = [];
+  try {
+    await sql`SELECT setval('invoice_seq', 9998, true)`;
+    const numbers: string[] = [];
+    for (let i = 0; i < 3; i++) {
+      const [order] = await sql<{ id: number }[]>`
+        INSERT INTO orders (ref, company, contact_name, email, total_cents, requested_total_cents)
+        VALUES (${`ORD-${randomUUID().slice(0, 6).toUpperCase()}`}, 'Seq Co', 'Tester',
+                'seq@example.invalid', 100, 100)
+        RETURNING id`;
+      ids.push(order.id);
+      await sql`
+        INSERT INTO order_items (order_id, product_id, part_number, family_name, qty,
+                                 unit_price_cents, requested_unit_price_cents)
+        VALUES (${order.id}, NULL, 'SEQ-1', 'Integration Family', 1, 100, 100)`;
+      assert.equal(await issueInvoice(order.id, { rate: 1_000_000, vatRateBp: 0 }), "issued");
+      const [row] = await sql<{ n: string }[]>`SELECT invoice_number AS n FROM orders WHERE id = ${order.id}`;
+      numbers.push(row.n.split("-")[2]);
+    }
+    assert.deepEqual(numbers, ["9999", "10000", "10001"]);
+
+    // A repair run after a push must not move the sequence back to 9,999.
+    const { realignInvoiceSequence } = await import("./invoiceSequence");
+    assert.equal(await realignInvoiceSequence(sql), 10001);
+    await sql`SELECT setval('invoice_seq', 1, false)`;
+    assert.equal(await realignInvoiceSequence(sql), 10001, "recreated sequence moves past issued numbers");
+  } finally {
+    if (ids.length) await sql`DELETE FROM orders WHERE id = ANY(${ids})`;
+    const value = Number(start);
+    if (value > 0) await sql`SELECT setval('invoice_seq', ${value}, true)`;
+    else await sql`SELECT setval('invoice_seq', 1, false)`;
+  }
+});
