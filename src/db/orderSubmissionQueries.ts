@@ -3,6 +3,7 @@ import { randomInt } from "node:crypto";
 import type { TransactionSql } from "postgres";
 import { sql } from "./index";
 import { holdStockForOrder } from "./inventoryQueries";
+import { FAMILY_VISIBLE } from "./queries";
 import type { CartLine } from "@/lib/cart";
 import { unitPriceAt } from "@/lib/cart";
 import type { Locale } from "@/lib/i18n";
@@ -63,7 +64,9 @@ async function cartLinesInTransaction(tx: Tx, cartId: string): Promise<CartLine[
     FROM cart_items ci
     JOIN products p ON p.id = ci.product_id
     JOIN product_families f ON f.id = p.family_id
-    WHERE ci.cart_id = ${cartId}
+    JOIN categories c ON c.id = f.category_id
+    -- A product hidden since it was added is not ordered (review M-3).
+    WHERE ci.cart_id = ${cartId} AND ${FAMILY_VISIBLE}
     ORDER BY ci.added_at, ci.product_id
   `;
 }

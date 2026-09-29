@@ -64,7 +64,7 @@ export async function POST(request: Request) {
 
   // The resulting line quantity comes back so the row can show the running
   // total without a second round trip.
-  let lineQty: number;
+  let lineQty: number | null;
   try {
     lineQty = await addLine(id, quantity);
   } catch (error) {
@@ -72,6 +72,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "cart full" }, { status: 409, headers: NO_STORE });
     }
     throw error;
+  }
+  // Hidden and non-existent products read the same.
+  if (lineQty === null) {
+    return NextResponse.json({ error: "not found" }, { status: 404, headers: NO_STORE });
   }
   return NextResponse.json(
     { count: await getCartCount(), productId: id, qty: lineQty },

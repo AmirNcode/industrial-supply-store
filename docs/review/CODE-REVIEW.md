@@ -89,7 +89,7 @@ deployment · `ALL` = everywhere.
 | H-11 | High | Admin "Reset password" on an order resets whichever account owns the email typed on that order | LIVE | **FIXED 2026-09-29 in `{{H-11}}`** |
 | M-1 | Medium | Customer sign-in is rate-limited per IP only | LIVE | **FIXED 2026-09-29 in `{{M-1}}`** |
 | M-2 | Medium | Customer sessions cannot be revoked; password change/reset leaves other sessions alive 30 days | LIVE | **FIXED 2026-09-29 in `{{M-2}}`** |
-| M-3 | Medium | `/api/cart` adds any product id, including hidden and non-existent ones | LIVE | CODE |
+| M-3 | Medium | `/api/cart` adds any product id, including hidden and non-existent ones | LIVE | **FIXED 2026-09-29 in `{{M-3}}`** |
 | M-4 | Medium | Heavy public pages have no rate limit (`/search`, family `?view=all`) | LIVE | CODE + live data |
 | M-5 | Medium | `/_next/image` is an open image proxy for any HTTPS host | LIVE | CODE |
 | M-6 | Medium | No security headers (framing, CSP, nosniff, referrer); `x-powered-by` exposed | LIVE | CONFIRMED-LIVE |
@@ -780,6 +780,14 @@ embed it in the token, re-read it in `currentUser()` exactly as `currentRep()`
 does, bump it on every password change/reset. Scope LIVE, status CODE.
 
 ### M-3 — `/api/cart` adds any product id, including hidden and non-existent ones
+
+> **Fix status (2026-09-29): FIXED in `{{M-3}}`.** `addLine` inserts only
+> through a join on the visible catalog (`FAMILY_VISIBLE`) and returns null
+> otherwise; `/api/cart` answers 404 for hidden and non-existent ids alike.
+> The cart page and checkout read only visible lines, so a product hidden
+> after it was added drops out. Test: `salesReps.integration.test.ts`
+> (checkout with a hidden line orders only the visible one); the 404 was
+> checked by hand on a local build.
 
 `src/app/api/cart/route.ts:57-69` → `addLine` (`src/lib/cart.ts:121`) checks
 neither existence nor visibility. Product ids are sequential. There are 22

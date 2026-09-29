@@ -5,6 +5,7 @@ import { sql } from "@/db";
 import type { SpecBag, PriceTier } from "@/db/schema";
 import { REQUEST_LIMITS } from "./requestLimits";
 import { unitPriceAt } from "./priceTiers";
+import { FAMILY_VISIBLE } from "@/db/queries";
 
 const COOKIE = "isupply_cart";
 const YEAR = 60 * 60 * 24 * 365;
@@ -76,7 +77,9 @@ export async function getCartLines(): Promise<CartLine[]> {
     FROM cart_items ci
     JOIN products p ON p.id = ci.product_id
     JOIN product_families f ON f.id = p.family_id
-    WHERE ci.cart_id = ${id}
+    JOIN categories c ON c.id = f.category_id
+    -- A product hidden since it was added drops out of the cart and checkout.
+    WHERE ci.cart_id = ${id} AND ${FAMILY_VISIBLE}
     ORDER BY ci.added_at
   `;
 }
@@ -118,8 +121,14 @@ async function lockCart(tx: Tx, cartId: string): Promise<boolean> {
   return rows.length > 0;
 }
 
-/** Returns the line's resulting quantity, which the row then displays. */
-export async function addLine(productId: number, qty: number): Promise<number> {
+/**
+ * Returns the line's resulting quantity, which the row then displays, or null
+ * when the product does not exist or is not in the visible catalog. Product
+ * ids are sequential, so an unchecked add let anyone put hidden products in a
+ * cart — and read their part numbers, specs and prices there — or raise a
+ * foreign-key error with an id that does not exist (review M-3).
+ */
+export async function addLine(productId: number, qty: number): Promise<number | null> {
   const cartId = await ensureCart();
   const quantity = Math.max(1, Math.min(99_999, Math.trunc(qty) || 1));
   // Adding an item already in the cart accumulates rather than replaces, which
@@ -136,14 +145,28 @@ export async function addLine(productId: number, qty: number): Promise<number> {
                  < ${REQUEST_LIMITS.cartLines} AS has_room
       )
       INSERT INTO cart_items (cart_id, product_id, qty)
-      SELECT ${cartId}, ${productId}, ${quantity}
-      FROM capacity
-      WHERE already_present OR has_room
+      SELECT ${cartId}, p.id, ${quantity}
+      FROM capacity, products p
+      JOIN product_families f ON f.id = p.family_id
+      JOIN categories c ON c.id = f.category_id
+      WHERE p.id = ${productId} AND ${FAMILY_VISIBLE}
+        AND (already_present OR has_room)
       ON CONFLICT (cart_id, product_id)
       DO UPDATE SET qty = least(99999, cart_items.qty + EXCLUDED.qty)
       RETURNING qty
     `;
-    if (!row) throw new CartCapacityError();
+    if (!row) {
+      // Nothing inserted: either the cart is full or the product is not
+      // sellable. Only the first is worth telling the buyer about.
+      const [sellable] = await tx`
+        SELECT 1 FROM products p
+        JOIN product_families f ON f.id = p.family_id
+        JOIN categories c ON c.id = f.category_id
+        WHERE p.id = ${productId} AND ${FAMILY_VISIBLE}
+      `;
+      if (!sellable) return null;
+      throw new CartCapacityError();
+    }
     await tx`UPDATE carts SET updated_at = now() WHERE id = ${cartId}`;
     return row.qty;
   });

@@ -878,3 +878,41 @@ test("every password change or reset ends the account's other sessions", async (
     await cleanupReps(repIds, userIds);
   }
 });
+
+test("checkout orders nothing that has been hidden since it was put in the cart", async () => {
+  // Review M-3: /api/cart added any product id; addLine now refuses hidden
+  // ones, and a product hidden after it was added drops out at checkout.
+  assertLocalDatabase();
+  await rolledBack(async (tx) => {
+    const { cartId } = await cartWithOneLine(tx);
+    const [visible] = await tx<{ productId: number }[]>`
+      SELECT product_id AS "productId" FROM cart_items WHERE cart_id = ${cartId}`;
+    const [family] = await tx<{ id: number; categoryId: number }[]>`
+      SELECT f.id, f.category_id AS "categoryId" FROM products p
+      JOIN product_families f ON f.id = p.family_id WHERE p.id = ${visible.productId}`;
+    const [hiddenFamily] = await tx<{ id: number }[]>`
+      INSERT INTO product_families (slug, category_id, name_en, name_fa, is_visible)
+      VALUES (${`hidden-${randomUUID()}`}, ${family.categoryId}, 'Hidden', 'پنهان', false) RETURNING id`;
+    const [hidden] = await tx<{ id: number }[]>`
+      INSERT INTO products (part_number, family_id, specs, price_cents,
+                            inventory_available, inventory_on_hold, inventory_sold)
+      VALUES (${`HID-${randomUUID()}`}, ${hiddenFamily.id}, '{}'::jsonb, 1, 100, 0, 0) RETURNING id`;
+    await tx`INSERT INTO cart_items (cart_id, product_id, qty) VALUES (${cartId}, ${hidden.id}, 5)`;
+
+    const result = await submitOrderFromCartInTransaction(tx, {
+      cartId,
+      cartFingerprint: quoteCartFingerprint([{ productId: visible.productId, qty: 2, unitPriceCents: 1000 }]),
+      submissionKey: randomUUID(),
+      locale: "en",
+      currency: "USD",
+      userId: null,
+      placedByRepId: null,
+      contact: { company: "C", contactName: "N", email: "", phone: "1", poNumber: "", address: "", city: "", country: "", notes: "" },
+    });
+    const ref = created(result);
+    const lines = await tx<{ productId: number }[]>`
+      SELECT i.product_id AS "productId" FROM order_items i JOIN orders o ON o.id = i.order_id
+      WHERE o.ref = ${ref}`;
+    assert.deepEqual(lines.map((line) => line.productId), [visible.productId]);
+  });
+});
