@@ -221,7 +221,8 @@ test("a rate is stale once it is more than a day and a half old", () => {
   const now = new Date("2026-09-28T12:00:00Z");
   assert.equal(isStale("2026-09-27T12:00:00Z", now), false);
   assert.equal(isStale("2026-09-26T23:00:00Z", now), true);
-  assert.equal(isStale(null, now), false);
+  // Never read is the stalest of all (review H-7).
+  assert.equal(isStale(null, now), true);
 });
 
 test("stored state survives a round trip and garbage reads as empty", () => {

@@ -19,7 +19,11 @@ export type FxSettings = {
   marketRate: number | null;
 };
 
-/** Used only when the environment value is missing or unparseable. */
+/**
+ * Used only when the environment value is missing or unparseable — a
+ * placeholder so a page can render, never a rate to bill at. `fxRateSource`
+ * reports when it is in use; invoices refuse it and admin says so.
+ */
 export const DEFAULT_FX_RATE = 1_100_000;
 
 export function isFxMode(v: string): v is FxMode {
@@ -44,6 +48,30 @@ export function configuredFxRate(
 
 export function envFxRate(): number {
   return configuredFxRate(process.env.USD_TO_RIAL, process.env.USD_TO_TOMAN);
+}
+
+/** Whether the environment names a rate at all, rather than leaving the placeholder. */
+export function hasConfiguredFxRate(
+  rialValue: string | undefined = process.env.USD_TO_RIAL,
+  legacyTomanValue: string | undefined = process.env.USD_TO_TOMAN,
+): boolean {
+  const rial = Number(rialValue);
+  const toman = Number(legacyTomanValue);
+  return (Number.isFinite(rial) && rial > 0) || (Number.isFinite(toman) && toman > 0);
+}
+
+/**
+ * Where the rate in use came from. "env" is the deployment's own fallback,
+ * used in automatic mode before the first market reading; "placeholder" is
+ * `DEFAULT_FX_RATE`, which nobody chose — about half the market rate when it
+ * was last checked. A fresh self-hosted database starts there (review H-7).
+ */
+export type FxRateSource = "market" | "manual" | "env" | "placeholder";
+
+export function fxRateSource(settings: FxSettings, envConfigured: boolean): FxRateSource {
+  const chosen = settings.mode === "manual" ? settings.manualRate : settings.marketRate;
+  if (usable(chosen)) return settings.mode === "manual" ? "manual" : "market";
+  return envConfigured ? "env" : "placeholder";
 }
 
 function usable(rate: number | null): rate is number {

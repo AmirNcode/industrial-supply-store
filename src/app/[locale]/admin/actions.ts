@@ -4,7 +4,13 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { sql } from "@/db";
 import { assertAdminWrite, signInAdmin, signOutAdmin, signOutAllAdmins } from "@/lib/admin";
-import { getAutomaticRate, getFxRate, saveFxSettings, savePriceDisplayMode } from "@/lib/fx";
+import {
+  getAutomaticRate,
+  getFxRate,
+  getFxRateSource,
+  saveFxSettings,
+  savePriceDisplayMode,
+} from "@/lib/fx";
 import { isFxMode, isPlausibleRate, parseRate } from "@/lib/fxRate";
 import { refreshMarketRate } from "@/lib/fxMarketUpdate";
 import { safeLocale } from "@/lib/i18n";
@@ -288,6 +294,10 @@ export async function issueInvoiceAction(formData: FormData): Promise<void> {
   // already past `received` is a lost race, not a forged post.
   if (order.status !== "received") {
     redirect(withFilter(`/${locale}/admin/orders?error=conflict`, statusFilter));
+  }
+  // An invoice locks its rate for good; the placeholder is nobody's rate.
+  if ((await getFxRateSource()) === "placeholder") {
+    redirect(withFilter(`/${locale}/admin/orders?error=no-rate`, statusFilter));
   }
 
   const [itemRows, rate, vatRateBp] = await Promise.all([

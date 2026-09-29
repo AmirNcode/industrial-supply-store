@@ -266,8 +266,12 @@ export function tehranStamp(iso: string): string {
   return `${tehranDay.format(at)} ${tehranClock.format(at)}`;
 }
 
+/**
+ * Never read counts as stale: a fresh database has no reading, prices at the
+ * fallback rate, and used to show no warning at all (review finding H-7).
+ */
 export function isStale(updatedAt: string | null, now: Date): boolean {
-  if (updatedAt === null) return false;
+  if (updatedAt === null) return true;
   return now.getTime() - Date.parse(updatedAt) > STALE_AFTER_MS;
 }
 

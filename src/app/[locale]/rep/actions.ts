@@ -19,7 +19,7 @@ import { getReorderLines, repCanSeeOrder } from "@/db/repOrderQueries";
 import { getInvoiceDraft, issueInvoice } from "@/db/invoiceQueries";
 import { acceptsPaymentProof, isOrderStatus } from "@/lib/orders";
 import { receivePaymentProof, type ProofUploadResult } from "@/lib/paymentProofUpload";
-import { getFxRate } from "@/lib/fx";
+import { getFxRate, getFxRateSource } from "@/lib/fx";
 import { getVatRateBp } from "@/lib/vatSettings";
 import { hasUnpricedLine, subtotalCents } from "@/lib/invoice";
 import {
@@ -290,6 +290,8 @@ export async function issueInvoiceForRepAction(formData: FormData): Promise<void
   const page = `/${locale}/rep/orders/${ref}`;
   if (found.order.status !== "received") redirect(`${page}?error=conflict`);
   if (hasUnpricedLine(found.items)) redirect(`${page}?error=unpriced`);
+  // An invoice locks its rate for good; the placeholder is nobody's rate.
+  if ((await getFxRateSource()) === "placeholder") redirect(`${page}?error=no-rate`);
 
   const [rate, vatRateBp] = await Promise.all([getFxRate(), getVatRateBp()]);
   if (

@@ -50,7 +50,9 @@ services:
       SELLER_ADDRESS_FA: ${SELLER_ADDRESS_FA:-}
       SELLER_TAX_ID: ${SELLER_TAX_ID:-}
       SUPABASE_PAYMENT_PROOF_BUCKET: ${SUPABASE_PAYMENT_PROOF_BUCKET:-payment-proofs}
-      USD_TO_RIAL: ${USD_TO_RIAL:-1100000}
+      # No default: an unset rate shows admin a warning and refuses invoices
+      # until the market job reads one or the admin types one (review H-7).
+      USD_TO_RIAL: ${USD_TO_RIAL:-}
       SUPABASE_URL: ${SUPABASE_URL:-}
       SUPABASE_PUBLIC_URL: ${SUPABASE_PUBLIC_URL:-}
       SUPABASE_PUBLISHABLE_KEY: ${SUPABASE_PUBLISHABLE_KEY:-}

@@ -5,6 +5,7 @@ import {
   getAutomaticRate,
   getFxSettings,
   getFxRate,
+  getFxRateSource,
   getMarketSummary,
   getPriceDisplayMode,
 } from "@/lib/fx";
@@ -54,7 +55,7 @@ export default async function AdminSettingsPage({
     vat: vatStatus,
   } = await searchParams;
 
-  const [fxSettings, rate, autoRate, market, priceDisplayMode, contact, bankFields, vatRateBp] =
+  const [fxSettings, rate, autoRate, market, priceDisplayMode, contact, bankFields, vatRateBp, fxSource] =
     await Promise.all([
       getFxSettings(),
       getFxRate(),
@@ -64,6 +65,7 @@ export default async function AdminSettingsPage({
       getSiteContact(),
       getBankFields(),
       getVatRateBp(),
+      getFxRateSource(),
     ]);
   const BANK_PROBLEM_KEY = {
     card: "bankInvalidCard",
@@ -306,6 +308,9 @@ export default async function AdminSettingsPage({
       {fx === "refresh-failed" && <ErrorBanner>{t.fxRefreshFailed}</ErrorBanner>}
       {fx === "range" && <ErrorBanner>{t.fxOutOfRange}</ErrorBanner>}
       {fx === "invalid" && <ErrorBanner>{t.fxInvalid}</ErrorBanner>}
+      {fxSource === "placeholder" && (
+        <ErrorBanner>{t.fxPlaceholder.replace("{rate}", formatInt(rate, l))}</ErrorBanner>
+      )}
 
       <FxRatePanel
         locale={l}

@@ -82,7 +82,7 @@ deployment · `ALL` = everywhere.
 | H-4 | High | A rep can take over any assigned customer's account via "reset password" | BRANCH | **FIXED 2026-09-29 in `{{H-4}}`** |
 | H-5 | High | Self-hosted: every rate limit (incl. admin login) is bypassed by a spoofed forwarding header | SELF-HOST | **FIXED 2026-09-29 in `{{H-5}}`** |
 | H-6 | High | Self-hosted compose publishes Postgres to the network with password `isupply`; cron secret never reaches the app | SELF-HOST | **FIXED 2026-09-29 in `{{H-6}}`** |
-| H-7 | High | A fresh database prices the catalog at 1,100,000 rial/USD (~47% of market) with no warning | SELF-HOST / ALL | CODE |
+| H-7 | High | A fresh database prices the catalog at 1,100,000 rial/USD (~47% of market) with no warning | SELF-HOST / ALL | **FIXED 2026-09-29 in `{{H-7}}`** |
 | H-8 | High | `DEMO_MODE` publishes pay tokens, receipts and the product table to the public | BRANCH | **FIXED 2026-09-29 in `{{H-8}}`** |
 | H-9 | High | Admin "session" is a permanent, unrevocable password-derived bearer token without the `Secure` flag | LIVE | **FIXED 2026-09-29 in `{{H-9}}`** |
 | H-10 | High | Applying the sales-rep migration first (as the deploy doc says) breaks live sign-up until the new code is live — and again after a rollback | BRANCH → LIVE | **FIXED 2026-09-29 in `{{H-10}}`** |
@@ -561,6 +561,18 @@ deployment · `ALL` = everywhere.
   scheduler service the deployment doc already recommends.
 
 ### H-7 — A fresh database prices the catalog at 1,100,000 rial/USD with no warning
+
+> **Fix status (2026-09-29): FIXED in `{{H-7}}` (local `main`, not pushed).**
+> `isStale(null)` is now true, and the rate panel says "no market reading yet,
+> prices use the fallback of N rial". `fxRateSource` names where the rate came
+> from; when it is the 1,100,000 placeholder (no reading, no manual rate, no
+> `USD_TO_RIAL`), Settings shows a red banner and **both admin and rep invoice
+> issuance refuse** ("no exchange rate set"), because an invoice locks its
+> rate for good. The compose default `USD_TO_RIAL=1100000` is removed so the
+> Iran launch starts in that guarded state. Deviation: storefront display and
+> checkout are not blocked — an order stores dollars, and the rate is locked
+> only at invoicing, which is now guarded. Tests: `fxMarket.test.ts`,
+> `fxRate.test.ts`.
 
 - **Scope**: SELF-HOST (the Iran launch starts from a fresh database); ALL in
   principle. **Status**: CODE.

@@ -21,6 +21,7 @@ const ERROR_KEY = {
   "cart-full": "reorderCartFull",
   conflict: "orderConflict",
   unpriced: "repInvoiceUnpriced",
+  "no-rate": "invoiceNeedsRate",
 } as const;
 
 /**

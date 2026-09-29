@@ -189,6 +189,7 @@ export default async function AdminPage({
       {error === "tracking" && <ErrorBanner>{t.trackingRequired}</ErrorBanner>}
       {error === "not-found" && <ErrorBanner>{t.orderNotFound}</ErrorBanner>}
       {error === "conflict" && <ErrorBanner>{t.orderConflict}</ErrorBanner>}
+      {error === "no-rate" && <ErrorBanner>{t.invoiceNeedsRate}</ErrorBanner>}
       {error === "bad-request" && <ErrorBanner>{t.badRequest}</ErrorBanner>}
 
       {orders.length === 0 && (

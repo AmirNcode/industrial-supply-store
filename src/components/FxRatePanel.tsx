@@ -116,7 +116,7 @@ export function FxRatePanel({
           </label>
         </div>
 
-        <MarketDetail locale={locale} market={market} disabled={disabled} />
+        <MarketDetail autoRate={autoRate} locale={locale} market={market} disabled={disabled} />
 
         <p className="mt-2 text-[11px] text-[var(--color-ink-muted)]">{t.fxAppliesTo}</p>
 
@@ -190,10 +190,13 @@ function reasonText(reason: RefusalReason, t: ReturnType<typeof getDict>): strin
 function MarketDetail({
   locale,
   market,
+  autoRate,
   disabled,
 }: {
   locale: Locale;
   market: MarketSummary;
+  /** What automatic mode prices at before the first reading. */
+  autoRate: number;
   disabled?: boolean;
 }) {
   const t = getDict(locale);
@@ -221,7 +224,9 @@ function MarketDetail({
       )}
       {market.stale && market.failedReason === null && (
         <p role="status" className="text-[var(--color-danger)]">
-          {t.fxStale}
+          {market.updatedAt === null
+            ? t.fxNeverRead.replace("{rate}", formatInt(autoRate, locale))
+            : t.fxStale}
         </p>
       )}
 

@@ -6,6 +6,8 @@ import {
   isPlausibleRate,
   parseRate,
   DEFAULT_FX_RATE,
+  fxRateSource,
+  hasConfiguredFxRate,
 } from "./fxRate";
 
 const ENV = 1_100_000;
@@ -85,4 +87,18 @@ test("the Rial environment setting wins, with a converted legacy fallback", () =
   assert.equal(configuredFxRate(undefined, "120000"), 1_200_000);
   assert.equal(configuredFxRate("bad", "120000"), 1_200_000);
   assert.equal(configuredFxRate(undefined, undefined), DEFAULT_FX_RATE);
+});
+
+test("the rate's source says when nobody chose it", () => {
+  const none = { mode: "auto" as const, manualRate: null, marketRate: null };
+  assert.equal(fxRateSource(none, false), "placeholder");
+  assert.equal(fxRateSource(none, true), "env");
+  assert.equal(fxRateSource({ ...none, marketRate: 2_500_000 }, false), "market");
+  assert.equal(fxRateSource({ ...none, mode: "manual", manualRate: 2_400_000 }, false), "manual");
+  // Manual mode with no usable typed rate falls back like automatic does.
+  assert.equal(fxRateSource({ ...none, mode: "manual" }, false), "placeholder");
+  assert.equal(hasConfiguredFxRate(undefined, undefined), false);
+  assert.equal(hasConfiguredFxRate("2500000", undefined), true);
+  assert.equal(hasConfiguredFxRate("", "250000"), true);
+  assert.equal(hasConfiguredFxRate("abc", "0"), false);
 });

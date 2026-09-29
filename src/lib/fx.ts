@@ -3,10 +3,13 @@ import { cache } from "react";
 import { sql } from "@/db";
 import {
   envFxRate,
+  fxRateSource,
+  hasConfiguredFxRate,
   isFxMode,
   parseRate,
   resolveFxRate,
   type FxMode,
+  type FxRateSource,
   type FxSettings,
 } from "./fxRate";
 import { parseMarketState, summarizeMarket, type MarketSummary } from "./fxMarket";
@@ -85,6 +88,11 @@ export async function getPriceDisplayMode(): Promise<PriceDisplayMode> {
 export const getFxRate = cache(async (): Promise<number> => {
   return resolveFxRate(await getFxSettings(), envFxRate());
 });
+
+/** Where `getFxRate` came from; "placeholder" means nobody set a rate. */
+export async function getFxRateSource(): Promise<FxRateSource> {
+  return fxRateSource(await getFxSettings(), hasConfiguredFxRate());
+}
 
 /**
  * Switching to `auto` deliberately leaves any stored manual rate in place, so
