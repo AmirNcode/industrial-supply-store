@@ -53,8 +53,15 @@ export async function Header({ locale }: { locale: Locale }) {
           {/* Set to the search field's own 35px so the two read as one control
               strip. `alt` carries the brand name — with the wordmark being an
               image, this is the only place "TEMEX" exists on the page, and an
-              empty alt would erase it for screen readers. */}
-          <Link href={`/${locale}`} className="shrink-0 hover:no-underline">
+              empty alt would erase it for screen readers.
+              Every link in the site chrome is `prefetch={false}`: a
+              default-prefetched link renders its target on the server as
+              soon as it is on screen, so each page view here cost four more
+              function runs, each with a database query, and the home page's
+              26 category titles regenerated every stale category page in the
+              same second — the bursts that exhausted the pooler (review
+              finding H-2). `src/lib/prefetch.test.ts` keeps it that way. */}
+          <Link prefetch={false} href={`/${locale}`} className="shrink-0 hover:no-underline">
             {/* Attributes carry the *display* size, not the file's 1908×543.
                 Same 3.5 ratio either way, so this still reserves the right box
                 and prevents layout shift — but if the stylesheet ever fails to
@@ -102,6 +109,7 @@ export async function Header({ locale }: { locale: Locale }) {
             <div className="mt-1 flex items-center justify-end gap-4">
               <CartLink locale={locale} />
               <Link
+                prefetch={false}
                 href={`/${locale}/quick-order`}
                 className="text-[14px] font-semibold uppercase tracking-[0.08em] !text-white"
               >
@@ -111,6 +119,7 @@ export async function Header({ locale }: { locale: Locale }) {
                   cached catalog page dynamic. /account decides for itself
                   whether to show orders or a sign-in prompt. */}
               <Link
+                prefetch={false}
                 href={`/${locale}/account`}
                 className="text-[14px] font-semibold uppercase tracking-[0.08em] !text-white"
               >

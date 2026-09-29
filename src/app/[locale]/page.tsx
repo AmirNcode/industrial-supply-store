@@ -69,6 +69,7 @@ export default async function HomePage({
                     />
                   )}
                   <Link
+                    prefetch={false}
                     href={`/${l}/c/${top.path}`}
                     className="text-[19px] font-bold text-[var(--color-navy)] lg:text-[21px]"
                   >

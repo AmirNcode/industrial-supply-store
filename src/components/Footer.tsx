@@ -21,7 +21,7 @@ export function Footer({ locale }: { locale: Locale }) {
         {links.map((l, i) => (
           <span key={l.href} className="flex items-center gap-3">
             {i > 0 && <span className="text-[var(--color-rule)]">|</span>}
-            <Link href={l.href}>{l.label}</Link>
+            <Link prefetch={false} href={l.href}>{l.label}</Link>
           </span>
         ))}
         <span className="ms-auto">{t.footerNote}</span>

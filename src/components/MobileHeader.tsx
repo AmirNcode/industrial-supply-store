@@ -110,7 +110,7 @@ export function MobileHeader({
           was the widest fixed item in the control row, and the search — already
           down to 134px — is what needed that space back. */}
       <div className="relative z-10 bg-[var(--color-navy)] px-3 pt-2 pb-1">
-        <Link href={`/${locale}`} className="flex items-center gap-2 hover:no-underline">
+        <Link prefetch={false} href={`/${locale}`} className="flex items-center gap-2 hover:no-underline">
           {/* alt carries the brand name, and the attributes carry the display
               size rather than the file's 1908×543 — see the note in Header.tsx
               for why that matters on a phone. */}
@@ -143,6 +143,7 @@ export function MobileHeader({
         </div>
 
         <Link
+          prefetch={false}
           href={`/${locale}/cart`}
           className="tap flex h-[35px] shrink-0 items-center px-1 text-[12px] font-semibold uppercase tracking-[0.06em] !text-white"
         >
@@ -203,6 +204,7 @@ export function MobileHeader({
                 className="border-b border-[var(--color-chrome-line)]"
               >
                 <Link
+                  prefetch={false}
                   href={l.href}
                   className="tap px-4 py-3 text-[16px] font-semibold !text-[var(--color-chrome-ink)]"
                 >

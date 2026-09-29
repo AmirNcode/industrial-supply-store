@@ -77,7 +77,7 @@ deployment · `ALL` = everywhere.
 | C-2 | Critical | A sales rep alone can mark an order paid (own "receipt" + own confirmation), including a zero-price invoice | BRANCH | **FIXED 2026-09-29 in `{{C-2}}`** |
 | C-3 | Critical | Pay tokens (a bearer credential) are rendered on admin pages; with C-1 anyone can change order state and read bank receipts | BRANCH | **FIXED 2026-09-29 in `{{C-3}}`** |
 | H-1 | High | Admin price changes do not reach customers for 94% of live products (stale seeded quantity-break prices win) | LIVE | **FIXED 2026-09-29 in `{{H-1}}`** |
-| H-2 | High | Production is running out of database connections right now (342 × EMAXCONN, 140 × 60 s timeouts in 7 days) | LIVE | CONFIRMED-LIVE / cause PLAUSIBLE |
+| H-2 | High | Production is running out of database connections right now (342 × EMAXCONN, 140 × 60 s timeouts in 7 days) | LIVE | **Main driver FIXED 2026-09-29 in `{{H-2}}`; confirm on live after the push** |
 | H-3 | High | Invoice numbers collide after invoice #9,999; the repair script then winds the sequence backwards | ALL | CONFIRMED |
 | H-4 | High | A rep can take over any assigned customer's account via "reset password" | BRANCH | **FIXED 2026-09-29 in `{{H-4}}`** |
 | H-5 | High | Self-hosted: every rate limit (incl. admin login) is bypassed by a spoofed forwarding header | SELF-HOST | CODE |
@@ -352,6 +352,31 @@ deployment · `ALL` = everywhere.
   `unitPriceAt` returns; integration test through `writeImport`.
 
 ### H-2 — Production is running out of database connections right now
+
+> **Fix status (2026-09-29): main driver FIXED in `{{H-2}}` (local `main`,
+> not pushed); effect on live to be measured after the push.**
+> Cause found: default `<Link>` prefetching. Next 16 prefetches a static
+> (ISR) route in full and a dynamic one down to its layout the moment the link
+> is on screen. The home page's 26 top-level category titles, the header,
+> mobile header, footer, cart link and language switch all prefetched, so a
+> home-page view rendered every stale category page in the same second (the
+> exact burst shape in the error log: all `/fa/c/<top-level>` pages failing
+> together, latest 2026-09-29 12:15:46 UTC) and every page view ran four
+> extra functions (`/cart`, `/track`, `/quick-order`, `/account`, each with
+> the header's settings query). Live evidence: in the last hour of logs those
+> four paths had identical counts (16 each). Measured on a local production
+> build with Playwright: loading `/fa` fired **15** prefetch renders before,
+> **0** after; a category page **9 → 0**. All those links are now
+> `prefetch={false}`; `src/lib/prefetch.test.ts` fails if one reverts.
+> Errors in the 48 h before the fix: EMAXCONN ×195, 60 s timeouts ×39,
+> ECHECKOUTTIMEOUT ×6. Not changed: the pool size (6 per instance) — with the
+> bursts gone it should not be reached, and shrinking it re-risks the
+> 2026-08-15 starvation; revisit only if EMAXCONN persists after the push.
+> Not done: a bigger Supabase pooler (costs money — Amir's call) and
+> `attachDatabasePool` (needs a new dependency; not needed unless errors
+> persist). Vercel's runtime logs on this plan reach back only about an hour
+> (`ExceedsBillingLimitError` for older windows), so per-minute burst
+> analysis of past windows was not possible.
 
 - **Scope**: LIVE. **Status**: symptoms CONFIRMED-LIVE (Vercel runtime errors,
   last 7 days); root cause PLAUSIBLE.

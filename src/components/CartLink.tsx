@@ -15,6 +15,7 @@ export function CartLink({ locale }: { locale: Locale }) {
   const t = getDict(locale);
   return (
     <Link
+      prefetch={false}
       href={`/${locale}/cart`}
       className="text-[14px] font-semibold uppercase tracking-[0.08em] !text-white"
     >

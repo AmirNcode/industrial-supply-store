@@ -30,6 +30,7 @@ export function LocaleSwitch({ other, className }: { other: Locale; className?: 
 
   return (
     <Link
+      prefetch={false}
       href={href}
       lang={other}
       className={className}
