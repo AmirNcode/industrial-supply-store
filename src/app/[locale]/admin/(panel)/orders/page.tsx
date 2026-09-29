@@ -8,8 +8,6 @@ import { customerCurrencyFor, formatPrice, formatInt } from "@/lib/money";
 import { formatOrderTotal } from "@/lib/invoice";
 import { draftLinePrices, priceParamName, priceParamValue } from "@/lib/invoiceDraft";
 import { getFxRate, getPriceDisplayMode } from "@/lib/fx";
-import { cookies } from "next/headers";
-import { emailsWithAccounts } from "@/db/userQueries";
 import { OrderStatusPill, STATUS_LABEL_KEY } from "@/components/OrderStatusPill";
 import { ConfirmSubmit } from "@/components/ConfirmSubmit";
 import { PayLinkReveal } from "@/components/PayLinkReveal";
@@ -20,7 +18,6 @@ import { listPaymentProofs } from "@/db/paymentProofQueries";
 import { PaymentProofSection } from "@/components/PaymentProofSection";
 import {
   setOrderStatusAction,
-  resetCustomerPasswordAction,
   addCommentAction,
   payLinkForOrderAction,
   replacePayLinkAction,
@@ -55,6 +52,8 @@ type OrderRow = {
   placedByRep: boolean;
   commissionRateBp: number | null;
   customerCode: string | null;
+  /** The account that placed the order; null for a guest order. */
+  userId: string | null;
 };
 
 type OrderItemRow = {
@@ -85,10 +84,6 @@ export default async function AdminPage({
   const error = typeof sp.error === "string" ? sp.error : undefined;
   const ok = typeof sp.ok === "string" ? sp.ok : undefined;
   const editRef = typeof sp.edit === "string" ? sp.edit : null;
-  // Read from a 30-second cookie the reset action set, so the credential never
-  // travels in a URL or reaches an access log.
-  const newPassword =
-    ok === "password" ? (await cookies()).get("isupply_new_password")?.value : undefined;
   const statusFilter = typeof sp.status === "string" && isOrderStatus(sp.status)
     ? sp.status
     : null;
@@ -111,7 +106,7 @@ export default async function AdminPage({
              (SELECT count(*)::int FROM order_items i WHERE i.order_id = q.id) AS "itemCount",
              r.name AS "repName", q.placed_by_rep AS "placedByRep",
              q.commission_rate_bp AS "commissionRateBp",
-             u.customer_code AS "customerCode"
+             u.customer_code AS "customerCode", q.user_id AS "userId"
       FROM orders q
       LEFT JOIN sales_reps r ON r.id = q.rep_id
       LEFT JOIN users u ON u.id = q.user_id
@@ -121,7 +116,7 @@ export default async function AdminPage({
   ]);
 
   const orderIds = orders.map((order) => order.id);
-  const [items, withAccounts, commentsByOrder, shortfalls, proofsByOrder] = await Promise.all([
+  const [items, commentsByOrder, shortfalls, proofsByOrder] = await Promise.all([
     orders.length
       ? sql<OrderItemRow[]>`
         SELECT id, order_id AS "orderId", part_number AS "partNumber",
@@ -133,9 +128,6 @@ export default async function AdminPage({
         ORDER BY id
       `
       : Promise.resolve([] as OrderItemRow[]),
-    // One query for the whole page rather than a lookup per row: staff can only
-    // reset a password for an address that actually has an account.
-    emailsWithAccounts(orders.map((order) => order.email)),
     listCommentsForOrders(orderIds),
     // Advisory, not blocking: the order already exists. This is so staff see
     // the shortfall before they price it on the phone, not after.
@@ -196,13 +188,6 @@ export default async function AdminPage({
       {error === "prices" && <ErrorBanner>{t.pricesRequired}</ErrorBanner>}
       {error === "tracking" && <ErrorBanner>{t.trackingRequired}</ErrorBanner>}
       {error === "not-found" && <ErrorBanner>{t.orderNotFound}</ErrorBanner>}
-      {error === "no-account" && <ErrorBanner>{t.noAccountForEmail}</ErrorBanner>}
-      {newPassword && (
-        <p className="mb-2 border-2 border-[var(--color-warn)] bg-[var(--color-warn-soft)] px-3 py-2 text-[12px]">
-          <strong>{t.newPasswordOnce}</strong>{" "}
-          <span className="tech select-all text-[14px] font-bold">{newPassword}</span>
-        </p>
-      )}
       {error === "conflict" && <ErrorBanner>{t.orderConflict}</ErrorBanner>}
       {error === "bad-request" && <ErrorBanner>{t.badRequest}</ErrorBanner>}
 
@@ -297,21 +282,18 @@ export default async function AdminPage({
                 </dd>
               </div>
               {q.poNumber && <Row label={t.poNumber} value={q.poNumber} tech />}
-              {withAccounts.has(q.email.toLowerCase()) && (
+              {/* The account that placed the order, never one matched by the
+                  email typed on it: anyone can type anyone's address on a
+                  guest order, and a reset from here once handed that person
+                  the victim's account (review finding H-11). Resets happen on
+                  the customer's own page. */}
+              {q.userId && (
                 <div className="flex items-baseline gap-1.5">
                   <dt className="font-bold">{t.account}:</dt>
                   <dd>
-                    <form action={resetCustomerPasswordAction} className="inline">
-                      <input type="hidden" name="locale" value={l} />
-                      <input type="hidden" name="email" value={q.email} />
-                      <button
-                        type="submit"
-                        className="underline disabled:no-underline disabled:opacity-50"
-                        disabled={DEMO_MODE}
-                      >
-                        {t.resetPassword}
-                      </button>
-                    </form>
+                    <Link href={`/${l}/admin/customers/${q.userId}`} prefetch={false} className="underline">
+                      {q.customerCode ?? t.account}
+                    </Link>
                   </dd>
                 </div>
               )}

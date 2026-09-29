@@ -46,23 +46,6 @@ export async function findUserForSignIn(
   return rows[0] ?? null;
 }
 
-export async function findUserIdByEmail(email: string): Promise<string | null> {
-  const rows = await sql<{ id: string }[]>`
-    SELECT id FROM users WHERE lower(email) = lower(${email}) LIMIT 1
-  `;
-  return rows[0]?.id ?? null;
-}
-
-/** Which of these addresses have an account — one query, not one per order. */
-export async function emailsWithAccounts(emails: readonly string[]): Promise<Set<string>> {
-  if (emails.length === 0) return new Set();
-  const lowered = emails.map((e) => e.toLowerCase());
-  const rows = await sql<{ email: string }[]>`
-    SELECT lower(email) AS email FROM users WHERE lower(email) = ANY(${lowered})
-  `;
-  return new Set(rows.map((r) => r.email));
-}
-
 export type NewUser = {
   email: string;
   passwordHash: string;

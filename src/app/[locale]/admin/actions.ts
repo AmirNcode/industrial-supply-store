@@ -2,11 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { randomBytes } from "node:crypto";
-import { cookies } from "next/headers";
 import { sql } from "@/db";
-import { findUserIdByEmail, setPassword } from "@/db/userQueries";
-import { hashPassword } from "@/lib/password";
 import { assertAdminWrite, signInAdmin, signOutAdmin } from "@/lib/admin";
 import { getAutomaticRate, getFxRate, saveFxSettings, savePriceDisplayMode } from "@/lib/fx";
 import { isFxMode, isPlausibleRate, parseRate } from "@/lib/fxRate";
@@ -332,46 +328,6 @@ export async function saveVatRateAction(formData: FormData): Promise<void> {
   // No revalidation: VAT appears only on invoices, drafts and order pages,
   // every one of them rendered per request.
   redirect(`/${locale}/admin/settings?vat=saved#vat`);
-}
-
-/**
- * Generates a password, stores its hash, and hands the plaintext back exactly
- * once through the redirect so staff can read it out.
- *
- * There is no reset email in this version, so this is the only way back in for
- * a customer who has forgotten theirs. The plaintext is never stored and never
- * shown again — reloading the page loses it, which is the intended behaviour.
- */
-export async function resetCustomerPasswordAction(formData: FormData): Promise<void> {
-  await assertAdminWrite();
-  const locale = safeLocale(formData);
-  const email = String(formData.get("email") ?? "").trim();
-
-  const userId = await findUserIdByEmail(email);
-  if (!userId) redirect(`/${locale}/admin/orders?error=no-account`);
-
-  const generated = randomBytes(9).toString("base64url");
-  await setPassword(userId, await hashPassword(generated), true);
-
-  /*
-   * Handed back in a short-lived cookie, not in the query string.
-   *
-   * A redirect puts the value in the Location header, the address bar, browser
-   * history and the access log of every proxy in front of this app — request
-   * query strings are logged by default nearly everywhere, and those logs
-   * outlive the "shown exactly once" intent by whatever the retention is.
-   * httpOnly is deliberately off: nothing reads it from script, but it is a
-   * credential, and a 30-second life is the actual protection.
-   */
-  const jar = await cookies();
-  jar.set("isupply_new_password", generated, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    maxAge: 30,
-  });
-  redirect(`/${locale}/admin/orders?ok=password`);
 }
 
 /**

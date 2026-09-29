@@ -86,7 +86,7 @@ deployment · `ALL` = everywhere.
 | H-8 | High | `DEMO_MODE` publishes pay tokens, receipts and the product table to the public | BRANCH | **FIXED 2026-09-29 in `{{H-8}}`** |
 | H-9 | High | Admin "session" is a permanent, unrevocable password-derived bearer token without the `Secure` flag | LIVE | CODE |
 | H-10 | High | Applying the sales-rep migration first (as the deploy doc says) breaks live sign-up until the new code is live — and again after a rollback | BRANCH → LIVE | CONFIRMED |
-| H-11 | High | Admin "Reset password" on an order resets whichever account owns the email typed on that order | LIVE | CODE |
+| H-11 | High | Admin "Reset password" on an order resets whichever account owns the email typed on that order | LIVE | **FIXED 2026-09-29 in `{{H-11}}`** |
 | M-1 | Medium | Customer sign-in is rate-limited per IP only | LIVE | CODE |
 | M-2 | Medium | Customer sessions cannot be revoked; password change/reset leaves other sessions alive 30 days | LIVE | CODE |
 | M-3 | Medium | `/api/cart` adds any product id, including hidden and non-existent ones | LIVE | CODE |
@@ -644,6 +644,15 @@ deployment · `ALL` = everywhere.
 
 ### H-11 — Admin "Reset password" on an order resets whoever owns the email typed on that order
 
+> **Fix status (2026-09-29): FIXED in `{{H-11}}` (local `main`, not pushed).**
+> The order queue's email-keyed "Reset password" (`resetCustomerPasswordAction`,
+> `findUserIdByEmail`, `emailsWithAccounts`) is removed. An order placed from
+> an account now shows that account's customer ID, linked by the order's own
+> `user_id` to the admin customer page, which already resets by id. Guest
+> orders show no account. The false L-9 comment about the reset cookie went
+> with the code. Test: `src/lib/adminReset.test.ts`. Not done: an audit
+> record of resets (M-11).
+
 - **Scope**: LIVE (the branch also touched this function to set
   `must_change_password`). **Status**: CODE.
 - **Where**: `src/app/[locale]/admin/actions.ts:342-372`
@@ -955,7 +964,7 @@ Scope BRANCH (process), status CODE.
 | L-6 | Placeholder seller/contact values (`sales@temex.example`, `+98 21 8888 0000`) print on invoices and the header when settings are unset | `src/lib/seller.ts:39-40`, `src/lib/siteContact.ts:14-15` | refuse to issue invoices until real values are saved |
 | L-7 | A non-integer `USD_TO_RIAL` is accepted, then `BigInt(rate)` throws in `invoiceAmounts` → invoice pages 500 | `src/lib/fxRate.ts:33-34`, `src/lib/invoice.ts:69` | require an integer at the boundary |
 | L-8 | Invoice URLs carrying `?key=<pay token>` have no `noindex` / `no-referrer` (the pay page has both); tokens also land in access logs and browser history | `src/app/[locale]/invoice/[ref]/page.tsx` | add metadata; prefer a POST-to-cookie exchange for keyed access |
-| L-9 | Comments that are now false: `next.config.ts:51-57` ("bounded by who can reach /admin", M-5); `api/payment-proofs/[id]/route.ts:17-18` ("not open under DEMO_MODE", H-8); `admin/actions.ts:360` says the reset cookie is not httpOnly but it is; (the `admin/(panel)/layout.tsx` "one place the sign-in gate lives" comment was corrected with C-1); `account/orders/[ref]/page.tsx:17` says the page is read-only with no customer actions, but it now takes receipt uploads that change order status; `account/password/page.tsx:20` says the form "asks for no current password", but it now requires the temporary one (dropping it would reopen the lock-out `setInitialPasswordAction` prevents) | as listed | fix with the related code |
+| L-9 | Comments that are now false: `next.config.ts:51-57` ("bounded by who can reach /admin", M-5); `api/payment-proofs/[id]/route.ts:17-18` ("not open under DEMO_MODE", H-8); ~~`admin/actions.ts:360` says the reset cookie is not httpOnly but it is~~ (removed with H-11); (the `admin/(panel)/layout.tsx` "one place the sign-in gate lives" comment was corrected with C-1); `account/orders/[ref]/page.tsx:17` says the page is read-only with no customer actions, but it now takes receipt uploads that change order status; `account/password/page.tsx:20` says the form "asks for no current password", but it now requires the temporary one (dropping it would reopen the lock-out `setInitialPasswordAction` prevents) | as listed | fix with the related code |
 | L-10 | Duplicated logic that will drift: two dummy scrypt hashes (`src/lib/password.ts:75`, `src/app/[locale]/account/actions.ts:111`); private `latinDigits` copies in `src/lib/fxRate.ts:86` and `src/lib/siteContactValues.ts:12` beside `src/lib/digits.ts`; `uniqueViolation` in `customerQueries.ts` and `repQueries.ts`; `postedCustomerId` in the rep and admin customer actions; `parseVatPercent` re-implements `parseCommissionPercent` | as listed | one shared helper each |
 | L-11 | Courier and tracking-number fields have no length bound | `src/app/[locale]/admin/actions.ts:185-186` | `boundedString` |
 | L-12 | scrypt `N = 16384` is below current guidance (2^17 for scrypt); parameters are stored per hash, so raising is backward-compatible | `src/lib/password.ts:24` | raise N, rehash on next sign-in |
