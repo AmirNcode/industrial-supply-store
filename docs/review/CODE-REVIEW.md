@@ -100,7 +100,7 @@ deployment · `ALL` = everywhere.
 | M-11 | Medium | No audit trail for money/state changes; rep payouts can be deleted outright | BRANCH | CODE |
 | M-12 | Medium | Local tooling defaults to the live database (e2e, build, start, drizzle) | LIVE (process) | CODE |
 | M-13 | Medium | Customer emails are never verified → an address can be squatted permanently | LIVE | CODE |
-| M-14 | Medium | Anyone can lock a rep out by failing sign-ins against their username | BRANCH | CODE |
+| M-14 | Medium | Anyone can lock a rep out by failing sign-ins against their username | BRANCH | **FIXED 2026-09-29 in `{{M-14}}`** |
 | M-15 | Medium | Lists silently truncate (admin queue 200, rep orders 300, rep customers 500) | ALL | CODE |
 | M-16 | Medium | 4.25 MB request bodies accepted by every Server Action, including anonymous ones | LIVE | CODE |
 | M-17 | Medium | Rep visibility over a moved customer's history is broader than needed | BRANCH | CODE |
@@ -907,6 +907,13 @@ Iran better), or at minimum an admin "release email" tool. Scope LIVE, status
 CODE (known gap).
 
 ### M-14 — Anyone can lock a rep out
+
+> **Fix status (2026-09-29): FIXED in `{{M-14}}`.** Rep sign-in now uses the
+> same guard as customers (M-1): the address counter counts every attempt,
+> the username counter counts failures only, and a browser the rep has signed
+> in from before passes a username lockout. A stranger can still make a rep
+> wait 15 minutes on a *new* device; they can no longer lock the rep out of
+> the phone they use. Test: `rateLimit.integration.test.ts` (shared counters).
 
 `repSignInAction` (`src/app/[locale]/rep/actions.ts:68`) consumes the
 username-scoped counter on every attempt before checking anything. Ten failed

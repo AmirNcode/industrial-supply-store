@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { safeLocale, type Locale } from "@/lib/i18n";
 import { REQUEST_LIMITS, boundedString } from "@/lib/requestLimits";
 import { RATE_LIMITS, consumeRateLimit } from "@/lib/rateLimit";
+import { recordSignInFailure, rememberSignInDevice, signInLocked } from "@/lib/signInGuard";
 import { DUMMY_PASSWORD_HASH, hashPassword, verifyPassword } from "@/lib/password";
 import { normalizeRepPassword, repPasswordProblems } from "@/lib/repPassword";
 import { FOLLOW_UP_DAYS, isValidUsername, normalizeUsername } from "@/lib/repAccount";
@@ -64,17 +65,25 @@ export async function repSignInAction(formData: FormData): Promise<void> {
   const password = boundedString(formData.get("password"), REQUEST_LIMITS.passwordChars, {
     trim: false,
   });
-  const limit = await consumeRateLimit("rep:sign-in", RATE_LIMITS.repSignIn, {
-    accountId: username || null,
-  });
+  // Per address on every attempt; per username on failures only, with a
+  // browser the rep has signed in from let through (lib/signInGuard.ts).
+  // Counting every attempt against the username let anyone lock a rep out.
+  const limit = await consumeRateLimit("rep:sign-in", RATE_LIMITS.repSignIn);
   if (!limit.allowed) redirect(`/${locale}/rep/signin?error=rate-limit`);
+  if (username && (await signInLocked("rep", username))) {
+    redirect(`/${locale}/rep/signin?error=rate-limit`);
+  }
 
   const rep = isValidUsername(username) ? await findRepForSignIn(username) : null;
   const ok = await verifyPassword(
     normalizeRepPassword(password ?? ""),
     rep ? rep.passwordHash : DUMMY_PASSWORD_HASH,
   );
-  if (!rep || !ok || !rep.active) redirect(`/${locale}/rep/signin?error=failed`);
+  if (!rep || !ok || !rep.active) {
+    if (username) await recordSignInFailure("rep", username);
+    redirect(`/${locale}/rep/signin?error=failed`);
+  }
+  await rememberSignInDevice("rep", username);
 
   await setRepSessionCookie(rep);
   await touchRepLogin(rep.id);
