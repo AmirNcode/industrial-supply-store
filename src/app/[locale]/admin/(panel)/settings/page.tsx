@@ -21,7 +21,9 @@ import {
   savePriceDisplayModeAction,
   saveSiteContactAction,
   saveVatRateAction,
+  signOutEverywhereAction,
 } from "../../actions";
+import { ConfirmSubmit } from "@/components/ConfirmSubmit";
 import { isLocale, getDict, type Locale } from "@/lib/i18n";
 import { formatInt } from "@/lib/money";
 
@@ -314,6 +316,21 @@ export default async function AdminSettingsPage({
         effectiveRate={rate}
         disabled={DEMO_MODE}
       />
+
+      <section className="mb-4 mt-4 border border-[var(--color-rule)] p-3">
+        <h2 className="mb-1 text-[13px] font-bold">{t.adminSessions}</h2>
+        <p className="mb-2 text-[12px] text-[var(--color-ink-muted)]">{t.adminSessionsHint}</p>
+        <form action={signOutEverywhereAction}>
+          <input type="hidden" name="locale" value={l} />
+          <ConfirmSubmit
+            label={t.signOutEverywhere}
+            title={t.confirmSignOutEverywhere}
+            continueLabel={t.confirmContinue}
+            discardLabel={t.confirmDiscard}
+            disabled={DEMO_MODE}
+          />
+        </form>
+      </section>
     </>
   );
 }

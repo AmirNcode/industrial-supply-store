@@ -84,7 +84,7 @@ deployment · `ALL` = everywhere.
 | H-6 | High | Self-hosted compose publishes Postgres to the network with password `isupply`; cron secret never reaches the app | SELF-HOST | CODE |
 | H-7 | High | A fresh database prices the catalog at 1,100,000 rial/USD (~47% of market) with no warning | SELF-HOST / ALL | CODE |
 | H-8 | High | `DEMO_MODE` publishes pay tokens, receipts and the product table to the public | BRANCH | **FIXED 2026-09-29 in `{{H-8}}`** |
-| H-9 | High | Admin "session" is a permanent, unrevocable password-derived bearer token without the `Secure` flag | LIVE | CODE |
+| H-9 | High | Admin "session" is a permanent, unrevocable password-derived bearer token without the `Secure` flag | LIVE | **FIXED 2026-09-29 in `{{H-9}}`** |
 | H-10 | High | Applying the sales-rep migration first (as the deploy doc says) breaks live sign-up until the new code is live — and again after a rollback | BRANCH → LIVE | **FIXED 2026-09-29 in `{{H-10}}`** |
 | H-11 | High | Admin "Reset password" on an order resets whichever account owns the email typed on that order | LIVE | **FIXED 2026-09-29 in `{{H-11}}`** |
 | M-1 | Medium | Customer sign-in is rate-limited per IP only | LIVE | CODE |
@@ -596,6 +596,17 @@ deployment · `ALL` = everywhere.
   with real receipts.
 
 ### H-9 — Admin session is a permanent, unrevocable, password-derived bearer token without `Secure`
+
+> **Fix status (2026-09-29): FIXED in `{{H-9}}` (local `main`, not pushed).**
+> The admin cookie is now `a1.<version>.<expiry>.<sig>` (`src/lib/adminSessionToken.ts`),
+> signed with a key derived from `AUTH_SECRET` and a hash of `ADMIN_PASSWORD`:
+> expiry (8 h) is checked on the server; changing the password invalidates
+> every cookie; `app_settings.admin_session_version` is checked on each request
+> and bumped by the new Settings → "Sign out everywhere"; `secure` is set in
+> production; passwords are compared as equal-length hashes (no length
+> timing). Every admin is signed out once when this deploys (old cookie
+> format). Tests: `adminSessionToken.test.ts`, `e2e/admin-session.spec.ts`.
+> Not done: named staff accounts (known gap).
 
 - **Scope**: LIVE. **Status**: CODE.
 - **Where**: `src/lib/admin.ts:42-44, 60-70`.

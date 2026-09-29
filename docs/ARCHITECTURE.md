@@ -64,8 +64,11 @@ if an admin page is added without it. Next's own guide says the same
 
 They share nothing on purpose.
 
-- **Staff** — one shared password, HMAC cookie, `src/lib/admin.ts`. No named
-  accounts or audit trail. Login and write surfaces use the shared database
+- **Staff** — one shared password, `src/lib/admin.ts`. The cookie is signed
+  with a key derived from `AUTH_SECRET` and the password, expires on the
+  server after 8 hours, and carries `app_settings.admin_session_version`:
+  changing the password or pressing Settings → "Sign out everywhere" ends
+  every admin session. No named accounts or audit trail. Login and write surfaces use the shared database
   rate limiter. `assertAdminWrite()` guards every write and refuses under
   `DEMO_MODE`.
 - **Customers** — per-account scrypt passwords, signed session cookie

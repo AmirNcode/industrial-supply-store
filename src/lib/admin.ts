@@ -1,17 +1,27 @@
 import "server-only";
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { cache } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { DEMO_MODE } from "./demo";
+import { AUTH_SECRET } from "./authSecret";
+import {
+  ADMIN_SESSION_TTL_MS,
+  passwordsEqual,
+  signAdminSessionToken,
+  verifyAdminSessionToken,
+} from "./adminSessionToken";
+import { sql } from "@/db";
 import type { Locale } from "./i18n";
 
 /**
  * Single shared password for the local admin view.
  *
  * This is deliberately minimal and is NOT a full staff identity system: there
- * are no named accounts, MFA, revocation, or audit trail. Login attempts are
- * rate-limited at the action boundary, but anything beyond evaluation still
- * needs real staff authentication before this page is broadly exposed.
+ * are no named accounts, MFA or audit trail. Sessions expire after eight
+ * hours, end when the password changes, and "Sign out everywhere" revokes
+ * them all. Login attempts are rate-limited at the action boundary, but
+ * anything beyond evaluation still needs real staff authentication before
+ * this page is broadly exposed.
  */
 const COOKIE = "isupply_admin";
 
@@ -41,34 +51,67 @@ function adminPassword(): string {
   return p || DEV_DEFAULT;
 }
 
-function expectedToken(): string {
-  return createHmac("sha256", adminPassword()).update("isupply-admin-v1").digest("hex");
+/**
+ * The admin session version (`app_settings`). "Sign out everywhere" bumps it,
+ * and every cookie carrying the old one stops verifying. Missing reads as 1.
+ */
+const KEY_SESSION_VERSION = "admin_session_version";
+
+async function sessionVersion(): Promise<number> {
+  const [row] = await sql<{ value: string }[]>`
+    SELECT value FROM app_settings WHERE key = ${KEY_SESSION_VERSION}
+  `;
+  const version = Number(row?.value);
+  return Number.isInteger(version) && version > 0 ? version : 1;
 }
 
-function safeEqual(a: string, b: string): boolean {
-  const bufA = Buffer.from(a);
-  const bufB = Buffer.from(b);
-  if (bufA.length !== bufB.length) return false;
-  return timingSafeEqual(bufA, bufB);
-}
-
-export async function isAdmin(): Promise<boolean> {
-  const jar = await cookies();
-  const token = jar.get(COOKIE)?.value;
+/**
+ * Cached per request: a page and the actions it calls ask more than once, and
+ * each answer costs one settings read. The token itself is checked for
+ * signature, expiry and version (`adminSessionToken.ts`).
+ */
+export const isAdmin = cache(async (): Promise<boolean> => {
+  const token = (await cookies()).get(COOKIE)?.value;
   if (!token) return false;
-  return safeEqual(token, expectedToken());
-}
+  return verifyAdminSessionToken(token, AUTH_SECRET, adminPassword(), await sessionVersion());
+});
 
 export async function signInAdmin(password: string): Promise<boolean> {
-  if (!safeEqual(password, adminPassword())) return false;
+  if (!passwordsEqual(password, adminPassword())) return false;
   const jar = await cookies();
-  jar.set(COOKIE, expectedToken(), {
-    httpOnly: true,
-    sameSite: "lax",
-    path: "/",
-    maxAge: 60 * 60 * 8,
-  });
+  jar.set(
+    COOKIE,
+    signAdminSessionToken(
+      await sessionVersion(),
+      Date.now() + ADMIN_SESSION_TTL_MS,
+      AUTH_SECRET,
+      adminPassword(),
+    ),
+    {
+      httpOnly: true,
+      sameSite: "lax",
+      // Sent only over HTTPS in production, like the customer and rep cookies.
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      maxAge: Math.floor(ADMIN_SESSION_TTL_MS / 1000),
+    },
+  );
   return true;
+}
+
+/**
+ * Ends every admin session, this one included: the shared password means a
+ * copied cookie cannot be told apart from a colleague's, so this is the only
+ * way to revoke one.
+ */
+export async function signOutAllAdmins(): Promise<void> {
+  await sql`
+    INSERT INTO app_settings (key, value, updated_at)
+    VALUES (${KEY_SESSION_VERSION}, '2', now())
+    ON CONFLICT (key) DO UPDATE
+      SET value = (COALESCE(NULLIF(app_settings.value, '')::int, 1) + 1)::text, updated_at = now()
+  `;
+  (await cookies()).delete(COOKIE);
 }
 
 export async function signOutAdmin(): Promise<void> {

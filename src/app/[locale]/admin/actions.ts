@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { sql } from "@/db";
-import { assertAdminWrite, signInAdmin, signOutAdmin } from "@/lib/admin";
+import { assertAdminWrite, signInAdmin, signOutAdmin, signOutAllAdmins } from "@/lib/admin";
 import { getAutomaticRate, getFxRate, saveFxSettings, savePriceDisplayMode } from "@/lib/fx";
 import { isFxMode, isPlausibleRate, parseRate } from "@/lib/fxRate";
 import { refreshMarketRate } from "@/lib/fxMarketUpdate";
@@ -60,6 +60,18 @@ export async function logoutAction(formData: FormData): Promise<void> {
   // Straight to the form. /admin would redirect to /admin/orders, which would
   // redirect back here anyway now the cookie is gone — three hops to land in
   // the same place.
+  redirect(`/${locale}/admin/login`);
+}
+
+/**
+ * Ends every admin session on every device, including this one. With one
+ * shared password this is the only way to revoke a cookie that may have been
+ * copied; changing ADMIN_PASSWORD does the same.
+ */
+export async function signOutEverywhereAction(formData: FormData): Promise<void> {
+  await assertAdminWrite();
+  const locale = safeLocale(formData);
+  await signOutAllAdmins();
   redirect(`/${locale}/admin/login`);
 }
 
