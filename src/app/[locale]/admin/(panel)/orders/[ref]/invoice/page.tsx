@@ -141,7 +141,8 @@ export default async function AdminInvoiceDraftPage({
         invoiceNumber={null}
         date={new Date()}
         bank={bank}
-        proofUrl={`${origin}/${l}/pay/${order.payToken}`}
+        // The demo's panel is public; a pay link is the order's key.
+        proofUrl={DEMO_MODE ? null : `${origin}/${l}/pay/${order.payToken}`}
       />
     </InvoiceDraft>
   );

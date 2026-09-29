@@ -16,7 +16,7 @@ export function PaymentProofSection({
   proofs,
   upload,
   hint,
-  payKey,
+  linked = true,
   showUploader = false,
   children,
 }: {
@@ -25,7 +25,8 @@ export function PaymentProofSection({
   /** Absent once the order no longer takes receipts. */
   upload?: (formData: FormData) => Promise<ProofUploadResult>;
   hint?: string;
-  payKey?: string;
+  /** False on the pay page, whose link does not open receipts. */
+  linked?: boolean;
   showUploader?: boolean;
   /** Extra controls, e.g. a rep's Confirm payment. */
   children?: ReactNode;
@@ -52,7 +53,7 @@ export function PaymentProofSection({
         />
       )}
       {(proofs.length > 0 || !upload) && (
-        <PaymentProofList locale={locale} proofs={proofs} payKey={payKey} showUploader={showUploader} />
+        <PaymentProofList locale={locale} proofs={proofs} linked={linked} showUploader={showUploader} />
       )}
       {children}
     </section>

@@ -85,7 +85,7 @@ export default async function PayPage({ params }: { params: Promise<{ locale: st
           <PaymentProofSection
             locale={l}
             proofs={proofs.get(order.id) ?? []}
-            payKey={token}
+            linked={false}
             upload={takesProof ? uploadPaymentProofWithKeyAction.bind(null, token) : undefined}
           />
         }

@@ -41,7 +41,7 @@ connects to either hosted Supabase project.
 | `/api/admin/family/[id]/{template,export}` | staff | CSV, 404 when signed out |
 | `/api/admin/family/[id]/products` | staff (and `DEMO_MODE`) | the product table's rows as JSON; the same query as the export |
 | `/api/admin/import` | staff | small signed-upload control messages; CSV bytes go to private Storage |
-| `/api/payment-proofs/[id]` | staff, the order's rep, its customer, or `?key=` | one receipt, streamed from the private bucket; 404 to everyone else, including DEMO_MODE visitors |
+| `/api/payment-proofs/[id]` | signed-in staff, the order's rep, its signed-in customer | one receipt, streamed from the private bucket; 404 to everyone else, including pay-link holders and DEMO_MODE visitors |
 | `/api/cron/fx-rate` | scheduler | evening exchange-rate reading; `Authorization: Bearer $CRON_SECRET` |
 
 `(panel)` is a route group — it does not appear in URLs. Its `layout.tsx`
@@ -349,9 +349,11 @@ orders, at a few dozen bytes each; the HTML does not grow.
 **A pay token is the key to one order.** `orders.pay_token` is 64 hex
 characters from two random UUIDs, a column default, so every order has one
 without application code choosing it. Its shape is checked before any query;
-it opens `/pay/[token]` and, as `?key=`, that order's invoice — nothing else.
-It cannot be revoked short of a migration: treat it like the emailed invoice
-PDF it stands in for.
+it opens `/pay/[token]` (where receipts can be uploaded) and, as `?key=`, that
+order's invoice — nothing else. It does not open receipts already sent, which
+carry bank details. The admin queue never renders tokens: "Show pay link"
+fetches one per click, and "New pay link" replaces a leaked one, after which
+the old link opens nothing.
 
 **Rep scoping is in the WHERE clause.** Every rep read and write carries the
 rep's id, taken from the session, in its own `WHERE` (`customerQueries.ts`,

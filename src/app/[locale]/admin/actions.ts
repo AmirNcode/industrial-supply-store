@@ -26,6 +26,8 @@ import { confirmPayment } from "@/db/paymentProofQueries";
 import { RATE_LIMITS, consumeRateLimit } from "@/lib/rateLimit";
 import { REQUEST_LIMITS, boundedString } from "@/lib/requestLimits";
 import { issueInvoice } from "@/db/invoiceQueries";
+import { getPayLinkParts, replacePayToken } from "@/db/payLinkQueries";
+import { siteOrigin } from "@/lib/siteOrigin";
 import { isPriceDisplayMode } from "@/lib/money";
 import { draftQuery, parsePriceDollars, priceParamName } from "@/lib/invoiceDraft";
 import { parseVatPercent } from "@/lib/vat";
@@ -369,6 +371,34 @@ export async function resetCustomerPasswordAction(formData: FormData): Promise<v
     maxAge: 30,
   });
   redirect(`/${locale}/admin/orders?ok=password`);
+}
+
+/**
+ * One order's pay link, returned to the admin who pressed "Show pay link".
+ *
+ * The queue does not render the links itself: a pay link is a bearer
+ * credential for its order (upload receipts, open the invoice), and a page
+ * listing two hundred of them is two hundred keys in one copy-paste. Behind
+ * `assertAdminWrite`, so the public demo's read-only panel never hands one out.
+ */
+export async function payLinkForOrderAction(orderId: number): Promise<string | null> {
+  await assertAdminWrite();
+  if (!Number.isInteger(orderId) || orderId <= 0) return null;
+  const parts = await getPayLinkParts(orderId);
+  if (!parts) return null;
+  return `${await siteOrigin()}/${parts.locale}/pay/${parts.token}`;
+}
+
+/** A new pay link for one order; the old one stops working at once. */
+export async function replacePayLinkAction(formData: FormData): Promise<void> {
+  await assertAdminWrite();
+  const locale = safeLocale(formData);
+  const statusFilter = String(formData.get("statusFilter") ?? "");
+  const id = Number(formData.get("orderId"));
+  if (!Number.isInteger(id) || id <= 0 || !(await replacePayToken(id))) {
+    redirect(withFilter(`/${locale}/admin/orders?error=not-found`, statusFilter));
+  }
+  redirect(withFilter(`/${locale}/admin/orders?ok=paylink`, statusFilter));
 }
 
 /**

@@ -75,7 +75,7 @@ deployment · `ALL` = everywhere.
 | --- | --- | --- | --- | --- |
 | C-1 | Critical | Every admin page is sent to anonymous visitors inside the login redirect | LIVE | **FIXED in `f205741` (local `main`, not pushed); the live site leaks until it is pushed** |
 | C-2 | Critical | A sales rep alone can mark an order paid (own "receipt" + own confirmation), including a zero-price invoice | BRANCH | CODE |
-| C-3 | Critical | Pay tokens (a bearer credential) are rendered on admin pages; with C-1 anyone can change order state and read bank receipts | BRANCH | CODE |
+| C-3 | Critical | Pay tokens (a bearer credential) are rendered on admin pages; with C-1 anyone can change order state and read bank receipts | BRANCH | **FIXED 2026-09-29 in `{{C-3}}`** |
 | H-1 | High | Admin price changes do not reach customers for 94% of live products (stale seeded quantity-break prices win) | LIVE | CONFIRMED |
 | H-2 | High | Production is running out of database connections right now (342 × EMAXCONN, 140 × 60 s timeouts in 7 days) | LIVE | CONFIRMED-LIVE / cause PLAUSIBLE |
 | H-3 | High | Invoice numbers collide after invoice #9,999; the repair script then winds the sequence backwards | ALL | CONFIRMED |
@@ -238,6 +238,19 @@ deployment · `ALL` = everywhere.
   line is refused.
 
 ### C-3 — Pay tokens are rendered on admin pages; with C-1 anyone can change order state and read bank receipts
+
+> **Fix status (2026-09-29): FIXED in `{{C-3}}` (local `main`, not pushed).**
+> The admin queue no longer renders any token: "Show pay link" fetches one
+> order's link through `payLinkForOrderAction` (behind `assertAdminWrite`, so
+> never in `DEMO_MODE`), and "New pay link" replaces a leaked token
+> (`replacePayLinkAction`). The admin draft invoice omits the link in
+> `DEMO_MODE`. A pay link no longer opens receipts: `?key=` was removed from
+> `/api/payment-proofs/[id]`, and the pay page lists receipts without links.
+> Test: `e2e/sales-rep-flow.spec.ts` asserts the signed-in queue's HTML does
+> not contain the order's token until "Show pay link" is pressed;
+> `e2e/admin-gate.spec.ts` already asserts no pay link reaches a stranger.
+> Not done: per-key rate limiting of the receipt route (moot now that keys
+> do not open it).
 
 - **Scope**: BRANCH. **Status**: CODE (the mechanism is C-1, which is
   CONFIRMED-LIVE; the pay-token markup is branch-only).

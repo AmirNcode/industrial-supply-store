@@ -12,8 +12,7 @@ import { cookies } from "next/headers";
 import { emailsWithAccounts } from "@/db/userQueries";
 import { OrderStatusPill, STATUS_LABEL_KEY } from "@/components/OrderStatusPill";
 import { ConfirmSubmit } from "@/components/ConfirmSubmit";
-import { ShareButton } from "@/components/ShareButton";
-import { siteOrigin } from "@/lib/siteOrigin";
+import { PayLinkReveal } from "@/components/PayLinkReveal";
 import { commissionPercentLabel } from "@/lib/repAccount";
 import { listCommentsForOrders, type OrderComment } from "@/db/commentQueries";
 import { findShortfalls } from "@/db/inventoryQueries";
@@ -23,6 +22,8 @@ import {
   setOrderStatusAction,
   resetCustomerPasswordAction,
   addCommentAction,
+  payLinkForOrderAction,
+  replacePayLinkAction,
 } from "../../actions";
 import type { SpecBag } from "@/db/schema";
 import { ORDER_STATUSES, isOrderStatus, nextStatuses, type OrderStatus } from "@/lib/orders";
@@ -54,7 +55,6 @@ type OrderRow = {
   placedByRep: boolean;
   commissionRateBp: number | null;
   customerCode: string | null;
-  payToken: string;
   /** The rep who confirmed payment; null when the admin did or nobody has. */
   paidByRepName: string | null;
 };
@@ -99,10 +99,9 @@ export default async function AdminPage({
   // stop this page from rendering (see `lib/admin.ts`). FX and the queue have
   // no dependency, so do not spend one database round trip waiting to start
   // the other.
-  const [rate, priceDisplayMode, origin, orders] = await Promise.all([
+  const [rate, priceDisplayMode, orders] = await Promise.all([
     getFxRate(),
     getPriceDisplayMode(),
-    siteOrigin(),
     sql<OrderRow[]>`
       SELECT q.id, q.ref, q.company, q.contact_name AS "contactName", q.email,
              q.phone, q.po_number AS "poNumber", q.city, q.country, q.notes,
@@ -114,7 +113,7 @@ export default async function AdminPage({
              (SELECT count(*)::int FROM order_items i WHERE i.order_id = q.id) AS "itemCount",
              r.name AS "repName", q.placed_by_rep AS "placedByRep",
              q.commission_rate_bp AS "commissionRateBp",
-             u.customer_code AS "customerCode", q.pay_token AS "payToken",
+             u.customer_code AS "customerCode",
              pr.name AS "paidByRepName"
       FROM orders q
       LEFT JOIN sales_reps r ON r.id = q.rep_id
@@ -197,6 +196,7 @@ export default async function AdminPage({
       {ok === "status" && <SuccessBanner>{t.orderUpdated}</SuccessBanner>}
       {ok === "comment" && <SuccessBanner>{t.noteAdded}</SuccessBanner>}
       {ok === "invoiced" && <SuccessBanner>{t.invoiceIssued}</SuccessBanner>}
+      {ok === "paylink" && <SuccessBanner>{t.payLinkReplaced}</SuccessBanner>}
       {error === "prices" && <ErrorBanner>{t.pricesRequired}</ErrorBanner>}
       {error === "tracking" && <ErrorBanner>{t.trackingRequired}</ErrorBanner>}
       {error === "not-found" && <ErrorBanner>{t.orderNotFound}</ErrorBanner>}
@@ -274,15 +274,30 @@ export default async function AdminPage({
               )}
               <div className="flex items-baseline gap-1.5">
                 <dt className="font-bold">{t.payLink}:</dt>
-                <dd>
-                  {/* In the customer's language, like the rest of the row. */}
-                  <ShareButton
-                    text={`${origin}/${q.locale === "fa" ? "fa" : "en"}/pay/${q.payToken}`}
-                    label={t.copy}
+                <dd className="flex flex-wrap items-baseline gap-x-3">
+                  {/* Fetched on request, never rendered into the page: the
+                      link is the order's key (`PayLinkReveal`). */}
+                  <PayLinkReveal
+                    load={payLinkForOrderAction.bind(null, q.id)}
+                    showLabel={t.showPayLink}
+                    copyLabel={t.copy}
                     copiedLabel={t.copied}
-                    copyOnly
-                    className="underline"
+                    disabled={DEMO_MODE}
                   />
+                  <form action={replacePayLinkAction} className="inline">
+                    <input type="hidden" name="locale" value={l} />
+                    <input type="hidden" name="orderId" value={q.id} />
+                    <input type="hidden" name="statusFilter" value={statusFilter ?? ""} />
+                    <ConfirmSubmit
+                      label={t.replacePayLink}
+                      title={t.confirmReplacePayLink}
+                      continueLabel={t.confirmContinue}
+                      discardLabel={t.confirmDiscard}
+                      disabled={DEMO_MODE}
+                      className="underline disabled:no-underline disabled:opacity-50"
+                      details={[{ label: t.confirmOrder, value: q.ref, tech: true }]}
+                    />
+                  </form>
                 </dd>
               </div>
               {q.poNumber && <Row label={t.poNumber} value={q.poNumber} tech />}

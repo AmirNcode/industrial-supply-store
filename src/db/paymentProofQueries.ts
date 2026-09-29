@@ -79,7 +79,6 @@ export type ProofAccess = {
   contentType: string;
   orderRef: string;
   userId: string | null;
-  payToken: string;
 };
 
 /** What the file route needs to decide who may see a receipt. */
@@ -87,7 +86,7 @@ export async function getProofAccess(id: number): Promise<ProofAccess | null> {
   if (!Number.isSafeInteger(id) || id <= 0) return null;
   const [row] = await sql<ProofAccess[]>`
     SELECT p.storage_path AS "storagePath", p.content_type AS "contentType",
-           o.ref AS "orderRef", o.user_id AS "userId", o.pay_token AS "payToken"
+           o.ref AS "orderRef", o.user_id AS "userId"
     FROM payment_proofs p JOIN orders o ON o.id = p.order_id
     WHERE p.id = ${id}
   `;

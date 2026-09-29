@@ -89,6 +89,11 @@ for (const locale of locales) {
     const order = admin.locator("details").filter({ hasText: company }).first();
     await order.locator("summary").click();
     await expect(order.getByText("E2E Rep").first()).toBeVisible();
+    // The queue carries no order's key until staff ask for that one.
+    const token = payLink.split("/pay/")[1];
+    expect(await admin.content()).not.toContain(token);
+    await order.getByRole("button", { name: t.showPayLink }).click();
+    await expect(order.getByTestId("admin-pay-link")).toHaveText(payLink);
 
     // The rep invoices at the order's prices: a draft first, then finalize.
     await rep.getByRole("link", { name: t.createInvoice }).click();
