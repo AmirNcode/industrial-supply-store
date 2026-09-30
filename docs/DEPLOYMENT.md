@@ -12,6 +12,15 @@ found the hard way, and most fail silently.
 | Production branch | `main` — pushing to it deploys |
 | Config | `vercel.ts` (committed). No `netlify.toml`; this is not a Netlify project |
 
+## Open before the next deploy
+
+- **Customer email verification (review M-13).** Deferred by Amir on
+  2026-09-30 so the review fixes could ship. Raise it with Amir before the
+  next deploy after that date: anyone can still register a real customer's address first
+  and lock the owner out of it. It needs an email or SMS provider (SMS fits
+  Iran better), which is Amir's cost decision. Details in
+  `docs/review/CODE-REVIEW.md`, M-13.
+
 ## The two databases
 
 There are two Supabase projects, and they are not interchangeable:
@@ -278,7 +287,7 @@ cannot describe reads as drift, and push removes it:
 
 - every index in `src/db/extensions.sql` (full-text, trigram, expression, partial)
 - `invoice_seq` — **recreated from scratch it restarts at 1 and re-issues
-  `INV-2026-0001`** against a unique index
+  `INV-1405-0001`** against a unique index
 - `users_email_lower_key` — without it `createUser` stops detecting duplicate
   accounts entirely, because it decides "email-taken" purely by catching the
   unique violation
