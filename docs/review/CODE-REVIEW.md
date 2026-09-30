@@ -92,7 +92,7 @@ deployment · `ALL` = everywhere.
 | M-3 | Medium | `/api/cart` adds any product id, including hidden and non-existent ones | LIVE | **FIXED 2026-09-29 in `{{M-3}}`** |
 | M-4 | Medium | Heavy public pages have no rate limit (`/search`, family `?view=all`) | LIVE | **FIXED 2026-09-29 in `{{M-4}}`** |
 | M-5 | Medium | `/_next/image` is an open image proxy for any HTTPS host | LIVE | **FIXED 2026-09-29 in `{{M-5}}`** |
-| M-6 | Medium | No security headers (framing, CSP, nosniff, referrer); `x-powered-by` exposed | LIVE | CONFIRMED-LIVE |
+| M-6 | Medium | No security headers (framing, CSP, nosniff, referrer); `x-powered-by` exposed | LIVE | **FIXED 2026-09-29 in `{{M-6}}`** (CSP beyond framing not done) |
 | M-7 | Medium | Per-click admin actions purge the whole site cache (the 2026-08-15 incident pattern) | LIVE | CODE |
 | M-8 | Medium | Stock updates lock product rows in arbitrary order → deadlocks under concurrency | ALL | CODE |
 | M-9 | Medium | 32-bit overflow on order and invoice totals → 500 errors (anonymous can trigger) | ALL | CONFIRMED |
@@ -787,7 +787,7 @@ does, bump it on every password change/reset. Scope LIVE, status CODE.
 > The cart page and checkout read only visible lines, so a product hidden
 > after it was added drops out. Test: `salesReps.integration.test.ts`
 > (checkout with a hidden line orders only the visible one); the 404 was
-> checked by hand on a local build.
+> checked by hand on a local build (hidden family → 404, visible → 200).
 
 `src/app/api/cart/route.ts:57-69` → `addLine` (`src/lib/cart.ts:121`) checks
 neither existence nor visibility. Product ids are sequential. There are 22
@@ -832,6 +832,10 @@ query. Scope LIVE, status CODE + live data.
 > resized — heavier tiles for those images until they are uploaded instead.
 > Self-hosted: the Docker build is not given `SUPABASE_URL`, so uploaded images
 > there are also served unoptimised until it is.
+> Verified on a local production build: a foreign URL through
+> `/_next/image` now returns 400. Not verified at runtime: an uploaded Storage
+> image still being optimised (the local database has none); the pattern is
+> the live project's host shape and is unit-tested.
 
 `next.config.ts:63` allows `hostname: "**"`. The comment (`:51-57`) says the
 cost is "bounded by who can reach /admin" — it is not: anyone can request
@@ -842,6 +846,16 @@ allow only that host (plus a short allow-list), or serve external URLs
 unoptimised. Fix the comment. Scope LIVE, status CODE.
 
 ### M-6 — No security headers
+
+> **Fix status (2026-09-29): FIXED in `{{M-6}}`, except a full CSP.**
+> `next.config.ts` `headers()`: `nosniff`, `Referrer-Policy:
+> strict-origin-when-cross-origin`, a `Permissions-Policy` refusing camera,
+> microphone and location, and `frame-ancestors 'self'` / `SAMEORIGIN`
+> everywhere; `frame-ancestors 'none'` / `DENY` on admin, rep, account, pay and
+> invoice; `no-referrer` on pay and invoice; `poweredByHeader: false`. Test:
+> `e2e/security-headers.spec.ts` (passed on a local production build). Not
+> done: a full Content-Security-Policy — the Enamad seal and Vercel Analytics
+> need measured allowances, and report-only mode needs a report endpoint.
 
 Live response headers for `/fa`: `strict-transport-security` (Vercel's
 default) and `x-powered-by: Next.js` — no `Content-Security-Policy`, no

@@ -93,6 +93,56 @@ const nextConfig: NextConfig = {
      */
     serverActions: { bodySizeLimit: "4.25mb" },
   },
+  /** Says nothing about the stack to a scanner; no browser needs it. */
+  poweredByHeader: false,
+  /**
+   * Security headers, set here so Vercel and the Docker server both send them
+   * (review finding M-6).
+   *
+   * Everywhere: no MIME sniffing, a referrer that stops at the origin when
+   * leaving the site, and no camera/microphone/location. Framing by other
+   * sites is refused everywhere, and on the signed-in and money pages —
+   * admin, rep, account, pay, invoice — by any site at all including this
+   * one: their confirm dialogs are one click from changing an order, which a
+   * page that frames them invisibly can steer (clickjacking). `/pay` and
+   * `/invoice` carry a bearer key in the URL, so they send no referrer.
+   *
+   * Not here: a full Content-Security-Policy. The Enamad seal and Vercel
+   * Analytics need allowances that have to be measured first; start it in
+   * report-only mode when there is somewhere to send reports.
+   */
+  async headers() {
+    const protectedPage = [
+      { key: "X-Frame-Options", value: "DENY" },
+      { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
+    ];
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+          { key: "X-Frame-Options", value: "SAMEORIGIN" },
+          { key: "Content-Security-Policy", value: "frame-ancestors 'self'" },
+        ],
+      },
+      { source: "/:locale/admin/:path*", headers: protectedPage },
+      { source: "/:locale/admin", headers: protectedPage },
+      { source: "/:locale/rep/:path*", headers: protectedPage },
+      { source: "/:locale/rep", headers: protectedPage },
+      { source: "/:locale/account/:path*", headers: protectedPage },
+      { source: "/:locale/account", headers: protectedPage },
+      {
+        source: "/:locale/pay/:path*",
+        headers: [...protectedPage, { key: "Referrer-Policy", value: "no-referrer" }],
+      },
+      {
+        source: "/:locale/invoice/:path*",
+        headers: [...protectedPage, { key: "Referrer-Policy", value: "no-referrer" }],
+      },
+    ];
+  },
   async redirects() {
     return [
       { source: "/", destination: "/fa", permanent: false },
