@@ -48,7 +48,13 @@ export async function generateMetadata({
   // would let a conflicting URL mislabel a USD-locked invoice as IRR (or the
   // reverse) in the browser and saved-PDF filename.
   const { ref } = await params;
-  return { title: `Invoice ${ref}` };
+  // A keyed invoice URL is a credential: never indexed, and no referrer
+  // leaves with it (the response header says the same; review L-8).
+  return {
+    title: `Invoice ${ref}`,
+    robots: { index: false, follow: false },
+    referrer: "no-referrer" as const,
+  };
 }
 
 export default async function InvoicePage({
