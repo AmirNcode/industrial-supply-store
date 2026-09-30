@@ -97,7 +97,7 @@ deployment · `ALL` = everywhere.
 | M-8 | Medium | Stock updates lock product rows in arbitrary order → deadlocks under concurrency | ALL | **FIXED 2026-09-29 in `{{M-8}}`** |
 | M-9 | Medium | 32-bit overflow on order and invoice totals → 500 errors (anonymous can trigger) | ALL | **FIXED 2026-09-29 in `{{M-9}}`** |
 | M-10 | Medium | Paid orders can be cancelled with no refund record; stock stays "sold" | ALL | **FIXED 2026-09-29 in `{{M-10}}`** |
-| M-11 | Medium | No audit trail for money/state changes; rep payouts can be deleted outright | BRANCH | CODE |
+| M-11 | Medium | No audit trail for money/state changes; rep payouts can be deleted outright | BRANCH | **FIXED 2026-09-29 in `{{M-11}}`** |
 | M-12 | Medium | Local tooling defaults to the live database (e2e, build, start, drizzle) | LIVE (process) | CODE |
 | M-13 | Medium | Customer emails are never verified → an address can be squatted permanently | LIVE | CODE |
 | M-14 | Medium | Anyone can lock a rep out by failing sign-ins against their username | BRANCH | **FIXED 2026-09-29 in `{{M-14}}`** |
@@ -957,6 +957,19 @@ and a "refund owed" list. Product decision for Amir; recommended: forbid.
 Scope ALL, status CODE.
 
 ### M-11 — No audit trail for money and state changes; payouts can be deleted
+
+> **Fix status (2026-09-29): FIXED in `{{M-11}}`.** New migration
+> `20260930120000_add_audit_log.sql` (a fourth one to apply before the push):
+> append-only `audit_log` and `rep_payouts.voided_at`. Written in the same
+> transaction as the change: order shipped/delivered/cancelled, invoice issued
+> (admin or rep), receipt uploaded, payment confirmed, customer password reset
+> (admin or rep), rep password reset/changed, customer reassigned (before and
+> after), pay link replaced, payout recorded and voided. "Delete payout" is now
+> "Void": the row stays, marked, and stops counting as paid. Admin rows say
+> "admin" (one shared password). Tests: `salesReps.integration.test.ts`
+> (invoice + payment trail with actors; a refused change writes nothing;
+> payout void keeps the row and records both steps). Not done: a screen to
+> read the trail (SQL for now); catalog edits are not audited.
 
 There is no record of who moved an order's status, issued an invoice, reset a
 password, reassigned a customer or recorded a payout (the admin is one shared

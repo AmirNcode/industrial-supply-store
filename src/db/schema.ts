@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   pgTable,
   serial,
+  bigserial,
   integer,
   text,
   boolean,
@@ -813,6 +814,28 @@ export const customerNotes = pgTable(
   ],
 );
 
+/**
+ * Who changed money or order state, append-only (review finding M-11). Written
+ * in the same transaction as the change; see `src/db/audit.ts`.
+ */
+export const auditLog = pgTable(
+  "audit_log",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
+    actorKind: text("actor_kind").notNull(),
+    actorId: text("actor_id"),
+    action: text("action").notNull(),
+    subjectKind: text("subject_kind").notNull(),
+    subjectId: text("subject_id").notNull(),
+    detail: jsonb("detail").notNull().default({}),
+  },
+  (t) => [
+    index("audit_log_subject_idx").on(t.subjectKind, t.subjectId, t.at),
+    check("audit_log_actor_kind_check", sql`${t.actorKind} IN ('admin', 'rep', 'customer', 'system')`),
+  ],
+);
+
 /** What the business actually paid a rep, in rial, as recorded by the admin. */
 export const repPayouts = pgTable(
   "rep_payouts",
@@ -824,6 +847,8 @@ export const repPayouts = pgTable(
     amountRial: bigint("amount_rial", { mode: "number" }).notNull(),
     note: text("note").notNull().default(""),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    /** Set when a payout recorded by mistake is voided; the row is kept (M-11). */
+    voidedAt: timestamp("voided_at", { withTimezone: true }),
   },
   (t) => [
     index("rep_payouts_rep_idx").on(t.repId, t.createdAt),

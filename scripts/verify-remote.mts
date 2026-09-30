@@ -35,6 +35,7 @@ const TABLES = [
   "spec_defs", "carts", "cart_items", "orders", "order_items", "users",
   "app_settings", "order_comments", "request_rate_limits", "part_number_registry",
   "sales_reps", "customer_notes", "rep_payouts", "rep_targets", "payment_proofs",
+  "audit_log",
 ] as const;
 
 /**
@@ -88,6 +89,7 @@ const COLUMNS: readonly (readonly [string, string])[] = [
   ["users", "customer_code"], ["users", "rep_id"], ["users", "rep_earns_commission"],
   ["users", "origin"], ["users", "origin_rep_id"], ["users", "must_change_password"],
   ["users", "chose_own_password"], ["users", "session_version"],
+  ["rep_payouts", "voided_at"],
   ["users", "address"], ["users", "city"], ["users", "next_follow_up_on"],
   ["orders", "rep_id"], ["orders", "commission_rate_bp"], ["orders", "placed_by_rep"],
   ["orders", "pay_token"],
@@ -252,6 +254,7 @@ const REQUIRED_MIGRATIONS = [
   "20260927120000",
   "20260928120000",
   "20260929120000",
+  "20260930120000",
 ] as const;
 let recordedMigrations = new Set<string>();
 if (hasMigrationLedger) {

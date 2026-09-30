@@ -31,7 +31,8 @@ export async function loadRepSummary(
       commissionRial: row.commissionRial,
     })),
     customerCount,
-    paidRial: payouts.reduce((sum, payout) => sum + payout.amountRial, 0),
+    // A voided payout stays on the list but was never paid.
+    paidRial: payouts.reduce((sum, payout) => sum + (payout.voidedAt ? 0 : payout.amountRial), 0),
     targets,
     current,
     tableYear: tableYear ?? current.year,

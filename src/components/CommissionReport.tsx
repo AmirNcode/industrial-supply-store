@@ -86,13 +86,23 @@ export function CommissionReport({
         ) : (
           <ul className="grid gap-1.5 text-[12px]" data-testid="payouts">
             {payouts.map((payout) => (
-              <li key={payout.id} className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <li
+                key={payout.id}
+                className={`flex flex-wrap items-center gap-x-3 gap-y-1 ${payout.voidedAt ? "text-[var(--color-ink-muted)]" : ""}`}
+              >
                 <span className="text-[var(--color-ink-muted)]">
                   {formatPersianDate(payout.createdAt, locale)}
                 </span>
-                <span className="tech font-bold">{rial(payout.amountRial)}</span>
+                <span className={`tech font-bold ${payout.voidedAt ? "line-through" : ""}`}>
+                  {rial(payout.amountRial)}
+                </span>
                 {payout.note && <span>{payout.note}</span>}
-                {deleteAction && (
+                {payout.voidedAt && (
+                  <span className="border border-[var(--color-rule)] px-1.5 text-[11px]">
+                    {t.payoutVoidedLabel}
+                  </span>
+                )}
+                {deleteAction && !payout.voidedAt && (
                   <form action={deleteAction.action} className="ms-auto">
                     {Object.entries(deleteAction.hidden).map(([name, value]) => (
                       <input key={name} type="hidden" name={name} value={value} />

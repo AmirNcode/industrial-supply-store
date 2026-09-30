@@ -1,5 +1,6 @@
 import "server-only";
 import { sql } from "./index";
+import { recordAudit } from "./audit";
 
 /**
  * One order's pay token, read only when staff ask for it.
@@ -25,11 +26,19 @@ export async function getPayLinkParts(
  * already sent stay on the order.
  */
 export async function replacePayToken(orderId: number): Promise<boolean> {
-  const rows = await sql`
-    UPDATE orders
-    SET pay_token = replace(gen_random_uuid()::text, '-', '') || replace(gen_random_uuid()::text, '-', '')
-    WHERE id = ${orderId}
-    RETURNING id
-  `;
-  return rows.length === 1;
+  return sql.begin(async (tx) => {
+    const rows = await tx`
+      UPDATE orders
+      SET pay_token = replace(gen_random_uuid()::text, '-', '') || replace(gen_random_uuid()::text, '-', '')
+      WHERE id = ${orderId}
+      RETURNING id
+    `;
+    if (rows.length !== 1) return false;
+    await recordAudit(tx, {
+      actor: { kind: "admin" },
+      action: "order.pay-link-replaced",
+      subject: { kind: "order", id: orderId },
+    });
+    return true;
+  });
 }

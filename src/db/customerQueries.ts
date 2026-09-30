@@ -1,5 +1,6 @@
 import "server-only";
 import { sql } from "./index";
+import { recordAudit } from "./audit";
 import { codeFromPhone, randomCustomerCode } from "@/lib/customerCode";
 import { latinDigits } from "@/lib/digits";
 
@@ -170,15 +171,23 @@ export async function resetCustomerPasswordForRep(
   customerId: string,
   passwordHash: string,
 ): Promise<CustomerRow | null> {
-  const [row] = await sql<CustomerRow[]>`
-    UPDATE users u
-    SET password_hash = ${passwordHash}, must_change_password = true,
-        session_version = u.session_version + 1
-    WHERE u.id = ${customerId} AND u.rep_id = ${repId}
-      AND u.origin = 'rep' AND u.origin_rep_id = ${repId} AND NOT u.chose_own_password
-    RETURNING ${COLS}
-  `;
-  return row ?? null;
+  return sql.begin(async (tx) => {
+    const [row] = await tx<CustomerRow[]>`
+      UPDATE users u
+      SET password_hash = ${passwordHash}, must_change_password = true,
+          session_version = u.session_version + 1
+      WHERE u.id = ${customerId} AND u.rep_id = ${repId}
+        AND u.origin = 'rep' AND u.origin_rep_id = ${repId} AND NOT u.chose_own_password
+      RETURNING ${COLS}
+    `;
+    if (!row) return null;
+    await recordAudit(tx, {
+      actor: { kind: "rep", id: repId },
+      action: "customer.password-reset",
+      subject: { kind: "customer", id: customerId },
+    });
+    return row;
+  });
 }
 
 export async function setFollowUpForRep(
@@ -269,25 +278,45 @@ export async function assignCustomer(
     const [rep] = await sql`SELECT 1 FROM sales_reps WHERE id = ${repId} AND active`;
     if (!rep) return "bad-rep";
   }
-  const result = await sql`
-    UPDATE users SET rep_id = ${repId}, rep_earns_commission = ${earnsCommission}
-    WHERE id = ${customerId}
-  `;
-  return result.count === 0 ? "not-found" : "ok";
+  return sql.begin(async (tx) => {
+    const [before] = await tx<{ repId: string | null; earns: boolean }[]>`
+      SELECT rep_id AS "repId", rep_earns_commission AS earns FROM users WHERE id = ${customerId} FOR UPDATE
+    `;
+    if (!before) return "not-found" as const;
+    await tx`
+      UPDATE users SET rep_id = ${repId}, rep_earns_commission = ${earnsCommission}
+      WHERE id = ${customerId}
+    `;
+    await recordAudit(tx, {
+      actor: { kind: "admin" },
+      action: "customer.assigned",
+      subject: { kind: "customer", id: customerId },
+      detail: { fromRep: before.repId, toRep: repId, fromEarns: before.earns, toEarns: earnsCommission },
+    });
+    return "ok" as const;
+  });
 }
 
 export async function resetCustomerPasswordAdmin(
   customerId: string,
   passwordHash: string,
 ): Promise<CustomerRow | null> {
-  const [row] = await sql<CustomerRow[]>`
-    UPDATE users u
-    SET password_hash = ${passwordHash}, must_change_password = true,
-        session_version = u.session_version + 1
-    WHERE u.id = ${customerId}
-    RETURNING ${COLS}
-  `;
-  return row ?? null;
+  return sql.begin(async (tx) => {
+    const [row] = await tx<CustomerRow[]>`
+      UPDATE users u
+      SET password_hash = ${passwordHash}, must_change_password = true,
+          session_version = u.session_version + 1
+      WHERE u.id = ${customerId}
+      RETURNING ${COLS}
+    `;
+    if (!row) return null;
+    await recordAudit(tx, {
+      actor: { kind: "admin" },
+      action: "customer.password-reset",
+      subject: { kind: "customer", id: customerId },
+    });
+    return row;
+  });
 }
 
 export async function setFollowUpAdmin(customerId: string, date: string | null): Promise<boolean> {

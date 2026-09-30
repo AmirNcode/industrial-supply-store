@@ -1,5 +1,6 @@
 import "server-only";
 import { sql } from "./index";
+import { recordAudit } from "./audit";
 import { randomReferralCode } from "@/lib/repAccount";
 
 export type RepRow = {
@@ -72,14 +73,23 @@ export async function setRepPassword(
   passwordHash: string,
   mustChange: boolean,
 ): Promise<number | null> {
-  const [row] = await sql<{ sessionVersion: number }[]>`
-    UPDATE sales_reps
-    SET password_hash = ${passwordHash}, must_change_password = ${mustChange},
-        session_version = session_version + 1
-    WHERE id = ${id}
-    RETURNING session_version AS "sessionVersion"
-  `;
-  return row?.sessionVersion ?? null;
+  return sql.begin(async (tx) => {
+    const [row] = await tx<{ sessionVersion: number }[]>`
+      UPDATE sales_reps
+      SET password_hash = ${passwordHash}, must_change_password = ${mustChange},
+          session_version = session_version + 1
+      WHERE id = ${id}
+      RETURNING session_version AS "sessionVersion"
+    `;
+    if (!row) return null;
+    // A forced change is the admin's reset; an unforced one is the rep's own.
+    await recordAudit(tx, {
+      actor: mustChange ? { kind: "admin" } : { kind: "rep", id },
+      action: mustChange ? "rep.password-reset" : "rep.password-changed",
+      subject: { kind: "rep", id },
+    });
+    return row.sessionVersion;
+  });
 }
 
 /**

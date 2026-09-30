@@ -6,7 +6,7 @@ import { getRepById, listActiveReps } from "@/db/repQueries";
 import {
   addPayoutAction,
   deactivateRepAction,
-  deletePayoutAction,
+  voidPayoutAction,
   reactivateRepAction,
   resetRepPasswordAction,
   setTargetAction,
@@ -44,7 +44,7 @@ const OK_KEY = {
   deactivated: "repDeactivated",
   reactivated: "repReactivated",
   payout: "payoutSaved",
-  "payout-deleted": "payoutDeleted",
+  "payout-voided": "payoutVoided",
   target: "targetSaved",
 } as const;
 
@@ -169,11 +169,11 @@ export default async function AdminRepPage({
           DEMO_MODE
             ? undefined
             : {
-                action: deletePayoutAction,
+                action: voidPayoutAction,
                 hidden: { locale: l, repId: rep.id },
                 labels: {
-                  delete: t.deletePayout,
-                  confirm: t.confirmDeletePayout,
+                  delete: t.voidPayout,
+                  confirm: t.confirmVoidPayout,
                   continue: t.confirmContinue,
                   discard: t.confirmDiscard,
                 },

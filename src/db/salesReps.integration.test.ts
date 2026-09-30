@@ -41,7 +41,7 @@ import { getOrderByPayToken } from "./accountQueries";
 import { getOrderForRep, getReorderLines, listOrdersForRep } from "./repOrderQueries";
 import {
   addPayout,
-  deletePayout,
+  voidPayout,
   listDeliveredForRep,
   listInProgressForRep,
   listPayouts,
@@ -655,8 +655,16 @@ test("one exact definition of sales and commission, and owed after payouts", asy
       paidRial: 1_000_000,
     });
     const [payout] = await listPayouts(rep, tx);
-    assert.equal(await deletePayout(rep, payout.id, tx), true);
+    assert.equal(await voidPayout(rep, payout.id, tx), true);
+    assert.equal(await voidPayout(rep, payout.id, tx), false, "voided once only");
     assert.equal((await listRepTotals(tx)).get(rep)?.paidRial, 0);
+    // The record stays, marked, and both steps are in the audit trail.
+    const [kept] = await listPayouts(rep, tx);
+    assert.equal(kept.id, payout.id);
+    assert.ok(kept.voidedAt instanceof Date);
+    const trail = await tx<{ action: string }[]>`
+      SELECT action FROM audit_log WHERE subject_kind = 'payout' AND subject_id = ${String(payout.id)} ORDER BY id`;
+    assert.deepEqual(trail.map((row) => row.action), ["payout.recorded", "payout.voided"]);
 
     await setTarget(rep, { year: 1405, month: 7 }, 500_000_000, tx);
     await setTarget(rep, { year: 1405, month: 7 }, 600_000_000, tx);
@@ -957,5 +965,39 @@ test("totals past what the database stores are refused, not a 500", async () => 
     assert.equal(row.status, "received");
   } finally {
     await sql`DELETE FROM orders WHERE id = ${order.id}`;
+  }
+});
+
+test("money and state changes leave an audit record in the same transaction", async () => {
+  // Review M-11.
+  assertLocalDatabase();
+  const suffix = randomUUID().slice(0, 8);
+  const [rep] = await sql<{ id: string }[]>`
+    INSERT INTO sales_reps (username, password_hash, name, referral_code)
+    VALUES (${`audit-${suffix}`}, 'x', 'Audit Rep', ${randomReferralCode()}) RETURNING id`;
+  const [order] = await sql<{ id: number }[]>`
+    INSERT INTO orders (ref, company, contact_name, email, total_cents, requested_total_cents)
+    VALUES (${`ORD-${randomUUID().slice(0, 6).toUpperCase()}`}, 'Audit Co', 'T', 'a@example.invalid', 100, 100)
+    RETURNING id`;
+  try {
+    await sql`
+      INSERT INTO order_items (order_id, product_id, part_number, family_name, qty,
+                               unit_price_cents, requested_unit_price_cents)
+      VALUES (${order.id}, NULL, 'AUD-1', 'Integration Family', 1, 100, 100)`;
+    assert.equal(await issueInvoice(order.id, { rate: 1_000_000, vatRateBp: 0, actor: { kind: "rep", id: rep.id } }), "issued");
+    assert.equal(await confirmPayment(order.id, "invoiced"), true);
+    // A refused change leaves no record.
+    assert.equal(await confirmPayment(order.id, "invoiced"), false);
+    const trail = await sql<{ action: string; actorKind: string; actorId: string | null }[]>`
+      SELECT action, actor_kind AS "actorKind", actor_id AS "actorId" FROM audit_log
+      WHERE subject_kind = 'order' AND subject_id = ${String(order.id)} ORDER BY id`;
+    assert.deepEqual([...trail], [
+      { action: "invoice.issued", actorKind: "rep", actorId: rep.id },
+      { action: "payment.confirmed", actorKind: "admin", actorId: null },
+    ]);
+  } finally {
+    await sql`DELETE FROM audit_log WHERE subject_kind = 'order' AND subject_id = ${String(order.id)}`;
+    await sql`DELETE FROM orders WHERE id = ${order.id}`;
+    await sql`DELETE FROM sales_reps WHERE id = ${rep.id}`;
   }
 });

@@ -311,7 +311,7 @@ export async function issueInvoiceForRepAction(formData: FormData): Promise<void
     redirect(`${page}/invoice?changed=1`);
   }
 
-  const issued = await issueInvoice(found.order.id, { rate, vatRateBp });
+  const issued = await issueInvoice(found.order.id, { rate, vatRateBp, actor: { kind: "rep", id: rep.id } });
   if (issued !== "issued") redirect(`${page}?error=${issued}`);
   redirect(`${page}?ok=invoiced`);
 }

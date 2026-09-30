@@ -28,6 +28,7 @@ import { confirmPayment } from "@/db/paymentProofQueries";
 import { RATE_LIMITS, consumeGlobalRateLimit, consumeRateLimit } from "@/lib/rateLimit";
 import { REQUEST_LIMITS, boundedString } from "@/lib/requestLimits";
 import { issueInvoice } from "@/db/invoiceQueries";
+import { recordAudit } from "@/db/audit";
 import { getPayLinkParts, replacePayToken } from "@/db/payLinkQueries";
 import { siteOrigin } from "@/lib/siteOrigin";
 import { isPriceDisplayMode } from "@/lib/money";
@@ -207,13 +208,23 @@ export async function setOrderStatusAction(formData: FormData): Promise<void> {
     if (!courier || !tracking) {
       redirect(withFilter(`/${locale}/admin/orders?error=tracking`, statusFilter));
     }
-    const result = await sql`
-      UPDATE orders
-      SET status = 'shipped', courier = ${courier},
-          tracking_number = ${tracking}, shipped_at = now()
-      WHERE id = ${id} AND status = ${row.status}
-    `;
-    if (result.count === 0) {
+    const moved = await sql.begin(async (tx) => {
+      const result = await tx`
+        UPDATE orders
+        SET status = 'shipped', courier = ${courier},
+            tracking_number = ${tracking}, shipped_at = now()
+        WHERE id = ${id} AND status = ${row.status}
+      `;
+      if (result.count === 0) return false;
+      await recordAudit(tx, {
+        actor: { kind: "admin" },
+        action: "order.shipped",
+        subject: { kind: "order", id },
+        detail: { from: row.status, courier, tracking },
+      });
+      return true;
+    });
+    if (!moved) {
       redirect(withFilter(`/${locale}/admin/orders?error=conflict`, statusFilter));
     }
   } else if (to === "preparing") {
@@ -227,11 +238,21 @@ export async function setOrderStatusAction(formData: FormData): Promise<void> {
       redirect(withFilter(`/${locale}/admin/orders?error=conflict`, statusFilter));
     }
   } else if (to === "delivered") {
-    const result = await sql`
-      UPDATE orders SET status = 'delivered', delivered_at = now()
-      WHERE id = ${id} AND status = ${row.status}
-    `;
-    if (result.count === 0) {
+    const moved = await sql.begin(async (tx) => {
+      const result = await tx`
+        UPDATE orders SET status = 'delivered', delivered_at = now()
+        WHERE id = ${id} AND status = ${row.status}
+      `;
+      if (result.count === 0) return false;
+      await recordAudit(tx, {
+        actor: { kind: "admin" },
+        action: "order.delivered",
+        subject: { kind: "order", id },
+        detail: { from: row.status },
+      });
+      return true;
+    });
+    if (!moved) {
       redirect(withFilter(`/${locale}/admin/orders?error=conflict`, statusFilter));
     }
   } else if (to === "cancelled") {
@@ -247,6 +268,12 @@ export async function setOrderStatusAction(formData: FormData): Promise<void> {
       `;
       if (result.count === 0) return false;
       if (stillHeld) await releaseHeldStock(tx, id);
+      await recordAudit(tx, {
+        actor: { kind: "admin" },
+        action: "order.cancelled",
+        subject: { kind: "order", id },
+        detail: { from: row.status },
+      });
       return true;
     });
     if (!moved) {

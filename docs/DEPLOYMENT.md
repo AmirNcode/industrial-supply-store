@@ -157,6 +157,14 @@ status (replacing three order check constraints), one order column
 (`payment_submitted_at`) and the `payment_proofs` table. Receipt files need Storage configured on the deployment (the same
 `SUPABASE_URL` and secret as catalog images); the bucket creates itself.
 
+For the audit-trail release, apply `20260930120000_add_audit_log.sql` **before
+pushing the new application to main**, after the three above. It adds the
+append-only `audit_log` table and `rep_payouts.voided_at`; every order status
+move, invoice, payment confirmation, password reset, customer reassignment,
+pay-link replacement and payout writes a row in the same transaction, so the
+new code fails those actions without it. The previous release never reads
+either. `db:verify:remote` checks the table, the column and the version.
+
 The storefront's bare root redirects to `/fa`; `/en/...` remains available
 through the language switch. This is a fixed application default, with no admin
 language setting.

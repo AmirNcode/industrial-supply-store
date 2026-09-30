@@ -578,6 +578,8 @@ Full detail, plus five other traps, in [`DEPLOYMENT.md`](DEPLOYMENT.md).
 Recorded in `docs/superpowers/specs/2026-07-31-accounts-orders-admin-design.md`.
 The load-bearing ones: no email anywhere (staff send invoices by hand), sessions
 cannot be revoked individually, and `/admin` has no named staff accounts —
-which is why `order_comments` has no author column. Rate limits mitigate abuse;
+which is why `order_comments` has no author column, and why `audit_log` (who
+changed money or order state, `src/db/audit.ts`) records "admin" rather than a
+person. The trail has no screen yet; it is read with SQL. Rate limits mitigate abuse;
 they do not replace named staff authentication, MFA, revocation, or an audit
 trail.

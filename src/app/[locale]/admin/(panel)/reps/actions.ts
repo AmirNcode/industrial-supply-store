@@ -12,7 +12,7 @@ import { isUuid } from "@/lib/ids";
 import { setShownOnce } from "@/lib/shownOnce";
 import { parseRialAmount } from "@/lib/money";
 import { persianYearMonth } from "@/lib/persianCalendar";
-import { addPayout, deletePayout, setTarget } from "@/db/repMoney";
+import { addPayout, setTarget, voidPayout } from "@/db/repMoney";
 import {
   createRep,
   deactivateRep,
@@ -131,14 +131,14 @@ export async function addPayoutAction(formData: FormData): Promise<void> {
   redirect(`/${locale}/admin/reps/${id}?ok=payout#payouts`);
 }
 
-export async function deletePayoutAction(formData: FormData): Promise<void> {
+export async function voidPayoutAction(formData: FormData): Promise<void> {
   await assertAdminWrite();
   const locale = safeLocale(formData);
   const id = String(formData.get("repId") ?? "");
   const payoutId = Number(formData.get("payoutId"));
   if (!isUuid(id) || !Number.isSafeInteger(payoutId)) redirect(`/${locale}/admin/reps`);
-  await deletePayout(id, payoutId);
-  redirect(`/${locale}/admin/reps/${id}?ok=payout-deleted#payouts`);
+  await voidPayout(id, payoutId);
+  redirect(`/${locale}/admin/reps/${id}?ok=payout-voided#payouts`);
 }
 
 /** A target from the current Persian month on, until changed. */

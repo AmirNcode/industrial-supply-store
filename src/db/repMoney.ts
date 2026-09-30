@@ -1,6 +1,7 @@
 import "server-only";
 import type { Sql, TransactionSql } from "postgres";
 import { sql } from "./index";
+import { recordAudit } from "./audit";
 import type { OrderStatus } from "@/lib/orders";
 import type { PersianYearMonth } from "@/lib/persianCalendar";
 import type { TargetRow } from "@/lib/repStats";
@@ -112,7 +113,8 @@ export async function listRepTotals(db: Db = sql): Promise<Map<string, RepTotals
     SELECT r.id AS "repId",
            COALESCE((SELECT SUM(${commissionRial()}) FROM orders o
                      WHERE o.rep_id = r.id AND o.status = 'delivered'), 0)::float8 AS "earnedRial",
-           COALESCE((SELECT SUM(p.amount_rial) FROM rep_payouts p WHERE p.rep_id = r.id), 0)::float8 AS "paidRial"
+           COALESCE((SELECT SUM(p.amount_rial) FROM rep_payouts p
+                     WHERE p.rep_id = r.id AND p.voided_at IS NULL), 0)::float8 AS "paidRial"
     FROM sales_reps r
   `;
   return new Map(rows.map((row) => [row.repId, row]));
@@ -132,25 +134,63 @@ export async function listRecentDeliveries(
   return Array.from(rows, (row) => ({ ...row, deliveredAt: toDate(row.deliveredAt) }));
 }
 
-export type Payout = { id: number; amountRial: number; note: string; createdAt: Date };
+/** `voidedAt` is set on a payout recorded by mistake; it no longer counts as paid. */
+export type Payout = { id: number; amountRial: number; note: string; createdAt: Date; voidedAt: Date | null };
 
 export async function listPayouts(repId: string, db: Db = sql): Promise<Payout[]> {
   const rows = await db<Payout[]>`
-    SELECT id, amount_rial::float8 AS "amountRial", note, created_at AS "createdAt"
+    SELECT id, amount_rial::float8 AS "amountRial", note, created_at AS "createdAt",
+           voided_at AS "voidedAt"
     FROM rep_payouts WHERE rep_id = ${repId}
     ORDER BY created_at DESC, id DESC
   `;
-  return Array.from(rows, (row) => ({ ...row, createdAt: toDate(row.createdAt) }));
+  return Array.from(rows, (row) => ({
+    ...row,
+    createdAt: toDate(row.createdAt),
+    voidedAt: row.voidedAt === null ? null : toDate(row.voidedAt),
+  }));
+}
+
+/** Runs `body` in `db` when it is already a transaction, else in a new one. */
+async function inTransaction<T>(db: Db, body: (tx: Db) => Promise<T>): Promise<T> {
+  return db === sql ? (sql.begin((tx) => body(tx)) as Promise<T>) : body(db);
 }
 
 export async function addPayout(repId: string, amountRial: number, note: string, db: Db = sql): Promise<void> {
-  await db`INSERT INTO rep_payouts (rep_id, amount_rial, note) VALUES (${repId}, ${amountRial}, ${note})`;
+  await inTransaction(db, async (tx) => {
+    const [row] = await tx<{ id: number }[]>`
+      INSERT INTO rep_payouts (rep_id, amount_rial, note) VALUES (${repId}, ${amountRial}, ${note})
+      RETURNING id
+    `;
+    await recordAudit(tx, {
+      actor: { kind: "admin" },
+      action: "payout.recorded",
+      subject: { kind: "payout", id: row.id },
+      detail: { repId, amountRial, note },
+    });
+  });
 }
 
-/** For a payout recorded by mistake. Scoped to the rep, so a posted id cannot reach another's. */
-export async function deletePayout(repId: string, payoutId: number, db: Db = sql): Promise<boolean> {
-  const result = await db`DELETE FROM rep_payouts WHERE id = ${payoutId} AND rep_id = ${repId}`;
-  return result.count === 1;
+/**
+ * For a payout recorded by mistake: voided, not deleted — a financial record
+ * stays, marked, and stops counting as paid (review M-11). Scoped to the rep,
+ * so a posted id cannot reach another's.
+ */
+export async function voidPayout(repId: string, payoutId: number, db: Db = sql): Promise<boolean> {
+  return inTransaction(db, async (tx) => {
+    const result = await tx`
+      UPDATE rep_payouts SET voided_at = now()
+      WHERE id = ${payoutId} AND rep_id = ${repId} AND voided_at IS NULL
+    `;
+    if (result.count !== 1) return false;
+    await recordAudit(tx, {
+      actor: { kind: "admin" },
+      action: "payout.voided",
+      subject: { kind: "payout", id: payoutId },
+      detail: { repId },
+    });
+    return true;
+  });
 }
 
 export async function listTargets(repId: string, db: Db = sql): Promise<TargetRow[]> {

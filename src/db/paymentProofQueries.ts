@@ -1,5 +1,6 @@
 import "server-only";
 import { sql } from "./index";
+import { recordAudit } from "./audit";
 import { sellHeldStock } from "./inventoryQueries";
 import { acceptsPaymentProof, isOrderStatus } from "@/lib/orders";
 import { PROOF_MAX_PER_ORDER, type ProofType } from "@/lib/paymentProof";
@@ -51,6 +52,12 @@ export async function addPaymentProof(
         WHERE id = ${orderId} AND status = 'invoiced'
       `;
     }
+    await recordAudit(tx, {
+      actor: by.kind === "rep" ? { kind: "rep", id: by.repId } : { kind: "customer", id: null },
+      action: "payment.receipt",
+      subject: { kind: "order", id: orderId },
+      detail: { from: order.status, bytes: file.size },
+    });
     return "added";
   });
 }
@@ -115,6 +122,12 @@ export async function confirmPayment(
       WHERE id = ${orderId} AND status = ${from}
     `;
     if (result.count === 0) return false;
+    await recordAudit(tx, {
+      actor: { kind: "admin" },
+      action: "payment.confirmed",
+      subject: { kind: "order", id: orderId },
+      detail: { from },
+    });
     await sellHeldStock(tx, orderId);
     return true;
   });

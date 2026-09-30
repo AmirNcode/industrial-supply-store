@@ -2,6 +2,7 @@ import "server-only";
 import type { TransactionSql } from "postgres";
 import { sql } from "./index";
 import { exceedsOrderLimit } from "@/lib/invoice";
+import { recordAudit, type AuditActor } from "./audit";
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 type Tx = TransactionSql<{}>;
@@ -69,7 +70,13 @@ export type IssueOutcome = "issued" | "conflict" | "unpriced" | "too-large";
  */
 export async function issueInvoice(
   orderId: number,
-  locked: { rate: number; vatRateBp: number; prices?: readonly OrderItemPrice[] },
+  locked: {
+    rate: number;
+    vatRateBp: number;
+    prices?: readonly OrderItemPrice[];
+    /** Who issued it, for the audit trail; the admin unless a rep's id is given. */
+    actor?: AuditActor;
+  },
 ): Promise<IssueOutcome> {
   try {
     await sql.begin(async (tx) => {
@@ -106,8 +113,21 @@ export async function issueInvoice(
               FROM order_items i WHERE i.order_id = o.id
             )
         WHERE o.id = ${orderId} AND o.status = 'received'
+        RETURNING o.invoice_number AS "invoiceNumber", o.total_cents AS "totalCents"
       `;
       if (result.count === 0) throw new InvoiceConflict();
+      await recordAudit(tx, {
+        actor: locked.actor ?? { kind: "admin" },
+        action: "invoice.issued",
+        subject: { kind: "order", id: orderId },
+        detail: {
+          invoiceNumber: result[0].invoiceNumber,
+          totalCents: result[0].totalCents,
+          rate: locked.rate,
+          vatRateBp: locked.vatRateBp,
+          pricesChanged: locked.prices?.length ?? 0,
+        },
+      });
     });
     return "issued";
   } catch (err) {
