@@ -28,14 +28,17 @@ test("catalog image files are JPG, PNG, or WebP and no larger than 4 MB", () => 
 });
 
 test("only our own Storage goes through the image optimiser", () => {
-  const upload = "https://myyjeiujwtkwlemidvow.supabase.co/storage/v1/object/public/catalog-images/a.webp";
-  assert.equal(optimizableImageUrl(upload, ""), true);
-  assert.equal(optimizableImageUrl("https://files.example.ir/storage/v1/object/public/catalog-images/a.webp", "files.example.ir"), true);
-  // A pasted supplier image, a lookalike path elsewhere, plain http, junk.
-  assert.equal(optimizableImageUrl("https://supplier.example/photos/a.jpg", ""), false);
-  assert.equal(optimizableImageUrl("https://evil.example/storage/v1/object/public/x.jpg", ""), false);
-  assert.equal(optimizableImageUrl("https://evil.supabase.co.example/storage/v1/object/public/x.jpg", ""), false);
-  assert.equal(optimizableImageUrl("http://myyjeiujwtkwlemidvow.supabase.co/storage/v1/object/public/a.jpg", ""), false);
-  assert.equal(optimizableImageUrl("https://myyjeiujwtkwlemidvow.supabase.co/rest/v1/users", ""), false);
-  assert.equal(optimizableImageUrl("not a url", ""), false);
+  const host = "myyjeiujwtkwlemidvow.supabase.co";
+  const upload = `https://${host}/storage/v1/object/public/catalog-images/a.webp`;
+  assert.equal(optimizableImageUrl(upload, host), true);
+  // Without a configured host nothing is optimised.
+  assert.equal(optimizableImageUrl(upload, ""), false);
+  // Someone else's Supabase project, a lookalike, another port, http, other paths, junk.
+  assert.equal(optimizableImageUrl("https://attacker.supabase.co/storage/v1/object/public/x.jpg", host), false);
+  assert.equal(optimizableImageUrl(`https://${host}.evil.example/storage/v1/object/public/x.jpg`, host), false);
+  assert.equal(optimizableImageUrl(`https://${host}:8443/storage/v1/object/public/x.jpg`, host), false);
+  assert.equal(optimizableImageUrl(`http://${host}/storage/v1/object/public/a.jpg`, host), false);
+  assert.equal(optimizableImageUrl(`https://${host}/rest/v1/users`, host), false);
+  assert.equal(optimizableImageUrl("https://supplier.example/photos/a.jpg", host), false);
+  assert.equal(optimizableImageUrl("not a url", host), false);
 });

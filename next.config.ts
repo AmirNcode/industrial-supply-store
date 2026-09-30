@@ -1,16 +1,16 @@
 import type { NextConfig } from "next";
 
 /**
- * The self-hosted Storage host, when the build is given one. Hosted Supabase
- * (`*.supabase.co`) is always allowed. Exposed to the bundle as
- * CATALOG_IMAGE_HOST so `CatalogImage` asks the optimiser only for what it
- * will accept (`optimizableImageUrl`).
+ * Our Storage host — exactly the project the build is given, never a
+ * wildcard: anyone can create a `*.supabase.co` project. Exposed to the bundle
+ * as CATALOG_IMAGE_HOST so `CatalogImage` asks the optimiser only for what it
+ * will accept (`optimizableImageUrl`). Without it, every image is served
+ * unoptimised rather than through an open proxy.
  */
 function storageHost(): string {
   const raw = process.env.SUPABASE_PUBLIC_URL || process.env.SUPABASE_URL;
   try {
-    const host = raw ? new URL(raw).hostname : "";
-    return host.endsWith(".supabase.co") ? "" : host;
+    return raw ? new URL(raw).hostname : "";
   } catch {
     return "";
   }
@@ -74,12 +74,9 @@ const nextConfig: NextConfig = {
    * `CatalogImage`, which is the cost of closing the proxy.
    */
   images: {
-    remotePatterns: [
-      { protocol: "https", hostname: "*.supabase.co", pathname: "/storage/v1/object/public/**" },
-      ...(catalogImageHost
-        ? [{ protocol: "https" as const, hostname: catalogImageHost, pathname: "/storage/v1/object/public/**" }]
-        : []),
-    ],
+    remotePatterns: catalogImageHost
+      ? [{ protocol: "https", hostname: catalogImageHost, port: "", pathname: "/storage/v1/object/public/**" }]
+      : [],
   },
   env: { CATALOG_IMAGE_HOST: catalogImageHost },
   // Spec tables are huge; keep the server payload lean.

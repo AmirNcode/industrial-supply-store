@@ -823,9 +823,12 @@ query. Scope LIVE, status CODE + live data.
 
 ### M-5 — `/_next/image` is an open image proxy for any HTTPS host
 
-> **Fix status (2026-09-29): FIXED in `{{M-5}}`.** `remotePatterns` allows only
-> `*.supabase.co/storage/v1/object/public/**` plus the self-hosted Storage host
-> named by `SUPABASE_PUBLIC_URL`/`SUPABASE_URL` at build time. `CatalogImage`
+> **Fix status (2026-09-29): FIXED in `{{M-5}}` and tightened in
+> `{{M-5b}}`.** `remotePatterns` allows only `/storage/v1/object/public/**` on
+> the one Storage host named by `SUPABASE_PUBLIC_URL`/`SUPABASE_URL` at build
+> time. (The first version also allowed any `*.supabase.co`, which a
+> background security review flagged: anyone can create a Supabase project.)
+> If the build has neither variable, nothing is optimised. `CatalogImage`
 > uses the same rule (`optimizableImageUrl`, tested in `catalogImages.test.ts`)
 > and serves any other URL as a plain `<img>`. The false comment is fixed
 > (part of L-9). Trade-off: supplier URLs pasted by an admin are no longer
