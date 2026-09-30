@@ -1206,7 +1206,7 @@ Scope BRANCH (process), status CODE.
 | ID | Finding | Where | Fix |
 | --- | --- | --- | --- |
 | L-1 | **FIXED 2026-09-30 in `{{L-1}}`** (`secure` in production, like the session cookies). Cart cookie has no `Secure` flag (the id is a bearer for the cart and its checkout) | `src/lib/cart.ts:57-62` | add `secure` in production |
-| L-2 | `.dockerignore` misses `venv.txt` (a `vercel env pull` with real keys, per `.gitignore`), `other_ignore/`, `products/`, `test-results/`, `playwright-report/`, `*.tsbuildinfo` — all copied into the builder stage and build cache | `.dockerignore` | mirror `.gitignore` |
+| L-2 | **FIXED 2026-09-30 in `{{L-2}}`** (mirrors `.gitignore`). `.dockerignore` misses `venv.txt` (a `vercel env pull` with real keys, per `.gitignore`), `other_ignore/`, `products/`, `test-results/`, `playwright-report/`, `*.tsbuildinfo` — all copied into the builder stage and build cache | `.dockerignore` | mirror `.gitignore` |
 | L-3 | Temporary Enamad ownership marker still live: `— 25626502` in every page title and `public/25626502.txt` | `src/app/[locale]/layout.tsx:12-27` | remove once the seal is issued (ask Amir if it has been) |
 | L-4 | `spec_defs.display` was to be dropped "next release" after 2026-08-20; still present | `src/db/schema.ts:247` | forward migration + schema + verifier |
 | L-5 | Invoice number year is the UTC Gregorian year (`to_char(now(),'YYYY')`); an invoice issued 00:00–03:30 Tehran on 1 January carries last year, and Iranian books run on the Persian fiscal year | invoice numbering (H-3) | decide the numbering rule with Amir |

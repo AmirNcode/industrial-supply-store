@@ -1,8 +1,22 @@
+# Mirrors .gitignore: nothing git would keep out may reach the image's build
+# context — `venv.txt` is a `vercel env pull` with real keys (review L-2).
 node_modules
 .next
 .git
+out
+playwright-report
+test-results
 .env*
 !.env.example
 *.log
+*.tsbuildinfo
+.DS_Store
+.vercel
+docker-compose.override.yml
+venv.txt
+other_ignore/
+products/
+docs/design_handoff_admin_products_taxonomy/
+docs/admin-products-page-redesign-handoff/
 PLAN.md
 README.md
