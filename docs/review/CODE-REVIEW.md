@@ -74,40 +74,40 @@ deployment · `ALL` = everywhere.
 | ID | Sev | Title | Scope | Status |
 | --- | --- | --- | --- | --- |
 | C-1 | Critical | Every admin page is sent to anonymous visitors inside the login redirect | LIVE | **FIXED in `f205741` (local `main`, not pushed); the live site leaks until it is pushed** |
-| C-2 | Critical | A sales rep alone can mark an order paid (own "receipt" + own confirmation), including a zero-price invoice | BRANCH | **FIXED 2026-09-29 in `{{C-2}}`** |
-| C-3 | Critical | Pay tokens (a bearer credential) are rendered on admin pages; with C-1 anyone can change order state and read bank receipts | BRANCH | **FIXED 2026-09-29 in `{{C-3}}`** |
-| H-1 | High | Admin price changes do not reach customers for 94% of live products (stale seeded quantity-break prices win) | LIVE | **FIXED 2026-09-29 in `{{H-1}}`** |
-| H-2 | High | Production is running out of database connections right now (342 × EMAXCONN, 140 × 60 s timeouts in 7 days) | LIVE | **Main driver FIXED 2026-09-29 in `{{H-2}}`; confirm on live after the push** |
-| H-3 | High | Invoice numbers collide after invoice #9,999; the repair script then winds the sequence backwards | ALL | **FIXED 2026-09-29 in `{{H-3}}`** |
-| H-4 | High | A rep can take over any assigned customer's account via "reset password" | BRANCH | **FIXED 2026-09-29 in `{{H-4}}`** |
-| H-5 | High | Self-hosted: every rate limit (incl. admin login) is bypassed by a spoofed forwarding header | SELF-HOST | **FIXED 2026-09-29 in `{{H-5}}`** |
-| H-6 | High | Self-hosted compose publishes Postgres to the network with password `isupply`; cron secret never reaches the app | SELF-HOST | **FIXED 2026-09-29 in `{{H-6}}`** |
-| H-7 | High | A fresh database prices the catalog at 1,100,000 rial/USD (~47% of market) with no warning | SELF-HOST / ALL | **FIXED 2026-09-29 in `{{H-7}}`** |
-| H-8 | High | `DEMO_MODE` publishes pay tokens, receipts and the product table to the public | BRANCH | **FIXED 2026-09-29 in `{{H-8}}`** |
-| H-9 | High | Admin "session" is a permanent, unrevocable password-derived bearer token without the `Secure` flag | LIVE | **FIXED 2026-09-29 in `{{H-9}}`** |
-| H-10 | High | Applying the sales-rep migration first (as the deploy doc says) breaks live sign-up until the new code is live — and again after a rollback | BRANCH → LIVE | **FIXED 2026-09-29 in `{{H-10}}`** |
-| H-11 | High | Admin "Reset password" on an order resets whichever account owns the email typed on that order | LIVE | **FIXED 2026-09-29 in `{{H-11}}`** |
-| M-1 | Medium | Customer sign-in is rate-limited per IP only | LIVE | **FIXED 2026-09-29 in `{{M-1}}`** |
-| M-2 | Medium | Customer sessions cannot be revoked; password change/reset leaves other sessions alive 30 days | LIVE | **FIXED 2026-09-29 in `{{M-2}}`** |
-| M-3 | Medium | `/api/cart` adds any product id, including hidden and non-existent ones | LIVE | **FIXED 2026-09-29 in `{{M-3}}`** |
-| M-4 | Medium | Heavy public pages have no rate limit (`/search`, family `?view=all`) | LIVE | **FIXED 2026-09-29 in `{{M-4}}`** |
-| M-5 | Medium | `/_next/image` is an open image proxy for any HTTPS host | LIVE | **FIXED 2026-09-29 in `{{M-5}}`** |
-| M-6 | Medium | No security headers (framing, CSP, nosniff, referrer); `x-powered-by` exposed | LIVE | **FIXED 2026-09-29 in `{{M-6}}`** (CSP beyond framing not done) |
-| M-7 | Medium | Per-click admin actions purge the whole site cache (the 2026-08-15 incident pattern) | LIVE | **FIXED 2026-09-29 in `{{M-7}}`** |
-| M-8 | Medium | Stock updates lock product rows in arbitrary order → deadlocks under concurrency | ALL | **FIXED 2026-09-29 in `{{M-8}}`** |
-| M-9 | Medium | 32-bit overflow on order and invoice totals → 500 errors (anonymous can trigger) | ALL | **FIXED 2026-09-29 in `{{M-9}}`** |
-| M-10 | Medium | Paid orders can be cancelled with no refund record; stock stays "sold" | ALL | **FIXED 2026-09-29 in `{{M-10}}`** |
-| M-11 | Medium | No audit trail for money/state changes; rep payouts can be deleted outright | BRANCH | **FIXED 2026-09-29 in `{{M-11}}`** |
-| M-12 | Medium | Local tooling defaults to the live database (e2e, build, start, drizzle) | LIVE (process) | **FIXED 2026-09-29 in `{{M-12}}`** |
+| C-2 | Critical | A sales rep alone can mark an order paid (own "receipt" + own confirmation), including a zero-price invoice | BRANCH | **FIXED 2026-09-29 in `1ba6cf5`** |
+| C-3 | Critical | Pay tokens (a bearer credential) are rendered on admin pages; with C-1 anyone can change order state and read bank receipts | BRANCH | **FIXED 2026-09-29 in `588b56b`** |
+| H-1 | High | Admin price changes do not reach customers for 94% of live products (stale seeded quantity-break prices win) | LIVE | **FIXED 2026-09-29 in `de10422`** |
+| H-2 | High | Production is running out of database connections right now (342 × EMAXCONN, 140 × 60 s timeouts in 7 days) | LIVE | **Main driver FIXED 2026-09-29 in `73c70bd`; confirm on live after the push** |
+| H-3 | High | Invoice numbers collide after invoice #9,999; the repair script then winds the sequence backwards | ALL | **FIXED 2026-09-29 in `334c981`** |
+| H-4 | High | A rep can take over any assigned customer's account via "reset password" | BRANCH | **FIXED 2026-09-29 in `ad70ae3`** |
+| H-5 | High | Self-hosted: every rate limit (incl. admin login) is bypassed by a spoofed forwarding header | SELF-HOST | **FIXED 2026-09-29 in `b526f48`** |
+| H-6 | High | Self-hosted compose publishes Postgres to the network with password `isupply`; cron secret never reaches the app | SELF-HOST | **FIXED 2026-09-29 in `58a0aaf`** |
+| H-7 | High | A fresh database prices the catalog at 1,100,000 rial/USD (~47% of market) with no warning | SELF-HOST / ALL | **FIXED 2026-09-29 in `a6b1c2d`** |
+| H-8 | High | `DEMO_MODE` publishes pay tokens, receipts and the product table to the public | BRANCH | **FIXED 2026-09-29 in `965ce9e`** |
+| H-9 | High | Admin "session" is a permanent, unrevocable password-derived bearer token without the `Secure` flag | LIVE | **FIXED 2026-09-29 in `74917ab`** |
+| H-10 | High | Applying the sales-rep migration first (as the deploy doc says) breaks live sign-up until the new code is live — and again after a rollback | BRANCH → LIVE | **FIXED 2026-09-29 in `830d351`** |
+| H-11 | High | Admin "Reset password" on an order resets whichever account owns the email typed on that order | LIVE | **FIXED 2026-09-29 in `63e738c`** |
+| M-1 | Medium | Customer sign-in is rate-limited per IP only | LIVE | **FIXED 2026-09-29 in `d961dc6`** |
+| M-2 | Medium | Customer sessions cannot be revoked; password change/reset leaves other sessions alive 30 days | LIVE | **FIXED 2026-09-29 in `f38e435`** |
+| M-3 | Medium | `/api/cart` adds any product id, including hidden and non-existent ones | LIVE | **FIXED 2026-09-29 in `5c767ce`** |
+| M-4 | Medium | Heavy public pages have no rate limit (`/search`, family `?view=all`) | LIVE | **FIXED 2026-09-29 in `0c04cec`** |
+| M-5 | Medium | `/_next/image` is an open image proxy for any HTTPS host | LIVE | **FIXED 2026-09-29 in `bb65ed9`** |
+| M-6 | Medium | No security headers (framing, CSP, nosniff, referrer); `x-powered-by` exposed | LIVE | **FIXED 2026-09-29 in `016cf44`** (CSP beyond framing not done) |
+| M-7 | Medium | Per-click admin actions purge the whole site cache (the 2026-08-15 incident pattern) | LIVE | **FIXED 2026-09-29 in `d0b322a`** |
+| M-8 | Medium | Stock updates lock product rows in arbitrary order → deadlocks under concurrency | ALL | **FIXED 2026-09-29 in `41e42b5`** |
+| M-9 | Medium | 32-bit overflow on order and invoice totals → 500 errors (anonymous can trigger) | ALL | **FIXED 2026-09-29 in `8056c30`** |
+| M-10 | Medium | Paid orders can be cancelled with no refund record; stock stays "sold" | ALL | **FIXED 2026-09-29 in `ecbb637`** |
+| M-11 | Medium | No audit trail for money/state changes; rep payouts can be deleted outright | BRANCH | **FIXED 2026-09-29 in `bae3df3`** |
+| M-12 | Medium | Local tooling defaults to the live database (e2e, build, start, drizzle) | LIVE (process) | **FIXED 2026-09-29 in `cab39c8`** |
 | M-13 | Medium | Customer emails are never verified → an address can be squatted permanently | LIVE | CODE |
-| M-14 | Medium | Anyone can lock a rep out by failing sign-ins against their username | BRANCH | **FIXED 2026-09-29 in `{{M-14}}`** |
-| M-15 | Medium | Lists silently truncate (admin queue 200, rep orders 300, rep customers 500) | ALL | **FIXED 2026-09-29 in `{{M-15}}`** |
+| M-14 | Medium | Anyone can lock a rep out by failing sign-ins against their username | BRANCH | **FIXED 2026-09-29 in `9064654`** |
+| M-15 | Medium | Lists silently truncate (admin queue 200, rep orders 300, rep customers 500) | ALL | **FIXED 2026-09-29 in `e527b83`** |
 | M-16 | Medium | 4.25 MB request bodies accepted by every Server Action, including anonymous ones | LIVE | **FIXED 2026-09-30 in `e632a05`** |
-| M-17 | Medium | Rep visibility over a moved customer's history is broader than needed | BRANCH | **FIXED 2026-09-30 in `{{M-17}}`** (recommended default; Amir to confirm) |
-| M-18 | Medium | Reassignment/deactivation checks race; moved customers keep the old commission flag | BRANCH | **FIXED 2026-09-30 in `{{M-18}}`** |
-| M-19 | Medium | Browser Back/Forward silently discards unsaved product-table edits | BRANCH | **FIXED 2026-09-30 in `{{M-19}}`** |
-| M-20 | Medium | About 1 in 290 temporary passwords is mangled in the "share" message (`$$` → `$`) | BRANCH | **FIXED 2026-09-30 in `{{M-20}}`** |
-| M-21 | Medium | Product-table JSON is unpaged; large families will exceed Vercel's 4.5 MB response cap | BRANCH | **FIXED 2026-09-30 in `{{M-21}}`** |
+| M-17 | Medium | Rep visibility over a moved customer's history is broader than needed | BRANCH | **FIXED 2026-09-30 in `5d6d476`** (recommended default; Amir to confirm) |
+| M-18 | Medium | Reassignment/deactivation checks race; moved customers keep the old commission flag | BRANCH | **FIXED 2026-09-30 in `d1cdcc4`** |
+| M-19 | Medium | Browser Back/Forward silently discards unsaved product-table edits | BRANCH | **FIXED 2026-09-30 in `0ee9f4a`** |
+| M-20 | Medium | About 1 in 290 temporary passwords is mangled in the "share" message (`$$` → `$`) | BRANCH | **FIXED 2026-09-30 in `8276c3f`** |
+| M-21 | Medium | Product-table JSON is unpaged; large families will exceed Vercel's 4.5 MB response cap | BRANCH | **FIXED 2026-09-30 in `fa76f4c`** |
 | M-22 | Medium | An unrelated feature (admin product-table editor) is bundled into the sales-rep release | BRANCH (process) | **DECLINED by Amir 2026-09-29 — everything ships together on this branch** |
 | L-1 … L-24 | Low | Hardening and hygiene (see section) | mixed | mixed |
 
@@ -205,7 +205,7 @@ deployment · `ALL` = everywhere.
 
 ### C-2 — A sales rep alone can mark an order paid, including a zero-price invoice
 
-> **Fix status (2026-09-29): FIXED in `{{C-2}}` (local `main`, not pushed).**
+> **Fix status (2026-09-29): FIXED in `1ba6cf5` (local `main`, not pushed).**
 > Amir's decision: reps may upload receipts, only the admin confirms payment;
 > no invoice (rep or admin) while any line is priced 0. The rep confirm
 > action and button are gone (reps see "the admin confirms"); `confirmPayment`
@@ -253,7 +253,7 @@ deployment · `ALL` = everywhere.
 
 ### C-3 — Pay tokens are rendered on admin pages; with C-1 anyone can change order state and read bank receipts
 
-> **Fix status (2026-09-29): FIXED in `{{C-3}}` (local `main`, not pushed).**
+> **Fix status (2026-09-29): FIXED in `588b56b` (local `main`, not pushed).**
 > The admin queue no longer renders any token: "Show pay link" fetches one
 > order's link through `payLinkForOrderAction` (behind `assertAdminWrite`, so
 > never in `DEMO_MODE`), and "New pay link" replaces a leaked token
@@ -304,7 +304,7 @@ deployment · `ALL` = everywhere.
 
 ### H-1 — Admin price changes do not reach customers for 94% of live products
 
-> **Fix status (2026-09-29): FIXED in `{{H-1}}` (local `main`, not pushed).**
+> **Fix status (2026-09-29): FIXED in `de10422` (local `main`, not pushed).**
 > `price_cents` is now the price everywhere: `src/lib/priceTiers.ts` ignores
 > any stored rung at one unit and applies only breaks above it (highest
 > `minQty ≤ qty`, any stored order — this also fixes L-20); the family page,
@@ -353,7 +353,7 @@ deployment · `ALL` = everywhere.
 
 ### H-2 — Production is running out of database connections right now
 
-> **Fix status (2026-09-29): main driver FIXED in `{{H-2}}` (local `main`,
+> **Fix status (2026-09-29): main driver FIXED in `73c70bd` (local `main`,
 > not pushed); effect on live to be measured after the push.**
 > Cause found: default `<Link>` prefetching. Next 16 prefetches a static
 > (ISR) route in full and a dynamic one down to its layout the moment the link
@@ -416,7 +416,7 @@ deployment · `ALL` = everywhere.
 
 ### H-3 — Invoice numbers collide after invoice #9,999; the repair script winds the sequence backwards
 
-> **Fix status (2026-09-29): FIXED in `{{H-3}}` (local `main`, not pushed).**
+> **Fix status (2026-09-29): FIXED in `334c981` (local `main`, not pushed).**
 > Amir's decision: keep one running sequence; just stop the truncation.
 > `issueInvoice` (and the demo seeder) pad to *at least* four digits
 > (`lpad(n, greatest(4, length(n)), '0')`), so #10,000 is `INV-YYYY-10000`.
@@ -453,7 +453,7 @@ deployment · `ALL` = everywhere.
 
 ### H-4 — A rep can take over any assigned customer's account
 
-> **Fix status (2026-09-29): FIXED in `{{H-4}}` (local `main`, not pushed).**
+> **Fix status (2026-09-29): FIXED in `ad70ae3` (local `main`, not pushed).**
 > Amir's decision: reps may reset only customers they created themselves who
 > have never set their own password. New column `users.chose_own_password`
 > (default true, so every existing account counts as self-chosen; false only
@@ -493,7 +493,7 @@ deployment · `ALL` = everywhere.
 
 ### H-5 — Self-hosted: every rate limit (including admin login) is bypassed by a spoofed header
 
-> **Fix status (2026-09-29): FIXED in `{{H-5}}` (local `main`, not pushed).**
+> **Fix status (2026-09-29): FIXED in `b526f48` (local `main`, not pushed).**
 > `clientAddress` reads exactly one header (`trustedAddressHeader`):
 > `TRUSTED_PROXY_HEADER` when set, `x-vercel-forwarded-for` on Vercel,
 > `x-forwarded-for` in development — and a production server with none of
@@ -530,7 +530,7 @@ deployment · `ALL` = everywhere.
 
 ### H-6 — Self-hosted compose publishes Postgres with password `isupply`; the cron secret never reaches the app
 
-> **Fix status (2026-09-29): FIXED in `{{H-6}}` (local `main`, not pushed).**
+> **Fix status (2026-09-29): FIXED in `58a0aaf` (local `main`, not pushed).**
 > Postgres is published on `127.0.0.1` only; its password comes from
 > `POSTGRES_PASSWORD` (default kept for the laptop) and the app's URL follows
 > it. The app now receives `CRON_SECRET`, `SELLER_ADDRESS[_FA]`,
@@ -562,7 +562,7 @@ deployment · `ALL` = everywhere.
 
 ### H-7 — A fresh database prices the catalog at 1,100,000 rial/USD with no warning
 
-> **Fix status (2026-09-29): FIXED in `{{H-7}}` (local `main`, not pushed).**
+> **Fix status (2026-09-29): FIXED in `a6b1c2d` (local `main`, not pushed).**
 > `isStale(null)` is now true, and the rate panel says "no market reading yet,
 > prices use the fallback of N rial". `fxRateSource` names where the rate came
 > from; when it is the 1,100,000 placeholder (no reading, no manual rate, no
@@ -600,7 +600,7 @@ deployment · `ALL` = everywhere.
 
 ### H-8 — `DEMO_MODE` publishes pay tokens, receipts and the product table
 
-> **Fix status (2026-09-29): FIXED in `{{H-8}}` (local `main`, not pushed).**
+> **Fix status (2026-09-29): FIXED in `965ce9e` (local `main`, not pushed).**
 > Under `DEMO_MODE` the issued invoice and the admin draft render no pay link
 > (the queue renders none at all since C-3); `receivePaymentProof` and the
 > pay-link upload action refuse every receipt and the pay page offers no
@@ -635,7 +635,7 @@ deployment · `ALL` = everywhere.
 
 ### H-9 — Admin session is a permanent, unrevocable, password-derived bearer token without `Secure`
 
-> **Fix status (2026-09-29): FIXED in `{{H-9}}` (local `main`, not pushed).**
+> **Fix status (2026-09-29): FIXED in `74917ab` (local `main`, not pushed).**
 > The admin cookie is now `a1.<version>.<expiry>.<sig>` (`src/lib/adminSessionToken.ts`),
 > signed with a key derived from `AUTH_SECRET` and a hash of `ADMIN_PASSWORD`:
 > expiry (8 h) is checked on the server; changing the password invalidates
@@ -673,7 +673,7 @@ deployment · `ALL` = everywhere.
 
 ### H-10 — The sales-rep migration breaks live sign-up if applied before the new code (as the deploy doc instructs)
 
-> **Fix status (2026-09-29): FIXED in `{{H-10}}` (local `main`, not pushed).**
+> **Fix status (2026-09-29): FIXED in `830d351` (local `main`, not pushed).**
 > `20260927120000_add_sales_reps.sql` edited in place (not yet on live): a
 > `BEFORE INSERT` trigger `users_customer_code_default` assigns the phone's
 > last seven digits (or a free random code) whenever an insert names no code,
@@ -712,7 +712,7 @@ deployment · `ALL` = everywhere.
 
 ### H-11 — Admin "Reset password" on an order resets whoever owns the email typed on that order
 
-> **Fix status (2026-09-29): FIXED in `{{H-11}}` (local `main`, not pushed).**
+> **Fix status (2026-09-29): FIXED in `63e738c` (local `main`, not pushed).**
 > The order queue's email-keyed "Reset password" (`resetCustomerPasswordAction`,
 > `findUserIdByEmail`, `emailsWithAccounts`) is removed. An order placed from
 > an account now shows that account's customer ID, linked by the order's own
@@ -745,7 +745,7 @@ deployment · `ALL` = everywhere.
 
 ### M-1 — Customer sign-in is rate-limited per IP only
 
-> **Fix status (2026-09-29): FIXED in `{{M-1}}`.** Failed sign-ins now also
+> **Fix status (2026-09-29): FIXED in `d961dc6`.** Failed sign-ins now also
 > count against the account, keyed on the normalised login string (so an
 > unknown login costs the same): 10 failures / 15 min from any addresses
 > locks further attempts (`src/lib/signInGuard.ts`). To avoid the M-14
@@ -766,7 +766,7 @@ exponential backoff per account. Scope LIVE, status CODE.
 
 ### M-2 — Customer sessions cannot be revoked
 
-> **Fix status (2026-09-29): FIXED in `{{M-2}}`.** New `users.session_version`
+> **Fix status (2026-09-29): FIXED in `f38e435`.** New `users.session_version`
 > (default 1; added to the not-yet-live `add_sales_reps` migration, the schema
 > and the verifier) is carried in the customer cookie and re-read by
 > `currentUserId()` each request. `setPassword`, the rep reset and the admin
@@ -785,7 +785,7 @@ does, bump it on every password change/reset. Scope LIVE, status CODE.
 
 ### M-3 — `/api/cart` adds any product id, including hidden and non-existent ones
 
-> **Fix status (2026-09-29): FIXED in `{{M-3}}`.** `addLine` inserts only
+> **Fix status (2026-09-29): FIXED in `5c767ce`.** `addLine` inserts only
 > through a join on the visible catalog (`FAMILY_VISIBLE`) and returns null
 > otherwise; `/api/cart` answers 404 for hidden and non-existent ids alike.
 > The cart page and checkout read only visible lines, so a product hidden
@@ -805,7 +805,7 @@ checkout. Scope LIVE, status CODE.
 
 ### M-4 — Heavy public pages have no rate limit
 
-> **Fix status (2026-09-29): FIXED in `{{M-4}}`.** `/search` consumes a
+> **Fix status (2026-09-29): FIXED in `0c04cec`.** `/search` consumes a
 > per-address limit (60 queries/min; an empty query costs nothing) and shows
 > "too many searches" instead of running the query when over. Family
 > `?view=all` is capped at 1,000 rows (`FAMILY_VIEW_ALL_MAX`; the footer then
@@ -827,8 +827,8 @@ query. Scope LIVE, status CODE + live data.
 
 ### M-5 — `/_next/image` is an open image proxy for any HTTPS host
 
-> **Fix status (2026-09-29): FIXED in `{{M-5}}` and tightened in
-> `{{M-5b}}`.** `remotePatterns` allows only `/storage/v1/object/public/**` on
+> **Fix status (2026-09-29): FIXED in `bb65ed9` and tightened in
+> `01787d1`.** `remotePatterns` allows only `/storage/v1/object/public/**` on
 > the one Storage host named by `SUPABASE_PUBLIC_URL`/`SUPABASE_URL` at build
 > time. (The first version also allowed any `*.supabase.co`, which a
 > background security review flagged: anyone can create a Supabase project.)
@@ -854,7 +854,7 @@ unoptimised. Fix the comment. Scope LIVE, status CODE.
 
 ### M-6 — No security headers
 
-> **Fix status (2026-09-29): FIXED in `{{M-6}}`, except a full CSP.**
+> **Fix status (2026-09-29): FIXED in `016cf44`, except a full CSP.**
 > `next.config.ts` `headers()`: `nosniff`, `Referrer-Policy:
 > strict-origin-when-cross-origin`, a `Permissions-Policy` refusing camera,
 > microphone and location, and `frame-ancestors 'self'` / `SAMEORIGIN`
@@ -879,7 +879,7 @@ CONFIRMED-LIVE.
 
 ### M-7 — Per-click admin actions purge the whole site cache
 
-> **Fix status (2026-09-29): FIXED in `{{M-7}}`.** No `revalidatePath("/",
+> **Fix status (2026-09-29): FIXED in `d0b322a`.** No `revalidatePath("/",
 > "layout")` remains. The only ISR pages are home and category, so catalog
 > writes (add product, create/delete, taxonomy and media saves, site contact,
 > CSV import) call `revalidateCatalogPages()`, which marks just those two
@@ -900,7 +900,7 @@ pages to tag-based invalidation. Scope LIVE, status CODE.
 
 ### M-8 — Stock updates lock product rows in arbitrary order (deadlocks)
 
-> **Fix status (2026-09-29): FIXED in `{{M-8}}`.** `holdStockForOrder`,
+> **Fix status (2026-09-29): FIXED in `41e42b5`.** `holdStockForOrder`,
 > `sellHeldStock` and `releaseHeldStock` first lock the order's product rows
 > with `SELECT … ORDER BY id FOR UPDATE`; `writeImport` locks the family's
 > rows the same way before upserting. Test: `orderIntegrity.integration.test.ts`
@@ -923,7 +923,7 @@ that order; retry once on `40P01`/`40001`. Scope ALL, status CODE.
 
 ### M-9 — 32-bit overflow on order and invoice totals
 
-> **Fix status (2026-09-29): FIXED in `{{M-9}}`.** Deviation from the
+> **Fix status (2026-09-29): FIXED in `8056c30`.** Deviation from the
 > suggested fix: the columns stay `integer` (max ≈ $21.4 M per order, far past
 > any real order here; `bigint` would come back from postgres-js as a string
 > and touch every money read, including the live release's). Instead checkout
@@ -946,7 +946,7 @@ action with a friendly error. Scope ALL, status CONFIRMED.
 
 ### M-10 — Paid orders can be cancelled with no refund record
 
-> **Fix status (2026-09-29): FIXED in `{{M-10}}`.** Amir's decision: a paid
+> **Fix status (2026-09-29): FIXED in `ecbb637`.** Amir's decision: a paid
 > order cannot be cancelled until there is a refund flow. `preparing →
 > cancelled` is removed from the transitions, so the queue shows no Cancel on
 > paid orders and the action's `assertTransition` + status-guarded UPDATE
@@ -962,7 +962,7 @@ Scope ALL, status CODE.
 
 ### M-11 — No audit trail for money and state changes; payouts can be deleted
 
-> **Fix status (2026-09-29): FIXED in `{{M-11}}`.** New migration
+> **Fix status (2026-09-29): FIXED in `bae3df3`.** New migration
 > `20260930120000_add_audit_log.sql` (a fourth one to apply before the push):
 > append-only `audit_log` and `rep_payouts.voided_at`. Written in the same
 > transaction as the change: order shipped/delivered/cancelled, invoice issued
@@ -985,7 +985,7 @@ delete with a reversing entry. Scope BRANCH, status CODE.
 
 ### M-12 — Local tooling defaults to the live database
 
-> **Fix status (2026-09-29): FIXED in `{{M-12}}`.** The live credentials file
+> **Fix status (2026-09-29): FIXED in `cab39c8`.** The live credentials file
 > was renamed `.env.production.local` → `.env.remote` on Amir's Mac (Next does
 > not auto-load it) and every `db:*:remote` script now reads `.env.remote`
 > (`db:verify:remote` checked: still reaches the live database, read-only).
@@ -1023,7 +1023,7 @@ CODE (known gap).
 
 ### M-14 — Anyone can lock a rep out
 
-> **Fix status (2026-09-29): FIXED in `{{M-14}}`.** Rep sign-in now uses the
+> **Fix status (2026-09-29): FIXED in `9064654`.** Rep sign-in now uses the
 > same guard as customers (M-1): the address counter counts every attempt,
 > the username counter counts failures only, and a browser the rep has signed
 > in from before passes a username lockout. A stranger can still make a rep
@@ -1040,7 +1040,7 @@ progressive delays instead of a hard stop). Scope BRANCH, status CODE.
 
 ### M-15 — Lists silently truncate
 
-> **Fix status (2026-09-29): FIXED in `{{M-15}}`.** The admin queue, rep
+> **Fix status (2026-09-29): FIXED in `e527b83`.** The admin queue, rep
 > orders and rep customers lists carry `count(*) OVER ()` and show "Showing
 > the first N of M — use a filter or search" when cut short. The rep checkout
 > loads the chosen customer with `getCustomerForRep` (and adds them to the
@@ -1082,7 +1082,7 @@ Scope LIVE, status CODE.
 
 ### M-17 — Rep visibility over a moved customer's history is broader than needed
 
-> **Fix status (2026-09-30): FIXED in `{{M-17}}` with the review's recommended
+> **Fix status (2026-09-30): FIXED in `5d6d476` with the review's recommended
 > default — Amir did not rule on this one, so it is his to overturn.** A rep
 > still *sees* every order of a customer now assigned to them, but may act only
 > on orders credited to them: the pay token is returned only for those (list
@@ -1100,7 +1100,7 @@ Scope BRANCH, status CODE.
 
 ### M-18 — Reassignment races; moved customers keep the old commission flag
 
-> **Fix status (2026-09-30): FIXED in `{{M-18}}`.** `assignCustomer` and
+> **Fix status (2026-09-30): FIXED in `d1cdcc4`.** `assignCustomer` and
 > `deactivateRep` check the destination rep `FOR SHARE` inside their
 > transaction; checkout's `creditFor` reads the customer `FOR SHARE`, so a move
 > in flight waits. Deactivation now asks explicitly whether moved customers
@@ -1125,7 +1125,7 @@ Scope BRANCH, status CODE.
 
 ### M-19 — Browser Back/Forward silently discards unsaved product-table edits
 
-> **Fix status (2026-09-30): FIXED in `{{M-19}}`.** `UnsavedOrderGuard`
+> **Fix status (2026-09-30): FIXED in `0ee9f4a`.** `UnsavedOrderGuard`
 > cancels a same-document Back/Forward through the Navigation API's
 > `navigate` event (before the address changes, so nothing re-renders) and
 > offers Save / Discard / Stay; leaving goes to the page Back was heading for.
@@ -1150,7 +1150,7 @@ CODE.
 
 ### M-20 — About 1 in 290 temporary passwords is mangled in the "share" message
 
-> **Fix status (2026-09-30): FIXED in `{{M-20}}`.** `src/lib/fillMessage.ts`
+> **Fix status (2026-09-30): FIXED in `8276c3f`.** `src/lib/fillMessage.ts`
 > fills `{placeholders}` through a replacer function, so values arrive
 > literally. Used for every message that is copied or sent: the three
 > credential messages (admin customer, admin rep, rep customer), both pay-link
@@ -1173,7 +1173,7 @@ Scope BRANCH, status CONFIRMED.
 
 ### M-21 — Product-table JSON is unpaged
 
-> **Fix status (2026-09-30): FIXED in `{{M-21}}`.** `/api/admin/family/[id]/products?page=N`
+> **Fix status (2026-09-30): FIXED in `fa76f4c`.** `/api/admin/family/[id]/products?page=N`
 > returns one page of 100 rows plus the family's total (`getProductsPage`);
 > the table fetches the page it shows and remembers every row loaded (with its
 > position) so edits on several pages save together with the fingerprints they
@@ -1211,30 +1211,30 @@ Scope BRANCH (process), status CODE.
 
 | ID | Finding | Where | Fix |
 | --- | --- | --- | --- |
-| L-1 | **FIXED 2026-09-30 in `{{L-1}}`** (`secure` in production, like the session cookies). Cart cookie has no `Secure` flag (the id is a bearer for the cart and its checkout) | `src/lib/cart.ts:57-62` | add `secure` in production |
-| L-2 | **FIXED 2026-09-30 in `{{L-2}}`** (mirrors `.gitignore`). `.dockerignore` misses `venv.txt` (a `vercel env pull` with real keys, per `.gitignore`), `other_ignore/`, `products/`, `test-results/`, `playwright-report/`, `*.tsbuildinfo` — all copied into the builder stage and build cache | `.dockerignore` | mirror `.gitignore` |
+| L-1 | **FIXED 2026-09-30 in `2356bd6`** (`secure` in production, like the session cookies). Cart cookie has no `Secure` flag (the id is a bearer for the cart and its checkout) | `src/lib/cart.ts:57-62` | add `secure` in production |
+| L-2 | **FIXED 2026-09-30 in `a80d412`** (mirrors `.gitignore`). `.dockerignore` misses `venv.txt` (a `vercel env pull` with real keys, per `.gitignore`), `other_ignore/`, `products/`, `test-results/`, `playwright-report/`, `*.tsbuildinfo` — all copied into the builder stage and build cache | `.dockerignore` | mirror `.gitignore` |
 | L-3 | Temporary Enamad ownership marker still live: `— 25626502` in every page title and `public/25626502.txt` | `src/app/[locale]/layout.tsx:12-27` | remove once the seal is issued (ask Amir if it has been) |
-| L-4 | **FIXED 2026-09-30 in `{{L-4}}`**: migration `20260930130000_drop_spec_defs_display.sql` (checked: neither the live release nor this one reads or writes the column), schema, verifier. `spec_defs.display` was to be dropped "next release" after 2026-08-20; still present | `src/db/schema.ts:247` | forward migration + schema + verifier |
-| L-5 | **Partly FIXED 2026-09-30 in `{{L-5}}`**: the year is now Tehran's (`AT TIME ZONE 'Asia/Tehran'`). Still open for Amir: Gregorian or Persian year in the number (the sequence stays one running count, per his H-3 decision). Invoice number year is the UTC Gregorian year (`to_char(now(),'YYYY')`); an invoice issued 00:00–03:30 Tehran on 1 January carries last year, and Iranian books run on the Persian fiscal year | invoice numbering (H-3) | decide the numbering rule with Amir |
-| L-6 | **FIXED 2026-09-30 in `{{L-6}}`**: admin and rep invoice issuance refuse while the contact email or phone is the stand-in value (`isPlaceholderContact`); the header still shows them. Live already has real values saved (checked: `sales@temex.ir` and a real phone on the live header). CI sets `SELLER_EMAIL`/`SELLER_PHONE`. Placeholder seller/contact values (`sales@temex.example`, `+98 21 8888 0000`) print on invoices and the header when settings are unset | `src/lib/seller.ts:39-40`, `src/lib/siteContact.ts:14-15` | refuse to issue invoices until real values are saved |
-| L-7 | **FIXED 2026-09-30 in `{{L-7}}`**: only a whole-rial value is accepted from the environment; anything else falls through as unset. A non-integer `USD_TO_RIAL` is accepted, then `BigInt(rate)` throws in `invoiceAmounts` → invoice pages 500 | `src/lib/fxRate.ts:33-34`, `src/lib/invoice.ts:69` | require an integer at the boundary |
-| L-8 | **FIXED 2026-09-30 in `{{L-8}}`**: `noindex` and `no-referrer` metadata on the invoice page (plus the `Referrer-Policy: no-referrer` header from M-6). Not done: a POST-to-cookie key exchange, so keyed URLs can still land in browser history. Invoice URLs carrying `?key=<pay token>` have no `noindex` / `no-referrer` (the pay page has both); tokens also land in access logs and browser history | `src/app/[locale]/invoice/[ref]/page.tsx` | add metadata; prefer a POST-to-cookie exchange for keyed access |
-| L-9 | **FIXED 2026-09-30** — the image-proxy and receipt-route comments with M-5/C-3, the reset-cookie comment with H-11, and the account order and password page comments in `{{L-9}}`. Comments that are now false: ~~`next.config.ts:51-57` ("bounded by who can reach /admin", M-5)~~ (fixed with M-5); `api/payment-proofs/[id]/route.ts:17-18` ("not open under DEMO_MODE", H-8); ~~`admin/actions.ts:360` says the reset cookie is not httpOnly but it is~~ (removed with H-11); (the `admin/(panel)/layout.tsx` "one place the sign-in gate lives" comment was corrected with C-1); `account/orders/[ref]/page.tsx:17` says the page is read-only with no customer actions, but it now takes receipt uploads that change order status; `account/password/page.tsx:20` says the form "asks for no current password", but it now requires the temporary one (dropping it would reopen the lock-out `setInitialPasswordAction` prevents) | as listed | fix with the related code |
-| L-10 | **FIXED 2026-09-30 in `{{L-10}}`**: one `DUMMY_PASSWORD_HASH`, one `latinDigits` (`lib/digits.ts`), `db/pgErrors.ts` `uniqueViolation`, `lib/ids.ts` `postedUuid`, `lib/percent.ts` `parsePercentBp` for VAT and commission (commission now also accepts a comma decimal mark and a leading `%`, like VAT). Duplicated logic that will drift: two dummy scrypt hashes (`src/lib/password.ts:75`, `src/app/[locale]/account/actions.ts:111`); private `latinDigits` copies in `src/lib/fxRate.ts:86` and `src/lib/siteContactValues.ts:12` beside `src/lib/digits.ts`; `uniqueViolation` in `customerQueries.ts` and `repQueries.ts`; `postedCustomerId` in the rep and admin customer actions; `parseVatPercent` re-implements `parseCommissionPercent` | as listed | one shared helper each |
-| L-11 | **FIXED 2026-09-30 in `{{L-11}}`** (80 / 120 characters, `boundedString`, `maxLength` on the inputs). Courier and tracking-number fields have no length bound | `src/app/[locale]/admin/actions.ts:185-186` | `boundedString` |
-| L-12 | **FIXED 2026-09-30 in `{{L-12}}`**: N = 2^17 (measured ≈250 ms, 128 MiB per hash here), `maxmem` raised to match, stored N capped at 2^18; customer and rep sign-in rehash an older hash in place (hash only — no flag or session change). Follow-up (security review of that fix): a wrong password against a not-yet-rehashed 2^14 hash answered 8× faster than an unknown login against the 2^17 dummy, so timing told which accounts exist; a check against an older hash now runs throwaway rounds up to exactly one current-cost hash (commit `{{L-12b}}`). scrypt `N = 16384` is below current guidance (2^17 for scrypt); parameters are stored per hash, so raising is backward-compatible | `src/lib/password.ts:24` | raise N, rehash on next sign-in |
-| L-13 | **FIXED 2026-09-30 in `{{L-13}}`**: `SET lock_timeout = '5s'` in all three (and in the two new ones). The `pay_token` rewrite of `orders` still takes an ACCESS EXCLUSIVE lock; the live table is small (orders in the hundreds), so it is seconds at most. The three branch migrations set no `lock_timeout` (earlier ones do); `add_sales_reps` rewrites `orders` for the volatile `pay_token` default under an ACCESS EXCLUSIVE lock | `supabase/migrations/2026092*` | add `SET lock_timeout = '5s'` |
-| L-14 | **FIXED 2026-09-30 in `{{L-14}}`** (rendered only when `VERCEL` is set). `@vercel/analytics` is always rendered; on the self-hosted server its script 404s on every page | `src/app/[locale]/layout.tsx:77` | render only when `VERCEL` is set |
-| L-15 | **FIXED 2026-09-30 in `{{L-15}}`**: `stripImageMetadata` drops JPEG APP1/APP13/COM, PNG text/eXIf/tIME and WebP EXIF/XMP before storing, without re-encoding (a real JPEG checked: still decodes, 3.5 KB of metadata gone). PDFs keep theirs. Receipt photos keep EXIF metadata (GPS, device) — only the browser shrinks them, and a direct post skips that | `src/lib/paymentProofUpload.ts` | strip metadata server-side or accept only re-encoded images |
-| L-16 | **FIXED 2026-09-30 in `{{L-16}}`**: migration `20260930140000_revoke_api_role_grants.sql` (tables, sequences, functions and default privileges; skipped where the roles do not exist); tested in a rolled-back transaction with temporary roles (TRUNCATE on `orders` and UPDATE on `invoice_seq`: true → false); `db:verify` now fails on any grant to those roles. Defence in depth: on the live database `anon`/`authenticated` hold every table privilege (including TRUNCATE) on 13 tables and USAGE/UPDATE on 9 sequences including `invoice_seq`; RLS with no policies is the only barrier | live DB grants | `REVOKE ALL … FROM anon, authenticated` in a migration (as `add_request_rate_limits` already does for its table) |
-| L-17 | **FIXED 2026-09-30 in `{{L-17}}`**: says "schema behind — run db:migrate:check:remote, then db:migrate:remote (pending: …)", and mentions bootstrap only when no table exists (checked read-only against live). `scripts/verify-remote.mts:318-322` prints "only an empty database may use db:bootstrap:empty:remote" when the schema is merely behind on migrations, and exits before the integrity checks | verifier | say "run db:migrate:remote" |
-| L-18 | **FIXED 2026-09-30 in `{{L-18}}`**: shown only when it parses as an issued reference (`normaliseRef`); test `e2e/quote-submitted-ref.spec.ts`. `/quote/submitted?ref=<anything>` prints any text as "your order reference" (content spoofing in a trusted frame) | `src/app/[locale]/quote/submitted/page.tsx:16-26` | show it only when it matches the reference format |
-| L-19 | **FIXED 2026-09-30 in `{{L-19}}`**: actions pinned to commit SHAs (tag in a comment); `npm audit fix` patched js-yaml, braces, brace-expansion, drizzle-kit and @vercel/config in place. Left, both dev-only and reachable only from our own build/tooling input: esbuild ≤0.24 inside drizzle-kit (fix is drizzle-kit 1.0 beta) and path-to-regexp inside @vercel/config (fix is a downgrade). `npm audit --omit=dev` is clean. CI actions pinned by major tag, not commit SHA; dev-only audit findings (esbuild via drizzle-kit, js-yaml, path-to-regexp via `@vercel/config`) | `.github/workflows/ci.yml`, `npm audit` | pin SHAs; upgrade when compatible |
-| L-20 | **FIXED 2026-09-29 with H-1 in `{{H-1}}`.** `unitPriceAt` takes the *last* tier in array order whose `minQty ≤ qty`, so unsorted tiers price wrongly (no live product is unsorted today; see H-1 for tiers generally) | `src/lib/cart.ts:257-263` | choose the highest `minQty ≤ qty` |
-| L-21 | **FIXED 2026-09-30 in `{{L-21}}`**: demo reps are reset in place (upsert on username) instead of deleted, and only the demo customers' orders are removed, so UI-created customers and their orders keep their rep. Reproduced on the local database (a UI-style customer of demo.sara made the re-run fail on `users_rep_id_sales_reps_id_fk`); after the fix two consecutive re-runs succeed and reconcile is clean. No automated test: the script only runs by hand against a local database. Re-running `npm run db:seed:reps` aborts once a demo rep owns a customer created through the UI (it deletes only its own `demo.*@example.invalid` users before `DELETE FROM sales_reps`, and the rep foreign keys are `RESTRICT`), although its header promises re-runs replace its rows | `scripts/seed-reps.mts:67` | reassign or delete dependants first |
-| L-22 | **FIXED 2026-09-30 in `{{L-22}}`**: the rate read runs alongside the other reads, and `loadRepSummary` returns the payouts it already read; covered by the rep and admin commission checks in `e2e/sales-rep-flow.spec.ts`. Wasted round trips: the admin rep page and the rep commission page await `getFxRate()` serially before their fan-out, and read payouts twice (`loadRepSummary` already reads them) | `admin/(panel)/reps/[id]/page.tsx:67`, `rep/(portal)/commission/page.tsx:19-24` | start in parallel; return payouts from `loadRepSummary` |
-| L-23 | **FIXED 2026-09-30 in `{{L-23}}`**: the four queries take `HELD_STATUS_LIST` as a `text[]` parameter; test `src/lib/orders.test.ts` ("no query spells out the held statuses itself") fails on any literal copy left in `src/db`. `HELD_STATUSES` exists in `src/lib/orders.ts`, but the held-status list is still hard-coded as SQL literals in `src/db/importQueries.ts:710`, `src/db/dataIntegrity.ts:104` and `:191`, `src/db/inventoryQueries.ts:101` — the next new held status repeats the grep hunt, and a missed site makes imports, reconcile and the shortfall warning disagree | as listed | pass the constant as an array parameter |
-| L-24 | **FIXED 2026-09-30 in `{{L-24}}`**: the credential box calls `DELETE /api/shown-once` once rendered (a route handler, not a Server Action — deleting a cookie in an action re-renders the page and would take the credential off screen); `e2e/sales-rep-flow.spec.ts` checks the cookie is gone after both the admin and the rep see a new password. The "shown once" credential cookie is never cleared after it is read; the plaintext password stays in the browser and rides on every request for 30 s | `src/lib/shownOnce.ts` | delete the cookie in the page that displays it (via a tiny client-side action) |
+| L-4 | **FIXED 2026-09-30 in `6fa9799`**: migration `20260930130000_drop_spec_defs_display.sql` (checked: neither the live release nor this one reads or writes the column), schema, verifier. `spec_defs.display` was to be dropped "next release" after 2026-08-20; still present | `src/db/schema.ts:247` | forward migration + schema + verifier |
+| L-5 | **Partly FIXED 2026-09-30 in `6168116`**: the year is now Tehran's (`AT TIME ZONE 'Asia/Tehran'`). Still open for Amir: Gregorian or Persian year in the number (the sequence stays one running count, per his H-3 decision). Invoice number year is the UTC Gregorian year (`to_char(now(),'YYYY')`); an invoice issued 00:00–03:30 Tehran on 1 January carries last year, and Iranian books run on the Persian fiscal year | invoice numbering (H-3) | decide the numbering rule with Amir |
+| L-6 | **FIXED 2026-09-30 in `f8b8e6b`**: admin and rep invoice issuance refuse while the contact email or phone is the stand-in value (`isPlaceholderContact`); the header still shows them. Live already has real values saved (checked: `sales@temex.ir` and a real phone on the live header). CI sets `SELLER_EMAIL`/`SELLER_PHONE`. Placeholder seller/contact values (`sales@temex.example`, `+98 21 8888 0000`) print on invoices and the header when settings are unset | `src/lib/seller.ts:39-40`, `src/lib/siteContact.ts:14-15` | refuse to issue invoices until real values are saved |
+| L-7 | **FIXED 2026-09-30 in `76a60e7`**: only a whole-rial value is accepted from the environment; anything else falls through as unset. A non-integer `USD_TO_RIAL` is accepted, then `BigInt(rate)` throws in `invoiceAmounts` → invoice pages 500 | `src/lib/fxRate.ts:33-34`, `src/lib/invoice.ts:69` | require an integer at the boundary |
+| L-8 | **FIXED 2026-09-30 in `2f70141`**: `noindex` and `no-referrer` metadata on the invoice page (plus the `Referrer-Policy: no-referrer` header from M-6). Not done: a POST-to-cookie key exchange, so keyed URLs can still land in browser history. Invoice URLs carrying `?key=<pay token>` have no `noindex` / `no-referrer` (the pay page has both); tokens also land in access logs and browser history | `src/app/[locale]/invoice/[ref]/page.tsx` | add metadata; prefer a POST-to-cookie exchange for keyed access |
+| L-9 | **FIXED 2026-09-30** — the image-proxy and receipt-route comments with M-5/C-3, the reset-cookie comment with H-11, and the account order and password page comments in `478f787`. Comments that are now false: ~~`next.config.ts:51-57` ("bounded by who can reach /admin", M-5)~~ (fixed with M-5); `api/payment-proofs/[id]/route.ts:17-18` ("not open under DEMO_MODE", H-8); ~~`admin/actions.ts:360` says the reset cookie is not httpOnly but it is~~ (removed with H-11); (the `admin/(panel)/layout.tsx` "one place the sign-in gate lives" comment was corrected with C-1); `account/orders/[ref]/page.tsx:17` says the page is read-only with no customer actions, but it now takes receipt uploads that change order status; `account/password/page.tsx:20` says the form "asks for no current password", but it now requires the temporary one (dropping it would reopen the lock-out `setInitialPasswordAction` prevents) | as listed | fix with the related code |
+| L-10 | **FIXED 2026-09-30 in `a18d3c5`**: one `DUMMY_PASSWORD_HASH`, one `latinDigits` (`lib/digits.ts`), `db/pgErrors.ts` `uniqueViolation`, `lib/ids.ts` `postedUuid`, `lib/percent.ts` `parsePercentBp` for VAT and commission (commission now also accepts a comma decimal mark and a leading `%`, like VAT). Duplicated logic that will drift: two dummy scrypt hashes (`src/lib/password.ts:75`, `src/app/[locale]/account/actions.ts:111`); private `latinDigits` copies in `src/lib/fxRate.ts:86` and `src/lib/siteContactValues.ts:12` beside `src/lib/digits.ts`; `uniqueViolation` in `customerQueries.ts` and `repQueries.ts`; `postedCustomerId` in the rep and admin customer actions; `parseVatPercent` re-implements `parseCommissionPercent` | as listed | one shared helper each |
+| L-11 | **FIXED 2026-09-30 in `6e030cf`** (80 / 120 characters, `boundedString`, `maxLength` on the inputs). Courier and tracking-number fields have no length bound | `src/app/[locale]/admin/actions.ts:185-186` | `boundedString` |
+| L-12 | **FIXED 2026-09-30 in `6ae9a83`**: N = 2^17 (measured ≈250 ms, 128 MiB per hash here), `maxmem` raised to match, stored N capped at 2^18; customer and rep sign-in rehash an older hash in place (hash only — no flag or session change). Follow-up (security review of that fix): a wrong password against a not-yet-rehashed 2^14 hash answered 8× faster than an unknown login against the 2^17 dummy, so timing told which accounts exist; a check against an older hash now runs throwaway rounds up to exactly one current-cost hash (commit `b631b1c`). scrypt `N = 16384` is below current guidance (2^17 for scrypt); parameters are stored per hash, so raising is backward-compatible | `src/lib/password.ts:24` | raise N, rehash on next sign-in |
+| L-13 | **FIXED 2026-09-30 in `9fda634`**: `SET lock_timeout = '5s'` in all three (and in the two new ones). The `pay_token` rewrite of `orders` still takes an ACCESS EXCLUSIVE lock; the live table is small (orders in the hundreds), so it is seconds at most. The three branch migrations set no `lock_timeout` (earlier ones do); `add_sales_reps` rewrites `orders` for the volatile `pay_token` default under an ACCESS EXCLUSIVE lock | `supabase/migrations/2026092*` | add `SET lock_timeout = '5s'` |
+| L-14 | **FIXED 2026-09-30 in `2360ea6`** (rendered only when `VERCEL` is set). `@vercel/analytics` is always rendered; on the self-hosted server its script 404s on every page | `src/app/[locale]/layout.tsx:77` | render only when `VERCEL` is set |
+| L-15 | **FIXED 2026-09-30 in `39e6a8d`**: `stripImageMetadata` drops JPEG APP1/APP13/COM, PNG text/eXIf/tIME and WebP EXIF/XMP before storing, without re-encoding (a real JPEG checked: still decodes, 3.5 KB of metadata gone). PDFs keep theirs. Receipt photos keep EXIF metadata (GPS, device) — only the browser shrinks them, and a direct post skips that | `src/lib/paymentProofUpload.ts` | strip metadata server-side or accept only re-encoded images |
+| L-16 | **FIXED 2026-09-30 in `98d21fb`**: migration `20260930140000_revoke_api_role_grants.sql` (tables, sequences, functions and default privileges; skipped where the roles do not exist); tested in a rolled-back transaction with temporary roles (TRUNCATE on `orders` and UPDATE on `invoice_seq`: true → false); `db:verify` now fails on any grant to those roles. Defence in depth: on the live database `anon`/`authenticated` hold every table privilege (including TRUNCATE) on 13 tables and USAGE/UPDATE on 9 sequences including `invoice_seq`; RLS with no policies is the only barrier | live DB grants | `REVOKE ALL … FROM anon, authenticated` in a migration (as `add_request_rate_limits` already does for its table) |
+| L-17 | **FIXED 2026-09-30 in `3fef24c`**: says "schema behind — run db:migrate:check:remote, then db:migrate:remote (pending: …)", and mentions bootstrap only when no table exists (checked read-only against live). `scripts/verify-remote.mts:318-322` prints "only an empty database may use db:bootstrap:empty:remote" when the schema is merely behind on migrations, and exits before the integrity checks | verifier | say "run db:migrate:remote" |
+| L-18 | **FIXED 2026-09-30 in `f9ffdf0`**: shown only when it parses as an issued reference (`normaliseRef`); test `e2e/quote-submitted-ref.spec.ts`. `/quote/submitted?ref=<anything>` prints any text as "your order reference" (content spoofing in a trusted frame) | `src/app/[locale]/quote/submitted/page.tsx:16-26` | show it only when it matches the reference format |
+| L-19 | **FIXED 2026-09-30 in `af03a03`**: actions pinned to commit SHAs (tag in a comment); `npm audit fix` patched js-yaml, braces, brace-expansion, drizzle-kit and @vercel/config in place. Left, both dev-only and reachable only from our own build/tooling input: esbuild ≤0.24 inside drizzle-kit (fix is drizzle-kit 1.0 beta) and path-to-regexp inside @vercel/config (fix is a downgrade). `npm audit --omit=dev` is clean. CI actions pinned by major tag, not commit SHA; dev-only audit findings (esbuild via drizzle-kit, js-yaml, path-to-regexp via `@vercel/config`) | `.github/workflows/ci.yml`, `npm audit` | pin SHAs; upgrade when compatible |
+| L-20 | **FIXED 2026-09-29 with H-1 in `de10422`.** `unitPriceAt` takes the *last* tier in array order whose `minQty ≤ qty`, so unsorted tiers price wrongly (no live product is unsorted today; see H-1 for tiers generally) | `src/lib/cart.ts:257-263` | choose the highest `minQty ≤ qty` |
+| L-21 | **FIXED 2026-09-30 in `bc1ea90`**: demo reps are reset in place (upsert on username) instead of deleted, and only the demo customers' orders are removed, so UI-created customers and their orders keep their rep. Reproduced on the local database (a UI-style customer of demo.sara made the re-run fail on `users_rep_id_sales_reps_id_fk`); after the fix two consecutive re-runs succeed and reconcile is clean. No automated test: the script only runs by hand against a local database. Re-running `npm run db:seed:reps` aborts once a demo rep owns a customer created through the UI (it deletes only its own `demo.*@example.invalid` users before `DELETE FROM sales_reps`, and the rep foreign keys are `RESTRICT`), although its header promises re-runs replace its rows | `scripts/seed-reps.mts:67` | reassign or delete dependants first |
+| L-22 | **FIXED 2026-09-30 in `17d53dc`**: the rate read runs alongside the other reads, and `loadRepSummary` returns the payouts it already read; covered by the rep and admin commission checks in `e2e/sales-rep-flow.spec.ts`. Wasted round trips: the admin rep page and the rep commission page await `getFxRate()` serially before their fan-out, and read payouts twice (`loadRepSummary` already reads them) | `admin/(panel)/reps/[id]/page.tsx:67`, `rep/(portal)/commission/page.tsx:19-24` | start in parallel; return payouts from `loadRepSummary` |
+| L-23 | **FIXED 2026-09-30 in `989c854`**: the four queries take `HELD_STATUS_LIST` as a `text[]` parameter; test `src/lib/orders.test.ts` ("no query spells out the held statuses itself") fails on any literal copy left in `src/db`. `HELD_STATUSES` exists in `src/lib/orders.ts`, but the held-status list is still hard-coded as SQL literals in `src/db/importQueries.ts:710`, `src/db/dataIntegrity.ts:104` and `:191`, `src/db/inventoryQueries.ts:101` — the next new held status repeats the grep hunt, and a missed site makes imports, reconcile and the shortfall warning disagree | as listed | pass the constant as an array parameter |
+| L-24 | **FIXED 2026-09-30 in `1477cde`**: the credential box calls `DELETE /api/shown-once` once rendered (a route handler, not a Server Action — deleting a cookie in an action re-renders the page and would take the credential off screen); `e2e/sales-rep-flow.spec.ts` checks the cookie is gone after both the admin and the rep see a new password. The "shown once" credential cookie is never cleared after it is read; the plaintext password stays in the browser and rides on every request for 30 s | `src/lib/shownOnce.ts` | delete the cookie in the page that displays it (via a tiny client-side action) |
 
 ---
 
