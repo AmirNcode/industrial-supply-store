@@ -255,6 +255,7 @@ const REQUIRED_MIGRATIONS = [
   "20260929120000",
   "20260930120000",
   "20260930130000",
+  "20260930140000",
 ] as const;
 let recordedMigrations = new Set<string>();
 if (hasMigrationLedger) {
@@ -281,6 +282,14 @@ const [{ hasSeq }] = await sql<{ hasSeq: boolean }[]>`
   SELECT to_regclass('public.invoice_seq') IS NOT NULL AS "hasSeq"
 `;
 console.log(`invoice_seq ${hasSeq ? "✓" : "✗ MISSING — invoice numbers will restart at 1"}`);
+
+// Supabase's REST roles must hold nothing on the app's objects (review L-16);
+// RLS with no policies used to be the only barrier. Zero on a plain Postgres.
+const [{ apiGrants }] = await sql<{ apiGrants: number }[]>`
+  SELECT count(*)::int AS "apiGrants" FROM information_schema.role_table_grants
+  WHERE table_schema = 'public' AND grantee IN ('anon', 'authenticated')
+`;
+console.log(`api roles   ${apiGrants === 0 ? "✓ no table grants" : `✗ ${apiGrants} table grants to anon/authenticated`}`);
 
 // The previous release's sign-up names no customer code; this trigger gives it
 // one. Without it, sign-up on a rolled-back deployment fails (review H-10).
@@ -456,6 +465,7 @@ const ok =
   missingMigrations.length === 0 &&
   hasSeq &&
   hasCodeTrigger &&
+  apiGrants === 0 &&
   rlsOff.length === 0 &&
   integrityIssues.length === 0 &&
   numbersOk &&

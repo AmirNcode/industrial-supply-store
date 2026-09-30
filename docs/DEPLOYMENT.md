@@ -167,6 +167,10 @@ pay-link replacement and payout writes a row in the same transaction, so the
 new code fails those actions without it. The previous release never reads
 either. `db:verify:remote` checks the table, the column and the version.
 
+`20260930140000_revoke_api_role_grants.sql` takes every privilege on the
+app's tables, sequences and functions away from Supabase's `anon` and
+`authenticated` roles. The app never uses them; it is safe in either order.
+
 `20260930130000_drop_spec_defs_display.sql` drops the dead
 `spec_defs.display` column. Neither the live release nor this one reads or
 writes it, so its order relative to the push does not matter; apply it with
