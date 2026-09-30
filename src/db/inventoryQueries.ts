@@ -31,8 +31,28 @@ import { sql } from "./index";
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 type Tx = TransactionSql<{}>;
 
+/**
+ * Locks the order's product rows in id order before any of them is updated.
+ *
+ * An `UPDATE … FROM order_items` takes row locks in whatever order the plan
+ * visits them, so two checkouts whose carts share two products could each hold
+ * one and wait for the other — a deadlock Postgres breaks by failing one of
+ * them with a 500 (review finding M-8). Taking every lock first, in one global
+ * order, makes the second transaction simply wait its turn. `writeImport`
+ * locks a family's rows in the same order for the same reason.
+ */
+async function lockOrderProducts(tx: Tx, orderId: number): Promise<void> {
+  await tx`
+    SELECT p.id FROM products p
+    WHERE p.id IN (SELECT product_id FROM order_items WHERE order_id = ${orderId})
+    ORDER BY p.id
+    FOR UPDATE OF p
+  `;
+}
+
 /** Order received: reserve what it asks for. */
 export async function holdStockForOrder(tx: Tx, orderId: number): Promise<void> {
+  await lockOrderProducts(tx, orderId);
   await tx`
     UPDATE products p
     SET inventory_available = p.inventory_available - i.qty,
@@ -44,6 +64,7 @@ export async function holdStockForOrder(tx: Tx, orderId: number): Promise<void> 
 
 /** Payment received: the reservation becomes a sale. */
 export async function sellHeldStock(tx: Tx, orderId: number): Promise<void> {
+  await lockOrderProducts(tx, orderId);
   await tx`
     UPDATE products p
     SET inventory_on_hold = p.inventory_on_hold - i.qty,
@@ -61,6 +82,7 @@ export async function sellHeldStock(tx: Tx, orderId: number): Promise<void> {
  * decides based on the status it is leaving.
  */
 export async function releaseHeldStock(tx: Tx, orderId: number): Promise<void> {
+  await lockOrderProducts(tx, orderId);
   await tx`
     UPDATE products p
     SET inventory_on_hold  = p.inventory_on_hold - i.qty,

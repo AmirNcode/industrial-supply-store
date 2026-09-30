@@ -452,3 +452,59 @@ test("invoice numbers stay unique past 9,999, and the realignment never winds ba
     else await sql`SELECT setval('invoice_seq', 1, false)`;
   }
 });
+
+test("concurrent checkouts sharing products in opposite order do not deadlock", async () => {
+  // Review M-8: stock moves now lock product rows in id order first.
+  assertLocalDatabase();
+  const suffix = randomUUID();
+  let categoryId: number | undefined;
+  try {
+    const [category] = await sql<{ id: number }[]>`
+      INSERT INTO categories (slug, path, name_en, name_fa)
+      VALUES (${`deadlock-${suffix}`}, ${`deadlock-${suffix}`}, 'Deadlock', 'بن‌بست') RETURNING id`;
+    categoryId = category.id;
+    const [family] = await sql<{ id: number }[]>`
+      INSERT INTO product_families (slug, category_id, name_en, name_fa)
+      VALUES (${`deadlock-family-${suffix}`}, ${category.id}, 'Deadlock', 'بن‌بست') RETURNING id`;
+    const products = await sql<{ id: number }[]>`
+      INSERT INTO products (part_number, family_id, specs, price_cents,
+                            inventory_available, inventory_on_hold, inventory_sold)
+      VALUES (${`DL-A-${suffix}`}, ${family.id}, '{}'::jsonb, 100, 1000, 0, 0),
+             (${`DL-B-${suffix}`}, ${family.id}, '{}'::jsonb, 100, 1000, 0, 0),
+             (${`DL-C-${suffix}`}, ${family.id}, '{}'::jsonb, 100, 1000, 0, 0)
+      RETURNING id`;
+    const ids = products.map((p) => p.id);
+    const orders: number[] = [];
+    for (let n = 0; n < 16; n++) {
+      const [order] = await sql<{ id: number }[]>`
+        INSERT INTO orders (ref, company, contact_name, email, total_cents, requested_total_cents)
+        VALUES (${`ORD-${randomUUID().slice(0, 6).toUpperCase()}`}, 'DL Co', 'T', 'dl@example.invalid', 300, 300)
+        RETURNING id`;
+      orders.push(order.id);
+      const lineOrder = n % 2 === 0 ? ids : [...ids].reverse();
+      for (const productId of lineOrder) {
+        await sql`
+          INSERT INTO order_items (order_id, product_id, part_number, family_name, qty,
+                                   unit_price_cents, requested_unit_price_cents)
+          VALUES (${order.id}, ${productId}, 'DL', 'Deadlock', 1, 100, 100)`;
+      }
+    }
+    await Promise.all(
+      orders.map((orderId) =>
+        sql.begin(async (tx) => {
+          await holdStockForOrder(tx, orderId);
+          // Hold the locks a moment, so the transactions genuinely overlap.
+          await tx`SELECT pg_sleep(0.02)`;
+        }),
+      ),
+    );
+    const held = await sql<{ onHold: number }[]>`
+      SELECT inventory_on_hold AS "onHold" FROM products WHERE id = ANY(${ids}) ORDER BY id`;
+    assert.deepEqual(held.map((row) => row.onHold), [16, 16, 16]);
+  } finally {
+    if (categoryId !== undefined) {
+      await sql`DELETE FROM orders WHERE company = 'DL Co'`;
+      await sql`DELETE FROM categories WHERE id = ${categoryId}`;
+    }
+  }
+});

@@ -429,6 +429,11 @@ export async function writeImport(
   try {
     const result = await sql.begin(async (tx) => {
       await lockPartNumberWrites(tx);
+      // The family's existing rows, in id order, before any is written: the
+      // upsert below visits them in file order, and a checkout holding stock
+      // on two of them in the other order would deadlock with it. Checkouts
+      // lock in id order too (inventoryQueries.ts, review M-8).
+      await tx`SELECT id FROM products WHERE family_id = ${family.id} ORDER BY id FOR UPDATE`;
       if (plan) await syncColumns(tx, family, plan);
 
       const parts = rows.map((r) => r.partNumber);

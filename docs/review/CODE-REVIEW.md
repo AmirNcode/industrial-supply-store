@@ -94,7 +94,7 @@ deployment · `ALL` = everywhere.
 | M-5 | Medium | `/_next/image` is an open image proxy for any HTTPS host | LIVE | **FIXED 2026-09-29 in `{{M-5}}`** |
 | M-6 | Medium | No security headers (framing, CSP, nosniff, referrer); `x-powered-by` exposed | LIVE | **FIXED 2026-09-29 in `{{M-6}}`** (CSP beyond framing not done) |
 | M-7 | Medium | Per-click admin actions purge the whole site cache (the 2026-08-15 incident pattern) | LIVE | **FIXED 2026-09-29 in `{{M-7}}`** |
-| M-8 | Medium | Stock updates lock product rows in arbitrary order → deadlocks under concurrency | ALL | CODE |
+| M-8 | Medium | Stock updates lock product rows in arbitrary order → deadlocks under concurrency | ALL | **FIXED 2026-09-29 in `{{M-8}}`** |
 | M-9 | Medium | 32-bit overflow on order and invoice totals → 500 errors (anonymous can trigger) | ALL | CONFIRMED |
 | M-10 | Medium | Paid orders can be cancelled with no refund record; stock stays "sold" | ALL | CODE |
 | M-11 | Medium | No audit trail for money/state changes; rep payouts can be deleted outright | BRANCH | CODE |
@@ -892,6 +892,16 @@ write changes (`/[locale]/c/[...slug]` page, the home page), or move catalog
 pages to tag-based invalidation. Scope LIVE, status CODE.
 
 ### M-8 — Stock updates lock product rows in arbitrary order (deadlocks)
+
+> **Fix status (2026-09-29): FIXED in `{{M-8}}`.** `holdStockForOrder`,
+> `sellHeldStock` and `releaseHeldStock` first lock the order's product rows
+> with `SELECT … ORDER BY id FOR UPDATE`; `writeImport` locks the family's
+> rows the same way before upserting. Test: `orderIntegrity.integration.test.ts`
+> runs 16 overlapping checkouts (lines in opposite orders) concurrently and
+> checks the totals. Honest limit: the deadlock did not reproduce locally
+> *without* the fix either (three runs), so the test guards the behaviour but
+> does not prove the race; the fix rests on the lock-ordering argument. Not
+> done: a retry on `40P01`/`40001`.
 
 `holdStockForOrder`, `sellHeldStock`, `releaseHeldStock`
 (`src/db/inventoryQueries.ts:35-71`) run `UPDATE products … FROM order_items`
