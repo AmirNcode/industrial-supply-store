@@ -106,7 +106,7 @@ deployment · `ALL` = everywhere.
 | M-17 | Medium | Rep visibility over a moved customer's history is broader than needed | BRANCH | **FIXED 2026-09-30 in `{{M-17}}`** (recommended default; Amir to confirm) |
 | M-18 | Medium | Reassignment/deactivation checks race; moved customers keep the old commission flag | BRANCH | **FIXED 2026-09-30 in `{{M-18}}`** |
 | M-19 | Medium | Browser Back/Forward silently discards unsaved product-table edits | BRANCH | **FIXED 2026-09-30 in `{{M-19}}`** |
-| M-20 | Medium | About 1 in 290 temporary passwords is mangled in the "share" message (`$$` → `$`) | BRANCH | CONFIRMED |
+| M-20 | Medium | About 1 in 290 temporary passwords is mangled in the "share" message (`$$` → `$`) | BRANCH | **FIXED 2026-09-30 in `{{M-20}}`** |
 | M-21 | Medium | Product-table JSON is unpaged; large families will exceed Vercel's 4.5 MB response cap | BRANCH | CODE + measured |
 | M-22 | Medium | An unrelated feature (admin product-table editor) is bundled into the sales-rep release | BRANCH (process) | **DECLINED by Amir 2026-09-29 — everything ships together on this branch** |
 | L-1 … L-24 | Low | Hardening and hygiene (see section) | mixed | mixed |
@@ -1143,6 +1143,14 @@ dialog), and route `updateUrl` through the same guard. Scope BRANCH, status
 CODE.
 
 ### M-20 — About 1 in 290 temporary passwords is mangled in the "share" message
+
+> **Fix status (2026-09-30): FIXED in `{{M-20}}`.** `src/lib/fillMessage.ts`
+> fills `{placeholders}` through a replacer function, so values arrive
+> literally. Used for every message that is copied or sent: the three
+> credential messages (admin customer, admin rep, rep customer), both pay-link
+> messages and the referral message. Other `.replace("{x}", …)` calls only
+> build on-screen labels from numbers or admin-typed names and were left
+> alone (converting all 93 was out of proportion). Test: `fillMessage.test.ts`.
 
 `String.prototype.replace("{password}", credential.password)` treats `$$` in
 the replacement as a literal `$`. `$` is in the temporary-password alphabet

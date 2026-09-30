@@ -28,6 +28,7 @@ import { siteOrigin } from "@/lib/siteOrigin";
 import { formatCommissionPercent } from "@/lib/repAccount";
 import { isUuid } from "@/lib/ids";
 import { isLocale, getDict, type Locale } from "@/lib/i18n";
+import { fillMessage } from "@/lib/fillMessage";
 
 const ERROR_KEY = {
   incomplete: "required",
@@ -104,10 +105,11 @@ export default async function AdminRepPage({
           loginLabel={t.username}
           login={credential.login}
           password={credential.password}
-          message={t.repCredentialsMessage
-            .replace("{url}", `${origin}/${l}/rep/signin`)
-            .replace("{login}", credential.login)
-            .replace("{password}", credential.password)}
+          message={fillMessage(t.repCredentialsMessage, {
+            url: `${origin}/${l}/rep/signin`,
+            login: credential.login,
+            password: credential.password,
+          })}
           labels={{ tempPassword: t.tempPassword, share: t.share, copied: t.copied }}
         />
       )}

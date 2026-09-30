@@ -10,6 +10,7 @@ import { ORDER_STATUSES, isOrderStatus } from "@/lib/orders";
 import { OrderStatusPill, STATUS_LABEL_KEY } from "@/components/OrderStatusPill";
 import { ShareButton } from "@/components/ShareButton";
 import { isLocale, getDict, type Locale } from "@/lib/i18n";
+import { fillMessage } from "@/lib/fillMessage";
 import { formatInt } from "@/lib/money";
 
 /**
@@ -109,10 +110,7 @@ export default async function RepOrdersPage({
                 {url && (
                   <span className="ms-auto">
                     <ShareButton
-                      text={t.payLinkMessage
-                        .replace("{company}", order.company)
-                        .replace("{ref}", order.ref)
-                        .replace("{url}", url)}
+                      text={fillMessage(t.payLinkMessage, { company: order.company, ref: order.ref, url: url })}
                       label={t.sharePayLink}
                       copiedLabel={t.copied}
                     />

@@ -25,6 +25,7 @@ import { getFxRate } from "@/lib/fx";
 import { tehranToday } from "@/lib/persianCalendar";
 import { isUuid } from "@/lib/ids";
 import { isLocale, getDict, type Locale } from "@/lib/i18n";
+import { fillMessage } from "@/lib/fillMessage";
 
 const ERROR_KEY = {
   rep: "repBadDestination",
@@ -107,10 +108,11 @@ export default async function AdminCustomerPage({
           loginLabel={t.customerId}
           login={credential.login}
           password={credential.password}
-          message={t.customerCredentialsMessage
-            .replace("{url}", `${origin}/${l}/account/signin`)
-            .replace("{login}", credential.login)
-            .replace("{password}", credential.password)}
+          message={fillMessage(t.customerCredentialsMessage, {
+            url: `${origin}/${l}/account/signin`,
+            login: credential.login,
+            password: credential.password,
+          })}
           labels={{ tempPassword: t.tempPassword, share: t.share, copied: t.copied }}
         />
       )}

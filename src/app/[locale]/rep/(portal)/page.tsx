@@ -9,6 +9,7 @@ import { loadRepSummary } from "@/lib/repDashboard";
 import { RepDashboard } from "@/components/RepDashboard";
 import { formatPersianDay, tehranToday } from "@/lib/persianCalendar";
 import { isLocale, getDict, type Locale } from "@/lib/i18n";
+import { fillMessage } from "@/lib/fillMessage";
 
 export default async function RepHomePage({
   params,
@@ -53,7 +54,7 @@ export default async function RepHomePage({
             {referralLink}
           </span>
           <ShareButton
-            text={t.referralMessage.replace("{url}", referralLink)}
+            text={fillMessage(t.referralMessage, { url: referralLink })}
             label={t.share}
             copiedLabel={t.copied}
           />

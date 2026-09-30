@@ -15,6 +15,7 @@ import { OrderStatusPill } from "@/components/OrderStatusPill";
 import { ShareButton } from "@/components/ShareButton";
 import { ErrorBanner, SuccessBanner } from "@/components/Banners";
 import { isLocale, getDict, type Locale } from "@/lib/i18n";
+import { fillMessage } from "@/lib/fillMessage";
 
 const ERROR_KEY = {
   "not-yours": "reorderNotYours",
@@ -145,10 +146,7 @@ export default async function RepOrderPage({
               {payUrl}
             </code>
             <ShareButton
-              text={t.payLinkMessage
-                .replace("{company}", order.company)
-                .replace("{ref}", order.ref)
-                .replace("{url}", payUrl)}
+              text={fillMessage(t.payLinkMessage, { company: order.company, ref: order.ref, url: payUrl })}
               label={t.sharePayLink}
               copiedLabel={t.copied}
             />
