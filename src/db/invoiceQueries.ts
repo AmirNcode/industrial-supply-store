@@ -1,6 +1,7 @@
 import "server-only";
 import type { TransactionSql } from "postgres";
 import { sql } from "./index";
+import { exceedsOrderLimit } from "@/lib/invoice";
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 type Tx = TransactionSql<{}>;
@@ -38,7 +39,10 @@ class InvoiceConflict extends Error {}
 /** Thrown inside the same transaction when a line would be invoiced at 0. */
 class InvoiceUnpriced extends Error {}
 
-export type IssueOutcome = "issued" | "conflict" | "unpriced";
+/** Thrown when the total would not fit `orders.total_cents` (review M-9). */
+class InvoiceTooLarge extends Error {}
+
+export type IssueOutcome = "issued" | "conflict" | "unpriced" | "too-large";
 
 /**
  * Prices the order, assigns an invoice number, and locks the exchange rate
@@ -77,6 +81,12 @@ export async function issueInvoice(
         SELECT 1 FROM order_items WHERE order_id = ${orderId} AND unit_price_cents <= 0 LIMIT 1
       `;
       if (unpriced) throw new InvoiceUnpriced();
+      // Multiplied as bigint: int * int overflows before SUM can widen it.
+      const [{ total }] = await tx<{ total: string }[]>`
+        SELECT COALESCE(SUM(unit_price_cents::bigint * qty), 0)::text AS total
+        FROM order_items WHERE order_id = ${orderId}
+      `;
+      if (exceedsOrderLimit(Number(total))) throw new InvoiceTooLarge();
       const result = await tx`
         UPDATE orders o
         SET status = 'invoiced',
@@ -92,7 +102,7 @@ export async function issueInvoice(
               FROM (SELECT nextval('invoice_seq') AS n) s
             ),
             total_cents = (
-              SELECT COALESCE(SUM(i.unit_price_cents * i.qty), 0)
+              SELECT COALESCE(SUM(i.unit_price_cents::bigint * i.qty), 0)
               FROM order_items i WHERE i.order_id = o.id
             )
         WHERE o.id = ${orderId} AND o.status = 'received'
@@ -103,6 +113,7 @@ export async function issueInvoice(
   } catch (err) {
     if (err instanceof InvoiceConflict) return "conflict";
     if (err instanceof InvoiceUnpriced) return "unpriced";
+    if (err instanceof InvoiceTooLarge) return "too-large";
     throw err;
   }
 }

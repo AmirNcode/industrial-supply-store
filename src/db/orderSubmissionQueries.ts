@@ -8,6 +8,7 @@ import type { CartLine } from "@/lib/cart";
 import { unitPriceAt } from "@/lib/cart";
 import type { Locale } from "@/lib/i18n";
 import { quoteCartFingerprint } from "@/lib/quoteSubmission";
+import { exceedsOrderLimit } from "@/lib/invoice";
 import type { Currency } from "@/lib/money";
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
@@ -43,7 +44,8 @@ export type SubmitOrderResult =
   | { kind: "cart-changed" }
   | { kind: "empty-cart" }
   | { kind: "missing-cart" }
-  | { kind: "customer-moved" };
+  | { kind: "customer-moved" }
+  | { kind: "too-large" };
 
 const REF_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
@@ -141,6 +143,7 @@ export async function submitOrderFromCartInTransaction(
     (sum, line) => sum + unitPriceAt(line, line.qty) * line.qty,
     0,
   );
+  if (exceedsOrderLimit(totalCents)) return { kind: "too-large" };
 
   const credit = input.userId ? await creditFor(tx, input.userId) : null;
   // A rep may only order for their own customer. Checked again here, inside

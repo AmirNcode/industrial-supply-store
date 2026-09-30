@@ -109,6 +109,11 @@ export default async function QuotePage({
           {t.quoteCartChanged}
         </p>
       )}
+      {error === "too-large" && (
+        <p className="mb-3 border border-[#e0b4b0] bg-[#fdf2f1] px-3 py-2 text-[12px] text-[#a3312a]">
+          {t.orderTooLarge}
+        </p>
+      )}
       {(error === "invalid" || error === "rate-limit") && (
         <p className="mb-3 border border-[#e0b4b0] bg-[#fdf2f1] px-3 py-2 text-[12px] text-[#a3312a]">
           {error === "rate-limit" ? t.rateLimited : t.invalidInput}

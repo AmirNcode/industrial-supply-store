@@ -335,6 +335,7 @@ export async function issueInvoiceAction(formData: FormData): Promise<void> {
   });
   if (issued === "unpriced") redirect(withFilter(`/${locale}/admin/orders?error=prices`, statusFilter));
   if (issued === "conflict") redirect(withFilter(`/${locale}/admin/orders?error=conflict`, statusFilter));
+  if (issued === "too-large") redirect(withFilter(`/${locale}/admin/orders?error=too-large`, statusFilter));
 
   // Invoicing changes an order, and no cached page renders orders.
   redirect(withFilter(`/${locale}/admin/orders?ok=invoiced`, statusFilter));

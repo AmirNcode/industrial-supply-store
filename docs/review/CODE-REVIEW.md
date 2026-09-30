@@ -95,7 +95,7 @@ deployment · `ALL` = everywhere.
 | M-6 | Medium | No security headers (framing, CSP, nosniff, referrer); `x-powered-by` exposed | LIVE | **FIXED 2026-09-29 in `{{M-6}}`** (CSP beyond framing not done) |
 | M-7 | Medium | Per-click admin actions purge the whole site cache (the 2026-08-15 incident pattern) | LIVE | **FIXED 2026-09-29 in `{{M-7}}`** |
 | M-8 | Medium | Stock updates lock product rows in arbitrary order → deadlocks under concurrency | ALL | **FIXED 2026-09-29 in `{{M-8}}`** |
-| M-9 | Medium | 32-bit overflow on order and invoice totals → 500 errors (anonymous can trigger) | ALL | CONFIRMED |
+| M-9 | Medium | 32-bit overflow on order and invoice totals → 500 errors (anonymous can trigger) | ALL | **FIXED 2026-09-29 in `{{M-9}}`** |
 | M-10 | Medium | Paid orders can be cancelled with no refund record; stock stays "sold" | ALL | CODE |
 | M-11 | Medium | No audit trail for money/state changes; rep payouts can be deleted outright | BRANCH | CODE |
 | M-12 | Medium | Local tooling defaults to the live database (e2e, build, start, drizzle) | LIVE (process) | CODE |
@@ -918,6 +918,15 @@ transaction, or sort `order_items` by `product_id` and use a CTE that updates in
 that order; retry once on `40P01`/`40001`. Scope ALL, status CODE.
 
 ### M-9 — 32-bit overflow on order and invoice totals
+
+> **Fix status (2026-09-29): FIXED in `{{M-9}}`.** Deviation from the
+> suggested fix: the columns stay `integer` (max ≈ $21.4 M per order, far past
+> any real order here; `bigint` would come back from postgres-js as a string
+> and touch every money read, including the live release's). Instead checkout
+> refuses a total past `MAX_ORDER_CENTS` with a clear message (`too-large`),
+> and `issueInvoice` sums `unit_price_cents::bigint * qty` and refuses the same
+> way; admin and rep see the message. Tests: `invoice.test.ts`,
+> `salesReps.integration.test.ts` (99,999 × $500 at checkout and at invoice).
 
 `orders.total_cents`/`requested_total_cents` and `order_items.unit_price_cents`
 are `integer`. Checkout computes totals in JavaScript and inserts them

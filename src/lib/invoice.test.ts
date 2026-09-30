@@ -6,6 +6,8 @@ import {
   lineTotalCents,
   roundedForDisplay,
   subtotalCents,
+  MAX_ORDER_CENTS,
+  exceedsOrderLimit,
 } from "./invoice";
 import { formatPrice, formatPriceExact } from "./money";
 
@@ -120,4 +122,11 @@ test("a list shows VAT only on invoices that carry a rate", () => {
   assert.equal(formatOrderTotal(1155, null, "IRR", "en", 1_094_889), formatPrice(1155, "IRR", "en", 1_094_889));
   assert.equal(formatOrderTotal(1155, 1000, "IRR", "en", 1_094_889), "13,911,000 IRR");
   assert.equal(formatOrderTotal(1155, 1000, "USD", "en", 1_094_889), "$12.71");
+});
+
+test("an order total past a Postgres integer is flagged", () => {
+  assert.equal(exceedsOrderLimit(MAX_ORDER_CENTS), false);
+  assert.equal(exceedsOrderLimit(MAX_ORDER_CENTS + 1), true);
+  assert.equal(exceedsOrderLimit(50_000 * 99_999), true);
+  assert.equal(exceedsOrderLimit(Number.NaN), true);
 });

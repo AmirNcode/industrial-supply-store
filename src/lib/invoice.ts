@@ -37,6 +37,20 @@ export function subtotalCents(lines: readonly InvoiceLine[]): number {
 }
 
 /**
+ * The largest order or invoice total the database stores: `total_cents` is a
+ * Postgres integer. Checkout computes totals in JavaScript, where 99,999 of a
+ * $500 product is simply a big number, and the insert then failed with an
+ * unhandled "integer out of range" — a 500 anyone could trigger (review M-9).
+ * About $21 million: far beyond any order this shop takes, so refusing past it
+ * with a clear message is the fix, not wider columns.
+ */
+export const MAX_ORDER_CENTS = 2_147_483_647;
+
+export function exceedsOrderLimit(cents: number): boolean {
+  return !Number.isSafeInteger(cents) || cents > MAX_ORDER_CENTS;
+}
+
+/**
  * True when a line would be invoiced at 0 — a "call for price" product nobody
  * priced. No invoice is issued while one is (`issueInvoice`); a rep, who never
  * changes a price, hands such an order to the admin.

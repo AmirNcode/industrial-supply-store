@@ -190,6 +190,7 @@ export default async function AdminPage({
       {error === "not-found" && <ErrorBanner>{t.orderNotFound}</ErrorBanner>}
       {error === "conflict" && <ErrorBanner>{t.orderConflict}</ErrorBanner>}
       {error === "no-rate" && <ErrorBanner>{t.invoiceNeedsRate}</ErrorBanner>}
+      {error === "too-large" && <ErrorBanner>{t.orderTooLarge}</ErrorBanner>}
       {error === "bad-request" && <ErrorBanner>{t.badRequest}</ErrorBanner>}
 
       {orders.length === 0 && (

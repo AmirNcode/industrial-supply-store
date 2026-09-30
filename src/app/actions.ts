@@ -182,6 +182,7 @@ export async function submitQuoteAction(formData: FormData) {
   // Only a rep's order can be refused this way; kept so the handling stays
   // exhaustive if this path ever passes a rep.
   if (result.kind === "customer-moved") redirect(`/${locale}/quote?error=invalid`);
+  if (result.kind === "too-large") redirect(`/${locale}/quote?error=too-large`);
 
   // The order, item snapshots, stock hold and cart clear have all committed at
   // this point. A replay returns the same reference through the same redirect.
@@ -227,6 +228,7 @@ async function submitForCustomer(rep: RepRow, locale: Locale, formData: FormData
     contact: parsed.contact,
   });
   if (result.kind === "customer-moved") redirect(`/${locale}/quote?error=customer`);
+  if (result.kind === "too-large") redirect(`${again}&error=too-large`);
   if (result.kind === "cart-changed") redirect(`${again}&error=cart-changed`);
   if (result.kind === "empty-cart" || result.kind === "missing-cart") redirect(`/${locale}/cart`);
 

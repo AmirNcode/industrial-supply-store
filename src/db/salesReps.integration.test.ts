@@ -916,3 +916,46 @@ test("checkout orders nothing that has been hidden since it was put in the cart"
     assert.deepEqual(lines.map((line) => line.productId), [visible.productId]);
   });
 });
+
+test("totals past what the database stores are refused, not a 500", async () => {
+  // Review M-9: 99,999 of a $500 product overflowed a 32-bit total.
+  assertLocalDatabase();
+  await rolledBack(async (tx) => {
+    const { cartId } = await cartWithOneLine(tx);
+    const [line] = await tx<{ productId: number }[]>`
+      SELECT product_id AS "productId" FROM cart_items WHERE cart_id = ${cartId}`;
+    await tx`UPDATE products SET price_cents = 50000 WHERE id = ${line.productId}`;
+    await tx`UPDATE cart_items SET qty = 99999 WHERE cart_id = ${cartId}`;
+    const result = await submitOrderFromCartInTransaction(tx, {
+      cartId,
+      cartFingerprint: quoteCartFingerprint([{ productId: line.productId, qty: 99999, unitPriceCents: 50000 }]),
+      submissionKey: randomUUID(),
+      locale: "en",
+      currency: "USD",
+      userId: null,
+      placedByRepId: null,
+      contact: { company: "C", contactName: "N", email: "", phone: "1", poNumber: "", address: "", city: "", country: "", notes: "" },
+    });
+    assert.deepEqual(result, { kind: "too-large" });
+  });
+
+  const [order] = await sql<{ id: number }[]>`
+    INSERT INTO orders (ref, company, contact_name, email, total_cents, requested_total_cents)
+    VALUES (${`ORD-${randomUUID().slice(0, 6).toUpperCase()}`}, 'Big Co', 'T', 'big@example.invalid', 1, 1)
+    RETURNING id`;
+  try {
+    const [item] = await sql<{ id: number }[]>`
+      INSERT INTO order_items (order_id, product_id, part_number, family_name, qty,
+                               unit_price_cents, requested_unit_price_cents)
+      VALUES (${order.id}, NULL, 'BIG-1', 'Integration Family', 99999, 1, 1) RETURNING id`;
+    // The admin types a price that makes the invoice overflow.
+    assert.equal(
+      await issueInvoice(order.id, { rate: 1_000_000, vatRateBp: 0, prices: [{ id: item.id, cents: 50_000 }] }),
+      "too-large",
+    );
+    const [row] = await sql<{ status: string }[]>`SELECT status FROM orders WHERE id = ${order.id}`;
+    assert.equal(row.status, "received");
+  } finally {
+    await sql`DELETE FROM orders WHERE id = ${order.id}`;
+  }
+});
