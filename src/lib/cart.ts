@@ -59,6 +59,8 @@ export async function ensureCart(): Promise<string> {
   jar.set(COOKIE, row.id, {
     httpOnly: true,
     sameSite: "lax",
+    // The id is the key to the cart and its checkout; never over plain http.
+    secure: process.env.NODE_ENV === "production",
     path: "/",
     maxAge: YEAR,
   });
