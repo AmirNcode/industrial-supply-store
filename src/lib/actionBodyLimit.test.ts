@@ -15,6 +15,10 @@ test("anonymous actions get a small body; upload pages keep the large one", () =
   assert.equal(actionBodyAllowed("/en/rep/orders/ORD-ABC234", "4400000"), true);
   assert.equal(actionBodyAllowed("/en/admin/products", "4400000"), true);
   assert.equal(actionBodyAllowed("/en/admin", "4400000"), true);
+  // The admin sign-in page is public: it gets the small limit like any form.
+  assert.equal(actionBodyAllowed("/en/admin/login", "4400000"), false);
+  assert.equal(actionBodyAllowed("/fa/admin/login/", "4400000"), false);
+  assert.equal(actionBodyAllowed("/en/admin/login", "2048"), true);
   // Lookalikes do not get the allowance.
   assert.equal(actionBodyAllowed("/en/administrator", "4400000"), false);
   assert.equal(actionBodyAllowed("/en/account/profile", "4400000"), false);
