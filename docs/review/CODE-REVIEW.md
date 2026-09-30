@@ -102,7 +102,7 @@ deployment · `ALL` = everywhere.
 | M-13 | Medium | Customer emails are never verified → an address can be squatted permanently | LIVE | CODE |
 | M-14 | Medium | Anyone can lock a rep out by failing sign-ins against their username | BRANCH | **FIXED 2026-09-29 in `{{M-14}}`** |
 | M-15 | Medium | Lists silently truncate (admin queue 200, rep orders 300, rep customers 500) | ALL | **FIXED 2026-09-29 in `{{M-15}}`** |
-| M-16 | Medium | 4.25 MB request bodies accepted by every Server Action, including anonymous ones | LIVE | CODE |
+| M-16 | Medium | 4.25 MB request bodies accepted by every Server Action, including anonymous ones | LIVE | **FIXED 2026-09-30 in `e632a05`** |
 | M-17 | Medium | Rep visibility over a moved customer's history is broader than needed | BRANCH | **FIXED 2026-09-30 in `{{M-17}}`** (recommended default; Amir to confirm) |
 | M-18 | Medium | Reassignment/deactivation checks race; moved customers keep the old commission flag | BRANCH | **FIXED 2026-09-30 in `{{M-18}}`** |
 | M-19 | Medium | Browser Back/Forward silently discards unsaved product-table edits | BRANCH | **FIXED 2026-09-30 in `{{M-19}}`** |
@@ -1065,6 +1065,12 @@ customer and cannot place the order (and each render also runs an unused
 `getCustomerForRep` and search the rest on demand. Scope ALL, status CODE.
 
 ### M-16 — 4.25 MB bodies accepted by every Server Action
+
+> **Fix status (2026-09-30): FIXED in `e632a05`.** `src/proxy.ts` runs only
+> for Server Action posts and refuses a body over 1 MB — or one with no declared
+> length — except on the pages that upload files (admin, pay link, customer and
+> rep order pages), which keep the 4.25 MB allowance. Signed direct uploads were
+> not needed for this. Test: `src/lib/actionBodyLimit.test.ts`.
 
 `next.config.ts:74` raises the limit globally for the image upload's sake, so
 anonymous actions (cart, checkout, sign-up, sign-in) also accept 4.25 MB
