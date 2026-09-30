@@ -74,7 +74,8 @@ export default async function LocaleLayout({
             `/[locale]/f/[slug]` rather than one row per part family. This is
             the layout that owns <html>/<body>, so it is the root layout in the
             sense the docs mean. */}
-        <Analytics />
+        {/* Vercel serves the script; anywhere else it 404s on every page (L-14). */}
+        {process.env.VERCEL ? <Analytics /> : null}
       </body>
     </html>
   );
