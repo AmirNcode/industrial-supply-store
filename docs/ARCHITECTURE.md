@@ -484,8 +484,8 @@ should reuse it.
 
 **The product table is a CSV upload typed in place.** A family's pane in
 `/admin/products` lists its products (`FamilyProductTable`, 100 rows a page,
-fetched from the JSON route because the workbench changes family without a
-server round trip). Save sends only the edited rows to
+fetched one page per request from the JSON route because the workbench changes
+family without a server round trip). Save sends only the edited rows to
 `saveFamilyProductsAction`, which rebuilds each as a complete import row —
 untouched cells carry their stored value, because `writeImport` replaces the
 whole row — and writes through `writeImport`, so facets, search text, counts

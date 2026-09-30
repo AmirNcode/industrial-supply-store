@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, type ReactNode, type RefObject } from "re
 import { useRouter } from "next/navigation";
 import type { FamilyProductsResponse } from "@/app/api/admin/family/[id]/products/route";
 import {
+  PRODUCT_PAGE_SIZE,
   cellText,
   productFingerprint,
   productTableColumns,
@@ -16,7 +17,7 @@ import { formatInt } from "@/lib/money";
 import { saveFamilyProductsAction } from "./productTableActions";
 
 /** Enough rows to scan and edit; few enough that edit mode stays quick. */
-const PAGE_SIZE = 100;
+const PAGE_SIZE = PRODUCT_PAGE_SIZE;
 
 /** What the workbench's leave-the-page guard needs from this table. */
 export type ProductTableHandle = { save: () => Promise<boolean>; discard: () => void };
@@ -37,7 +38,10 @@ const cellKey = (partNumber: string, cell: CellId) => `${partNumber}\u0000${cell
  * picking another family in the tree.
  *
  * The rows are fetched by this component, not rendered with the page: the
- * workbench switches family without a server round trip.
+ * workbench switches family without a server round trip. One page at a time
+ * (review M-21); every row loaded so far is remembered in `known`, so an edit
+ * made on page 3 can still be saved — with the fingerprint it was loaded
+ * with — from page 7.
  */
 export function FamilyProductTable({
   familyId,
@@ -69,30 +73,48 @@ export function FamilyProductTable({
   const [page, setPage] = useState(0);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
+  // Every row loaded so far in this family, with its position, by part number.
+  const [known, setKnown] = useState<ReadonlyMap<string, { product: ProductRecord; index: number }>>(
+    () => new Map(),
+  );
+
+  // Another family, or a refresh after an import: nothing loaded still holds.
+  const [loadedFor, setLoadedFor] = useState({ familyId, refreshKey });
+  if (loadedFor.familyId !== familyId || loadedFor.refreshKey !== refreshKey) {
+    setLoadedFor({ familyId, refreshKey });
+    setKnown(new Map());
+    setPage(0);
+  }
 
   useEffect(() => {
     const controller = new AbortController();
-    fetch(`/api/admin/family/${familyId}/products`, {
+    fetch(`/api/admin/family/${familyId}/products?page=${page}`, {
       cache: "no-store",
       signal: controller.signal,
     })
       .then((response) => (response.ok ? response.json() : Promise.reject(response.status)))
       .then((body: FamilyProductsResponse) => {
         setData(body);
+        setKnown((previous) => {
+          const next = new Map(previous);
+          body.products.forEach((product, i) =>
+            next.set(product.partNumber, { product, index: body.page * PAGE_SIZE + i }),
+          );
+          return next;
+        });
         setFailed(false);
       })
       .catch(() => {
         if (!controller.signal.aborted) setFailed(true);
       });
     return () => controller.abort();
-  }, [familyId, refreshKey, reloadToken]);
+  }, [familyId, refreshKey, reloadToken, page]);
 
   const columns = useMemo(() => productTableColumns(data?.defs ?? []), [data]);
-  const products = useMemo(() => data?.products ?? [], [data]);
   const changed = Object.keys(draft).length;
-  const pages = Math.max(1, Math.ceil(products.length / PAGE_SIZE));
+  const pages = Math.max(1, Math.ceil((data?.total ?? 0) / PAGE_SIZE));
   const currentPage = Math.min(page, pages - 1);
-  const rows = products.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
+  const rows = data?.products ?? [];
 
   useEffect(() => {
     onPendingChange(changed);
@@ -134,9 +156,8 @@ export function FamilyProductTable({
     }
     setSaving(true);
     setNotice(null);
-    const byPart = new Map(data.products.map((product) => [product.partNumber, product]));
     const payload = Object.entries(draft).flatMap(([partNumber, edits]) => {
-      const product = byPart.get(partNumber);
+      const product = known.get(partNumber)?.product;
       return product ? [{ partNumber, fingerprint: productFingerprint(product), edits }] : [];
     });
     try {
@@ -151,6 +172,14 @@ export function FamilyProductTable({
             products: previous.products.map((product) => fresh.get(product.partNumber) ?? product),
           },
         );
+        setKnown((previous) => {
+          const next = new Map(previous);
+          for (const [partNumber, product] of fresh) {
+            const entry = next.get(partNumber);
+            if (entry) next.set(partNumber, { ...entry, product });
+          }
+          return next;
+        });
         setDraft({});
         setInvalid(new Set());
         setEditing(false);
@@ -161,7 +190,7 @@ export function FamilyProductTable({
       }
       if (result.kind === "invalid") {
         setInvalid(new Set(result.cells.map(({ partNumber, cell }) => cellKey(partNumber, cell))));
-        const first = products.findIndex((product) => product.partNumber === result.cells[0]?.partNumber);
+        const first = known.get(result.cells[0]?.partNumber ?? "")?.index ?? -1;
         if (first >= 0) setPage(Math.floor(first / PAGE_SIZE));
         setNotice({
           kind: "error",
@@ -235,7 +264,7 @@ export function FamilyProductTable({
             <button
               type="button"
               className="taxonomy-ghost-button"
-              disabled={demo || !data || products.length === 0}
+              disabled={demo || !data || data.total === 0}
               onClick={() => {
                 setEditing(true);
                 setNotice(null);
@@ -255,7 +284,7 @@ export function FamilyProductTable({
 
       <div className="product-table-head">
         <span className="tech">
-          {data ? t.productsCount.replace("{n}", formatInt(products.length, locale)) : ""}
+          {data ? t.productsCount.replace("{n}", formatInt(data.total, locale)) : ""}
         </span>
         {changed > 0 && (
           <strong className="product-table-pending">
@@ -293,7 +322,7 @@ export function FamilyProductTable({
         <p className="taxonomy-error-banner">{t.productsLoadFailed}</p>
       ) : !data ? (
         <p className="product-table-empty">{t.productsLoading}</p>
-      ) : products.length === 0 ? (
+      ) : data.total === 0 ? (
         <p className="product-table-empty">{t.productsEmpty}</p>
       ) : (
         // Scrolls both ways inside its own box, so the horizontal scrollbar and

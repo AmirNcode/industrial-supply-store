@@ -9,6 +9,12 @@
  */
 
 /** One product as the table loads it — the same fields a CSV export carries. */
+/**
+ * Rows per page of the admin product table — and per request of its JSON
+ * route, which serves one page at a time (review M-21).
+ */
+export const PRODUCT_PAGE_SIZE = 100;
+
 export type ProductRecord = {
   partNumber: string;
   specs: Record<string, unknown>;

@@ -510,3 +510,32 @@ test("an import that changes a price changes what the customer is charged", asyn
     assert.equal(unitPriceAt(after, 10), 200);
   });
 });
+
+test("the product table reads a family one page at a time", async () => {
+  // Review M-21: the table's JSON used to carry every product of the family.
+  const slug = `pn-page-${Date.now()}`;
+  await withFamily(slug, async (familyId) => {
+    const { getProductsPage } = await import("./importQueries");
+    const rows = Array.from({ length: 5 }, (_, i) => ({
+      partNumber: `PAGE-${Date.now()}-${i}`,
+      specs: {},
+      priceCents: 100 + i,
+      packQty: 1,
+      leadDays: 0,
+      inStock: true,
+      inventoryAvailable: 0,
+      inventoryOnHold: 0,
+      inventorySold: 0,
+    }));
+    await writeImport(familyId, rows);
+    const first = await getProductsPage(familyId, 0, 2);
+    const third = await getProductsPage(familyId, 4, 2);
+    assert.equal(first.total, 5);
+    assert.equal(first.products.length, 2);
+    assert.equal(third.products.length, 1);
+    assert.deepEqual(
+      [...first.products, ...(await getProductsPage(familyId, 2, 2)).products, ...third.products].map((p) => p.partNumber),
+      rows.map((r) => r.partNumber),
+    );
+  });
+});

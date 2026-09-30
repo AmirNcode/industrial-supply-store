@@ -178,6 +178,34 @@ export async function getProductsForExport(
 }
 
 /**
+ * One page of a family's products for the admin table, in the export's order,
+ * plus how many there are. The table used to fetch every row on each family
+ * click — 735 KB for the largest family, and past ~15,000 rows more than
+ * Vercel's 4.5 MB response limit, so the table could not load (review M-21).
+ */
+export async function getProductsPage(
+  familyId: number,
+  offset: number,
+  limit: number,
+): Promise<{ products: ExportProduct[]; total: number }> {
+  const [products, [{ total }]] = await Promise.all([
+    sql<ExportProduct[]>`
+      SELECT part_number AS "partNumber", specs, price_cents AS "priceCents",
+             pack_qty AS "packQty", lead_days AS "leadDays", in_stock AS "inStock",
+             inventory_available AS "inventoryAvailable",
+             inventory_on_hold AS "inventoryOnHold",
+             inventory_sold AS "inventorySold", image_url AS "imageUrl"
+      FROM products
+      WHERE family_id = ${familyId}
+      ORDER BY sort, id
+      LIMIT ${limit} OFFSET ${offset}
+    `,
+    sql<{ total: number }[]>`SELECT count(*)::int AS total FROM products WHERE family_id = ${familyId}`,
+  ]);
+  return { products, total };
+}
+
+/**
  * How a spec value is written into a CSV cell and into `val_text`.
  *
  * Matches `specValueToText` in `src/seed/index.ts` — the four-decimal clamp is

@@ -107,7 +107,7 @@ deployment · `ALL` = everywhere.
 | M-18 | Medium | Reassignment/deactivation checks race; moved customers keep the old commission flag | BRANCH | **FIXED 2026-09-30 in `{{M-18}}`** |
 | M-19 | Medium | Browser Back/Forward silently discards unsaved product-table edits | BRANCH | **FIXED 2026-09-30 in `{{M-19}}`** |
 | M-20 | Medium | About 1 in 290 temporary passwords is mangled in the "share" message (`$$` → `$`) | BRANCH | **FIXED 2026-09-30 in `{{M-20}}`** |
-| M-21 | Medium | Product-table JSON is unpaged; large families will exceed Vercel's 4.5 MB response cap | BRANCH | CODE + measured |
+| M-21 | Medium | Product-table JSON is unpaged; large families will exceed Vercel's 4.5 MB response cap | BRANCH | **FIXED 2026-09-30 in `{{M-21}}`** |
 | M-22 | Medium | An unrelated feature (admin product-table editor) is bundled into the sales-rep release | BRANCH (process) | **DECLINED by Amir 2026-09-29 — everything ships together on this branch** |
 | L-1 … L-24 | Low | Hardening and hygiene (see section) | mixed | mixed |
 
@@ -1166,6 +1166,14 @@ system-generated (`payLinkMessage` with company names, for instance).
 Scope BRANCH, status CONFIRMED.
 
 ### M-21 — Product-table JSON is unpaged
+
+> **Fix status (2026-09-30): FIXED in `{{M-21}}`.** `/api/admin/family/[id]/products?page=N`
+> returns one page of 100 rows plus the family's total (`getProductsPage`);
+> the table fetches the page it shows and remembers every row loaded (with its
+> position) so edits on several pages save together with the fingerprints they
+> were loaded with. Measured on a local production build, largest family
+> (2,400 rows): 27 KB per page, against ~735 KB for the whole family before.
+> Tests: `partNumbers.integration.test.ts` (paging), `e2e/admin-products-taxonomy.spec.ts`.
 
 `/api/admin/family/[id]/products` (`src/app/api/admin/family/[id]/products/route.ts:30`)
 returns every product of the family on every family click. Measured locally,
