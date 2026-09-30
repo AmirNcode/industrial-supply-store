@@ -246,6 +246,10 @@ export default async function AdminRepPage({
                   ))}
               </select>
             </label>
+            <label className="flex items-center gap-1.5 text-[11px]">
+              <input type="checkbox" name="movedEarnCommission" disabled={DEMO_MODE} />
+              {t.repMovedEarnCommission}
+            </label>
             <ConfirmSubmit
               label={t.repDeactivate}
               title={t.confirmDeactivateRep}

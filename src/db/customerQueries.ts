@@ -277,11 +277,13 @@ export async function assignCustomer(
   repId: string | null,
   earnsCommission: boolean,
 ): Promise<"ok" | "not-found" | "bad-rep"> {
-  if (repId !== null) {
-    const [rep] = await sql`SELECT 1 FROM sales_reps WHERE id = ${repId} AND active`;
-    if (!rep) return "bad-rep";
-  }
   return sql.begin(async (tx) => {
+    // Checked and locked inside the transaction: checked outside it, the rep
+    // could be deactivated between the check and the write (review M-18).
+    if (repId !== null) {
+      const [rep] = await tx`SELECT 1 FROM sales_reps WHERE id = ${repId} AND active FOR SHARE`;
+      if (!rep) return "bad-rep" as const;
+    }
     const [before] = await tx<{ repId: string | null; earns: boolean }[]>`
       SELECT rep_id AS "repId", rep_earns_commission AS earns FROM users WHERE id = ${customerId} FOR UPDATE
     `;

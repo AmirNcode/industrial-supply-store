@@ -104,7 +104,7 @@ deployment · `ALL` = everywhere.
 | M-15 | Medium | Lists silently truncate (admin queue 200, rep orders 300, rep customers 500) | ALL | **FIXED 2026-09-29 in `{{M-15}}`** |
 | M-16 | Medium | 4.25 MB request bodies accepted by every Server Action, including anonymous ones | LIVE | CODE |
 | M-17 | Medium | Rep visibility over a moved customer's history is broader than needed | BRANCH | **FIXED 2026-09-30 in `{{M-17}}`** (recommended default; Amir to confirm) |
-| M-18 | Medium | Reassignment/deactivation checks race; moved customers keep the old commission flag | BRANCH | CODE |
+| M-18 | Medium | Reassignment/deactivation checks race; moved customers keep the old commission flag | BRANCH | **FIXED 2026-09-30 in `{{M-18}}`** |
 | M-19 | Medium | Browser Back/Forward silently discards unsaved product-table edits | BRANCH | CODE |
 | M-20 | Medium | About 1 in 290 temporary passwords is mangled in the "share" message (`$$` → `$`) | BRANCH | CONFIRMED |
 | M-21 | Medium | Product-table JSON is unpaged; large families will exceed Vercel's 4.5 MB response cap | BRANCH | CODE + measured |
@@ -1093,6 +1093,15 @@ orders of a newly assigned customer are read-only summaries without pay links.
 Scope BRANCH, status CODE.
 
 ### M-18 — Reassignment races; moved customers keep the old commission flag
+
+> **Fix status (2026-09-30): FIXED in `{{M-18}}`.** `assignCustomer` and
+> `deactivateRep` check the destination rep `FOR SHARE` inside their
+> transaction; checkout's `creditFor` reads the customer `FOR SHARE`, so a move
+> in flight waits. Deactivation now asks explicitly whether moved customers
+> earn commission for the new rep (checkbox, off by default) instead of
+> carrying the old rep's flag; the move is audited (M-11). Test:
+> `salesReps.integration.test.ts` (flag not inherited; assign to a deactivated
+> rep refused). The race itself is argued from the locks, not reproduced.
 
 - `deactivateRep` (`src/db/repQueries.ts:152`) moves customers with
   `UPDATE users SET rep_id = destination` but leaves `rep_earns_commission` as

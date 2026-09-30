@@ -159,14 +159,24 @@ export async function listActiveReps(): Promise<{ id: string; name: string }[]> 
  * their orders. Moving the session version on is what ends a session that is
  * open right now.
  */
+/**
+ * Locks the rep out and moves their customers to `destination` (or to no rep).
+ *
+ * The destination is locked `FOR SHARE` inside the transaction, so it cannot
+ * be deactivated between the check and the move (review M-18). Whether the
+ * moved customers earn the new rep commission is the admin's explicit choice
+ * here: it used to carry over the flag set for the previous rep, so the
+ * destination inherited eligibility decisions made for someone else.
+ */
 export async function deactivateRep(
   id: string,
   destination: string | null,
+  movedEarnCommission: boolean,
 ): Promise<"ok" | "not-found" | "bad-destination"> {
   return sql.begin(async (tx) => {
     if (destination !== null) {
       if (destination === id) return "bad-destination" as const;
-      const [dest] = await tx`SELECT 1 FROM sales_reps WHERE id = ${destination} AND active`;
+      const [dest] = await tx`SELECT 1 FROM sales_reps WHERE id = ${destination} AND active FOR SHARE`;
       if (!dest) return "bad-destination" as const;
     }
     const result = await tx`
@@ -174,7 +184,17 @@ export async function deactivateRep(
       WHERE id = ${id} AND active
     `;
     if (result.count === 0) return "not-found" as const;
-    await tx`UPDATE users SET rep_id = ${destination} WHERE rep_id = ${id}`;
+    const moved = await tx`
+      UPDATE users
+      SET rep_id = ${destination}, rep_earns_commission = ${destination !== null && movedEarnCommission}
+      WHERE rep_id = ${id}
+    `;
+    await recordAudit(tx, {
+      actor: { kind: "admin" },
+      action: "rep.deactivated",
+      subject: { kind: "rep", id },
+      detail: { movedTo: destination, customers: moved.count, earnCommission: destination !== null && movedEarnCommission },
+    });
     return "ok" as const;
   });
 }

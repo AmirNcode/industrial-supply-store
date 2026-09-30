@@ -91,6 +91,9 @@ async function creditFor(tx: Tx, userId: string): Promise<{ repId: string; rateB
            u.rep_earns_commission AS earns
     FROM users u LEFT JOIN sales_reps r ON r.id = u.rep_id
     WHERE u.id = ${userId}
+    -- Held until the order commits, so a move or deactivation in flight waits
+    -- rather than landing between this read and the order's credit (M-18).
+    FOR SHARE OF u
   `;
   if (!row || row.repId === null || !row.active) return null;
   return { repId: row.repId, rateBp: row.earns ? (row.rateBp ?? 0) : 0 };

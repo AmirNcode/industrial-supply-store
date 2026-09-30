@@ -200,14 +200,20 @@ test("rep accounts: unique usernames, a password change ends sessions, deactivat
       RETURNING id`;
     userIds.push(c.id);
 
-    assert.equal(await deactivateRep(a.id, a.id), "bad-destination");
-    assert.equal(await deactivateRep(a.id, b.id), "ok");
-    const [moved] = await sql<{ repId: string }[]>`SELECT rep_id AS "repId" FROM users WHERE id = ${c.id}`;
+    await sql`UPDATE users SET rep_earns_commission = true WHERE id = ${c.id}`;
+    assert.equal(await deactivateRep(a.id, a.id, false), "bad-destination");
+    assert.equal(await deactivateRep(a.id, b.id, false), "ok");
+    const [moved] = await sql<{ repId: string; earns: boolean }[]>`
+      SELECT rep_id AS "repId", rep_earns_commission AS earns FROM users WHERE id = ${c.id}`;
     assert.equal(moved.repId, b.id);
+    // The flag set for rep A does not carry over: the admin chose "no" (M-18).
+    assert.equal(moved.earns, false);
     const after = await getRepById(a.id);
     assert.equal(after?.active, false);
     assert.equal(after?.sessionVersion, (version ?? 0) + 1);
-    assert.equal(await deactivateRep(b.id, a.id), "bad-destination");
+    assert.equal(await deactivateRep(b.id, a.id, true), "bad-destination");
+    // Assigning to a deactivated rep is refused inside the transaction.
+    assert.equal(await assignCustomer(c.id, a.id, true), "bad-rep");
 
     // A referral link opened before deactivation must not credit a locked-out rep.
     assert.equal(await getActiveRepByReferralCode(a.referralCode), null);
