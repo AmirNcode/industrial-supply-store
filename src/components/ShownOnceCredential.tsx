@@ -1,3 +1,4 @@
+import { ForgetShownOnce } from "./ForgetShownOnce";
 import { ShareButton } from "./ShareButton";
 
 /**
@@ -37,6 +38,7 @@ export function ShownOnceCredential({
         </dd>
       </dl>
       <ShareButton text={message} label={labels.share} copiedLabel={labels.copied} />
+      <ForgetShownOnce />
     </div>
   );
 }

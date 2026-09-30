@@ -46,3 +46,14 @@ export async function readShownOnce(
     return null;
   }
 }
+
+/**
+ * Called by the page once the credential is on screen (review L-24). Until
+ * then the plaintext password sat in the browser and rode on every request for
+ * the cookie's 30 seconds. Not a Server Action: deleting a cookie in one makes
+ * Next re-render the page, which would take the credential off the screen the
+ * moment it appeared.
+ */
+export async function clearShownOnce(): Promise<void> {
+  (await cookies()).delete(COOKIE);
+}

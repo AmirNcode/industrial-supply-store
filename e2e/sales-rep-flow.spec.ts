@@ -36,6 +36,10 @@ for (const locale of locales) {
     await admin.locator('input[name="commission"]').fill("2.5");
     await admin.getByRole("button", { name: t.createRep }).click();
     const tempPassword = (await admin.getByTestId("shown-once-password").innerText()).trim();
+    // Once on screen, the plaintext leaves the browser's cookies (L-24).
+    const holdsCredential = async (context: typeof adminContext) =>
+      (await context.cookies()).some((cookie) => cookie.name === "isupply_shown_once");
+    await expect.poll(() => holdsCredential(adminContext)).toBe(false);
 
     // The rep must replace it, and a weak password is refused.
     const repContext = await browser.newContext();
@@ -61,6 +65,7 @@ for (const locale of locales) {
     await rep.locator('input[name="phone"]').fill(phone);
     await rep.getByRole("button", { name: t.createCustomer }).click();
     await expect(rep.getByTestId("shown-once-login")).toHaveText(phone.slice(-7));
+    await expect.poll(() => holdsCredential(repContext)).toBe(false);
 
     // New order → one catalog line → checkout already filled in for them.
     // Wait for its landing page: navigating away mid-action would cancel the
