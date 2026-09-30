@@ -4,6 +4,7 @@ import {
   contactPhoneHref,
   normalizeContactEmail,
   normalizeContactPhone,
+  isPlaceholderContact,
 } from "./siteContactValues";
 
 test("contact email is trimmed and normalized for display and mailto", () => {
@@ -30,3 +31,9 @@ test("phone links keep a leading plus and remove display punctuation", () => {
   assert.equal(contactPhoneHref("021 8888 0000"), "tel:02188880000");
 });
 
+
+test("the stand-in contact details are recognised, real ones are not", () => {
+  assert.equal(isPlaceholderContact({ email: "sales@temex.example", phone: "+98 21 1234 5678" }), true);
+  assert.equal(isPlaceholderContact({ email: "sales@temex.ir", phone: "+98 21 8888 0000" }), true);
+  assert.equal(isPlaceholderContact({ email: "sales@temex.ir", phone: "+98 21 1234 5678" }), false);
+});

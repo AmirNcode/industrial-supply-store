@@ -39,6 +39,8 @@ import {
   type CustomerInput,
 } from "@/db/customerQueries";
 import { addNoteForRep } from "@/db/noteQueries";
+import { getSiteContact } from "@/lib/siteContact";
+import { isPlaceholderContact } from "@/lib/siteContactValues";
 import {
   clearRepSessionCookie,
   requireRep,
@@ -302,6 +304,7 @@ export async function issueInvoiceForRepAction(formData: FormData): Promise<void
   if (hasUnpricedLine(found.items)) redirect(`${page}?error=unpriced`);
   // An invoice locks its rate for good; the placeholder is nobody's rate.
   if ((await getFxRateSource()) === "placeholder") redirect(`${page}?error=no-rate`);
+  if (isPlaceholderContact(await getSiteContact())) redirect(`${page}?error=no-contact`);
 
   const [rate, vatRateBp] = await Promise.all([getFxRate(), getVatRateBp()]);
   if (

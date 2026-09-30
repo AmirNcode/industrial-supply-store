@@ -27,6 +27,10 @@ jobs:
       # next start is a production server; tell it which header holds the
       # client address (src/lib/rateLimit.ts). Next fills this one locally.
       TRUSTED_PROXY_HEADER: x-forwarded-for
+      # Invoices refuse the stand-in contact details (review L-6); the fresh
+      # CI database has none saved, so these are what it prints.
+      SELLER_EMAIL: sales@ci.example.org
+      SELLER_PHONE: "+98 21 1111 2222"
       USD_TO_TOMAN: "110000"
     services:
       postgres:

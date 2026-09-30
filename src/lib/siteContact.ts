@@ -3,6 +3,8 @@ import "server-only";
 import { cache } from "react";
 import { sql } from "@/db";
 import {
+  PLACEHOLDER_CONTACT_EMAIL,
+  PLACEHOLDER_CONTACT_PHONE,
   contactPhoneHref,
   normalizeContactEmail,
   normalizeContactPhone,
@@ -11,8 +13,8 @@ import {
 
 const KEY_EMAIL = "site_contact_email";
 const KEY_PHONE = "site_contact_phone";
-const DEFAULT_EMAIL = "sales@temex.example";
-const DEFAULT_PHONE = "+98 21 8888 0000";
+const DEFAULT_EMAIL = PLACEHOLDER_CONTACT_EMAIL;
+const DEFAULT_PHONE = PLACEHOLDER_CONTACT_PHONE;
 
 function fallbackEmail(): string {
   return normalizeContactEmail(process.env.SELLER_EMAIL ?? "") ?? DEFAULT_EMAIL;

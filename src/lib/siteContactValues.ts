@@ -9,6 +9,18 @@ export type SiteContact = {
   phoneHref: string;
 };
 
+/**
+ * What the site shows before anyone has entered the real contact details.
+ * Fine as a stand-in on the header; printed on an invoice, it sends customers
+ * to an address nobody reads (review finding L-6), so invoices refuse it.
+ */
+export const PLACEHOLDER_CONTACT_EMAIL = "sales@temex.example";
+export const PLACEHOLDER_CONTACT_PHONE = "+98 21 8888 0000";
+
+export function isPlaceholderContact(contact: { email: string; phone: string }): boolean {
+  return contact.email === PLACEHOLDER_CONTACT_EMAIL || contact.phone === PLACEHOLDER_CONTACT_PHONE;
+}
+
 function latinDigits(value: string): string {
   return value.replace(/[۰-۹٠-٩]/g, (digit) => {
     const code = digit.charCodeAt(0);

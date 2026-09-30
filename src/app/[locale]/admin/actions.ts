@@ -14,10 +14,11 @@ import {
 import { isFxMode, isPlausibleRate, parseRate } from "@/lib/fxRate";
 import { refreshMarketRate } from "@/lib/fxMarketUpdate";
 import { safeLocale } from "@/lib/i18n";
-import { saveSiteContact } from "@/lib/siteContact";
+import { getSiteContact, saveSiteContact } from "@/lib/siteContact";
 import { validateBankFields } from "@/lib/bankDetails";
 import { saveBankFields } from "@/lib/bankSettings";
 import {
+  isPlaceholderContact,
   normalizeContactEmail,
   normalizeContactPhone,
 } from "@/lib/siteContactValues";
@@ -325,6 +326,10 @@ export async function issueInvoiceAction(formData: FormData): Promise<void> {
   // An invoice locks its rate for good; the placeholder is nobody's rate.
   if ((await getFxRateSource()) === "placeholder") {
     redirect(withFilter(`/${locale}/admin/orders?error=no-rate`, statusFilter));
+  }
+  // Nor is an invoice sent with the stand-in contact details on it (L-6).
+  if (isPlaceholderContact(await getSiteContact())) {
+    redirect(withFilter(`/${locale}/admin/orders?error=no-contact`, statusFilter));
   }
 
   const [itemRows, rate, vatRateBp] = await Promise.all([

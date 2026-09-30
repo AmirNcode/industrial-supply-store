@@ -1,5 +1,6 @@
 import "server-only";
 import type { Locale } from "./i18n";
+import { PLACEHOLDER_CONTACT_EMAIL, PLACEHOLDER_CONTACT_PHONE } from "./siteContactValues";
 
 /**
  * Who the invoice is from.
@@ -36,8 +37,8 @@ export function getSeller(locale: Locale): Seller {
       .split("|")
       .map((s) => s.trim())
       .filter(Boolean),
-    email: pick("EMAIL", "sales@temex.example"),
-    phone: pick("PHONE", "+98 21 8888 0000"),
+    email: pick("EMAIL", PLACEHOLDER_CONTACT_EMAIL),
+    phone: pick("PHONE", PLACEHOLDER_CONTACT_PHONE),
     taxId: pick("TAX_ID", ""),
   };
 }

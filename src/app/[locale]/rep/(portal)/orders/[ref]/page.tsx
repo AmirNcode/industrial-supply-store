@@ -23,6 +23,7 @@ const ERROR_KEY = {
   conflict: "orderConflict",
   unpriced: "repInvoiceUnpriced",
   "no-rate": "invoiceNeedsRate",
+  "no-contact": "invoiceNeedsContact",
   "too-large": "orderTooLarge",
 } as const;
 
