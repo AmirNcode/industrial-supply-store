@@ -30,6 +30,8 @@ export const REQUEST_LIMITS = {
   cityChars: 120,
   countryChars: 120,
   notesChars: 4_000,
+  courierChars: 80,
+  trackingNumberChars: 120,
   /**
    * One locale of a category or family description. Admin-only, but it lives
    * here with every other ceiling so there is one place to read them from.

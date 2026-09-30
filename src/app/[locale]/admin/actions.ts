@@ -203,8 +203,10 @@ export async function setOrderStatusAction(formData: FormData): Promise<void> {
   // statement lost that race, and the order is left exactly as whoever won it
   // left it.
   if (to === "shipped") {
-    const courier = String(formData.get("courier") ?? "").trim();
-    const tracking = String(formData.get("trackingNumber") ?? "").trim();
+    // Bounded like every other typed field: both print on the customer's
+    // order and tracking pages (review L-11). Too long reads as missing.
+    const courier = boundedString(formData.get("courier"), REQUEST_LIMITS.courierChars) ?? "";
+    const tracking = boundedString(formData.get("trackingNumber"), REQUEST_LIMITS.trackingNumberChars) ?? "";
     // The whole point of this state is showing the customer a tracking number.
     if (!courier || !tracking) {
       redirect(withFilter(`/${locale}/admin/orders?error=tracking`, statusFilter));

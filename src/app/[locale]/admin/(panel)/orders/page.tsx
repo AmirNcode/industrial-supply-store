@@ -364,6 +364,7 @@ export default async function AdminPage({
                         <input
                           type="text"
                           name="courier"
+                          maxLength={80}
                           placeholder={t.courier}
                           className="w-28 text-[11px]"
                           required
@@ -371,6 +372,7 @@ export default async function AdminPage({
                         <input
                           type="text"
                           name="trackingNumber"
+                          maxLength={120}
                           dir="ltr"
                           placeholder={t.trackingNumber}
                           className="tech w-36 text-[11px]"
