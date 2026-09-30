@@ -4,6 +4,7 @@ import { addPaymentProof } from "@/db/paymentProofQueries";
 import { DEMO_MODE } from "./demo";
 import { PROOF_MAX_BYTES, proofProblem, sniffProofType } from "./paymentProof";
 import { discardPaymentProof, storePaymentProof } from "./paymentProofStorage";
+import { stripImageMetadata } from "./imageMetadata";
 
 export type ProofUploadProblem =
   | "empty"
@@ -40,10 +41,12 @@ export async function receivePaymentProof(
   if (!(entry instanceof File) || entry.size === 0) return { ok: false, problem: "empty" };
   // Refused before the body is read into memory.
   if (entry.size > PROOF_MAX_BYTES) return { ok: false, problem: "too-large" };
-  const bytes = new Uint8Array(await entry.arrayBuffer());
-  const problem = proofProblem(bytes);
+  const received = new Uint8Array(await entry.arrayBuffer());
+  const problem = proofProblem(received);
   if (problem) return { ok: false, problem };
-  const type = sniffProofType(bytes)!;
+  const type = sniffProofType(received)!;
+  // GPS, device and time out of photos before anything is stored (L-15).
+  const bytes = stripImageMetadata(received, type);
 
   let path: string;
   try {
