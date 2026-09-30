@@ -1,6 +1,6 @@
 import "server-only";
 
-import { revalidatePath } from "next/cache";
+import { revalidateCatalogPages } from "./revalidateCatalog";
 import { parseWithPlan, pricelessParts, type ImportError } from "./importCsv";
 import {
   analyzeCsv,
@@ -142,7 +142,8 @@ export async function processCatalogImport(input: {
     return { kind: "case-variants", familyId, parts: result.caseVariants };
   }
 
-  revalidatePath("/", "layout");
+  // Product counts on the cached catalog pages; family pages are per request.
+  revalidateCatalogPages();
   return {
     kind: "ok",
     familyId,

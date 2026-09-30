@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidateCatalogPages } from "@/lib/revalidateCatalog";
 import { redirect } from "next/navigation";
 import { sql } from "@/db";
 import { assertAdminWrite, signInAdmin, signOutAdmin, signOutAllAdmins } from "@/lib/admin";
@@ -104,9 +104,8 @@ export async function saveFxAction(formData: FormData): Promise<void> {
   }
 
   await saveFxSettings(mode, manualRate);
-  // The catalog is statically rendered with revalidate = 3600, so without this
-  // a rate change would take up to an hour to reach the pages that show it.
-  revalidatePath("/", "layout");
+  // No purge: every page that shows a price renders per request, and the
+  // cached catalog pages show none (lib/revalidateCatalog.ts).
   redirect(`/${locale}/admin/settings?fx=saved`);
 }
 
@@ -135,7 +134,7 @@ export async function savePriceDisplayModeAction(formData: FormData): Promise<vo
   }
 
   await savePriceDisplayMode(rawMode);
-  revalidatePath("/", "layout");
+  // No purge, for the same reason as the exchange rate.
   redirect(`/${locale}/admin/settings?currency=saved`);
 }
 
@@ -150,7 +149,8 @@ export async function saveSiteContactAction(formData: FormData): Promise<void> {
   if (!phone) redirect(`/${locale}/admin/settings?contact=invalid-phone`);
 
   await saveSiteContact(email, phone);
-  revalidatePath("/", "layout");
+  // The header on the cached catalog pages prints it.
+  revalidateCatalogPages();
   redirect(`/${locale}/admin/settings?contact=saved`);
 }
 

@@ -318,9 +318,10 @@ per-click action.** It marks every ISR page stale at once, so the next visit to
 each one is a regeneration, and a burst of regenerations against the small
 shared database is how production melted on 2026-08-15: statements queued past
 the database's 120s `statement_timeout` and requests behind them hung to the
-300s function ceiling. It is acceptable on rare, coarse writes (an import, a
-deletion); anything a person presses repeatedly must revalidate only the pages
-its write actually changes, as `saveFamilyOrderAction` does.
+300s function ceiling. Nothing uses it now: the only cached pages are the home
+and category pages, and admin writes that change them call
+`revalidateCatalogPages()` (`src/lib/revalidateCatalog.ts`). Exchange-rate and
+currency settings purge nothing — no cached page shows a price.
 
 **Serverless database limits live in `src/db/index.ts`, and every wait must be
 bounded.** The pool options there (pool size, keep-alive, lifetime) are tuned

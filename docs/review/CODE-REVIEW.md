@@ -93,7 +93,7 @@ deployment · `ALL` = everywhere.
 | M-4 | Medium | Heavy public pages have no rate limit (`/search`, family `?view=all`) | LIVE | **FIXED 2026-09-29 in `{{M-4}}`** |
 | M-5 | Medium | `/_next/image` is an open image proxy for any HTTPS host | LIVE | **FIXED 2026-09-29 in `{{M-5}}`** |
 | M-6 | Medium | No security headers (framing, CSP, nosniff, referrer); `x-powered-by` exposed | LIVE | **FIXED 2026-09-29 in `{{M-6}}`** (CSP beyond framing not done) |
-| M-7 | Medium | Per-click admin actions purge the whole site cache (the 2026-08-15 incident pattern) | LIVE | CODE |
+| M-7 | Medium | Per-click admin actions purge the whole site cache (the 2026-08-15 incident pattern) | LIVE | **FIXED 2026-09-29 in `{{M-7}}`** |
 | M-8 | Medium | Stock updates lock product rows in arbitrary order → deadlocks under concurrency | ALL | CODE |
 | M-9 | Medium | 32-bit overflow on order and invoice totals → 500 errors (anonymous can trigger) | ALL | CONFIRMED |
 | M-10 | Medium | Paid orders can be cancelled with no refund record; stock stays "sold" | ALL | CODE |
@@ -871,6 +871,14 @@ Analytics need allowances); `poweredByHeader: false`. Scope LIVE, status
 CONFIRMED-LIVE.
 
 ### M-7 — Per-click admin actions purge the whole site cache
+
+> **Fix status (2026-09-29): FIXED in `{{M-7}}`.** No `revalidatePath("/",
+> "layout")` remains. The only ISR pages are home and category, so catalog
+> writes (add product, create/delete, taxonomy and media saves, site contact,
+> CSV import) call `revalidateCatalogPages()`, which marks just those two
+> routes stale. The exchange-rate and currency-display saves purge nothing:
+> no cached page shows a price (checked: neither route reads the rate). No
+> automated test — the change is a call-site swap; typecheck and lint cover it.
 
 `revalidatePath("/", "layout")` — the pattern ARCHITECTURE.md says caused the
 2026-08-15 outage — still runs on per-click actions:

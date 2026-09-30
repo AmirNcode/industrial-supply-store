@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidateCatalogPages } from "@/lib/revalidateCatalog";
 import { assertAdminWrite } from "@/lib/admin";
 import { getFamilyForImport, writeImport } from "@/db/importQueries";
 import { parseNumeric } from "@/lib/columnPlan";
@@ -114,7 +114,8 @@ export async function createProductAction(
   }
   if (result.inserted !== 1) return { kind: "error", message: "not-created" };
 
-  revalidatePath("/", "layout");
+  // Product counts on the cached catalog pages; the family page is per request.
+  revalidateCatalogPages();
   // `writeImport` fills the minted code into the row it was handed.
   return { kind: "ok", partNumber: row.partNumber };
 }

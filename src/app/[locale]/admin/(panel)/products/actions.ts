@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { revalidateCatalogPages } from "@/lib/revalidateCatalog";
 import { assertAdminWrite } from "@/lib/admin";
 import { catalogImageFileProblem } from "@/lib/catalogImages";
 import { CatalogStorageError, uploadCatalogImage } from "@/lib/catalogStorage";
@@ -45,7 +46,7 @@ export async function createFamilyAction(
   );
   if (!result.ok) return { kind: "error", message: result.reason };
 
-  revalidatePath("/", "layout");
+  revalidateCatalogPages();
   return { kind: "created", name: String(formData.get("nameEn") ?? "").trim() };
 }
 
@@ -269,11 +270,9 @@ export async function saveTaxonomyWorkbenchAction(
 
   if (!(await saveAdminTaxonomyChanges(orders, content, visibility))) return "stale";
 
-  if (content.length > 0 || visibility.length > 0) revalidatePath("/", "layout");
-  else {
-    revalidatePath("/[locale]", "page");
-    revalidatePath("/[locale]/c/[...slug]", "page");
-  }
+  // Order, names, images and visibility all show only on the cached catalog
+  // pages; family and list pages render per request.
+  revalidateCatalogPages();
   revalidatePath(`/${locale}/admin/products`);
   return "saved";
 }
@@ -352,6 +351,6 @@ export async function deleteCatalogAction(
     what === "category" ? await deleteCategory(id) : await deleteFamily(id);
   if (!ok) return { kind: "error", message: "not-found" };
 
-  revalidatePath("/", "layout");
+  revalidateCatalogPages();
   return { kind: "deleted", what, name, products };
 }

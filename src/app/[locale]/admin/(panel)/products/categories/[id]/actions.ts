@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidateCatalogPages } from "@/lib/revalidateCatalog";
 import { assertAdminWrite } from "@/lib/admin";
 import {
   catalogImageFileProblem,
@@ -244,10 +244,9 @@ export async function saveCatalogMediaAction(
     if (!saved) failures.push({ entity: u.entity, id: u.id, field: "card", message: "not-found" });
   }
 
-  // Names, images, descriptions and visibility are baked into every catalog
-  // page, so this one is deliberately the coarse purge — but it is paid once
-  // per press.
-  revalidatePath("/", "layout");
+  // Names, images, descriptions and visibility are baked into the cached
+  // catalog pages; once per press.
+  revalidateCatalogPages();
 
   if (failures.length > 0) return { kind: "error", failures };
   return { kind: "saved", count: updates.length };
