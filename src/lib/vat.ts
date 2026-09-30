@@ -1,5 +1,5 @@
 import type { Locale } from "./i18n";
-import { latinDigits } from "./digits";
+import { parsePercentBp } from "./percent";
 
 /**
  * VAT (ارزش افزوده) as the admin types it and as an invoice prints it.
@@ -19,14 +19,7 @@ export const MAX_VAT_RATE_BP = 10_000;
  * silently printing 9.13 would put a different tax on every invoice.
  */
 export function parseVatPercent(raw: string): number | null {
-  const value = latinDigits(raw.trim())
-    .replace(/[%٪]/g, "")
-    .replace(/[٫,]/g, ".")
-    .trim();
-  const match = /^(\d{1,3})(?:\.(\d{1,2}))?$/.exec(value);
-  if (!match) return null;
-  const bp = Number(match[1]) * 100 + Number((match[2] ?? "").padEnd(2, "0"));
-  return bp <= MAX_VAT_RATE_BP ? bp : null;
+  return parsePercentBp(raw, MAX_VAT_RATE_BP);
 }
 
 const percentFmt = {

@@ -1,8 +1,10 @@
 /**
- * Exchange rate policy, kept free of imports so it can be tested without a
- * database. `lib/fx.ts` supplies the stored settings; this module decides what
- * they mean.
+ * Exchange rate policy, kept free of database imports so it can be tested
+ * without a database. `lib/fx.ts` supplies the stored settings; this module
+ * decides what they mean.
  */
+
+import { latinDigits } from "./digits";
 
 export const FX_MODES = ["auto", "manual"] as const;
 export type FxMode = (typeof FX_MODES)[number];
@@ -113,14 +115,6 @@ export function isPlausibleRate(rate: number, envRate: number): boolean {
  * rate read as unparseable — and the rejection message says nothing about
  * which digits are acceptable.
  */
-function latinDigits(s: string): string {
-  return s.replace(/[۰-۹٠-٩]/g, (d) => {
-    const code = d.charCodeAt(0);
-    const base = code >= 0x06f0 ? 0x06f0 : 0x0660;
-    return String(code - base);
-  });
-}
-
 /** Accepts what someone actually types, including thousands separators. */
 export function parseRate(raw: string): number | null {
   const cleaned = latinDigits(raw.trim()).replace(/[,\s٬،]/g, "");

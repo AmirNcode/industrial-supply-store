@@ -1,5 +1,6 @@
 import "server-only";
 import { sql } from "./index";
+import { uniqueViolation } from "./pgErrors";
 import { recordAudit } from "./audit";
 import { randomReferralCode } from "@/lib/repAccount";
 
@@ -32,11 +33,6 @@ const COLS = sql`id, username, name, phone, email,
   created_at AS "createdAt", last_login_at AS "lastLoginAt"`;
 
 /** The constraint a unique violation hit, or null for any other error. */
-function uniqueViolation(err: unknown): string | null {
-  const e = err as { code?: string; constraint_name?: string };
-  return e?.code === "23505" ? (e.constraint_name ?? "") : null;
-}
-
 export async function getRepById(id: string): Promise<RepRow | null> {
   const [row] = await sql<RepRow[]>`SELECT ${COLS} FROM sales_reps WHERE id = ${id}`;
   return row ?? null;

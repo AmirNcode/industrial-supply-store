@@ -3,6 +3,8 @@
  * Kept free of database imports so the same rules can be unit tested directly.
  */
 
+import { latinDigits } from "./digits";
+
 export type SiteContact = {
   email: string;
   phone: string;
@@ -19,14 +21,6 @@ export const PLACEHOLDER_CONTACT_PHONE = "+98 21 8888 0000";
 
 export function isPlaceholderContact(contact: { email: string; phone: string }): boolean {
   return contact.email === PLACEHOLDER_CONTACT_EMAIL || contact.phone === PLACEHOLDER_CONTACT_PHONE;
-}
-
-function latinDigits(value: string): string {
-  return value.replace(/[۰-۹٠-٩]/g, (digit) => {
-    const code = digit.charCodeAt(0);
-    const base = code >= 0x06f0 ? 0x06f0 : 0x0660;
-    return String(code - base);
-  });
 }
 
 /** A deliberately practical business-email subset that is safe in mailto:. */

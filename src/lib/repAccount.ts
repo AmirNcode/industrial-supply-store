@@ -1,5 +1,5 @@
 import { randomInt } from "node:crypto";
-import { latinDigits } from "./digits";
+import { parsePercentBp } from "./percent";
 import type { Locale } from "./i18n";
 
 /** The order-reference alphabet: no O/0 or I/1, because these are read aloud. */
@@ -24,11 +24,7 @@ export function isValidUsername(value: string): boolean {
  * system stored must be the same number.
  */
 export function parseCommissionPercent(raw: string): number | null {
-  const value = latinDigits(raw.trim()).replace("٫", ".").replace(/[%٪]$/, "").trim();
-  if (!/^\d{1,3}(\.\d{1,2})?$/.test(value)) return null;
-  const [whole, fraction = ""] = value.split(".");
-  const bp = Number(whole) * 100 + Number(fraction.padEnd(2, "0"));
-  return bp <= 10_000 ? bp : null;
+  return parsePercentBp(raw);
 }
 
 /** 250 → "2.5". What a form is prefilled with, so saving it unchanged is a no-op. */

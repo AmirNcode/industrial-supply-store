@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { safeLocale, isLocale, type Locale } from "@/lib/i18n";
-import { hashPassword, verifyPassword, MIN_PASSWORD_LENGTH } from "@/lib/password";
+import { DUMMY_PASSWORD_HASH, hashPassword, verifyPassword, MIN_PASSWORD_LENGTH } from "@/lib/password";
 import {
   setSessionCookie,
   clearSessionCookie,
@@ -109,8 +109,6 @@ export async function signUpAction(formData: FormData): Promise<void> {
  * the other half of the same leak: without it, an unknown address returns
  * noticeably faster than a known one.
  */
-const DUMMY_HASH =
-  "scrypt$16384$8$1$AAAAAAAAAAAAAAAAAAAAAA==$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 
 export async function signInAction(formData: FormData): Promise<void> {
   const locale = safeLocale(formData);
@@ -130,7 +128,7 @@ export async function signInAction(formData: FormData): Promise<void> {
     redirect(`/${locale}/account/signin?error=rate-limit`);
   }
   const user = login ? await findUserForSignIn(login) : null;
-  const ok = await verifyPassword(password ?? "", user ? user.passwordHash : DUMMY_HASH);
+  const ok = await verifyPassword(password ?? "", user ? user.passwordHash : DUMMY_PASSWORD_HASH);
 
   if (!user || !ok) {
     if (loginKey) await recordSignInFailure("customer", loginKey);

@@ -1,5 +1,6 @@
 import "server-only";
 import { sql } from "./index";
+import { uniqueViolation } from "./pgErrors";
 import { recordAudit } from "./audit";
 import { codeFromPhone, randomCustomerCode } from "@/lib/customerCode";
 import { latinDigits } from "@/lib/digits";
@@ -47,11 +48,6 @@ const COLS = sql`u.id, u.customer_code AS "customerCode", u.company,
   u.rep_earns_commission AS "repEarnsCommission", u.origin,
   u.origin_rep_id AS "originRepId", u.chose_own_password AS "choseOwnPassword",
   u.next_follow_up_on::text AS "nextFollowUpOn", u.created_at AS "createdAt"`;
-
-function uniqueViolation(err: unknown): string | null {
-  const e = err as { code?: string; constraint_name?: string };
-  return e?.code === "23505" ? (e.constraint_name ?? "") : null;
-}
 
 function escapeLike(value: string): string {
   return value.replace(/[\\%_]/g, (c) => `\\${c}`);

@@ -9,7 +9,7 @@ import { DUMMY_PASSWORD_HASH, hashPassword, verifyPassword } from "@/lib/passwor
 import { normalizeRepPassword, repPasswordProblems } from "@/lib/repPassword";
 import { FOLLOW_UP_DAYS, isValidUsername, normalizeUsername } from "@/lib/repAccount";
 import { latinDigits } from "@/lib/digits";
-import { isUuid } from "@/lib/ids";
+import { postedUuid } from "@/lib/ids";
 import { generateTempPassword } from "@/lib/tempPassword";
 import { tehranDatePlusDays } from "@/lib/persianCalendar";
 import { setShownOnce } from "@/lib/shownOnce";
@@ -146,8 +146,7 @@ async function repForWrite(formData: FormData): Promise<{ rep: RepRow; locale: L
 }
 
 function postedCustomerId(formData: FormData): string | null {
-  const id = String(formData.get("customerId") ?? "");
-  return isUuid(id) ? id : null;
+  return postedUuid(formData, "customerId");
 }
 
 function parseCustomerForm(

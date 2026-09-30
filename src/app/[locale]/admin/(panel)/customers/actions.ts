@@ -6,7 +6,7 @@ import { safeLocale } from "@/lib/i18n";
 import { boundedString } from "@/lib/requestLimits";
 import { hashPassword } from "@/lib/password";
 import { generateTempPassword } from "@/lib/tempPassword";
-import { isUuid } from "@/lib/ids";
+import { isUuid, postedUuid } from "@/lib/ids";
 import { FOLLOW_UP_DAYS } from "@/lib/repAccount";
 import { tehranDatePlusDays } from "@/lib/persianCalendar";
 import { setShownOnce } from "@/lib/shownOnce";
@@ -19,8 +19,7 @@ import {
 import { addNoteAdmin } from "@/db/noteQueries";
 
 function postedCustomerId(formData: FormData): string | null {
-  const id = String(formData.get("customerId") ?? "");
-  return isUuid(id) ? id : null;
+  return postedUuid(formData, "customerId");
 }
 
 /*

@@ -8,3 +8,9 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export function isUuid(value: string): boolean {
   return UUID.test(value);
 }
+
+/** A form field that must hold a UUID — a customer's id, say — or null. */
+export function postedUuid(formData: FormData, name: string): string | null {
+  const id = String(formData.get(name) ?? "");
+  return isUuid(id) ? id : null;
+}
