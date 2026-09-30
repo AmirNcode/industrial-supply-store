@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { hashPassword, needsRehash, verifyPassword, MIN_PASSWORD_LENGTH } from "./password";
+import { DUMMY_PASSWORD_HASH, hashPassword, needsRehash, verifyPassword, MIN_PASSWORD_LENGTH } from "./password";
 
 test("a hash verifies against the password that made it", async () => {
   const stored = await hashPassword("correct horse battery staple");
@@ -61,4 +61,24 @@ test("new hashes use the current cost; older ones verify and are flagged for reh
   assert.equal(needsRehash(old), true);
   // A planted hash demanding absurd memory is refused, not computed.
   assert.equal(await verifyPassword("x", `scrypt$1048576$8$1$${salt.toString("base64")}$${"A".repeat(88)}`), false);
+});
+
+test("a wrong password costs the same against an old hash as against an unknown login", async () => {
+  // Security review of L-12: unknown logins verify against the dummy at 2^17,
+  // an account not yet rehashed verified at 2^14 — eight times faster, which
+  // told anyone timing the form that the account exists. Unpadded the ratio
+  // is about 0.13; padded it is about 1. The 0.6 bar leaves room for noise.
+  const { scryptSync } = await import("node:crypto");
+  const salt = Buffer.alloc(16, 9);
+  const old = ["scrypt", 16384, 8, 1, salt.toString("base64"),
+    scryptSync("right", salt, 64, { N: 16384, r: 8, p: 1 }).toString("base64")].join("$");
+  const time = async (stored: string) => {
+    const start = performance.now();
+    assert.equal(await verifyPassword("wrong", stored), false);
+    return performance.now() - start;
+  };
+  await time(DUMMY_PASSWORD_HASH); // warm up
+  const unknown = Math.min(await time(DUMMY_PASSWORD_HASH), await time(DUMMY_PASSWORD_HASH));
+  const oldAccount = Math.min(await time(old), await time(old));
+  assert.ok(oldAccount / unknown > 0.6, `old ${oldAccount.toFixed(0)} ms vs unknown ${unknown.toFixed(0)} ms`);
 });

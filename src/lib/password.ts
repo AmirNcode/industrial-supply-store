@@ -35,6 +35,7 @@ const R = 8;
 const P = 1;
 const KEYLEN = 64;
 const SALT_BYTES = 16;
+const PAD_SALT = Buffer.alloc(SALT_BYTES);
 
 export const MIN_PASSWORD_LENGTH = 8;
 
@@ -67,6 +68,7 @@ export async function verifyPassword(plain: string, stored: string): Promise<boo
   let actual: Buffer;
   try {
     actual = await scrypt(plain, salt, expected.length, { N: n, r, p, maxmem: MAXMEM });
+    await padToCurrentCost(n);
   } catch {
     // Absurd stored parameters can make scrypt refuse outright. That is a
     // corrupt row, not a valid password.
@@ -74,6 +76,22 @@ export async function verifyPassword(plain: string, stored: string): Promise<boo
   }
 
   return actual.length === expected.length && timingSafeEqual(actual, expected);
+}
+
+/**
+ * Makes a check against an older, cheaper hash take as long as one at today's
+ * cost. An unknown login verifies against `DUMMY_PASSWORD_HASH` at the current
+ * N; an account not yet rehashed would otherwise answer eight times faster,
+ * and the sign-in form would say which logins exist after all.
+ *
+ * scrypt's work is linear in N and N is a power of two, so n + n + 2n + … +
+ * N/2 = N: the throwaway rounds bring the total to exactly one current-cost
+ * hash. Nothing here runs once every stored hash is at the current N.
+ */
+async function padToCurrentCost(n: number): Promise<void> {
+  for (let k = n; k < N; k *= 2) {
+    await scrypt("", PAD_SALT, KEYLEN, { N: k, r: R, p: P, maxmem: MAXMEM });
+  }
 }
 
 /**
