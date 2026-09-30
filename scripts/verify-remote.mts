@@ -338,7 +338,16 @@ console.log(
 // Everything below reads the catalog tables, which is only meaningful once
 // they exist.
 if (missingTables.length > 0 || missingCols.length > 0) {
-  console.log("\n✗ schema incomplete — only an empty database may use db:bootstrap:empty:remote");
+  // The usual cause is pending migrations, not an empty database: saying
+  // "bootstrap" here pointed at the one command that must not be run (L-17).
+  const empty = missingTables.length === TABLES.length;
+  console.log(
+    empty
+      ? "\n✗ no schema — a genuinely empty database is set up with db:bootstrap:empty:remote"
+      : `\n✗ schema behind — run db:migrate:check:remote, then db:migrate:remote${
+          missingMigrations.length ? ` (pending: ${missingMigrations.join(", ")})` : ""
+        }; integrity checks run once it is current`,
+  );
   await sql.end();
   process.exit(1);
 }
