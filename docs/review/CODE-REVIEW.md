@@ -643,7 +643,11 @@ deployment · `ALL` = everywhere.
 > and bumped by the new Settings → "Sign out everywhere"; `secure` is set in
 > production; passwords are compared as equal-length hashes (no length
 > timing). Every admin is signed out once when this deploys (old cookie
-> format). Tests: `adminSessionToken.test.ts`, `e2e/admin-session.spec.ts`.
+> format). Tests: `adminSessionToken.test.ts`. "Sign out everywhere" was
+> proven end to end once with a Playwright spec (two signed-in browsers; the
+> second lands on sign-in afterwards), then removed from the suite: run in
+> parallel it signs out the other admin tests, and its extra sign-ins push the
+> suite past the 8-per-15-minutes admin limit.
 > Not done: named staff accounts (known gap).
 
 - **Scope**: LIVE. **Status**: CODE.
