@@ -4,9 +4,11 @@
  * status, notes, follow-ups, payouts and targets — so the dashboards have
  * something to show without walking sixty orders through the admin by hand.
  *
- * Local databases only. Re-running replaces this script's own rows (reps named
- * demo.*, customers with demo.*@example.invalid emails, their orders) and
- * touches nothing else. Stock counts for every product those orders used are
+ * Local databases only. Re-running replaces this script's own rows (customers
+ * with demo.*@example.invalid emails, their orders, the demo reps' payouts and
+ * targets) and touches nothing else. The reps named demo.* are reset in place,
+ * not deleted: a customer created through the UI for one of them keeps its rep,
+ * and the RESTRICT foreign keys would otherwise stop the re-run (review L-21). Stock counts for every product those orders used are
  * then re-derived from the order ledger — the same repair db:reconcile:apply
  * makes — so the integrity checks stay green.
  *
@@ -54,17 +56,18 @@ const [repHash, customerHash] = await Promise.all([
 ]);
 
 const printed = await sql.begin(async (tx) => {
+  // Orders of the demo customers only: an order a UI-created customer placed
+  // through a demo rep is not this script's to delete.
   const demoOrders = tx`
     SELECT o.id FROM orders o
-    WHERE o.rep_id IN (SELECT id FROM sales_reps WHERE username LIKE 'demo.%')
-       OR o.user_id IN (SELECT id FROM users WHERE email LIKE 'demo.%@example.invalid')`;
+    WHERE o.user_id IN (SELECT id FROM users WHERE email LIKE 'demo.%@example.invalid')`;
   const touched = await tx<{ productId: number }[]>`
     SELECT DISTINCT product_id AS "productId" FROM order_items
     WHERE product_id IS NOT NULL AND order_id IN (${demoOrders})`;
   await tx`DELETE FROM orders WHERE id IN (${demoOrders})`;
   await tx`DELETE FROM users WHERE email LIKE 'demo.%@example.invalid'`;
   await tx`DELETE FROM rep_payouts WHERE rep_id IN (SELECT id FROM sales_reps WHERE username LIKE 'demo.%')`;
-  await tx`DELETE FROM sales_reps WHERE username LIKE 'demo.%'`;
+  await tx`DELETE FROM rep_targets WHERE rep_id IN (SELECT id FROM sales_reps WHERE username LIKE 'demo.%')`;
 
   const reps: { id: string; username: string; rateBp: number }[] = [];
   for (const [username, name, rateBp, phone] of [
@@ -75,6 +78,10 @@ const printed = await sql.begin(async (tx) => {
       INSERT INTO sales_reps (username, password_hash, name, phone, commission_rate_bp,
                               referral_code, must_change_password)
       VALUES (${username}, ${repHash}, ${name}, ${phone}, ${rateBp}, ${randomReferralCode()}, false)
+      ON CONFLICT (username) DO UPDATE SET
+        password_hash = EXCLUDED.password_hash, name = EXCLUDED.name, phone = EXCLUDED.phone,
+        commission_rate_bp = EXCLUDED.commission_rate_bp, active = true,
+        must_change_password = false, session_version = sales_reps.session_version + 1
       RETURNING id`;
     reps.push({ id: rep.id, username, rateBp });
   }
