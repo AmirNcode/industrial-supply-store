@@ -6,6 +6,9 @@
 -- Forward-only and idempotent. The constraint name matches what drizzle-kit
 -- generates from src/db/schema.ts.
 
+-- Fail fast rather than queue behind live traffic holding a lock (L-13).
+SET lock_timeout = '5s';
+
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS vat_rate_bp integer;
 
 ALTER TABLE orders DROP CONSTRAINT IF EXISTS orders_vat_rate_check;

@@ -6,6 +6,9 @@
 -- Forward-only and idempotent. Constraint names match what drizzle-kit
 -- generates from src/db/schema.ts.
 
+-- Fail fast rather than queue behind live traffic holding a lock (L-13).
+SET lock_timeout = '5s';
+
 ALTER TABLE orders
   ADD COLUMN IF NOT EXISTS payment_submitted_at timestamptz;
 

@@ -5,6 +5,9 @@
 -- generates from src/db/schema.ts, so a pushed local database and a migrated
 -- hosted one verify identically.
 
+-- Fail fast rather than queue behind live traffic holding a lock (L-13).
+SET lock_timeout = '5s';
+
 CREATE TABLE IF NOT EXISTS sales_reps (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   username text NOT NULL,
