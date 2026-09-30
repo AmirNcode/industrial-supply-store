@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { requireRep } from "@/lib/repSession";
-import { repCanSeeOrder } from "@/db/repOrderQueries";
+import { repCanActOnOrder } from "@/db/repOrderQueries";
 import { getInvoiceDraft } from "@/db/invoiceQueries";
 import { getFxRate } from "@/lib/fx";
 import { getVatRateBp } from "@/lib/vatSettings";
@@ -38,7 +38,8 @@ export default async function RepInvoiceDraftPage({
   const rep = await requireRep(l);
 
   // 404 for an order this rep may not see, as on the order page itself.
-  if (!(await repCanSeeOrder(rep.id, ref))) notFound();
+  // Only an order credited to this rep (review M-17).
+  if (!(await repCanActOnOrder(rep.id, ref))) notFound();
   const [found, rate, vatRateBp, contact, bank, origin] = await Promise.all([
     getInvoiceDraft(ref),
     getFxRate(),

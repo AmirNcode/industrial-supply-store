@@ -75,7 +75,8 @@ export default async function RepOrdersPage({
       ) : (
         <ul className="grid gap-2">
           {orders.map((order) => {
-            const url = `${origin}/${l}/pay/${order.payToken}`;
+            // No pay link on an order credited to another rep (review M-17).
+            const url = order.payToken ? `${origin}/${l}/pay/${order.payToken}` : null;
             return (
               <li
                 key={order.id}
@@ -105,16 +106,18 @@ export default async function RepOrdersPage({
                     order.fxRateToRial ?? liveRate,
                   )}
                 </span>
-                <span className="ms-auto">
-                  <ShareButton
-                    text={t.payLinkMessage
-                      .replace("{company}", order.company)
-                      .replace("{ref}", order.ref)
-                      .replace("{url}", url)}
-                    label={t.sharePayLink}
-                    copiedLabel={t.copied}
-                  />
-                </span>
+                {url && (
+                  <span className="ms-auto">
+                    <ShareButton
+                      text={t.payLinkMessage
+                        .replace("{company}", order.company)
+                        .replace("{ref}", order.ref)
+                        .replace("{url}", url)}
+                      label={t.sharePayLink}
+                      copiedLabel={t.copied}
+                    />
+                  </span>
+                )}
               </li>
             );
           })}

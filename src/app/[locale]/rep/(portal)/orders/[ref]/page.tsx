@@ -54,7 +54,8 @@ export default async function RepOrderPage({
     listPaymentProofs([order.id]),
   ]);
   const orderProofs = proofs.get(order.id) ?? [];
-  const payUrl = `${origin}/${l}/pay/${order.payToken}`;
+  // Null on an order credited to another rep: this one sees it, read-only.
+  const payUrl = order.payToken ? `${origin}/${l}/pay/${order.payToken}` : null;
   const errorKey = error && error in ERROR_KEY ? ERROR_KEY[error as keyof typeof ERROR_KEY] : null;
   const rateBp = order.commissionRateBp ?? 0;
 
@@ -86,14 +87,20 @@ export default async function RepOrderPage({
       {ok === "invoiced" && <SuccessBanner>{t.invoiceIssued}</SuccessBanner>}
       {errorKey && <ErrorBanner>{t[errorKey]}</ErrorBanner>}
       {order.creditedToMe && (
-        <p className="mb-3 text-[12px]" data-testid="commission-line">
-          {rateBp > 0
-            ? t.commissionLocked.replace("{percent}", commissionPercentLabel(rateBp, l))
-            : t.commissionNone}
+          <p className="mb-3 text-[12px]" data-testid="commission-line">
+            {rateBp > 0
+              ? t.commissionLocked.replace("{percent}", commissionPercentLabel(rateBp, l))
+              : t.commissionNone}
+          </p>
+      )}
+
+      {!order.creditedToMe && (
+        <p className="mb-3 text-[12px] text-[var(--color-ink-muted)]" data-testid="rep-order-read-only">
+          {t.repOrderReadOnly}
         </p>
       )}
 
-      {order.status === "received" && (
+      {order.creditedToMe && order.status === "received" && (
         <section className="mb-4 flex flex-wrap items-center gap-3 border border-[var(--color-rule)] p-3 text-[12px]">
           {/* A rep never changes a price, so a line at 0 is the admin's to price. */}
           {hasUnpricedLine(items) ? (
@@ -109,50 +116,54 @@ export default async function RepOrderPage({
         </section>
       )}
 
-      <PaymentProofSection
-        locale={l}
-        proofs={orderProofs}
-        showUploader
-        hint={t.proofHintRep}
-        upload={
-          acceptsPaymentProof(order.status)
-            ? uploadPaymentProofForRepAction.bind(null, order.ref)
-            : undefined
-        }
-      >
-        {/* Confirming the money arrived is the admin's alone. */}
-        {order.status === "payment_review" && (
-          <p className="border-t border-[var(--color-rule)] pt-3 text-[12px] text-[var(--color-ink-muted)]">
-            {t.repAwaitingConfirmation}
-          </p>
-        )}
-      </PaymentProofSection>
-
-      <section className="mb-4 border border-[var(--color-rule)] p-3 text-[12px]">
-        <h2 className="mb-1.5 text-[13px] font-bold">{t.payLink}</h2>
-        <div className="flex flex-wrap items-center gap-3">
-          <code data-testid="pay-link" dir="ltr" className="tech break-all">
-            {payUrl}
-          </code>
-          <ShareButton
-            text={t.payLinkMessage
-              .replace("{company}", order.company)
-              .replace("{ref}", order.ref)
-              .replace("{url}", payUrl)}
-            label={t.sharePayLink}
-            copiedLabel={t.copied}
-          />
-          <Link href={`/${l}/pay/${order.payToken}`} target="_blank" prefetch={false}>
-            {t.openPayPage}
-          </Link>
-          {/* The pay link's key opens the invoice, as it does for the customer. */}
-          {order.invoiceNumber && order.status !== "cancelled" && (
-            <Link href={`/${l}/invoice/${order.ref}?key=${order.payToken}`} prefetch={false}>
-              {t.viewInvoice}
-            </Link>
+      {order.creditedToMe && (
+        <PaymentProofSection
+          locale={l}
+          proofs={orderProofs}
+          showUploader
+          hint={t.proofHintRep}
+          upload={
+            acceptsPaymentProof(order.status)
+              ? uploadPaymentProofForRepAction.bind(null, order.ref)
+              : undefined
+          }
+        >
+          {/* Confirming the money arrived is the admin's alone. */}
+          {order.status === "payment_review" && (
+            <p className="border-t border-[var(--color-rule)] pt-3 text-[12px] text-[var(--color-ink-muted)]">
+              {t.repAwaitingConfirmation}
+            </p>
           )}
-        </div>
-      </section>
+        </PaymentProofSection>
+      )}
+
+      {payUrl && (
+        <section className="mb-4 border border-[var(--color-rule)] p-3 text-[12px]">
+          <h2 className="mb-1.5 text-[13px] font-bold">{t.payLink}</h2>
+          <div className="flex flex-wrap items-center gap-3">
+            <code data-testid="pay-link" dir="ltr" className="tech break-all">
+              {payUrl}
+            </code>
+            <ShareButton
+              text={t.payLinkMessage
+                .replace("{company}", order.company)
+                .replace("{ref}", order.ref)
+                .replace("{url}", payUrl)}
+              label={t.sharePayLink}
+              copiedLabel={t.copied}
+            />
+            <Link href={`/${l}/pay/${order.payToken}`} target="_blank" prefetch={false}>
+              {t.openPayPage}
+            </Link>
+            {/* The pay link's key opens the invoice, as it does for the customer. */}
+            {order.invoiceNumber && order.status !== "cancelled" && (
+              <Link href={`/${l}/invoice/${order.ref}?key=${order.payToken}`} prefetch={false}>
+                {t.viewInvoice}
+              </Link>
+            )}
+          </div>
+        </section>
+      )}
 
       <OrderView
         locale={l}

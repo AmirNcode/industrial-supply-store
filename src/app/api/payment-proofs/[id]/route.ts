@@ -2,15 +2,16 @@ import { isAdmin } from "@/lib/admin";
 import { currentUserId } from "@/lib/session";
 import { currentRep } from "@/lib/repSession";
 import { getProofAccess } from "@/db/paymentProofQueries";
-import { repCanSeeOrder } from "@/db/repOrderQueries";
+import { repCanActOnOrder } from "@/db/repOrderQueries";
 import { readPaymentProof } from "@/lib/paymentProofStorage";
 import { isProofType, proofExtension } from "@/lib/paymentProof";
 
 const notFound = () => new Response("Not found", { status: 404 });
 
 /**
- * One receipt, to the people allowed to see it: the signed-in admin, the
- * order's rep, or the signed-in customer who owns the order. Anyone else gets
+ * One receipt, to the people allowed to see it: the signed-in admin, the rep
+ * the order is credited to (not a rep who merely inherited the customer), or
+ * the signed-in customer who owns the order. Anyone else gets
  * the same 404 as a receipt that does not exist.
  *
  * A pay link does not open receipts, though it can upload them. Receipts
@@ -32,7 +33,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const allowed =
     admin ||
     (uid !== null && proof.userId === uid) ||
-    (rep !== null && (await repCanSeeOrder(rep.id, proof.orderRef)));
+    (rep !== null && (await repCanActOnOrder(rep.id, proof.orderRef)));
   if (!allowed) return notFound();
 
   let bytes: Uint8Array;

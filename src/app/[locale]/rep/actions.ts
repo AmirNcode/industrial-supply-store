@@ -16,7 +16,7 @@ import { setShownOnce } from "@/lib/shownOnce";
 import { redirectFresh } from "@/lib/redirectFresh";
 import { setOrderingFor } from "@/lib/repOrderContext";
 import { CartCapacityError, addLines } from "@/lib/cart";
-import { getReorderLines, repCanSeeOrder } from "@/db/repOrderQueries";
+import { getReorderLines, repCanActOnOrder } from "@/db/repOrderQueries";
 import { getInvoiceDraft, issueInvoice } from "@/db/invoiceQueries";
 import { acceptsPaymentProof, isOrderStatus } from "@/lib/orders";
 import { receivePaymentProof, type ProofUploadResult } from "@/lib/paymentProofUpload";
@@ -293,7 +293,8 @@ export async function issueInvoiceForRepAction(formData: FormData): Promise<void
   const { rep, locale } = await repForWrite(formData);
   const ref = boundedString(formData.get("ref"), 20) ?? "";
   // 404-shaped, like every other rep read: an order this rep may not see.
-  if (!(await repCanSeeOrder(rep.id, ref))) redirect(`/${locale}/rep/orders`);
+  // Only an order credited to this rep (review M-17); 404-shaped otherwise.
+  if (!(await repCanActOnOrder(rep.id, ref))) redirect(`/${locale}/rep/orders`);
   const found = await getInvoiceDraft(ref);
   if (!found) redirect(`/${locale}/rep/orders`);
   const page = `/${locale}/rep/orders/${ref}`;
@@ -329,7 +330,7 @@ export async function uploadPaymentProofForRepAction(
   const limit = await consumeRateLimit("rep:write", RATE_LIMITS.repWrite, { accountId: rep.id });
   if (!limit.allowed) return { ok: false, problem: "rate-limited" };
   const safeRef = typeof ref === "string" ? ref.slice(0, 20) : "";
-  if (!(await repCanSeeOrder(rep.id, safeRef))) return { ok: false, problem: "closed" };
+  if (!(await repCanActOnOrder(rep.id, safeRef))) return { ok: false, problem: "closed" };
   const found = await getInvoiceDraft(safeRef);
   if (!found || !isOrderStatus(found.order.status) || !acceptsPaymentProof(found.order.status)) {
     return { ok: false, problem: "closed" };

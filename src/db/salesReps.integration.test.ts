@@ -38,7 +38,7 @@ import { confirmPayment } from "./paymentProofQueries";
 import { submitOrderFromCartInTransaction } from "./orderSubmissionQueries";
 import { quoteCartFingerprint } from "@/lib/quoteSubmission";
 import { getOrderByPayToken } from "./accountQueries";
-import { getOrderForRep, getReorderLines, listOrdersForRep } from "./repOrderQueries";
+import { getOrderForRep, getReorderLines, listOrdersForRep, repCanActOnOrder } from "./repOrderQueries";
 import {
   addPayout,
   voidPayout,
@@ -1025,6 +1025,48 @@ test("rep lists report their full size, so a cut-off list can say so", async () 
     assert.deepEqual(rows.map((row) => row.totalCount), [3, 3, 3]);
     assert.deepEqual([...(await listOrdersForRep(rep.id, null))], []);
   } finally {
+    await cleanupReps(repIds, userIds);
+  }
+});
+
+test("a moved customer's older orders are visible to the new rep but not theirs to act on", async () => {
+  // Review M-17: no pay link, no invoicing, no receipts on another rep's sale.
+  assertLocalDatabase();
+  const suffix = randomUUID().slice(0, 8);
+  const repIds: string[] = [];
+  const userIds: string[] = [];
+  let orderId: number | undefined;
+  try {
+    const oldRep = await createRep({ username: `mo-${suffix}`, name: "Old", phone: "", email: "", commissionRateBp: 250, passwordHash: "x" });
+    const newRep = await createRep({ username: `mn-${suffix}`, name: "New", phone: "", email: "", commissionRateBp: 250, passwordHash: "x" });
+    if (oldRep === "username-taken" || newRep === "username-taken") throw new Error("username clash");
+    repIds.push(oldRep.id, newRep.id);
+    const customer = await createCustomerForRep(oldRep.id, {
+      company: `Moved ${suffix}`, contactName: "N", phone: randomPhone(), email: null, address: "", city: "",
+      codeChoice: "random", passwordHash: "x", locale: "fa",
+    });
+    if (customer.kind !== "created") throw new Error(customer.kind);
+    userIds.push(customer.id);
+    const [order] = await sql<{ id: number; ref: string }[]>`
+      INSERT INTO orders (ref, company, contact_name, email, total_cents, requested_total_cents,
+                          user_id, rep_id, commission_rate_bp)
+      VALUES (${`ORD-${randomUUID().slice(0, 6).toUpperCase()}`}, 'Moved Co', 'N', '', 100, 100,
+              ${customer.id}, ${oldRep.id}, 250)
+      RETURNING id, ref`;
+    orderId = order.id;
+    assert.equal(await assignCustomer(customer.id, newRep.id, true), "ok");
+
+    const seen = await getOrderForRep(newRep.id, order.ref);
+    assert.ok(seen, "the new rep still sees the order");
+    assert.equal(seen.order.payToken, null);
+    assert.equal(seen.order.creditedToMe, false);
+    assert.equal(await repCanActOnOrder(newRep.id, order.ref), false);
+    assert.equal((await listOrdersForRep(newRep.id, null)).find((o) => o.ref === order.ref)?.payToken, null);
+
+    assert.equal(await repCanActOnOrder(oldRep.id, order.ref), true);
+    assert.match((await getOrderForRep(oldRep.id, order.ref))?.order.payToken ?? "", /^[0-9a-f]{64}$/);
+  } finally {
+    if (orderId !== undefined) await sql`DELETE FROM orders WHERE id = ${orderId}`;
     await cleanupReps(repIds, userIds);
   }
 });

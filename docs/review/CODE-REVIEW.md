@@ -103,7 +103,7 @@ deployment · `ALL` = everywhere.
 | M-14 | Medium | Anyone can lock a rep out by failing sign-ins against their username | BRANCH | **FIXED 2026-09-29 in `{{M-14}}`** |
 | M-15 | Medium | Lists silently truncate (admin queue 200, rep orders 300, rep customers 500) | ALL | **FIXED 2026-09-29 in `{{M-15}}`** |
 | M-16 | Medium | 4.25 MB request bodies accepted by every Server Action, including anonymous ones | LIVE | CODE |
-| M-17 | Medium | Rep visibility over a moved customer's history is broader than needed | BRANCH | CODE |
+| M-17 | Medium | Rep visibility over a moved customer's history is broader than needed | BRANCH | **FIXED 2026-09-30 in `{{M-17}}`** (recommended default; Amir to confirm) |
 | M-18 | Medium | Reassignment/deactivation checks race; moved customers keep the old commission flag | BRANCH | CODE |
 | M-19 | Medium | Browser Back/Forward silently discards unsaved product-table edits | BRANCH | CODE |
 | M-20 | Medium | About 1 in 290 temporary passwords is mangled in the "share" message (`$$` → `$`) | BRANCH | CONFIRMED |
@@ -1075,6 +1075,14 @@ or a dedicated route handler with `readTextBodyWithin`-style streaming limits.
 Scope LIVE, status CODE.
 
 ### M-17 — Rep visibility over a moved customer's history is broader than needed
+
+> **Fix status (2026-09-30): FIXED in `{{M-17}}` with the review's recommended
+> default — Amir did not rule on this one, so it is his to overturn.** A rep
+> still *sees* every order of a customer now assigned to them, but may act only
+> on orders credited to them: the pay token is returned only for those (list
+> and detail), and invoicing, the draft invoice, receipt uploads and reading
+> receipts use `repCanActOnOrder` (`o.rep_id = rep`). An inherited order shows
+> "credited to another rep — read-only". Test: `salesReps.integration.test.ts`.
 
 `visibleTo` (`src/db/repOrderQueries.ts:37`) grants a rep every order of any
 customer currently assigned to them — including orders placed and credited

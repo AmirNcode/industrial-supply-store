@@ -13,7 +13,10 @@ export type RepOrderRow = {
   fxRateToRial: number | null;
   vatRateBp: number | null;
   invoiceNumber: string | null;
-  payToken: string;
+  /** Only on orders credited to this rep; null on a moved customer's older ones. */
+  payToken: string | null;
+  /** Credited to this rep when it was placed — the orders they may act on. */
+  creditedToMe: boolean;
   company: string;
   customerId: string | null;
   customerCode: string | null;
@@ -23,8 +26,6 @@ export type RepOrderRow = {
 export type RepOrderDetail = AccountOrderDetail &
   RepOrderRow & {
     commissionRateBp: number | null;
-    /** Credited to this rep when it was placed. */
-    creditedToMe: boolean;
     /** The customer is this rep's now — what Reorder requires. */
     customerIsMine: boolean;
   };
@@ -42,12 +43,22 @@ function visibleTo(repId: string) {
   )`;
 }
 
-const ROW_COLS = sql`o.id, o.ref, o.status, o.created_at AS "createdAt",
+/**
+ * The columns every rep order read returns. The pay token — a bearer
+ * credential for the order — only on orders credited to this rep: a customer
+ * moved to them brings their older orders into view, but not the power to
+ * take receipts or send pay links for sales another rep made (review M-17).
+ */
+function rowCols(repId: string) {
+  return sql`o.id, o.ref, o.status, o.created_at AS "createdAt",
   o.total_cents AS "totalCents", o.fx_rate_to_rial AS "fxRateToRial",
   o.vat_rate_bp AS "vatRateBp",
-  o.invoice_number AS "invoiceNumber", o.pay_token AS "payToken",
+  o.invoice_number AS "invoiceNumber",
+  CASE WHEN o.rep_id = ${repId} THEN o.pay_token END AS "payToken",
+  (o.rep_id = ${repId}) IS TRUE AS "creditedToMe",
   COALESCE(u.company, o.company) AS company, o.user_id AS "customerId",
   u.customer_code AS "customerCode", o.placed_by_rep AS "placedByRep"`;
+}
 
 /** `totalCount` is every match, so the page can say when 300 is not all (M-15). */
 export async function listOrdersForRep(
@@ -55,7 +66,7 @@ export async function listOrdersForRep(
   status: OrderStatus | null,
 ): Promise<(RepOrderRow & { totalCount: number })[]> {
   return sql<(RepOrderRow & { totalCount: number })[]>`
-    SELECT ${ROW_COLS}, count(*) OVER ()::int AS "totalCount"
+    SELECT ${rowCols(repId)}, count(*) OVER ()::int AS "totalCount"
     FROM orders o LEFT JOIN users u ON u.id = o.user_id
     WHERE ${visibleTo(repId)} AND ${status ? sql`o.status = ${status}` : sql`TRUE`}
     ORDER BY o.created_at DESC
@@ -68,14 +79,13 @@ export async function getOrderForRep(
   ref: string,
 ): Promise<{ order: RepOrderDetail; items: AccountOrderItem[] } | null> {
   const [order] = await sql<RepOrderDetail[]>`
-    SELECT ${ROW_COLS},
+    SELECT ${rowCols(repId)},
            o.courier, o.tracking_number AS "trackingNumber",
            o.po_number AS "poNumber", o.invoiced_at AS "invoicedAt",
            o.payment_submitted_at AS "paymentSubmittedAt", o.paid_at AS "paidAt",
            o.shipped_at AS "shippedAt", o.delivered_at AS "deliveredAt",
            (SELECT count(*)::int FROM order_items i WHERE i.order_id = o.id) AS "itemCount",
            o.commission_rate_bp AS "commissionRateBp",
-           (o.rep_id = ${repId}) IS TRUE AS "creditedToMe",
            (u.rep_id = ${repId}) IS TRUE AS "customerIsMine"
     FROM orders o LEFT JOIN users u ON u.id = o.user_id
     WHERE o.ref = ${ref} AND ${visibleTo(repId)}
@@ -86,11 +96,21 @@ export async function getOrderForRep(
 }
 
 /**
- * Whether this rep may see the order — and so create its invoice. The same
- * rule as every read above, for pages that then load the order another way.
+ * Whether this rep may see the order. The same rule as every read above, for
+ * pages that then load the order another way.
  */
 export async function repCanSeeOrder(repId: string, ref: string): Promise<boolean> {
   const rows = await sql`SELECT 1 FROM orders o WHERE o.ref = ${ref} AND ${visibleTo(repId)} LIMIT 1`;
+  return rows.length > 0;
+}
+
+/**
+ * Whether this rep may *act* on the order — invoice it, take its receipts,
+ * read them: only an order credited to them. Seeing a moved customer's older
+ * orders is read-only (review M-17).
+ */
+export async function repCanActOnOrder(repId: string, ref: string): Promise<boolean> {
+  const rows = await sql`SELECT 1 FROM orders o WHERE o.ref = ${ref} AND o.rep_id = ${repId} LIMIT 1`;
   return rows.length > 0;
 }
 
