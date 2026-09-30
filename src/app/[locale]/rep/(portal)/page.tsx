@@ -28,7 +28,7 @@ export default async function RepHomePage({
   // Only a plausible Persian year picks the table's year; anything else is ignored.
   const year = typeof yearParam === "string" ? Number(yearParam) : NaN;
   const tableYear = Number.isInteger(year) && year >= 1300 && year <= 1600 ? year : undefined;
-  const [due, origin, summary] = await Promise.all([
+  const [due, origin, { summary }] = await Promise.all([
     listFollowUpsDue(rep.id, today),
     siteOrigin(),
     loadRepSummary(rep.id, tableYear),

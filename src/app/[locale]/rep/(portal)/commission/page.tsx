@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { requireRep } from "@/lib/repSession";
 import { loadRepSummary } from "@/lib/repDashboard";
-import { listInProgressForRep, listPayouts } from "@/db/repMoney";
+import { listInProgressForRep } from "@/db/repMoney";
 import { getFxRate } from "@/lib/fx";
 import { CommissionReport } from "@/components/CommissionReport";
 import { isLocale, getDict, type Locale } from "@/lib/i18n";
@@ -16,11 +16,10 @@ export default async function RepCommissionPage({
   const l = locale as Locale;
   const t = getDict(l);
   const rep = await requireRep(l);
-  const liveRate = await getFxRate();
-  const [summary, payouts, inProgress] = await Promise.all([
+  // One round of reads: the rate is needed only by the in-progress list.
+  const [{ summary, payouts }, inProgress] = await Promise.all([
     loadRepSummary(rep.id),
-    listPayouts(rep.id),
-    listInProgressForRep(rep.id, liveRate),
+    getFxRate().then((liveRate) => listInProgressForRep(rep.id, liveRate)),
   ]);
 
   return (

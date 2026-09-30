@@ -13,7 +13,7 @@ import {
   updateRepAction,
 } from "../actions";
 import { loadRepSummary } from "@/lib/repDashboard";
-import { listInProgressForRep, listPayouts } from "@/db/repMoney";
+import { listInProgressForRep } from "@/db/repMoney";
 import { getFxRate } from "@/lib/fx";
 import { formatRial } from "@/lib/money";
 import { persianMonthLabel, persianYearMonth } from "@/lib/persianCalendar";
@@ -67,14 +67,13 @@ export default async function AdminRepPage({
 
   const rep = await getRepById(id);
   if (!rep) notFound();
-  const liveRate = await getFxRate();
-  const [activeReps, origin, credential, summary, payouts, inProgress] = await Promise.all([
+  // One round of reads: the rate is needed only by the in-progress list.
+  const [activeReps, origin, credential, { summary, payouts }, inProgress] = await Promise.all([
     listActiveReps(),
     siteOrigin(),
     ok === "created" || ok === "password" ? readShownOnce("rep", id) : Promise.resolve(null),
     loadRepSummary(id, tableYear),
-    listPayouts(id),
-    listInProgressForRep(id, liveRate),
+    getFxRate().then((liveRate) => listInProgressForRep(id, liveRate)),
   ]);
   const current = persianYearMonth(new Date());
   const errorKey = error && error in ERROR_KEY ? ERROR_KEY[error as keyof typeof ERROR_KEY] : null;
