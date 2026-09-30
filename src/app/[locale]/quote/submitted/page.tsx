@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { isLocale, getDict, type Locale } from "@/lib/i18n";
+import { normaliseRef } from "@/lib/trackRef";
 
 export default async function QuoteSubmittedPage({
   params,
@@ -13,7 +14,12 @@ export default async function QuoteSubmittedPage({
   if (!isLocale(locale)) notFound();
   const l = locale as Locale;
   const t = getDict(l);
-  const { ref } = await searchParams;
+  // Only something shaped like a reference we issue is shown as one. The query
+  // string is anyone's to write, and this page is where a customer expects the
+  // shop's own words: a crafted link could otherwise print any text there as
+  // "your order reference" (review L-18).
+  const { ref: rawRef } = await searchParams;
+  const ref = normaliseRef(rawRef ?? "");
 
   return (
     <main className="mx-auto max-w-[620px] px-3 pt-10 pb-16 text-center">
