@@ -104,7 +104,9 @@ export async function issueInvoice(
             -- string to the width, so a fixed width of 4 turned invoice
             -- 10,000 into 1000 and collided from there on (review H-3).
             invoice_number = (
-              SELECT 'INV-' || to_char(now(), 'YYYY') || '-' ||
+              -- The year in Tehran, where the invoice is dated: in UTC an
+              -- invoice issued 00:00–03:30 on 1 January carried last year (L-5).
+              SELECT 'INV-' || to_char(now() AT TIME ZONE 'Asia/Tehran', 'YYYY') || '-' ||
                      lpad(s.n::text, greatest(4, length(s.n::text)), '0')
               FROM (SELECT nextval('invoice_seq') AS n) s
             ),

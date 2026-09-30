@@ -508,3 +508,15 @@ test("concurrent checkouts sharing products in opposite order do not deadlock", 
     }
   }
 });
+
+test("the invoice number's year is Tehran's, not UTC's", async () => {
+  // Review L-5: an invoice issued just after midnight on 1 January in Tehran
+  // (still 31 December in UTC) must carry the new year.
+  assertLocalDatabase();
+  const [{ tehran, utc }] = await sql<{ tehran: string; utc: string }[]>`
+    SELECT to_char(timestamptz '2027-01-01 00:30+03:30' AT TIME ZONE 'Asia/Tehran', 'YYYY') AS tehran,
+           to_char(timestamptz '2027-01-01 00:30+03:30' AT TIME ZONE 'UTC', 'YYYY') AS utc`;
+  assert.deepEqual({ tehran, utc }, { tehran: "2027", utc: "2026" });
+  const { readFileSync } = await import("node:fs");
+  assert.match(readFileSync("src/db/invoiceQueries.ts", "utf8"), /to_char\(now\(\) AT TIME ZONE 'Asia\/Tehran', 'YYYY'\)/);
+});
