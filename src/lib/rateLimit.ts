@@ -14,10 +14,13 @@ export type RateLimitPolicy = Readonly<{
 /** Deliberately named policies make call sites reviewable at a glance. */
 export const RATE_LIMITS = {
   adminLogin: { limit: 8, windowSeconds: 15 * 60 },
-  // Every admin sign-in attempt from anywhere, together. The admin password is
-  // shared and has no account to key on, so a guesser spread over many
-  // addresses meets only this ceiling. Far above what a small staff uses.
-  adminLoginGlobal: { limit: 60, windowSeconds: 15 * 60 },
+  // Failed admin sign-ins from every address together (lib/signInGuard.ts).
+  // The admin password is shared and has no account to key on, so a guesser
+  // spread over many addresses meets only this ceiling. Failures only, and
+  // only attempts the per-address limit let through: counting every attempt
+  // let one address lock every admin out by sending junk (fix review,
+  // 2026-09-30). A browser that has signed in as admin before is let through.
+  adminLoginFailures: { limit: 60, windowSeconds: 15 * 60 },
   accountSignIn: { limit: 10, windowSeconds: 15 * 60 },
   // Failed sign-ins against one account (customer or rep), from any address.
   // Counted on failure only, and a device that has signed in to the account
@@ -180,23 +183,6 @@ export async function peekAccountCounter(
       AND window_started_at > now() - make_interval(secs => ${policy.windowSeconds})
   `;
   return row?.count ?? 0;
-}
-
-/**
- * One counter for every caller together — for the shared admin password,
- * where no address or account identifies the guesser. Logged when it trips,
- * because it means someone is guessing and every admin is now locked out
- * until the window passes.
- */
-export async function consumeGlobalRateLimit(
-  scope: string,
-  policy: RateLimitPolicy,
-): Promise<RateLimitResult> {
-  const row = await consumeCounter(scope, rateLimitIdentityHash("account", "global"), policy);
-  if (row.count === policy.limit + 1) {
-    console.error(`rate limit ${scope}: ${policy.limit} attempts in ${policy.windowSeconds}s from all addresses`);
-  }
-  return { allowed: row.count <= policy.limit, retryAfter: row.retryAfter };
 }
 
 /**

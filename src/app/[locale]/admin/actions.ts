@@ -3,7 +3,8 @@
 import { revalidateCatalogPages } from "@/lib/revalidateCatalog";
 import { redirect } from "next/navigation";
 import { sql } from "@/db";
-import { assertAdminWrite, signInAdmin, signOutAdmin, signOutAllAdmins } from "@/lib/admin";
+import { adminSignInKey, assertAdminWrite, signInAdmin, signOutAdmin, signOutAllAdmins } from "@/lib/admin";
+import { recordSignInFailure, rememberSignInDevice, signInLocked } from "@/lib/signInGuard";
 import {
   getAutomaticRate,
   getFxRate,
@@ -26,7 +27,7 @@ import { HELD_STATUSES, assertTransition, isOrderStatus } from "@/lib/orders";
 import { addComment } from "@/db/commentQueries";
 import { releaseHeldStock } from "@/db/inventoryQueries";
 import { confirmPayment } from "@/db/paymentProofQueries";
-import { RATE_LIMITS, consumeGlobalRateLimit, consumeRateLimit } from "@/lib/rateLimit";
+import { RATE_LIMITS, consumeRateLimit } from "@/lib/rateLimit";
 import { REQUEST_LIMITS, boundedString } from "@/lib/requestLimits";
 import { issueInvoice } from "@/db/invoiceQueries";
 import { recordAudit } from "@/db/audit";
@@ -51,18 +52,26 @@ import { getVatRateBp, saveVatRateBp } from "@/lib/vatSettings";
  */
 export async function loginAction(formData: FormData): Promise<void> {
   const locale = safeLocale(formData);
-  const [limit, global] = await Promise.all([
-    consumeRateLimit("admin:sign-in", RATE_LIMITS.adminLogin),
-    consumeGlobalRateLimit("admin:sign-in-all", RATE_LIMITS.adminLoginGlobal),
-  ]);
-  if (!limit.allowed || !global.allowed) redirect(`/${locale}/admin/login?error=rate-limit`);
+  // Per address, every attempt.
+  const limit = await consumeRateLimit("admin:sign-in", RATE_LIMITS.adminLogin);
+  if (!limit.allowed) redirect(`/${locale}/admin/login?error=rate-limit`);
+  // From every address together, failures only — and only attempts the line
+  // above let through. Counting every attempt there let one address lock every
+  // admin out by sending junk. A browser that has signed in before passes.
+  const key = adminSignInKey();
+  if (await signInLocked("admin", key)) redirect(`/${locale}/admin/login?error=rate-limit`);
   const password = boundedString(formData.get("password"), REQUEST_LIMITS.passwordChars, {
     trim: false,
   });
   const ok = password ? await signInAdmin(password) : false;
   // A failure returns to the form rather than to /admin, which would only
   // bounce straight back here and lose the error message on the way.
-  redirect(ok ? `/${locale}/admin` : `/${locale}/admin/login?error=1`);
+  if (!ok) {
+    await recordSignInFailure("admin", key);
+    redirect(`/${locale}/admin/login?error=1`);
+  }
+  await rememberSignInDevice("admin", key);
+  redirect(`/${locale}/admin`);
 }
 
 export async function logoutAction(formData: FormData): Promise<void> {

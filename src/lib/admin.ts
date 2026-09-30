@@ -1,4 +1,5 @@
 import "server-only";
+import { createHash } from "node:crypto";
 import { cache } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -49,6 +50,16 @@ function adminPassword(): string {
     );
   }
   return p || DEV_DEFAULT;
+}
+
+/**
+ * What the sign-in guard counts admin failures against, and signs the
+ * known-device mark with (`lib/signInGuard.ts`): a digest of the current
+ * password, so changing ADMIN_PASSWORD starts a fresh count and retires every
+ * browser's mark. Reveals nothing — the guard only ever stores HMACs of it.
+ */
+export function adminSignInKey(): string {
+  return createHash("sha256").update(adminPassword()).digest("hex");
 }
 
 /**
