@@ -13,6 +13,7 @@ import { submitOrderFromCart, type SubmitOrderInput } from "./orderSubmissionQue
 import { getInvoiceByRef, issueInvoice, updateOrderItemPrices } from "./invoiceQueries";
 import { addPaymentProof, confirmPayment, listPaymentProofs } from "./paymentProofQueries";
 import { PROOF_MAX_PER_ORDER } from "@/lib/paymentProof";
+import { persianYearMonth } from "@/lib/persianCalendar";
 import { randomReferralCode } from "@/lib/repAccount";
 import { quoteCartFingerprint } from "@/lib/quoteSubmission";
 
@@ -339,6 +340,11 @@ test("an invoice locks its prices, exchange rate and VAT rate once, and only onc
     assert.equal(issued.totalCents, 900);
     assert.equal(issued.lineCents, 450);
     assert.match(issued.invoiceNumber, /^INV-\d{4}-\d{4,}$/);
+    // The year is the Persian one (L-5), e.g. 1405 rather than 2026.
+    assert.equal(
+      issued.invoiceNumber.slice(4, 8),
+      String(persianYearMonth(new Date()).year),
+    );
     assert.equal((await getInvoiceByRef(order.ref))?.order.vatRateBp, 1000);
 
     // The admin and a rep finalizing at once: the second changes nothing, and
@@ -507,16 +513,4 @@ test("concurrent checkouts sharing products in opposite order do not deadlock", 
       await sql`DELETE FROM categories WHERE id = ${categoryId}`;
     }
   }
-});
-
-test("the invoice number's year is Tehran's, not UTC's", async () => {
-  // Review L-5: an invoice issued just after midnight on 1 January in Tehran
-  // (still 31 December in UTC) must carry the new year.
-  assertLocalDatabase();
-  const [{ tehran, utc }] = await sql<{ tehran: string; utc: string }[]>`
-    SELECT to_char(timestamptz '2027-01-01 00:30+03:30' AT TIME ZONE 'Asia/Tehran', 'YYYY') AS tehran,
-           to_char(timestamptz '2027-01-01 00:30+03:30' AT TIME ZONE 'UTC', 'YYYY') AS utc`;
-  assert.deepEqual({ tehran, utc }, { tehran: "2027", utc: "2026" });
-  const { readFileSync } = await import("node:fs");
-  assert.match(readFileSync("src/db/invoiceQueries.ts", "utf8"), /to_char\(now\(\) AT TIME ZONE 'Asia\/Tehran', 'YYYY'\)/);
 });

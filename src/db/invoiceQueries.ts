@@ -2,6 +2,7 @@ import "server-only";
 import type { TransactionSql } from "postgres";
 import { sql } from "./index";
 import { exceedsOrderLimit } from "@/lib/invoice";
+import { persianYearMonth } from "@/lib/persianCalendar";
 import { recordAudit, type AuditActor } from "./audit";
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
@@ -104,9 +105,10 @@ export async function issueInvoice(
             -- string to the width, so a fixed width of 4 turned invoice
             -- 10,000 into 1000 and collided from there on (review H-3).
             invoice_number = (
-              -- The year in Tehran, where the invoice is dated: in UTC an
-              -- invoice issued 00:00–03:30 on 1 January carried last year (L-5).
-              SELECT 'INV-' || to_char(now() AT TIME ZONE 'Asia/Tehran', 'YYYY') || '-' ||
+              -- The Persian year on Tehran time, which is how Iranian books
+              -- are kept (L-5). Postgres has no Persian calendar, so Node
+              -- supplies it; the sequence stays one running count (H-3).
+              SELECT 'INV-' || ${String(persianYearMonth(new Date()).year)} || '-' ||
                      lpad(s.n::text, greatest(4, length(s.n::text)), '0')
               FROM (SELECT nextval('invoice_seq') AS n) s
             ),
