@@ -36,14 +36,14 @@
     "db:column-tiers": "tsx scripts/add-column-tiers.mts",
     "db:catalog-media": "tsx scripts/add-catalog-media.mts",
     "i18n:missing": "tsx scripts/find-untranslated.mjs",
-    "db:rename-orders:remote": "dotenv -e .env.production.local -v ALLOW_REMOTE_MIGRATION=1 -- tsx scripts/rename-quotes-to-orders.mts",
-    "db:migrate:remote": "dotenv -e .env.production.local -- tsx scripts/migrate.mts",
-    "db:migrate:check:remote": "dotenv -e .env.production.local -- tsx scripts/migrate.mts --dry-run",
-    "db:bootstrap:empty:remote": "dotenv -e .env.production.local -- tsx scripts/bootstrap-empty-database.mts",
-    "db:extensions:remote": "dotenv -e .env.production.local -- tsx scripts/apply-extensions.mts",
-    "db:reconcile:check:remote": "dotenv -e .env.production.local -- tsx scripts/reconcile-data.mts",
-    "db:reconcile:apply:remote": "dotenv -e .env.production.local -- tsx scripts/reconcile-data.mts --apply",
-    "db:verify:remote": "dotenv -e .env.production.local -- tsx scripts/verify-remote.mts"
+    "db:rename-orders:remote": "dotenv -e .env.remote -v ALLOW_REMOTE_MIGRATION=1 -- tsx scripts/rename-quotes-to-orders.mts",
+    "db:migrate:remote": "dotenv -e .env.remote -- tsx scripts/migrate.mts",
+    "db:migrate:check:remote": "dotenv -e .env.remote -- tsx scripts/migrate.mts --dry-run",
+    "db:bootstrap:empty:remote": "dotenv -e .env.remote -- tsx scripts/bootstrap-empty-database.mts",
+    "db:extensions:remote": "dotenv -e .env.remote -- tsx scripts/apply-extensions.mts",
+    "db:reconcile:check:remote": "dotenv -e .env.remote -- tsx scripts/reconcile-data.mts",
+    "db:reconcile:apply:remote": "dotenv -e .env.remote -- tsx scripts/reconcile-data.mts --apply",
+    "db:verify:remote": "dotenv -e .env.remote -- tsx scripts/verify-remote.mts"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.112.3",

@@ -98,7 +98,7 @@ deployment · `ALL` = everywhere.
 | M-9 | Medium | 32-bit overflow on order and invoice totals → 500 errors (anonymous can trigger) | ALL | **FIXED 2026-09-29 in `{{M-9}}`** |
 | M-10 | Medium | Paid orders can be cancelled with no refund record; stock stays "sold" | ALL | **FIXED 2026-09-29 in `{{M-10}}`** |
 | M-11 | Medium | No audit trail for money/state changes; rep payouts can be deleted outright | BRANCH | **FIXED 2026-09-29 in `{{M-11}}`** |
-| M-12 | Medium | Local tooling defaults to the live database (e2e, build, start, drizzle) | LIVE (process) | CODE |
+| M-12 | Medium | Local tooling defaults to the live database (e2e, build, start, drizzle) | LIVE (process) | **FIXED 2026-09-29 in `{{M-12}}`** |
 | M-13 | Medium | Customer emails are never verified → an address can be squatted permanently | LIVE | CODE |
 | M-14 | Medium | Anyone can lock a rep out by failing sign-ins against their username | BRANCH | **FIXED 2026-09-29 in `{{M-14}}`** |
 | M-15 | Medium | Lists silently truncate (admin queue 200, rep orders 300, rep customers 500) | ALL | CODE |
@@ -980,6 +980,16 @@ each money/state write (actor kind + id, action, before/after); replace payout
 delete with a reversing entry. Scope BRANCH, status CODE.
 
 ### M-12 — Local tooling defaults to the live database
+
+> **Fix status (2026-09-29): FIXED in `{{M-12}}`.** The live credentials file
+> was renamed `.env.production.local` → `.env.remote` on Amir's Mac (Next does
+> not auto-load it) and every `db:*:remote` script now reads `.env.remote`
+> (`db:verify:remote` checked: still reaches the live database, read-only).
+> `playwright.config.ts` refuses a non-local `DATABASE_URL`; `drizzle.config.ts`
+> refuses any non-local host (checked: `drizzle-kit check` against a remote URL
+> exits with the refusal). `strict` stays false: it prompts before every
+> statement and would stall CI's bootstrap; drizzle-kit still prompts before
+> data-loss statements. Docs: `LOCAL-DEV.md`, `DEPLOYMENT.md`.
 
 - `playwright.config.ts:25` starts `npm run start`, and `next start` loads
   `.env.production.local` (live credentials). Unless the operator exports the

@@ -82,7 +82,9 @@ is why, and it is not optional.
 
 ## Database setup
 
-Credentials live in `.env.production.local` (gitignored, never committed):
+Credentials live in `.env.remote` (gitignored, never committed). Not
+`.env.production.local`: Next loads that file into every local production build
+and server, which then talk to the live database (review M-12).
 
 ```
 DATABASE_URL=<transaction pooler, port 6543>

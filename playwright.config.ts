@@ -1,5 +1,16 @@
 import { defineConfig, devices } from "@playwright/test";
 
+/**
+ * The suite creates orders, customers, reps and settings. It must never run
+ * against a server on the live database (review finding M-12): refuse any
+ * DATABASE_URL that is not this machine. The live credentials live in
+ * `.env.remote`, which `next start` does not load.
+ */
+const databaseHost = process.env.DATABASE_URL ? new URL(process.env.DATABASE_URL).hostname : "localhost";
+if (databaseHost !== "localhost" && databaseHost !== "127.0.0.1") {
+  throw new Error(`Refusing to run e2e against a non-local database (${databaseHost}).`);
+}
+
 const port = Number(process.env.PLAYWRIGHT_PORT ?? 3100);
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? `http://127.0.0.1:${port}`;
 
