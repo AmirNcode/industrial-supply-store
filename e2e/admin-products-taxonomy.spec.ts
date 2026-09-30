@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { getDict, type Locale } from "../src/lib/i18n";
 import { expectNoAccessibilityViolations } from "./accessibility";
+import { CLIENT_ADDRESS_HEADER } from "./clientAddress";
 
 const locales: Locale[] = ["en", "fa"];
 
@@ -10,7 +11,7 @@ async function openProducts(
   testAddress: string,
 ) {
   const t = getDict(locale);
-  await page.setExtraHTTPHeaders({ "x-vercel-forwarded-for": testAddress });
+  await page.setExtraHTTPHeaders({ [CLIENT_ADDRESS_HEADER]: testAddress });
   await page.goto(`/${locale}/admin/products`);
   if (page.url().includes("/admin/login")) {
     await page.getByLabel(t.password).fill(process.env.E2E_ADMIN_PASSWORD ?? "ci-admin-password");

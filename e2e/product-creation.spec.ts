@@ -2,6 +2,7 @@ import "dotenv/config";
 import { test, expect } from "@playwright/test";
 import postgres from "postgres";
 import { getDict, type Locale } from "../src/lib/i18n";
+import { CLIENT_ADDRESS_HEADER } from "./clientAddress";
 
 // These tests write fixtures. They may never use a hosted production database.
 const databaseUrl = process.env.DATABASE_URL;
@@ -21,7 +22,7 @@ for (const locale of ["en", "fa"] as Locale[]) {
       const [family] = await sql`INSERT INTO product_families (slug, category_id, name_en, name_fa)
         VALUES (${slug}, ${category.id}, ${slug}, ${slug}) RETURNING id`;
       const familyId = Number(family.id);
-      await page.setExtraHTTPHeaders({ "x-vercel-forwarded-for": `203.0.113.${140 + testInfo.workerIndex}` });
+      await page.setExtraHTTPHeaders({ [CLIENT_ADDRESS_HEADER]: `203.0.113.${140 + testInfo.workerIndex}` });
       await page.goto(`/${locale}/admin/login`);
       await page.getByLabel(t.password).fill(process.env.E2E_ADMIN_PASSWORD ?? "ci-admin-password");
       await page.getByRole("button", { name: t.signIn }).click();
@@ -93,7 +94,7 @@ for (const locale of ["en", "fa"] as Locale[]) {
         } } });
       }
     });
-    await page.setExtraHTTPHeaders({ "x-vercel-forwarded-for": `203.0.113.${180 + testInfo.workerIndex}` });
+    await page.setExtraHTTPHeaders({ [CLIENT_ADDRESS_HEADER]: `203.0.113.${180 + testInfo.workerIndex}` });
     await page.goto(`/${locale}/admin/login`);
     await page.getByLabel(t.password).fill(process.env.E2E_ADMIN_PASSWORD ?? "ci-admin-password");
     await page.getByRole("button", { name: t.signIn }).click();
