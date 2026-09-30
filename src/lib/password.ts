@@ -5,7 +5,7 @@ const scrypt = promisify(scryptCb) as (
   password: string,
   salt: Buffer,
   keylen: number,
-  options: { N: number; r: number; p: number },
+  options: { N: number; r: number; p: number; maxmem: number },
 ) => Promise<Buffer>;
 
 /**
@@ -19,9 +19,18 @@ const scrypt = promisify(scryptCb) as (
  *
  * The stored form carries its own parameters, so raising them later does not
  * invalidate existing hashes: an old row verifies with the numbers it was
- * written with.
+ * written with, and `needsRehash` tells sign-in to rewrite it at the current
+ * cost while the plaintext is in hand.
+ *
+ * N = 2^17 (raised from 2^14 on 2026-09-30, review L-12), the current guidance
+ * for scrypt with r = 8: about 250 ms and 128 MiB per hash, paid once per
+ * sign-in. `MAX_N` refuses a stored row that would demand far more — a
+ * corrupted or planted hash must not make one sign-in eat the server.
  */
-const N = 16384;
+const N = 131072;
+const MAX_N = 262144;
+// 128 · N · r bytes; Node's 32 MiB default refuses N = 2^17.
+const MAXMEM = 256 * 1024 * 1024;
 const R = 8;
 const P = 1;
 const KEYLEN = 64;
@@ -31,7 +40,7 @@ export const MIN_PASSWORD_LENGTH = 8;
 
 export async function hashPassword(plain: string): Promise<string> {
   const salt = randomBytes(SALT_BYTES);
-  const key = await scrypt(plain, salt, KEYLEN, { N, r: R, p: P });
+  const key = await scrypt(plain, salt, KEYLEN, { N, r: R, p: P, maxmem: MAXMEM });
   return ["scrypt", N, R, P, salt.toString("base64"), key.toString("base64")].join("$");
 }
 
@@ -43,6 +52,7 @@ export async function verifyPassword(plain: string, stored: string): Promise<boo
   const r = Number(parts[2]);
   const p = Number(parts[3]);
   if (!Number.isInteger(n) || !Number.isInteger(r) || !Number.isInteger(p)) return false;
+  if (n > MAX_N || r > R || p > P) return false;
 
   let salt: Buffer;
   let expected: Buffer;
@@ -56,7 +66,7 @@ export async function verifyPassword(plain: string, stored: string): Promise<boo
 
   let actual: Buffer;
   try {
-    actual = await scrypt(plain, salt, expected.length, { N: n, r, p });
+    actual = await scrypt(plain, salt, expected.length, { N: n, r, p, maxmem: MAXMEM });
   } catch {
     // Absurd stored parameters can make scrypt refuse outright. That is a
     // corrupt row, not a valid password.
@@ -72,4 +82,14 @@ export async function verifyPassword(plain: string, stored: string): Promise<boo
  * noticeably faster than a known one, and the form becomes an oracle for
  * which accounts exist.
  */
-export const DUMMY_PASSWORD_HASH = `scrypt$16384$8$1$${"A".repeat(22)}==$${"A".repeat(88)}`;
+export const DUMMY_PASSWORD_HASH = `scrypt$${N}$8$1$${"A".repeat(22)}==$${"A".repeat(88)}`;
+
+/**
+ * True for a well-formed hash written at a lower cost than today's. Sign-in
+ * checks it after a correct password and stores a fresh hash, so accounts
+ * move to the current cost without anyone resetting anything.
+ */
+export function needsRehash(stored: string): boolean {
+  const parts = stored.split("$");
+  return parts.length === 6 && parts[0] === "scrypt" && Number(parts[1]) < N;
+}

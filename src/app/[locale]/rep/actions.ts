@@ -5,7 +5,7 @@ import { safeLocale, type Locale } from "@/lib/i18n";
 import { REQUEST_LIMITS, boundedString } from "@/lib/requestLimits";
 import { RATE_LIMITS, consumeRateLimit } from "@/lib/rateLimit";
 import { recordSignInFailure, rememberSignInDevice, signInLocked } from "@/lib/signInGuard";
-import { DUMMY_PASSWORD_HASH, hashPassword, verifyPassword } from "@/lib/password";
+import { DUMMY_PASSWORD_HASH, hashPassword, needsRehash, verifyPassword } from "@/lib/password";
 import { normalizeRepPassword, repPasswordProblems } from "@/lib/repPassword";
 import { FOLLOW_UP_DAYS, isValidUsername, normalizeUsername } from "@/lib/repAccount";
 import { latinDigits } from "@/lib/digits";
@@ -29,6 +29,7 @@ import {
   setRepPassword,
   touchRepLogin,
   type RepRow,
+  upgradeRepPasswordHash,
 } from "@/db/repQueries";
 import {
   createCustomerForRep,
@@ -86,6 +87,9 @@ export async function repSignInAction(formData: FormData): Promise<void> {
     redirect(`/${locale}/rep/signin?error=failed`);
   }
   await rememberSignInDevice("rep", username);
+  if (needsRehash(rep.passwordHash)) {
+    await upgradeRepPasswordHash(rep.id, rep.passwordHash, await hashPassword(normalizeRepPassword(password ?? "")));
+  }
 
   await setRepSessionCookie(rep);
   await touchRepLogin(rep.id);

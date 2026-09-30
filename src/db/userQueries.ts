@@ -46,6 +46,15 @@ export async function findUserForSignIn(
   return rows[0] ?? null;
 }
 
+/**
+ * A stronger hash of the same password (`needsRehash`). Only the hash moves —
+ * no flag, no session version — and only if nobody changed the password in
+ * the meantime.
+ */
+export async function upgradePasswordHash(userId: string, oldHash: string, newHash: string): Promise<void> {
+  await sql`UPDATE users SET password_hash = ${newHash} WHERE id = ${userId} AND password_hash = ${oldHash}`;
+}
+
 /** The session version a cookie must carry; null for no such account. */
 export async function getSessionVersion(userId: string): Promise<number | null> {
   const [row] = await sql<{ version: number }[]>`

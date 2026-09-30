@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { hashPassword, verifyPassword, MIN_PASSWORD_LENGTH } from "./password";
+import { hashPassword, needsRehash, verifyPassword, MIN_PASSWORD_LENGTH } from "./password";
 
 test("a hash verifies against the password that made it", async () => {
   const stored = await hashPassword("correct horse battery staple");
@@ -45,4 +45,20 @@ test("a malformed stored hash fails rather than throwing", async () => {
 test("the minimum length is stated once, for the form and the action to share", () => {
   assert.equal(typeof MIN_PASSWORD_LENGTH, "number");
   assert.ok(MIN_PASSWORD_LENGTH >= 8);
+});
+
+test("new hashes use the current cost; older ones verify and are flagged for rehash", async () => {
+  // Review L-12: N raised from 2^14 to 2^17.
+  const stored = await hashPassword("pw-now");
+  assert.equal(stored.split("$")[1], "131072");
+  assert.equal(needsRehash(stored), false);
+  // A hash written before the change (N = 2^14) still verifies.
+  const { scryptSync } = await import("node:crypto");
+  const salt = Buffer.alloc(16, 7);
+  const old = ["scrypt", 16384, 8, 1, salt.toString("base64"),
+    scryptSync("pw-then", salt, 64, { N: 16384, r: 8, p: 1 }).toString("base64")].join("$");
+  assert.equal(await verifyPassword("pw-then", old), true);
+  assert.equal(needsRehash(old), true);
+  // A planted hash demanding absurd memory is refused, not computed.
+  assert.equal(await verifyPassword("x", `scrypt$1048576$8$1$${salt.toString("base64")}$${"A".repeat(88)}`), false);
 });

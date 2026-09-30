@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { safeLocale, isLocale, type Locale } from "@/lib/i18n";
-import { DUMMY_PASSWORD_HASH, hashPassword, verifyPassword, MIN_PASSWORD_LENGTH } from "@/lib/password";
+import { DUMMY_PASSWORD_HASH, hashPassword, verifyPassword, MIN_PASSWORD_LENGTH, needsRehash } from "@/lib/password";
 import {
   setSessionCookie,
   clearSessionCookie,
@@ -16,6 +16,7 @@ import {
   updateProfile,
   setPassword,
   getPasswordHash,
+  upgradePasswordHash,
 } from "@/db/userQueries";
 import { RATE_LIMITS, consumeRateLimit } from "@/lib/rateLimit";
 import { recordSignInFailure, rememberSignInDevice, signInLocked } from "@/lib/signInGuard";
@@ -135,6 +136,9 @@ export async function signInAction(formData: FormData): Promise<void> {
     redirect(`/${locale}/account/signin?error=failed`);
   }
   if (loginKey) await rememberSignInDevice("customer", loginKey);
+  if (needsRehash(user.passwordHash)) {
+    await upgradePasswordHash(user.id, user.passwordHash, await hashPassword(password ?? ""));
+  }
 
   await setSessionCookie(user.id);
   await touchLastLogin(user.id);

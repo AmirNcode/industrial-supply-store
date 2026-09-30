@@ -88,6 +88,11 @@ export async function setRepPassword(
   });
 }
 
+/** A stronger hash of the same password; see `upgradePasswordHash` in userQueries. */
+export async function upgradeRepPasswordHash(repId: string, oldHash: string, newHash: string): Promise<void> {
+  await sql`UPDATE sales_reps SET password_hash = ${newHash} WHERE id = ${repId} AND password_hash = ${oldHash}`;
+}
+
 /**
  * The unique indexes decide, not a lookup first — two admins creating "sara"
  * at once would both pass a check. A clash on the random referral code is not
