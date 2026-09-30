@@ -34,14 +34,16 @@ export function configuredFxRate(
   rialValue: string | undefined,
   legacyTomanValue: string | undefined,
 ): number {
+  // Whole rial only: invoices convert with BigInt, which throws on 1250000.5
+  // and took every invoice page down with it (review L-7).
   const rial = Number(rialValue);
-  if (Number.isFinite(rial) && rial > 0) return rial;
+  if (Number.isSafeInteger(rial) && rial > 0) return rial;
 
   // One-release compatibility for deployments that have not renamed their
   // environment variable yet. All internal values are still Rial: the legacy
   // Toman input is converted at the boundary and never leaves this function.
   const legacyToman = Number(legacyTomanValue);
-  if (Number.isFinite(legacyToman) && legacyToman > 0) return legacyToman * 10;
+  if (Number.isSafeInteger(legacyToman * 10) && legacyToman > 0) return legacyToman * 10;
 
   return DEFAULT_FX_RATE;
 }
@@ -57,7 +59,7 @@ export function hasConfiguredFxRate(
 ): boolean {
   const rial = Number(rialValue);
   const toman = Number(legacyTomanValue);
-  return (Number.isFinite(rial) && rial > 0) || (Number.isFinite(toman) && toman > 0);
+  return (Number.isSafeInteger(rial) && rial > 0) || (Number.isSafeInteger(toman * 10) && toman > 0);
 }
 
 /**

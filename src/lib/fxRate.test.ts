@@ -87,6 +87,10 @@ test("the Rial environment setting wins, with a converted legacy fallback", () =
   assert.equal(configuredFxRate(undefined, "120000"), 1_200_000);
   assert.equal(configuredFxRate("bad", "120000"), 1_200_000);
   assert.equal(configuredFxRate(undefined, undefined), DEFAULT_FX_RATE);
+  // A fractional rial rate is refused at the boundary (review L-7).
+  assert.equal(configuredFxRate("1250000.5", undefined), DEFAULT_FX_RATE);
+  assert.equal(hasConfiguredFxRate("1250000.5", undefined), false);
+  assert.equal(configuredFxRate(undefined, "125000.5"), 1_250_005);
 });
 
 test("the rate's source says when nobody chose it", () => {
