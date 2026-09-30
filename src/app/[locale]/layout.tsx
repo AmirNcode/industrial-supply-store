@@ -9,21 +9,15 @@ import { Analytics } from "@vercel/analytics/next";
 import { isLocale, dir, locales, getDict, type Locale } from "@/lib/i18n";
 
 /**
- * TEMPORARY — Enamad ownership check for temex.ir, required before the payment
- * gateway will activate. Enamad fetches the home page and accepts any one of
- * three proofs; all three are in place so the check cannot fail on whichever one
- * it happens to read. They are the number in the title below, the `enamad` meta
- * tag below, and `public/25626502.txt`, served at the site root.
- *
- * The title marker is public: it shows in the browser tab, in search results and
- * in link previews for as long as it is here. Remove the `— 25626502` suffix, the
- * `other` entry and `public/25626502.txt` once the seal is issued.
+ * The Enamad ownership proofs — a number in this title, an `enamad` meta tag
+ * and a file at the site root — were removed once the seal was issued (review
+ * L-3): the title number showed in every browser tab and search result. The
+ * seal itself is in the footer and needs none of them.
  */
 export const metadata: Metadata = {
-  title: "TEMEX — Tools, Equipment & Materials Express — 25626502",
+  title: "TEMEX — Tools, Equipment & Materials Express",
   description:
     "Industrial parts catalog: fasteners, sealing, bearings, pipe fittings and more.",
-  other: { enamad: "25626502" },
 };
 
 /**
