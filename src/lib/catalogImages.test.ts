@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   CATALOG_IMAGE_MAX_BYTES,
   catalogImageFileProblem,
+  optimizableImageUrl,
   normalizeCatalogImageUrl,
 } from "./catalogImages";
 
@@ -24,4 +25,17 @@ test("catalog image files are JPG, PNG, or WebP and no larger than 4 MB", () => 
     catalogImageFileProblem({ type: "image/png", size: CATALOG_IMAGE_MAX_BYTES + 1 }),
     "file-too-large",
   );
+});
+
+test("only our own Storage goes through the image optimiser", () => {
+  const upload = "https://myyjeiujwtkwlemidvow.supabase.co/storage/v1/object/public/catalog-images/a.webp";
+  assert.equal(optimizableImageUrl(upload, ""), true);
+  assert.equal(optimizableImageUrl("https://files.example.ir/storage/v1/object/public/catalog-images/a.webp", "files.example.ir"), true);
+  // A pasted supplier image, a lookalike path elsewhere, plain http, junk.
+  assert.equal(optimizableImageUrl("https://supplier.example/photos/a.jpg", ""), false);
+  assert.equal(optimizableImageUrl("https://evil.example/storage/v1/object/public/x.jpg", ""), false);
+  assert.equal(optimizableImageUrl("https://evil.supabase.co.example/storage/v1/object/public/x.jpg", ""), false);
+  assert.equal(optimizableImageUrl("http://myyjeiujwtkwlemidvow.supabase.co/storage/v1/object/public/a.jpg", ""), false);
+  assert.equal(optimizableImageUrl("https://myyjeiujwtkwlemidvow.supabase.co/rest/v1/users", ""), false);
+  assert.equal(optimizableImageUrl("not a url", ""), false);
 });

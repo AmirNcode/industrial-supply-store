@@ -263,13 +263,14 @@ category's description; `CATEGORY_COLS` is shared with the child, ancestor and
 search reads, and putting 2,000 characters × 2 locales in it would ship ~100 KB
 per page for cards that render none of it.
 
-**Catalog artwork goes through `next/image`, and `remotePatterns` allows every
-HTTPS host.** Administrators paste arbitrary supplier URLs, so the host cannot
-be enumerated in advance; the consequence is that the optimiser will fetch any
-HTTPS URL entered in `/admin`, and each image and size is a billable
-transformation. `CatalogImage` passes `sizes` as the tile's literal width
-because these thumbnails never reflow, and falls back to a plain `<img>` for
-`http:` sources, which `remotePatterns` deliberately excludes. Uploads are
+**Uploaded catalog artwork goes through `next/image`; pasted URLs do not.**
+`remotePatterns` allows only public objects in our own Storage (hosted
+Supabase, or the self-hosted Storage host the build is given). The optimiser
+is a public endpoint, so allowing every HTTPS host made it an open, billed
+image proxy for anyone. `CatalogImage` checks the same rule
+(`optimizableImageUrl`) and serves anything else — a supplier URL an admin
+pasted, an `http:` source — as a plain `<img>`, unoptimised. It passes `sizes`
+as the tile's literal width because these thumbnails never reflow. Uploads are
 still stored at full size — that is storage, not bandwidth, and nobody
 downloads the original.
 

@@ -1,5 +1,6 @@
 import Image from "next/image";
 import { ProductIcon } from "./ProductIcon";
+import { optimizableImageUrl } from "@/lib/catalogImages";
 
 /**
  * Remote or uploaded catalog artwork, with the in-house SVG as its empty state.
@@ -15,9 +16,10 @@ import { ProductIcon } from "./ProductIcon";
  * the optimiser assumes the image might fill the viewport and serves something
  * far larger than the tile can show.
  *
- * An `http:` source falls back to a plain `<img>`. `remotePatterns` allows
- * HTTPS only, and an optimiser that refuses the URL fails the whole render —
- * an insecure image is worth serving unoptimised, not worth a broken page.
+ * Anything that is not our own Storage — an `http:` source, a supplier URL
+ * an admin pasted — falls back to a plain `<img>`. The optimiser accepts only
+ * Storage (`optimizableImageUrl`, next.config.ts), and one that refuses a URL
+ * fails the whole render; an unoptimised image beats a broken page.
  */
 export function CatalogImage({
   imageUrl,
@@ -40,9 +42,9 @@ export function CatalogImage({
     return <ProductIcon name={icon} size={size} className={className} />;
   }
 
-  if (!imageUrl.startsWith("https://")) {
+  if (!optimizableImageUrl(imageUrl, process.env.CATALOG_IMAGE_HOST)) {
     return (
-      // The optimiser is HTTPS-only and refusing the URL would fail the render.
+      // Not ours to optimise, and a refused URL would fail the render.
       // eslint-disable-next-line @next/next/no-img-element
       <img
         src={imageUrl}

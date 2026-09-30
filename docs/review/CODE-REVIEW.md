@@ -91,7 +91,7 @@ deployment · `ALL` = everywhere.
 | M-2 | Medium | Customer sessions cannot be revoked; password change/reset leaves other sessions alive 30 days | LIVE | **FIXED 2026-09-29 in `{{M-2}}`** |
 | M-3 | Medium | `/api/cart` adds any product id, including hidden and non-existent ones | LIVE | **FIXED 2026-09-29 in `{{M-3}}`** |
 | M-4 | Medium | Heavy public pages have no rate limit (`/search`, family `?view=all`) | LIVE | **FIXED 2026-09-29 in `{{M-4}}`** |
-| M-5 | Medium | `/_next/image` is an open image proxy for any HTTPS host | LIVE | CODE |
+| M-5 | Medium | `/_next/image` is an open image proxy for any HTTPS host | LIVE | **FIXED 2026-09-29 in `{{M-5}}`** |
 | M-6 | Medium | No security headers (framing, CSP, nosniff, referrer); `x-powered-by` exposed | LIVE | CONFIRMED-LIVE |
 | M-7 | Medium | Per-click admin actions purge the whole site cache (the 2026-08-15 incident pattern) | LIVE | CODE |
 | M-8 | Medium | Stock updates lock product rows in arbitrary order → deadlocks under concurrency | ALL | CODE |
@@ -823,6 +823,16 @@ query. Scope LIVE, status CODE + live data.
 
 ### M-5 — `/_next/image` is an open image proxy for any HTTPS host
 
+> **Fix status (2026-09-29): FIXED in `{{M-5}}`.** `remotePatterns` allows only
+> `*.supabase.co/storage/v1/object/public/**` plus the self-hosted Storage host
+> named by `SUPABASE_PUBLIC_URL`/`SUPABASE_URL` at build time. `CatalogImage`
+> uses the same rule (`optimizableImageUrl`, tested in `catalogImages.test.ts`)
+> and serves any other URL as a plain `<img>`. The false comment is fixed
+> (part of L-9). Trade-off: supplier URLs pasted by an admin are no longer
+> resized — heavier tiles for those images until they are uploaded instead.
+> Self-hosted: the Docker build is not given `SUPABASE_URL`, so uploaded images
+> there are also served unoptimised until it is.
+
 `next.config.ts:63` allows `hostname: "**"`. The comment (`:51-57`) says the
 cost is "bounded by who can reach /admin" — it is not: anyone can request
 `/_next/image?url=https://any-host/any.jpg&w=640&q=75`, and every distinct
@@ -1072,7 +1082,7 @@ Scope BRANCH (process), status CODE.
 | L-6 | Placeholder seller/contact values (`sales@temex.example`, `+98 21 8888 0000`) print on invoices and the header when settings are unset | `src/lib/seller.ts:39-40`, `src/lib/siteContact.ts:14-15` | refuse to issue invoices until real values are saved |
 | L-7 | A non-integer `USD_TO_RIAL` is accepted, then `BigInt(rate)` throws in `invoiceAmounts` → invoice pages 500 | `src/lib/fxRate.ts:33-34`, `src/lib/invoice.ts:69` | require an integer at the boundary |
 | L-8 | Invoice URLs carrying `?key=<pay token>` have no `noindex` / `no-referrer` (the pay page has both); tokens also land in access logs and browser history | `src/app/[locale]/invoice/[ref]/page.tsx` | add metadata; prefer a POST-to-cookie exchange for keyed access |
-| L-9 | Comments that are now false: `next.config.ts:51-57` ("bounded by who can reach /admin", M-5); `api/payment-proofs/[id]/route.ts:17-18` ("not open under DEMO_MODE", H-8); ~~`admin/actions.ts:360` says the reset cookie is not httpOnly but it is~~ (removed with H-11); (the `admin/(panel)/layout.tsx` "one place the sign-in gate lives" comment was corrected with C-1); `account/orders/[ref]/page.tsx:17` says the page is read-only with no customer actions, but it now takes receipt uploads that change order status; `account/password/page.tsx:20` says the form "asks for no current password", but it now requires the temporary one (dropping it would reopen the lock-out `setInitialPasswordAction` prevents) | as listed | fix with the related code |
+| L-9 | Comments that are now false: ~~`next.config.ts:51-57` ("bounded by who can reach /admin", M-5)~~ (fixed with M-5); `api/payment-proofs/[id]/route.ts:17-18` ("not open under DEMO_MODE", H-8); ~~`admin/actions.ts:360` says the reset cookie is not httpOnly but it is~~ (removed with H-11); (the `admin/(panel)/layout.tsx` "one place the sign-in gate lives" comment was corrected with C-1); `account/orders/[ref]/page.tsx:17` says the page is read-only with no customer actions, but it now takes receipt uploads that change order status; `account/password/page.tsx:20` says the form "asks for no current password", but it now requires the temporary one (dropping it would reopen the lock-out `setInitialPasswordAction` prevents) | as listed | fix with the related code |
 | L-10 | Duplicated logic that will drift: two dummy scrypt hashes (`src/lib/password.ts:75`, `src/app/[locale]/account/actions.ts:111`); private `latinDigits` copies in `src/lib/fxRate.ts:86` and `src/lib/siteContactValues.ts:12` beside `src/lib/digits.ts`; `uniqueViolation` in `customerQueries.ts` and `repQueries.ts`; `postedCustomerId` in the rep and admin customer actions; `parseVatPercent` re-implements `parseCommissionPercent` | as listed | one shared helper each |
 | L-11 | Courier and tracking-number fields have no length bound | `src/app/[locale]/admin/actions.ts:185-186` | `boundedString` |
 | L-12 | scrypt `N = 16384` is below current guidance (2^17 for scrypt); parameters are stored per hash, so raising is backward-compatible | `src/lib/password.ts:24` | raise N, rehash on next sign-in |

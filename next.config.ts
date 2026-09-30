@@ -1,5 +1,22 @@
 import type { NextConfig } from "next";
 
+/**
+ * The self-hosted Storage host, when the build is given one. Hosted Supabase
+ * (`*.supabase.co`) is always allowed. Exposed to the bundle as
+ * CATALOG_IMAGE_HOST so `CatalogImage` asks the optimiser only for what it
+ * will accept (`optimizableImageUrl`).
+ */
+function storageHost(): string {
+  const raw = process.env.SUPABASE_PUBLIC_URL || process.env.SUPABASE_URL;
+  try {
+    const host = raw ? new URL(raw).hostname : "";
+    return host.endsWith(".supabase.co") ? "" : host;
+  } catch {
+    return "";
+  }
+}
+const catalogImageHost = storageHost();
+
 const nextConfig: NextConfig = {
   /**
    * Standalone output exists for the Docker image, which runs `server.js`
@@ -48,20 +65,23 @@ const nextConfig: NextConfig = {
    * populated catalog is what made this worth doing before the pictures
    * arrive rather than after.
    *
-   * `hostname: "**"` rather than a list, and that is a real trade. An
-   * administrator can paste any supplier URL — that is the feature — so the
-   * host genuinely cannot be enumerated ahead of time, and the alternative is
-   * that pasted images stay unoptimised, which is the case that exists in the
-   * catalog today. The cost is that the optimiser will fetch any HTTPS URL an
-   * admin enters, and each distinct image and size is a transformation the
-   * platform bills for. Both are bounded by who can reach /admin.
-   *
-   * HTTPS only. `normalizeCatalogImageUrl` still accepts http, and
-   * `CatalogImage` serves those unoptimised rather than failing the render.
+   * Only our own Storage, not every host. This used to be `hostname: "**"`
+   * on the reasoning that only admins choose image URLs — but the optimiser
+   * is a public endpoint: anyone could request
+   * `/_next/image?url=https://any-host/…`, and every distinct image and size
+   * is a billed transformation (review M-5). Uploaded images live in Storage
+   * and are optimised; a supplier URL an admin pastes is served unoptimised by
+   * `CatalogImage`, which is the cost of closing the proxy.
    */
   images: {
-    remotePatterns: [{ protocol: "https", hostname: "**" }],
+    remotePatterns: [
+      { protocol: "https", hostname: "*.supabase.co", pathname: "/storage/v1/object/public/**" },
+      ...(catalogImageHost
+        ? [{ protocol: "https" as const, hostname: catalogImageHost, pathname: "/storage/v1/object/public/**" }]
+        : []),
+    ],
   },
+  env: { CATALOG_IMAGE_HOST: catalogImageHost },
   // Spec tables are huge; keep the server payload lean.
   experimental: {
     optimizePackageImports: ["drizzle-orm"],
