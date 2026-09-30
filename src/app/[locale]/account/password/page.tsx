@@ -17,8 +17,9 @@ const ERROR_KEY = {
  * Where a customer replaces a password a rep or the admin set for them.
  *
  * Sign-out is offered here because the account page, where it normally lives,
- * is gated behind this one — and this form asks for no current password, so a
- * session left open on a shared computer would let the next person choose it.
+ * is gated behind this one. The form asks for the temporary password again:
+ * without it, anyone holding a session opened with that password could choose
+ * the real one first and lock the customer out (`setInitialPasswordAction`).
  */
 export default async function ChoosePasswordPage({
   params,

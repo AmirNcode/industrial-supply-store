@@ -14,11 +14,13 @@ import { PaymentProofSection } from "@/components/PaymentProofSection";
 import { uploadPaymentProofAction } from "../../actions";
 
 /**
- * One order, read-only.
+ * One order, as its customer sees it.
  *
- * There is deliberately nothing here that changes anything. Every transition
- * belongs to staff — that single-actor rule is what keeps this whole feature
- * small, and an Approve or Cancel button here would quietly undo it.
+ * The one thing a customer can do here is upload a payment receipt while the
+ * order is invoiced or being checked — which moves `invoiced` to
+ * `payment_review`. Every other transition (pricing, confirming payment,
+ * shipping, cancelling) belongs to staff, and an Approve or Cancel button here
+ * would quietly undo that rule.
  */
 export default async function AccountOrderPage({
   params,
