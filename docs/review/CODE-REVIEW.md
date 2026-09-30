@@ -26,8 +26,9 @@ to him when a fix is done.
 **Rules that apply to every fix** (from `CLAUDE.md` and `docs/ARCHITECTURE.md`):
 
 1. One finding per commit, on the local `main`. **Never push**: pushing
-   `main` deploys the live site, and the live database does not yet have the
-   three new migrations. Amir says when to push.
+   `main` deploys the live site. All six new migrations are on the live
+   database (verified 2026-09-30), so the push is the only step left, and
+   Amir says when.
 2. Find the root cause first; the IDs below give the cause where it is known.
 3. `npx tsc --noEmit` and `npm test` must be clean; `npm run build` too for
    anything touching a route segment. Add the test named in each finding.
@@ -110,6 +111,10 @@ deployment · `ALL` = everywhere.
 | M-21 | Medium | Product-table JSON is unpaged; large families will exceed Vercel's 4.5 MB response cap | BRANCH | **FIXED 2026-09-30 in `fa76f4c`** |
 | M-22 | Medium | An unrelated feature (admin product-table editor) is bundled into the sales-rep release | BRANCH (process) | **DECLINED by Amir 2026-09-29 — everything ships together on this branch** |
 | L-1 … L-24 | Low | Hardening and hygiene (see section) | mixed | mixed |
+| F-1 | High | One address can lock every admin out (from the H-5 fix) | BRANCH | **FIXED 2026-09-30 in `8c9e94b`** |
+| F-2 | Medium | The M-16 body cap is skipped by a form posted without the `Next-Action` header, and on the admin sign-in page | BRANCH | **FIXED 2026-09-30 in `fcdf9d7`** (pay-link addresses stay open by design) |
+| F-3 | Low | Receipt photos can lose their orientation when the server strips metadata (L-15) | BRANCH | OPEN |
+| F-4 | Low | The sign-in "known device" mark never expires on the server and survives a password change (M-1/M-14) | BRANCH | OPEN |
 
 ### Do first (in this order)
 
@@ -1071,6 +1076,8 @@ customer and cannot place the order (and each render also runs an unused
 > length — except on the pages that upload files (admin, pay link, customer and
 > rep order pages), which keep the 4.25 MB allowance. Signed direct uploads were
 > not needed for this. Test: `src/lib/actionBodyLimit.test.ts`.
+> **Incomplete as first committed; see F-2** (the proxy missed header-less
+> form posts, and the admin sign-in page counted as an upload page).
 
 `next.config.ts:74` raises the limit globally for the image upload's sake, so
 anonymous actions (cart, checkout, sign-up, sign-in) also accept 4.25 MB
@@ -1213,7 +1220,7 @@ Scope BRANCH (process), status CODE.
 | --- | --- | --- | --- |
 | L-1 | **FIXED 2026-09-30 in `2356bd6`** (`secure` in production, like the session cookies). Cart cookie has no `Secure` flag (the id is a bearer for the cart and its checkout) | `src/lib/cart.ts:57-62` | add `secure` in production |
 | L-2 | **FIXED 2026-09-30 in `a80d412`** (mirrors `.gitignore`). `.dockerignore` misses `venv.txt` (a `vercel env pull` with real keys, per `.gitignore`), `other_ignore/`, `products/`, `test-results/`, `playwright-report/`, `*.tsbuildinfo` — all copied into the builder stage and build cache | `.dockerignore` | mirror `.gitignore` |
-| L-3 | **CLOSED 2026-09-30 by Amir**: the seal is issued and on the site; no change made. Temporary Enamad ownership marker still live: `— 25626502` in every page title and `public/25626502.txt` | `src/app/[locale]/layout.tsx:12-27` | remove once the seal is issued (ask Amir if it has been) |
+| L-3 | **FIXED 2026-09-30 in `4ca4b3e`** at Amir's request: the title suffix, the `enamad` meta tag and `public/25626502.txt` are gone; the footer seal stays. (Earlier the same day: closed by Amir with no change, the seal being issued.) Temporary Enamad ownership marker still live: `— 25626502` in every page title and `public/25626502.txt` | `src/app/[locale]/layout.tsx:12-27` | remove once the seal is issued (ask Amir if it has been) |
 | L-4 | **FIXED 2026-09-30 in `6fa9799`**: migration `20260930130000_drop_spec_defs_display.sql` (checked: neither the live release nor this one reads or writes the column), schema, verifier. `spec_defs.display` was to be dropped "next release" after 2026-08-20; still present | `src/db/schema.ts:247` | forward migration + schema + verifier |
 | L-5 | **FIXED 2026-09-30**: the year in the number is the Persian year on Tehran time (Amir's decision), supplied by `persianYearMonth` because Postgres has no Persian calendar; the sequence stays one running count (H-3). Invoices issued before this keep their Gregorian numbers (`INV-2026-…`); the running count means old and new never collide. Invoice number year is the UTC Gregorian year (`to_char(now(),'YYYY')`); an invoice issued 00:00–03:30 Tehran on 1 January carries last year, and Iranian books run on the Persian fiscal year | invoice numbering (H-3) | — |
 | L-6 | **FIXED 2026-09-30 in `f8b8e6b`**: admin and rep invoice issuance refuse while the contact email or phone is the stand-in value (`isPlaceholderContact`); the header still shows them. Live already has real values saved (checked: `sales@temex.ir` and a real phone on the live header). CI sets `SELLER_EMAIL`/`SELLER_PHONE`. Placeholder seller/contact values (`sales@temex.example`, `+98 21 8888 0000`) print on invoices and the header when settings are unset | `src/lib/seller.ts:39-40`, `src/lib/siteContact.ts:14-15` | refuse to issue invoices until real values are saved |
@@ -1235,6 +1242,67 @@ Scope BRANCH (process), status CODE.
 | L-22 | **FIXED 2026-09-30 in `17d53dc`**: the rate read runs alongside the other reads, and `loadRepSummary` returns the payouts it already read; covered by the rep and admin commission checks in `e2e/sales-rep-flow.spec.ts`. Wasted round trips: the admin rep page and the rep commission page await `getFxRate()` serially before their fan-out, and read payouts twice (`loadRepSummary` already reads them) | `admin/(panel)/reps/[id]/page.tsx:67`, `rep/(portal)/commission/page.tsx:19-24` | start in parallel; return payouts from `loadRepSummary` |
 | L-23 | **FIXED 2026-09-30 in `989c854`**: the four queries take `HELD_STATUS_LIST` as a `text[]` parameter; test `src/lib/orders.test.ts` ("no query spells out the held statuses itself") fails on any literal copy left in `src/db`. `HELD_STATUSES` exists in `src/lib/orders.ts`, but the held-status list is still hard-coded as SQL literals in `src/db/importQueries.ts:710`, `src/db/dataIntegrity.ts:104` and `:191`, `src/db/inventoryQueries.ts:101` — the next new held status repeats the grep hunt, and a missed site makes imports, reconcile and the shortfall warning disagree | as listed | pass the constant as an array parameter |
 | L-24 | **FIXED 2026-09-30 in `1477cde`**: the credential box calls `DELETE /api/shown-once` once rendered (a route handler, not a Server Action — deleting a cookie in an action re-renders the page and would take the credential off screen); `e2e/sales-rep-flow.spec.ts` checks the cookie is gone after both the admin and the rep see a new password. The "shown once" credential cookie is never cleared after it is read; the plaintext password stays in the browser and rides on every request for 30 s | `src/lib/shownOnce.ts` | delete the cookie in the page that displays it (via a tiny client-side action) |
+
+---
+
+## Fix review (2026-09-30)
+
+A review of the 62 fix commits (`50c4ace..40a07b8`). Most fixes are complete
+and correct; these four are new.
+
+### F-1 — One address can lock every admin out
+
+> **Fix status (2026-09-30): FIXED in `8c9e94b`.**
+
+The H-5 fix added a ceiling of 60 admin sign-in attempts per 15 minutes from
+all addresses together, consumed in parallel with the per-address limit
+(8 per 15 minutes) — so attempts the per-address limit had already refused
+still counted. One address posting ~60 junk sign-ins every 15 minutes kept
+every admin out indefinitely. **Fix**: the admin goes through
+`lib/signInGuard.ts` like reps and customers: only failures count, only
+after the per-address limit lets the attempt through, and a browser that has
+signed in as admin before passes; the count and the mark are keyed to a digest
+of the current password (`adminSignInKey`), so changing `ADMIN_PASSWORD`
+retires both. Test: `e2e/admin-sign-in-lockout.spec.ts` (fails on the old
+code with `error=rate-limit`).
+
+### F-2 — The 1 MB action body cap could be skipped
+
+> **Fix status (2026-09-30): FIXED in `fcdf9d7`**, with a residual by design.
+
+`src/proxy.ts` matched only requests carrying `Next-Action`, but Next treats
+every multipart POST as a possible action (a form posted before the page's
+JavaScript runs names its action in the body), so leaving the header off
+skipped the cap on every page; and `/admin/login`, a public page, matched the
+upload-page pattern. **Fix**: the proxy also matches multipart posts; the
+sign-in page gets the small limit. **Residual**: Next runs an action posted to
+any page, forwarding it internally to the page that owns it (the forwarded
+hop skips the proxy), so a stranger can still send 4.25 MB by posting to a
+pay-link address — where customers without accounts upload receipts — or an
+admin address. Only signed direct-to-Storage uploads would close that. Test:
+`e2e/action-body-limit.spec.ts` (the header-less cart post returned 500 from a
+processed action on the old code).
+
+### F-3 — Receipt photos can show sideways
+
+`stripImageMetadata` (L-15) drops the whole JPEG APP1 segment, including the
+EXIF orientation tag. The browser's shrink step bakes the orientation into the
+pixels, but `PaymentProofUpload.tsx:123` sends the original when re-encoding
+would make it larger, and a direct post skips the shrink: such a photo is
+stored without its orientation and displays rotated. Inferred from the code,
+not observed. **Fix**: keep a minimal APP1 carrying only the orientation tag,
+or rotate on the server. Scope BRANCH, status OPEN.
+
+### F-4 — The known-device mark never expires on the server
+
+`deviceMark` in `lib/signInGuard.ts` is an HMAC of the login alone: the same
+value for every browser, valid for ever on the server (the cookie's 180 days
+is only the browser's), and unchanged by a password change. Anyone who once
+signed in to a customer or rep account — someone who learnt an old password —
+keeps a pass through that account's lockout; the per-address limit still
+applies. (The admin's mark is keyed to the password since F-1.) **Fix**: put
+an expiry in the mark and key it to the account's `session_version`. Scope
+BRANCH, status OPEN.
 
 ---
 
@@ -1267,15 +1335,17 @@ payment deserve their own cases.
 
 ## Deployment blockers before `main` is pushed (not bugs — required steps)
 
-Confirmed by `npm run db:verify:remote` (read-only) against the live
-database: the three branch migrations are **not** applied —
-`20260927120000_add_sales_reps.sql`, `20260928120000_add_invoice_vat.sql`,
-`20260929120000_add_payment_proofs.sql` — so 5 tables, 16 columns, 4 unique
-indexes and 24 constraints are missing. Merging before they are applied
-breaks every account, order and invoice page (the deployment doc already says
-so). Apply them only after C-1, C-2, C-3, H-8 and H-10 are fixed — H-10 in
-particular, because the migration as written breaks live sign-up the moment
-it is applied.
+**Done 2026-09-30.** `npm run db:verify:remote` (read-only) reports every
+table, column, constraint, index, the customer-code trigger and all six
+migrations present on the live database — `20260927120000` (sales reps),
+`20260928120000` (VAT), `20260929120000` (payment proofs), `20260930120000`
+(audit log), `20260930130000` (drop `spec_defs.display`) and `20260930140000`
+(revoke REST-role grants) — and the statements recorded in its migration
+ledger match the current files exactly (compared ignoring whitespace), so the
+H-10 and C-2 edits made before they were applied are in. Another session
+applied them; the live site (the previous release) kept serving normally
+afterwards. The only step left is pushing `main`, when Amir says. After the
+push every admin is signed out once (new session format, H-9).
 
 ---
 
