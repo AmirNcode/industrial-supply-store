@@ -84,10 +84,13 @@ function matches(search: string) {
 export async function listCustomersForRep(
   repId: string,
   search: string,
-): Promise<(CustomerRow & { lastOrderAt: string | null })[]> {
-  return sql<(CustomerRow & { lastOrderAt: string | null })[]>`
+): Promise<(CustomerRow & { lastOrderAt: string | null; totalCount: number })[]> {
+  // `totalCount` is every match, not just the 500 returned, so the page can
+  // say the list is cut short instead of rows silently disappearing (M-15).
+  return sql<(CustomerRow & { lastOrderAt: string | null; totalCount: number })[]>`
     SELECT ${COLS},
-           (SELECT max(o.created_at) FROM orders o WHERE o.user_id = u.id) AS "lastOrderAt"
+           (SELECT max(o.created_at) FROM orders o WHERE o.user_id = u.id) AS "lastOrderAt",
+           count(*) OVER ()::int AS "totalCount"
     FROM users u
     WHERE u.rep_id = ${repId} AND ${matches(search)}
     ORDER BY u.company, u.customer_code

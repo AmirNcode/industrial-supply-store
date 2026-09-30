@@ -49,9 +49,13 @@ const ROW_COLS = sql`o.id, o.ref, o.status, o.created_at AS "createdAt",
   COALESCE(u.company, o.company) AS company, o.user_id AS "customerId",
   u.customer_code AS "customerCode", o.placed_by_rep AS "placedByRep"`;
 
-export async function listOrdersForRep(repId: string, status: OrderStatus | null): Promise<RepOrderRow[]> {
-  return sql<RepOrderRow[]>`
-    SELECT ${ROW_COLS}
+/** `totalCount` is every match, so the page can say when 300 is not all (M-15). */
+export async function listOrdersForRep(
+  repId: string,
+  status: OrderStatus | null,
+): Promise<(RepOrderRow & { totalCount: number })[]> {
+  return sql<(RepOrderRow & { totalCount: number })[]>`
+    SELECT ${ROW_COLS}, count(*) OVER ()::int AS "totalCount"
     FROM orders o LEFT JOIN users u ON u.id = o.user_id
     WHERE ${visibleTo(repId)} AND ${status ? sql`o.status = ${status}` : sql`TRUE`}
     ORDER BY o.created_at DESC

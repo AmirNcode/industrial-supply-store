@@ -101,7 +101,7 @@ deployment · `ALL` = everywhere.
 | M-12 | Medium | Local tooling defaults to the live database (e2e, build, start, drizzle) | LIVE (process) | **FIXED 2026-09-29 in `{{M-12}}`** |
 | M-13 | Medium | Customer emails are never verified → an address can be squatted permanently | LIVE | CODE |
 | M-14 | Medium | Anyone can lock a rep out by failing sign-ins against their username | BRANCH | **FIXED 2026-09-29 in `{{M-14}}`** |
-| M-15 | Medium | Lists silently truncate (admin queue 200, rep orders 300, rep customers 500) | ALL | CODE |
+| M-15 | Medium | Lists silently truncate (admin queue 200, rep orders 300, rep customers 500) | ALL | **FIXED 2026-09-29 in `{{M-15}}`** |
 | M-16 | Medium | 4.25 MB request bodies accepted by every Server Action, including anonymous ones | LIVE | CODE |
 | M-17 | Medium | Rep visibility over a moved customer's history is broader than needed | BRANCH | CODE |
 | M-18 | Medium | Reassignment/deactivation checks race; moved customers keep the old commission flag | BRANCH | CODE |
@@ -1035,6 +1035,15 @@ short account lockout from a previously successful device/IP (or add
 progressive delays instead of a hard stop). Scope BRANCH, status CODE.
 
 ### M-15 — Lists silently truncate
+
+> **Fix status (2026-09-29): FIXED in `{{M-15}}`.** The admin queue, rep
+> orders and rep customers lists carry `count(*) OVER ()` and show "Showing
+> the first N of M — use a filter or search" when cut short. The rep checkout
+> loads the chosen customer with `getCustomerForRep` (and adds them to the
+> picker if past the first 500), so "New order" works for every customer.
+> Test: `salesReps.integration.test.ts`. Not done: real paging; the smaller
+> lists (notes 200, follow-ups 50, in-progress 200) keep their limits
+> unannounced — they are per-customer or per-day and far from the limit.
 
 Admin queue `LIMIT 200` of non-closed orders (`admin/(panel)/orders/page.tsx:121`,
 also on `main`), `listOrdersForRep … LIMIT 300` (`src/db/repOrderQueries.ts:58`),

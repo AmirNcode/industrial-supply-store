@@ -7,6 +7,7 @@ import { formatRial } from "@/lib/money";
 import { formatPersianDate, formatPersianDay, tehranToday } from "@/lib/persianCalendar";
 import { REQUEST_LIMITS } from "@/lib/requestLimits";
 import { isLocale, getDict, type Locale } from "@/lib/i18n";
+import { formatInt } from "@/lib/money";
 
 export default async function RepCustomersPage({
   params,
@@ -52,6 +53,13 @@ export default async function RepCustomersPage({
         </button>
       </form>
 
+      {customers.length > 0 && customers[0].totalCount > customers.length && (
+        <p className="mb-2 border border-[var(--color-warn)] bg-[var(--color-warn-soft)] px-3 py-2 text-[12px]">
+          {t.listTruncated
+            .replace("{shown}", formatInt(customers.length, l))
+            .replace("{total}", formatInt(customers[0].totalCount, l))}
+        </p>
+      )}
       {customers.length === 0 ? (
         <p className="text-[12px] text-[var(--color-ink-muted)]">{t.noCustomersYet}</p>
       ) : (

@@ -10,6 +10,7 @@ import { ORDER_STATUSES, isOrderStatus } from "@/lib/orders";
 import { OrderStatusPill, STATUS_LABEL_KEY } from "@/components/OrderStatusPill";
 import { ShareButton } from "@/components/ShareButton";
 import { isLocale, getDict, type Locale } from "@/lib/i18n";
+import { formatInt } from "@/lib/money";
 
 /**
  * Every order a rep may see — the ones credited to them and their current
@@ -62,6 +63,13 @@ export default async function RepOrdersPage({
         ))}
       </nav>
 
+      {orders.length > 0 && orders[0].totalCount > orders.length && (
+        <p className="mb-2 border border-[var(--color-warn)] bg-[var(--color-warn-soft)] px-3 py-2 text-[12px]">
+          {t.listTruncated
+            .replace("{shown}", formatInt(orders.length, l))
+            .replace("{total}", formatInt(orders[0].totalCount, l))}
+        </p>
+      )}
       {orders.length === 0 ? (
         <p className="text-[12px] text-[var(--color-ink-muted)]">{t.noOrdersYet}</p>
       ) : (

@@ -1001,3 +1001,30 @@ test("money and state changes leave an audit record in the same transaction", as
     await sql`DELETE FROM sales_reps WHERE id = ${rep.id}`;
   }
 });
+
+test("rep lists report their full size, so a cut-off list can say so", async () => {
+  // Review M-15: lists stopped at 300/500 rows with no sign.
+  assertLocalDatabase();
+  const suffix = randomUUID().slice(0, 8);
+  const repIds: string[] = [];
+  const userIds: string[] = [];
+  try {
+    const rep = await createRep({ username: `lt-${suffix}`, name: "L", phone: "", email: "", commissionRateBp: 0, passwordHash: "x" });
+    if (rep === "username-taken") throw new Error("username clash");
+    repIds.push(rep.id);
+    for (let i = 0; i < 3; i++) {
+      const created = await createCustomerForRep(rep.id, {
+        company: `LT ${suffix} ${i}`, contactName: "N", phone: randomPhone(), email: null, address: "", city: "",
+        codeChoice: "random", passwordHash: "x", locale: "fa",
+      });
+      if (created.kind !== "created") throw new Error(created.kind);
+      userIds.push(created.id);
+    }
+    const rows = await listCustomersForRep(rep.id, "");
+    assert.equal(rows.length, 3);
+    assert.deepEqual(rows.map((row) => row.totalCount), [3, 3, 3]);
+    assert.deepEqual([...(await listOrdersForRep(rep.id, null))], []);
+  } finally {
+    await cleanupReps(repIds, userIds);
+  }
+});

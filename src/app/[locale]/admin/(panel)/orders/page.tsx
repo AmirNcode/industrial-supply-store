@@ -54,6 +54,8 @@ type OrderRow = {
   customerCode: string | null;
   /** The account that placed the order; null for a guest order. */
   userId: string | null;
+  /** Every order matching the filter, not only the 200 shown (M-15). */
+  totalCount: number;
 };
 
 type OrderItemRow = {
@@ -106,7 +108,8 @@ export default async function AdminPage({
              (SELECT count(*)::int FROM order_items i WHERE i.order_id = q.id) AS "itemCount",
              r.name AS "repName", q.placed_by_rep AS "placedByRep",
              q.commission_rate_bp AS "commissionRateBp",
-             u.customer_code AS "customerCode", q.user_id AS "userId"
+             u.customer_code AS "customerCode", q.user_id AS "userId",
+             count(*) OVER ()::int AS "totalCount"
       FROM orders q
       LEFT JOIN sales_reps r ON r.id = q.rep_id
       LEFT JOIN users u ON u.id = q.user_id
@@ -196,6 +199,7 @@ export default async function AdminPage({
       {orders.length === 0 && (
         <p className="py-8 text-[13px] text-[var(--color-ink-muted)]">{t.noQuotes}</p>
       )}
+      <ListTruncated locale={l} shown={orders.length} total={orders[0]?.totalCount ?? 0} />
 
       {orders.map((q) => (
         <details
@@ -566,6 +570,20 @@ function NoteLog({
         </button>
       </form>
     </section>
+  );
+}
+
+/**
+ * Said out loud when a list stops short. Rows past a limit used to vanish with
+ * no sign — and an order the admin never sees is an order never fulfilled.
+ */
+function ListTruncated({ locale, shown, total }: { locale: Locale; shown: number; total: number }) {
+  if (total <= shown) return null;
+  const t = getDict(locale);
+  return (
+    <p className="mb-2 border border-[var(--color-warn)] bg-[var(--color-warn-soft)] px-3 py-2 text-[12px]">
+      {t.listTruncated.replace("{shown}", formatInt(shown, locale)).replace("{total}", formatInt(total, locale))}
+    </p>
   );
 }
 

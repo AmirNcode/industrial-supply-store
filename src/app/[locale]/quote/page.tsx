@@ -8,7 +8,7 @@ import { customerCurrencyFor, formatPrice, formatInt } from "@/lib/money";
 import { getFxRate, getPriceDisplayMode } from "@/lib/fx";
 import { currentUser } from "@/lib/session";
 import { currentRep } from "@/lib/repSession";
-import { listCustomersForRep } from "@/db/customerQueries";
+import { getCustomerForRep, listCustomersForRep } from "@/db/customerQueries";
 import { readOrderingFor } from "@/lib/repOrderContext";
 import { isUuid } from "@/lib/ids";
 import { RepQuoteForm } from "./RepQuoteForm";
@@ -61,15 +61,22 @@ export default async function QuotePage({
   // A signed-in rep checks out for one of their customers, on its own form.
   if (rep) {
     if (rep.mustChangePassword) redirect(`/${l}/rep/password`);
-    const customers = await listCustomersForRep(rep.id, "");
     const wanted =
       (typeof forParam === "string" && isUuid(forParam) ? forParam : null) ??
       (await readOrderingFor());
+    // The chosen customer is loaded on its own, not looked up in the picker's
+    // list: the list stops at 500, and a rep pressing "New order" on customer
+    // 550 used to land here with nobody selected (review M-15).
+    const [listed, selected] = await Promise.all([
+      listCustomersForRep(rep.id, ""),
+      wanted ? getCustomerForRep(rep.id, wanted) : Promise.resolve(null),
+    ]);
+    const customers = selected && !listed.some((c) => c.id === selected.id) ? [selected, ...listed] : listed;
     return (
       <RepQuoteForm
         locale={l}
         customers={customers}
-        selected={customers.find((c) => c.id === wanted) ?? null}
+        selected={selected}
         lines={lines}
         subtotal={subtotal}
         rate={rate}
