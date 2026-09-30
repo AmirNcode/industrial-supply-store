@@ -221,17 +221,15 @@ added 52 pages, pushed several past the 60-second page ceiling, and failed the
 the route stays cacheable and the build pays nothing. `staticPageGenerationTimeout`
 is raised to 120 for the pages that still prerender.
 
-**A spec column's placement is two independent booleans, and `spec_defs.display`
-is dead.** `in_table` puts the column in the catalog spec table; `in_detail`
-puts it in the expanded product row. Either, both, or neither — neither means it
-renders nowhere while keeping its values, its facet rows and its place in
-`search_text`, which is what makes hiding reversible and distinct from deleting.
-The enum they replace could express only the first two combinations, so every
-column taken out of the table was silently pushed into the expanded row instead.
-`display` is still on the table, still defaulted, and **read by nothing**; it is
-retained for one release so a rollback needs no restore, and a follow-up
-migration must drop it. The dependency rules between the four checkboxes live in
-`src/lib/columnVisibility.ts` with tests — not in an `onChange`.
+**A spec column's placement is two independent booleans.** `in_table` puts
+the column in the catalog spec table; `in_detail` puts it in the expanded
+product row. Either, both, or neither — neither means it renders nowhere while
+keeping its values, its facet rows and its place in `search_text`, which is
+what makes hiding reversible and distinct from deleting. The `display` enum
+they replaced could express only the first two combinations, so every column
+taken out of the table was silently pushed into the expanded row instead; it
+was dropped on 2026-09-30. The dependency rules between the four checkboxes
+live in `src/lib/columnVisibility.ts` with tests — not in an `onChange`.
 
 **Nothing on this page may carry state in a hidden input.** React does not
 update `<input type="hidden" value={…}>` after mount, and React 19 resets a form

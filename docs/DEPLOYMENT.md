@@ -167,6 +167,11 @@ pay-link replacement and payout writes a row in the same transaction, so the
 new code fails those actions without it. The previous release never reads
 either. `db:verify:remote` checks the table, the column and the version.
 
+`20260930130000_drop_spec_defs_display.sql` drops the dead
+`spec_defs.display` column. Neither the live release nor this one reads or
+writes it, so its order relative to the push does not matter; apply it with
+the others.
+
 The storefront's bare root redirects to `/fa`; `/en/...` remains available
 through the language switch. This is a fixed application default, with no admin
 language setting.

@@ -54,10 +54,9 @@ const COLUMNS: readonly (readonly [string, string])[] = [
   ["orders", "invoice_number"],
   ["orders", "user_id"],
   ["orders", "submission_key"],
-  // Added 2026-08-12 by `db:column-tiers`. Every family page selects
-  // spec_defs.display and products.documents, so a build that ships before the
-  // script has run errors on the whole catalog, not just on admin.
-  ["spec_defs", "display"],
+  // Added 2026-08-12 by `db:column-tiers` (whose `display` column was dropped
+  // on 2026-09-30, review L-4). Every family page selects these, so a build
+  // that ships before they exist errors on the whole catalog, not just admin.
   ["spec_defs", "mobile"],
   ["spec_defs", "csv_alias"],
   ["product_families", "field_aliases"],
@@ -255,6 +254,7 @@ const REQUIRED_MIGRATIONS = [
   "20260928120000",
   "20260929120000",
   "20260930120000",
+  "20260930130000",
 ] as const;
 let recordedMigrations = new Set<string>();
 if (hasMigrationLedger) {

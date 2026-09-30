@@ -239,16 +239,6 @@ export const specDefs = pgTable(
     filterable: boolean("filterable").notNull().default(false),
     sort: integer("sort").notNull().default(0),
     /**
-     * Superseded by `inTable`/`inDetail` on 2026-08-20 and no longer read.
-     *
-     * Kept for one release so a restore is possible without one; a later
-     * migration drops it. Its default is what keeps an insert that still names
-     * the old column valid.
-     */
-    display: text("display", { enum: ["table", "detail"] })
-      .notNull()
-      .default("table"),
-    /**
      * Where the column renders, as two independent flags.
      *
      * The enum they replace could say "table" or "detail" but never both and
@@ -262,7 +252,7 @@ export const specDefs = pgTable(
     /**
      * Show this column on the collapsed phone card.
      *
-     * Separate from `display` because a phone fits three or four values, not
+     * Separate from `inTable` because a phone fits three or four values, not
      * the eight a desktop table carries. Expanding the card still shows
      * everything, exactly as the desktop expanded row does.
      */
