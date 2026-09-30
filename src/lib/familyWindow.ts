@@ -9,9 +9,15 @@ export const FAMILY_ROW_STEP = 100;
 /** Larger documents require the deliberately named all-products mode. */
 export const FAMILY_MAX_PROGRESSIVE_ROWS = 500;
 
-export type FamilyWindow =
-  | { showAll: true; rows: null }
-  | { showAll: false; rows: number };
+/**
+ * "All products" is still bounded. The largest live family has 2,400 rows, a
+ * whole-family render is uncached, and a loop of `?view=all` requests is the
+ * cheapest way to load the database (review M-4). Past this, the filters are
+ * the way through.
+ */
+export const FAMILY_VIEW_ALL_MAX = 1_000;
+
+export type FamilyWindow = { showAll: boolean; rows: number };
 
 function single(value: string | string[] | undefined): string | undefined {
   return typeof value === "string" ? value : undefined;
@@ -26,7 +32,7 @@ function single(value: string | string[] | undefined): string | undefined {
  * tranche.
  */
 export function parseFamilyWindow(sp: RawSearchParams): FamilyWindow {
-  if (single(sp.view) === "all") return { showAll: true, rows: null };
+  if (single(sp.view) === "all") return { showAll: true, rows: FAMILY_VIEW_ALL_MAX };
 
   const raw = single(sp.rows);
   if (!raw || !/^\d+$/.test(raw)) {

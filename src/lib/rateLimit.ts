@@ -30,6 +30,11 @@ export const RATE_LIMITS = {
   quickOrder: { limit: 12, windowSeconds: 60 },
   quoteSubmit: { limit: 5, windowSeconds: 10 * 60 },
   suggest: { limit: 180, windowSeconds: 60 },
+  // Full search runs a relevance pass over every family plus three passes
+  // over the products; "all products" renders up to 1,000 uncached rows.
+  // Both were free to request in a loop (review M-4).
+  search: { limit: 60, windowSeconds: 60 },
+  catalogViewAll: { limit: 20, windowSeconds: 10 * 60 },
   guestTracking: { limit: 30, windowSeconds: 10 * 60 },
   importPrepare: { limit: 10, windowSeconds: 60 * 60 },
   importProcess: { limit: 30, windowSeconds: 60 * 60 },

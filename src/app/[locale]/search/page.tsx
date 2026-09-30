@@ -1,12 +1,15 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { search } from "@/db/queries";
+import { search, type SearchResults } from "@/db/queries";
 import { CategorySidebar } from "@/components/CategorySidebar";
 import { CatalogImage } from "@/components/CatalogImage";
 import { isLocale, getDict, pick, type Locale } from "@/lib/i18n";
 import { customerCurrencyFor, formatInt, formatPrice } from "@/lib/money";
 import { getFxRate, getPriceDisplayMode } from "@/lib/fx";
 import { REQUEST_LIMITS, boundedString } from "@/lib/requestLimits";
+import { RATE_LIMITS, consumeRateLimit } from "@/lib/rateLimit";
+
+const EMPTY_RESULTS: SearchResults = { families: [], categories: [], products: [], total: 0 };
 
 export default async function SearchPage({
   params,
@@ -22,8 +25,11 @@ export default async function SearchPage({
 
   const submitted = (await searchParams).q;
   const q = boundedString(submitted, REQUEST_LIMITS.searchChars, { allowEmpty: true }) ?? "";
+  // Only a real query costs a search; an over-limit one shows nothing and says why.
+  const limited =
+    q.trim() !== "" && !(await consumeRateLimit("search", RATE_LIMITS.search)).allowed;
   const [results, rate, priceDisplayMode] = await Promise.all([
-    search(q),
+    limited ? Promise.resolve(EMPTY_RESULTS) : search(q),
     getFxRate(),
     getPriceDisplayMode(),
   ]);
@@ -39,7 +45,9 @@ export default async function SearchPage({
         </h1>
 
         {results.total === 0 && (
-          <p className="py-6 text-[13px] text-[var(--color-ink-muted)]">{t.noResults}</p>
+          <p className="py-6 text-[13px] text-[var(--color-ink-muted)]">
+            {limited ? t.searchRateLimited : t.noResults}
+          </p>
         )}
 
         {results.categories.length > 0 && (

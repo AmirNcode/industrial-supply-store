@@ -48,6 +48,7 @@ import {
   parseFamilyWindow,
   type FamilyWindow,
 } from "@/lib/familyWindow";
+import { RATE_LIMITS, consumeRateLimit } from "@/lib/rateLimit";
 import { boundedString } from "@/lib/requestLimits";
 
 /**
@@ -76,7 +77,13 @@ export default async function FamilyPage({
 
   const filters = parseFilters(sp);
   const base = `/${l}/f/${slug}`;
-  const window = parseFamilyWindow(sp);
+  const requested = parseFamilyWindow(sp);
+  // An over-limit "all products" request gets the ordinary first page.
+  const window =
+    requested.showAll &&
+    !(await consumeRateLimit("catalog:view-all", RATE_LIMITS.catalogViewAll)).allowed
+      ? parseFamilyWindow({})
+      : requested;
   const highlighted = boundedString(sp.pn, 120)?.toUpperCase() ?? null;
 
   const [defs, summary, products, facets, category, ancestors, rate, priceDisplayMode] = await Promise.all([
@@ -378,7 +385,7 @@ function TableFooter({
   const currentRows = window.showAll ? null : window.rows;
   const nextRows = currentRows === null ? null : nextFamilyRows(currentRows, total);
   const nextCount = nextRows === null ? 0 : Math.min(FAMILY_ROW_STEP, total - shown);
-  const countText = window.showAll
+  const countText = window.showAll && shown >= total
     ? t.showingAllProducts.replace("{total}", formatInt(total, locale))
     : t.showingProducts
         .replace("{shown}", formatInt(shown, locale))

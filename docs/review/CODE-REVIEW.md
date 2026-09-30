@@ -90,7 +90,7 @@ deployment · `ALL` = everywhere.
 | M-1 | Medium | Customer sign-in is rate-limited per IP only | LIVE | **FIXED 2026-09-29 in `{{M-1}}`** |
 | M-2 | Medium | Customer sessions cannot be revoked; password change/reset leaves other sessions alive 30 days | LIVE | **FIXED 2026-09-29 in `{{M-2}}`** |
 | M-3 | Medium | `/api/cart` adds any product id, including hidden and non-existent ones | LIVE | **FIXED 2026-09-29 in `{{M-3}}`** |
-| M-4 | Medium | Heavy public pages have no rate limit (`/search`, family `?view=all`) | LIVE | CODE + live data |
+| M-4 | Medium | Heavy public pages have no rate limit (`/search`, family `?view=all`) | LIVE | **FIXED 2026-09-29 in `{{M-4}}`** |
 | M-5 | Medium | `/_next/image` is an open image proxy for any HTTPS host | LIVE | CODE |
 | M-6 | Medium | No security headers (framing, CSP, nosniff, referrer); `x-powered-by` exposed | LIVE | CONFIRMED-LIVE |
 | M-7 | Medium | Per-click admin actions purge the whole site cache (the 2026-08-15 incident pattern) | LIVE | CODE |
@@ -800,6 +800,15 @@ through `SELECT … FROM products p JOIN product_families f … WHERE p.id = $1 
 checkout. Scope LIVE, status CODE.
 
 ### M-4 — Heavy public pages have no rate limit
+
+> **Fix status (2026-09-29): FIXED in `{{M-4}}`.** `/search` consumes a
+> per-address limit (60 queries/min; an empty query costs nothing) and shows
+> "too many searches" instead of running the query when over. Family
+> `?view=all` is capped at 1,000 rows (`FAMILY_VIEW_ALL_MAX`; the footer then
+> reads "showing 1,000 of N") and limited to 20 per address per 10 minutes,
+> after which the request gets the ordinary first 100 rows. Test:
+> `familyWindow.test.ts`. Not done: a short-lived cache of search results
+> (the limit was judged enough) and a CSV download past 1,000 rows.
 
 `/[locale]/search` runs `search()` (`src/db/queries.ts:457`) — a relevance
 function over every family and category plus three full-text/trigram passes

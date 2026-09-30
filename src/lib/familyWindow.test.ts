@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   FAMILY_INITIAL_ROWS,
   FAMILY_MAX_PROGRESSIVE_ROWS,
+  FAMILY_VIEW_ALL_MAX,
   nextFamilyRows,
   parseFamilyWindow,
 } from "./familyWindow";
@@ -36,7 +37,7 @@ test("family row requests are normalized and capped", () => {
 test("rendering every row requires the explicit all-products mode", () => {
   assert.deepEqual(parseFamilyWindow({ view: "all", rows: "500" }), {
     showAll: true,
-    rows: null,
+    rows: FAMILY_VIEW_ALL_MAX,
   });
   assert.equal(parseFamilyWindow({ view: ["all", "all"] }).showAll, false);
 });
