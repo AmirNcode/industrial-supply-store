@@ -231,6 +231,14 @@ test("a family's product table edits in place, refuses a bad cell, and saves", a
   await expect(guard).toBeVisible();
   await guard.getByRole("button", { name: t.orderStay }).click();
   await expect(page).toHaveURL(familyUrl);
+
+  // And when the browser's Back button is pressed (review M-19). Not
+  // `page.goBack()`: it waits for a navigation the guard cancels.
+  await page.evaluate(() => window.history.back());
+  await expect(guard).toBeVisible();
+  await guard.getByRole("button", { name: t.orderStay }).click();
+  await expect(page).toHaveURL(familyUrl);
+  await expect(price).toHaveValue(changed);
   await discard.click();
   await expect(edit).toBeVisible();
 

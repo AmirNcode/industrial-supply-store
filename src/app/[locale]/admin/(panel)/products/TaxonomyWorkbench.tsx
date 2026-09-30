@@ -413,7 +413,9 @@ export function TaxonomyWorkbench({
         }
         setAdding(null);
         setNewName("");
-        if (result.selectionKey !== selectedKey) updateUrl(result.selectionKey);
+        // Through the guard: showing the new node swaps the pane, which would
+        // drop unsaved product-table rows (review M-19).
+        if (result.selectionKey !== selectedKey) selectNode(result.selectionKey);
         router.refresh();
       }
     } catch {

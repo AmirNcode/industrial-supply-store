@@ -105,7 +105,7 @@ deployment · `ALL` = everywhere.
 | M-16 | Medium | 4.25 MB request bodies accepted by every Server Action, including anonymous ones | LIVE | CODE |
 | M-17 | Medium | Rep visibility over a moved customer's history is broader than needed | BRANCH | **FIXED 2026-09-30 in `{{M-17}}`** (recommended default; Amir to confirm) |
 | M-18 | Medium | Reassignment/deactivation checks race; moved customers keep the old commission flag | BRANCH | **FIXED 2026-09-30 in `{{M-18}}`** |
-| M-19 | Medium | Browser Back/Forward silently discards unsaved product-table edits | BRANCH | CODE |
+| M-19 | Medium | Browser Back/Forward silently discards unsaved product-table edits | BRANCH | **FIXED 2026-09-30 in `{{M-19}}`** |
 | M-20 | Medium | About 1 in 290 temporary passwords is mangled in the "share" message (`$$` → `$`) | BRANCH | CONFIRMED |
 | M-21 | Medium | Product-table JSON is unpaged; large families will exceed Vercel's 4.5 MB response cap | BRANCH | CODE + measured |
 | M-22 | Medium | An unrelated feature (admin product-table editor) is bundled into the sales-rep release | BRANCH (process) | **DECLINED by Amir 2026-09-29 — everything ships together on this branch** |
@@ -1118,6 +1118,17 @@ transaction; make the commission flag an explicit choice at move time.
 Scope BRANCH, status CODE.
 
 ### M-19 — Browser Back/Forward silently discards unsaved product-table edits
+
+> **Fix status (2026-09-30): FIXED in `{{M-19}}`.** `UnsavedOrderGuard`
+> cancels a same-document Back/Forward through the Navigation API's
+> `navigate` event (before the address changes, so nothing re-renders) and
+> offers Save / Discard / Stay; leaving goes to the page Back was heading for.
+> Where the Navigation API is missing, a capture-phase `popstate` fallback
+> restores the address and shows the dialog — but by then Next has already
+> re-rendered, so on those browsers the table's draft is still lost (Next 16's
+> router acts before `popstate` reaches page code). `createNode`'s URL change
+> now goes through the same guard. Test: `e2e/admin-products-taxonomy.spec.ts`
+> (Back with an edited price → dialog, address kept, value kept; Chromium).
 
 The admin product table keeps pending edits in React state; the selected
 family comes from `?cat=` and the pane is keyed per family

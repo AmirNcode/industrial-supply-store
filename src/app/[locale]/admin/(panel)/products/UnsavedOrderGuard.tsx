@@ -33,6 +33,12 @@ import { formatInt } from "@/lib/money";
  * tree swaps the pane in place, which would drop the product table's edits.
  * `requestRef` lets the page route that through the same dialog, with the
  * move to make once the person has chosen.
+ *
+ * A fourth is the browser's Back and Forward, which change `?cat=` and remount
+ * the pane with the draft gone (review finding M-19). `popstate` cannot be
+ * cancelled, so the guard listens in the capture phase — ahead of the router's
+ * own listener — puts the page's address back, and asks; the move the person
+ * pressed becomes the navigation to make if they choose to leave.
  */
 type Pending = { href: string } | { go: () => void };
 export function UnsavedOrderGuard({
@@ -69,6 +75,18 @@ export function UnsavedOrderGuard({
   useEffect(() => {
     state.current = { dirtyCount, pending };
   }, [dirtyCount, pending]);
+
+  // Where this page is, to put back when Back or Forward is pressed with
+  // unsaved work. Refreshed only while nothing is unsaved: the router
+  // re-renders for the new address *before* `popstate` fires, so a snapshot
+  // taken on every render would already be the page Back is heading to. While
+  // work is unsaved the address cannot change except through this dialog.
+  const here = useRef<{ href: string; state: unknown } | null>(null);
+  useEffect(() => {
+    if (dirtyCount === 0 || here.current === null) {
+      here.current = { href: window.location.href, state: window.history.state };
+    }
+  });
 
   useEffect(() => {
     if (!requestRef) return;
@@ -114,11 +132,42 @@ export function UnsavedOrderGuard({
       event.returnValue = "";
     };
 
+    const onPopState = (event: PopStateEvent) => {
+      if (state.current.dirtyCount === 0 || state.current.pending !== null || !here.current) return;
+      const target = window.location.pathname + window.location.search + window.location.hash;
+      // Keep the router from acting on it, and stay where the work is.
+      event.stopImmediatePropagation();
+      window.history.pushState(here.current.state, "", here.current.href);
+      setPending({ href: target });
+    };
+
+    // Where the Navigation API exists, Back/Forward is stopped before the
+    // address changes, so nothing re-renders; `popstate` is the fallback.
+    type NavigateEvent = Event & {
+      navigationType: string;
+      cancelable: boolean;
+      destination: { url: string };
+    };
+    const navigation = (window as unknown as { navigation?: EventTarget }).navigation;
+    const onNavigate = (event: Event) => {
+      const nav = event as NavigateEvent;
+      if (state.current.dirtyCount === 0 || state.current.pending !== null) return;
+      if (nav.navigationType !== "traverse" || !nav.cancelable) return;
+      const url = new URL(nav.destination.url);
+      if (url.origin !== window.location.origin) return;
+      event.preventDefault();
+      setPending({ href: url.pathname + url.search + url.hash });
+    };
+
     document.addEventListener("click", onClick, true);
     window.addEventListener("beforeunload", onBeforeUnload);
+    window.addEventListener("popstate", onPopState, true);
+    navigation?.addEventListener("navigate", onNavigate);
     return () => {
       document.removeEventListener("click", onClick, true);
       window.removeEventListener("beforeunload", onBeforeUnload);
+      window.removeEventListener("popstate", onPopState, true);
+      navigation?.removeEventListener("navigate", onNavigate);
     };
   }, []);
 
