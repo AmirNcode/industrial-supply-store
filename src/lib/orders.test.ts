@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync, readdirSync } from "node:fs";
 import {
   ORDER_STATUSES,
   isOrderStatus,
@@ -89,4 +90,18 @@ test("receipts are accepted while payment is owed or being checked, and never af
     ORDER_STATUSES.filter(acceptsPaymentProof),
     ["invoiced", "payment_review"],
   );
+});
+
+test("no query spells out the held statuses itself", () => {
+  // Review L-23: the list lives in HELD_STATUSES and reaches SQL as a
+  // parameter. A literal copy is the one a new held status would miss.
+  const dir = "src/db";
+  for (const name of readdirSync(dir).filter((f) => f.endsWith(".ts"))) {
+    const source = readFileSync(`${dir}/${name}`, "utf8");
+    assert.doesNotMatch(
+      source,
+      /status IN \('received',\s*'invoiced',\s*'payment_review'\)/,
+      `${name} hard-codes the held statuses`,
+    );
+  }
 });

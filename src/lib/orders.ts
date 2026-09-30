@@ -63,6 +63,12 @@ export function assertTransition(from: OrderStatus, to: OrderStatus): void {
 
 /** Unpaid and not cancelled: the order's stock is held for it. */
 export const HELD_STATUSES = ["received", "invoiced", "payment_review"] as const satisfies readonly OrderStatus[];
+/**
+ * The same list as a query parameter (`status = ANY(${HELD_STATUS_LIST}::text[])`).
+ * Imports, reconcile and the shortfall warning all read it from here, so a
+ * new held status cannot leave one of them disagreeing (review L-23).
+ */
+export const HELD_STATUS_LIST: string[] = [...HELD_STATUSES];
 
 /** A receipt can be added while payment is owed or being checked, and not after. */
 export function acceptsPaymentProof(status: OrderStatus): boolean {

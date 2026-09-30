@@ -1,6 +1,7 @@
 import "server-only";
 import type { TransactionSql } from "postgres";
 import { sql } from "./index";
+import { HELD_STATUS_LIST } from "@/lib/orders";
 
 /**
  * Stock movement, driven by the order lifecycle.
@@ -120,7 +121,7 @@ export async function findShortfalls(
              min(i.part_number) AS part_number, sum(i.qty)::int AS qty
       FROM orders o
       JOIN order_items i ON i.order_id = o.id
-      WHERE o.status IN ('received', 'invoiced', 'payment_review')
+      WHERE o.status = ANY(${HELD_STATUS_LIST}::text[])
         AND i.product_id IS NOT NULL
       GROUP BY o.id, o.created_at, i.product_id
     ), allocated AS (

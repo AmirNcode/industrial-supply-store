@@ -1,4 +1,5 @@
 import type { Sql, TransactionSql } from "postgres";
+import { HELD_STATUS_LIST } from "../lib/orders";
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export type IntegrityQuery = Sql<{}> | TransactionSql<{}>;
@@ -101,7 +102,7 @@ export async function reconcileInventoryForProducts(
     WITH expected AS (
       SELECT p.id AS product_id,
              COALESCE(sum(i.qty) FILTER (
-               WHERE o.status IN ('received', 'invoiced', 'payment_review')
+               WHERE o.status = ANY(${HELD_STATUS_LIST}::text[])
              ), 0)::int AS on_hold,
              COALESCE(sum(i.qty) FILTER (
                WHERE o.paid_at IS NOT NULL
@@ -188,7 +189,7 @@ export async function inspectDatabaseIntegrity(
     ), inventory_expected AS (
       SELECT p.id AS product_id,
              COALESCE(sum(i.qty) FILTER (
-               WHERE o.status IN ('received', 'invoiced', 'payment_review')
+               WHERE o.status = ANY(${HELD_STATUS_LIST}::text[])
              ), 0)::int AS on_hold,
              COALESCE(sum(i.qty) FILTER (
                -- A paid order remains sold if it is cancelled before shipping;

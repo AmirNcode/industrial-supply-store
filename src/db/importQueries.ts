@@ -7,6 +7,7 @@ import { plannedAliases, plannedDefs, type ImportPlan } from "@/lib/columnPlan";
 import type { FieldAliases } from "./schema";
 import { reconcileInventoryForProducts } from "./dataIntegrity";
 import { allocatePartNumbers, lockPartNumberWrites, PartNumberUnavailable, registerExistingPartNumbers } from "./partNumberQueries";
+import { HELD_STATUS_LIST } from "@/lib/orders";
 
 /**
  * A family's spec column, in full.
@@ -746,7 +747,7 @@ export async function writeImport(
       >`
         SELECT p.part_number AS "partNumber",
                COALESCE(SUM(i.qty) FILTER (
-                 WHERE o.status IN ('received', 'invoiced', 'payment_review')), 0)::int AS "onHold",
+                 WHERE o.status = ANY(${HELD_STATUS_LIST}::text[])), 0)::int AS "onHold",
                COALESCE(SUM(i.qty) FILTER (
                  WHERE o.paid_at IS NOT NULL), 0)::int AS "sold"
         FROM products p
