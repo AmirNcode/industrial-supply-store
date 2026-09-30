@@ -204,8 +204,10 @@ tracking payload.
 
 **Inventory is advisory.** Nothing blocks an order that exceeds
 `inventory_available`; the admin queue flags it. Counts are in packs. Received
-and invoiced lines are held; a line with `paid_at` is sold, including an order
-cancelled after payment because no refund/restock transition exists yet.
+and invoiced lines are held; a line with `paid_at` is sold. A paid order
+cannot be cancelled (`src/lib/orders.ts`): there is no refund or restock flow
+yet, so it goes forward or is settled off the platform. Orders cancelled after
+payment before this rule keep their stock as sold.
 
 **`generateStaticParams` must stay cheap, and the category route deliberately
 returns `[]`.** Two facts collide here. A dynamic segment with *no*

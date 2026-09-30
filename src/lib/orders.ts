@@ -20,21 +20,24 @@ export const ORDER_STATUSES = [
 export type OrderStatus = (typeof ORDER_STATUSES)[number];
 
 /**
- * Forward one step only. `cancelled` is reachable until the goods are with a
- * courier, after which stopping the order is a return, not a cancellation, and
- * that is a different process this version does not model.
+ * Forward one step only. `cancelled` is reachable only while no money has
+ * been confirmed. Cancelling a paid order used to be allowed and recorded
+ * nothing: no refund, stock left "sold", nothing telling anyone money was owed
+ * back (review finding M-10). Until there is a refund flow, a paid order goes
+ * forward or is settled off the platform. After shipping, stopping the order
+ * is a return, which this version does not model either.
  *
  * `payment_review` is entered only by a receipt upload, and left only by
  * someone confirming the money arrived. There is no way back to `invoiced`:
  * a receipt that does not match is settled by phone, or the order cancelled.
  * `invoiced → preparing` stays for the admin alone, for a payment confirmed
- * without an upload; a rep confirms only from `payment_review`.
+ * without an upload. Reps never confirm (review C-2).
  */
 const TRANSITIONS: Record<OrderStatus, readonly OrderStatus[]> = {
   received: ["invoiced", "cancelled"],
   invoiced: ["payment_review", "preparing", "cancelled"],
   payment_review: ["preparing", "cancelled"],
-  preparing: ["shipped", "cancelled"],
+  preparing: ["shipped"],
   shipped: ["delivered"],
   delivered: [],
   cancelled: [],

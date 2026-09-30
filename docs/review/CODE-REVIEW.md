@@ -96,7 +96,7 @@ deployment · `ALL` = everywhere.
 | M-7 | Medium | Per-click admin actions purge the whole site cache (the 2026-08-15 incident pattern) | LIVE | **FIXED 2026-09-29 in `{{M-7}}`** |
 | M-8 | Medium | Stock updates lock product rows in arbitrary order → deadlocks under concurrency | ALL | **FIXED 2026-09-29 in `{{M-8}}`** |
 | M-9 | Medium | 32-bit overflow on order and invoice totals → 500 errors (anonymous can trigger) | ALL | **FIXED 2026-09-29 in `{{M-9}}`** |
-| M-10 | Medium | Paid orders can be cancelled with no refund record; stock stays "sold" | ALL | CODE |
+| M-10 | Medium | Paid orders can be cancelled with no refund record; stock stays "sold" | ALL | **FIXED 2026-09-29 in `{{M-10}}`** |
 | M-11 | Medium | No audit trail for money/state changes; rep payouts can be deleted outright | BRANCH | CODE |
 | M-12 | Medium | Local tooling defaults to the live database (e2e, build, start, drizzle) | LIVE (process) | CODE |
 | M-13 | Medium | Customer emails are never verified → an address can be squatted permanently | LIVE | CODE |
@@ -941,6 +941,13 @@ makes Finalize throw. **Fix**: `bigint` for totals (forward migration), cast
 action with a friendly error. Scope ALL, status CONFIRMED.
 
 ### M-10 — Paid orders can be cancelled with no refund record
+
+> **Fix status (2026-09-29): FIXED in `{{M-10}}`.** Amir's decision: a paid
+> order cannot be cancelled until there is a refund flow. `preparing →
+> cancelled` is removed from the transitions, so the queue shows no Cancel on
+> paid orders and the action's `assertTransition` + status-guarded UPDATE
+> refuse a forged post. Test: `orders.test.ts`. Orders already cancelled after
+> payment are unchanged.
 
 `preparing → cancelled` is legal (`src/lib/orders.ts:37`; also on `main`).
 Cancelling after payment leaves stock "sold", records no refund, and nothing

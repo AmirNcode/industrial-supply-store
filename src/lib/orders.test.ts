@@ -45,11 +45,12 @@ test("going backwards is refused", () => {
   assert.equal(canTransition("delivered", "shipped"), false);
 });
 
-test("cancelling is allowed before shipping and not after", () => {
+test("cancelling is allowed until payment is confirmed, and not after", () => {
   assert.equal(canTransition("received", "cancelled"), true);
   assert.equal(canTransition("invoiced", "cancelled"), true);
   assert.equal(canTransition("payment_review", "cancelled"), true);
-  assert.equal(canTransition("preparing", "cancelled"), true);
+  // Paid: no refund flow exists yet, so no cancellation (review M-10).
+  assert.equal(canTransition("preparing", "cancelled"), false);
   assert.equal(canTransition("shipped", "cancelled"), false);
 });
 
