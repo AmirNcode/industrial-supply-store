@@ -8,7 +8,12 @@
  * all (review finding L-15). This runs on the server for every receipt.
  *
  * No re-encoding and no image library: JPEG segments, PNG chunks and WebP
- * chunks are walked and the metadata ones left out. A file whose structure
+ * chunks are walked and the metadata ones left out. One EXIF value is put
+ * back: a JPEG's orientation. A phone stores a portrait photo sideways and
+ * says so in EXIF; without the tag the receipt displays rotated (fix review
+ * F-3). The browser's shrink step usually bakes the rotation into the pixels,
+ * but it keeps the original file when re-encoding would make it larger, and a
+ * direct post skips it. PNG and WebP keep none: phones photograph in JPEG. A file whose structure
  * does not parse is returned unchanged rather than refused — it already passed
  * the type check, and a receipt that cannot be uploaded is worse than one that
  * keeps its metadata. PDFs are not touched.
@@ -38,7 +43,11 @@ function concat(parts: Uint8Array[]): Uint8Array {
   return out;
 }
 
-/** APP1 (EXIF, XMP), APP13 (IPTC) and COM segments go; everything else stays. */
+/**
+ * APP1 (EXIF, XMP), APP13 (IPTC) and COM segments go; everything else stays.
+ * An EXIF segment that says the picture is rotated is replaced by one that
+ * says only that.
+ */
 function stripJpeg(bytes: Uint8Array): Uint8Array | null {
   if (bytes[0] !== 0xff || bytes[1] !== 0xd8) return null;
   const parts: Uint8Array[] = [bytes.subarray(0, 2)];
@@ -55,9 +64,52 @@ function stripJpeg(bytes: Uint8Array): Uint8Array | null {
     if (length < 2 || at + 2 + length > bytes.length) return null;
     const drop = marker === 0xe1 || marker === 0xed || marker === 0xfe;
     if (!drop) parts.push(bytes.subarray(at, at + 2 + length));
+    if (marker === 0xe1) {
+      const orientation = exifOrientation(bytes.subarray(at + 4, at + 2 + length));
+      if (orientation !== null) parts.push(orientationSegment(orientation));
+    }
     at += 2 + length;
   }
   return null;
+}
+
+/**
+ * The orientation (2–8) an EXIF payload records, or null for upright, absent
+ * or unreadable. Read from the first IFD, in the payload's own byte order.
+ */
+function exifOrientation(payload: Uint8Array): number | null {
+  const header = [0x45, 0x78, 0x69, 0x66, 0, 0]; // "Exif\0\0"
+  if (payload.length < 14 || header.some((byte, i) => payload[i] !== byte)) return null;
+  const tiff = new DataView(payload.buffer, payload.byteOffset + 6, payload.byteLength - 6);
+  const order = tiff.getUint16(0);
+  if (order !== 0x4949 && order !== 0x4d4d) return null;
+  const little = order === 0x4949;
+  if (tiff.getUint16(2, little) !== 42) return null;
+  const ifd = tiff.getUint32(4, little);
+  if (ifd + 2 > tiff.byteLength) return null;
+  const count = tiff.getUint16(ifd, little);
+  for (let i = 0; i < count; i++) {
+    const entry = ifd + 2 + i * 12;
+    if (entry + 12 > tiff.byteLength) return null;
+    // Tag 0x0112 is Orientation, a SHORT (type 3) held in the entry itself.
+    if (tiff.getUint16(entry, little) !== 0x0112) continue;
+    if (tiff.getUint16(entry + 2, little) !== 3) return null;
+    const value = tiff.getUint16(entry + 8, little);
+    return value >= 2 && value <= 8 ? value : null;
+  }
+  return null;
+}
+
+/** A complete APP1 segment holding one EXIF entry: the orientation. */
+function orientationSegment(orientation: number): Uint8Array {
+  return Uint8Array.from([
+    0xff, 0xe1, 0x00, 0x22, // APP1, 34 bytes including this length
+    0x45, 0x78, 0x69, 0x66, 0x00, 0x00, // "Exif\0\0"
+    0x4d, 0x4d, 0x00, 0x2a, 0x00, 0x00, 0x00, 0x08, // big-endian TIFF, first IFD at 8
+    0x00, 0x01, // one entry
+    0x01, 0x12, 0x00, 0x03, 0x00, 0x00, 0x00, 0x01, 0x00, orientation, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, // no further IFD
+  ]);
 }
 
 const PNG_DROP = new Set(["eXIf", "tEXt", "zTXt", "iTXt", "tIME"]);
