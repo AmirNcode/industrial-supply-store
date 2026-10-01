@@ -113,8 +113,8 @@ deployment · `ALL` = everywhere.
 | L-1 … L-24 | Low | Hardening and hygiene (see section) | mixed | mixed |
 | F-1 | High | One address can lock every admin out (from the H-5 fix) | BRANCH | **FIXED 2026-09-30 in `8c9e94b`** |
 | F-2 | Medium | The M-16 body cap is skipped by a form posted without the `Next-Action` header, and on the admin sign-in page | BRANCH | **FIXED 2026-09-30 in `fcdf9d7`** (pay-link addresses stay open by design) |
-| F-3 | Low | Receipt photos can lose their orientation when the server strips metadata (L-15) | BRANCH | OPEN |
-| F-4 | Low | The sign-in "known device" mark never expires on the server and survives a password change (M-1/M-14) | BRANCH | OPEN |
+| F-3 | Low | Receipt photos can lose their orientation when the server strips metadata (L-15) | BRANCH | **FIXED 2026-09-30 in `c643447`** |
+| F-4 | Low | The sign-in "known device" mark never expires on the server and survives a password change (M-1/M-14) | BRANCH | **FIXED 2026-09-30 in `bbf1d93`** |
 
 ### Do first (in this order)
 
@@ -1248,7 +1248,7 @@ Scope BRANCH (process), status CODE.
 ## Fix review (2026-09-30)
 
 A review of the 62 fix commits (`50c4ace..40a07b8`). Most fixes are complete
-and correct; these four are new.
+and correct; these four are new. All four are fixed.
 
 ### F-1 — One address can lock every admin out
 
@@ -1285,15 +1285,26 @@ processed action on the old code).
 
 ### F-3 — Receipt photos can show sideways
 
+> **Fix status (2026-09-30): FIXED in `c643447`.** An EXIF segment that
+> records a rotation is replaced by a minimal one carrying only the
+> orientation; everything else in it still goes. JPEG only (phones photograph
+> in JPEG). Test: `src/lib/imageMetadata.test.ts`.
+
 `stripImageMetadata` (L-15) drops the whole JPEG APP1 segment, including the
 EXIF orientation tag. The browser's shrink step bakes the orientation into the
 pixels, but `PaymentProofUpload.tsx:123` sends the original when re-encoding
 would make it larger, and a direct post skips the shrink: such a photo is
 stored without its orientation and displays rotated. Inferred from the code,
 not observed. **Fix**: keep a minimal APP1 carrying only the orientation tag,
-or rotate on the server. Scope BRANCH, status OPEN.
+or rotate on the server. Scope BRANCH.
 
 ### F-4 — The known-device mark never expires on the server
+
+> **Fix status (2026-09-30): FIXED in `bbf1d93`.** `lib/deviceMark.ts`:
+> `d1.<expiry>.<signature>`, signed over the account's session version, so the
+> server checks the expiry and any password change or reset (for the admin,
+> "Sign out everywhere") retires earlier marks. Sign-in now looks the account
+> up before the lockout check. Test: `src/lib/deviceMark.test.ts`.
 
 `deviceMark` in `lib/signInGuard.ts` is an HMAC of the login alone: the same
 value for every browser, valid for ever on the server (the cookie's 180 days
@@ -1302,7 +1313,7 @@ signed in to a customer or rep account — someone who learnt an old password �
 keeps a pass through that account's lockout; the per-address limit still
 applies. (The admin's mark is keyed to the password since F-1.) **Fix**: put
 an expiry in the mark and key it to the account's `session_version`. Scope
-BRANCH, status OPEN.
+BRANCH.
 
 ---
 
