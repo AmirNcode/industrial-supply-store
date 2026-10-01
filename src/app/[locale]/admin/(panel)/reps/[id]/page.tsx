@@ -23,6 +23,7 @@ import { RepFields } from "../RepFields";
 import { ErrorBanner, SuccessBanner } from "@/components/Banners";
 import { ConfirmSubmit } from "@/components/ConfirmSubmit";
 import { ShownOnceCredential } from "@/components/ShownOnceCredential";
+import { GroupedAmountInput } from "@/components/GroupedAmountInput";
 import { readShownOnce } from "@/lib/shownOnce";
 import { siteOrigin } from "@/lib/siteOrigin";
 import { formatCommissionPercent } from "@/lib/repAccount";
@@ -192,11 +193,8 @@ export default async function AdminRepPage({
         <form action={setTargetAction} className="flex flex-wrap items-end gap-2">
           <input type="hidden" name="locale" value={l} />
           <input type="hidden" name="repId" value={rep.id} />
-          <input
-            type="text"
+          <GroupedAmountInput
             name="target"
-            dir="ltr"
-            inputMode="numeric"
             required
             maxLength={24}
             aria-label={t.monthlyTarget}

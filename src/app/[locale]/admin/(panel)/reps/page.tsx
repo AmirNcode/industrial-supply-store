@@ -12,7 +12,7 @@ import { formatInt, formatRial } from "@/lib/money";
 import { listAllTargets, listRecentDeliveries, listRepTotals } from "@/db/repMoney";
 import { persianYearMonth } from "@/lib/persianCalendar";
 import { targetFor } from "@/lib/repStats";
-import { REQUEST_LIMITS } from "@/lib/requestLimits";
+import { GroupedAmountInput } from "@/components/GroupedAmountInput";
 
 const ERROR_KEY = {
   incomplete: "required",
@@ -120,7 +120,7 @@ export default async function AdminRepsPage({
           <RepFields t={t} disabled={DEMO_MODE} />
           <label className="grid gap-0.5 text-[11px] font-semibold">
             {t.monthlyTargetOptional}
-            <input type="text" name="target" dir="ltr" inputMode="numeric" maxLength={REQUEST_LIMITS.phoneChars} disabled={DEMO_MODE} />
+            <GroupedAmountInput name="target" maxLength={24} disabled={DEMO_MODE} />
           </label>
           <button type="submit" className="btn-small justify-self-start sm:col-span-2" disabled={DEMO_MODE}>
             {t.createRep}
