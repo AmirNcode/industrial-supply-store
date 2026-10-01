@@ -3,7 +3,7 @@
 import { revalidateCatalogPages } from "@/lib/revalidateCatalog";
 import { redirect } from "next/navigation";
 import { sql } from "@/db";
-import { adminSignInKey, assertAdminWrite, signInAdmin, signOutAdmin, signOutAllAdmins } from "@/lib/admin";
+import { adminSessionVersion, adminSignInKey, assertAdminWrite, signInAdmin, signOutAdmin, signOutAllAdmins } from "@/lib/admin";
 import { recordSignInFailure, rememberSignInDevice, signInLocked } from "@/lib/signInGuard";
 import {
   getAutomaticRate,
@@ -57,9 +57,11 @@ export async function loginAction(formData: FormData): Promise<void> {
   if (!limit.allowed) redirect(`/${locale}/admin/login?error=rate-limit`);
   // From every address together, failures only — and only attempts the line
   // above let through. Counting every attempt there let one address lock every
-  // admin out by sending junk. A browser that has signed in before passes.
+  // admin out by sending junk. A browser that has signed in before passes,
+  // until "Sign out everywhere" or a new password retires its mark.
   const key = adminSignInKey();
-  if (await signInLocked("admin", key)) redirect(`/${locale}/admin/login?error=rate-limit`);
+  const version = await adminSessionVersion();
+  if (await signInLocked("admin", key, version)) redirect(`/${locale}/admin/login?error=rate-limit`);
   const password = boundedString(formData.get("password"), REQUEST_LIMITS.passwordChars, {
     trim: false,
   });
@@ -70,7 +72,7 @@ export async function loginAction(formData: FormData): Promise<void> {
     await recordSignInFailure("admin", key);
     redirect(`/${locale}/admin/login?error=1`);
   }
-  await rememberSignInDevice("admin", key);
+  await rememberSignInDevice("admin", key, version);
   redirect(`/${locale}/admin`);
 }
 

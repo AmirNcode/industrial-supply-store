@@ -68,7 +68,7 @@ export function adminSignInKey(): string {
  */
 const KEY_SESSION_VERSION = "admin_session_version";
 
-async function sessionVersion(): Promise<number> {
+export async function adminSessionVersion(): Promise<number> {
   const [row] = await sql<{ value: string }[]>`
     SELECT value FROM app_settings WHERE key = ${KEY_SESSION_VERSION}
   `;
@@ -84,7 +84,7 @@ async function sessionVersion(): Promise<number> {
 export const isAdmin = cache(async (): Promise<boolean> => {
   const token = (await cookies()).get(COOKIE)?.value;
   if (!token) return false;
-  return verifyAdminSessionToken(token, AUTH_SECRET, adminPassword(), await sessionVersion());
+  return verifyAdminSessionToken(token, AUTH_SECRET, adminPassword(), await adminSessionVersion());
 });
 
 export async function signInAdmin(password: string): Promise<boolean> {
@@ -93,7 +93,7 @@ export async function signInAdmin(password: string): Promise<boolean> {
   jar.set(
     COOKIE,
     signAdminSessionToken(
-      await sessionVersion(),
+      await adminSessionVersion(),
       Date.now() + ADMIN_SESSION_TTL_MS,
       AUTH_SECRET,
       adminPassword(),

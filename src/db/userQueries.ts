@@ -32,16 +32,21 @@ export async function getUserById(id: string): Promise<UserRow | null> {
   return rows[0] ?? null;
 }
 
-/** One sign-in field: a seven-digit ID or an email, never both kinds of lookup. */
+/**
+ * One sign-in field: a seven-digit ID or an email, never both kinds of lookup.
+ * Carries the session version the sign-in guard's device mark is checked
+ * against (`lib/deviceMark.ts`).
+ */
 export async function findUserForSignIn(
   login: LoginIdentifier,
-): Promise<(UserRow & { passwordHash: string }) | null> {
+): Promise<(UserRow & { passwordHash: string; sessionVersion: number }) | null> {
   const where =
     login.kind === "code"
       ? sql`customer_code = ${login.code}`
       : sql`lower(email) = lower(${login.email})`;
-  const rows = await sql<(UserRow & { passwordHash: string })[]>`
-    SELECT ${COLS}, password_hash AS "passwordHash" FROM users WHERE ${where} LIMIT 1
+  const rows = await sql<(UserRow & { passwordHash: string; sessionVersion: number })[]>`
+    SELECT ${COLS}, password_hash AS "passwordHash", session_version AS "sessionVersion"
+    FROM users WHERE ${where} LIMIT 1
   `;
   return rows[0] ?? null;
 }

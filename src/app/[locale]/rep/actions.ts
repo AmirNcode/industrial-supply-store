@@ -73,11 +73,11 @@ export async function repSignInAction(formData: FormData): Promise<void> {
   // Counting every attempt against the username let anyone lock a rep out.
   const limit = await consumeRateLimit("rep:sign-in", RATE_LIMITS.repSignIn);
   if (!limit.allowed) redirect(`/${locale}/rep/signin?error=rate-limit`);
-  if (username && (await signInLocked("rep", username))) {
+  const rep = isValidUsername(username) ? await findRepForSignIn(username) : null;
+  if (username && (await signInLocked("rep", username, rep?.sessionVersion ?? null))) {
     redirect(`/${locale}/rep/signin?error=rate-limit`);
   }
 
-  const rep = isValidUsername(username) ? await findRepForSignIn(username) : null;
   const ok = await verifyPassword(
     normalizeRepPassword(password ?? ""),
     rep ? rep.passwordHash : DUMMY_PASSWORD_HASH,
@@ -86,7 +86,7 @@ export async function repSignInAction(formData: FormData): Promise<void> {
     if (username) await recordSignInFailure("rep", username);
     redirect(`/${locale}/rep/signin?error=failed`);
   }
-  await rememberSignInDevice("rep", username);
+  await rememberSignInDevice("rep", username, rep.sessionVersion);
   if (needsRehash(rep.passwordHash)) {
     await upgradeRepPasswordHash(rep.id, rep.passwordHash, await hashPassword(normalizeRepPassword(password ?? "")));
   }

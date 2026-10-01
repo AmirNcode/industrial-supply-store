@@ -1,7 +1,7 @@
 import "server-only";
-import { createHmac, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import { AUTH_SECRET } from "./authSecret";
+import { DEVICE_MARK_TTL_MS, signDeviceMark, verifyDeviceMark } from "./deviceMark";
 import { RATE_LIMITS, consumeAccountCounter, peekAccountCounter, type RateLimitPolicy } from "./rateLimit";
 
 /**
@@ -14,12 +14,14 @@ import { RATE_LIMITS, consumeAccountCounter, peekAccountCounter, type RateLimitP
  * (normalised) so an unknown login costs the same as a real one; once an
  * account has had too many, further attempts are refused — except from a
  * browser that has signed in to that account before, which carries a mark
- * only a correct password could have earned. The owner keeps working; a
- * stranger waits out the window.
+ * only a correct password could have earned (`lib/deviceMark.ts`: it expires,
+ * and the account's next password change retires it). The owner keeps
+ * working; a stranger waits out the window.
  *
  * The admin has no login to key on — one shared password — so its "account"
  * is the password itself (`adminSignInKey`): every failure from every address
- * counts together, and changing ADMIN_PASSWORD retires every admin mark.
+ * counts together. Its session version is the one "Sign out everywhere"
+ * bumps, so that and a new ADMIN_PASSWORD each retire every admin mark.
  */
 export type SignInKind = "customer" | "rep" | "admin";
 
@@ -28,7 +30,6 @@ const POLICY: Record<SignInKind, RateLimitPolicy> = {
   rep: RATE_LIMITS.signInFailures,
   admin: RATE_LIMITS.adminLoginFailures,
 };
-const DEVICE_DAYS = 180;
 
 function scope(kind: SignInKind): string {
   return `${kind}:sign-in-failures`;
@@ -38,19 +39,20 @@ function cookieName(kind: SignInKind): string {
   return `isupply_known_${kind}`;
 }
 
-function deviceMark(kind: SignInKind, loginKey: string): string {
-  return createHmac("sha256", AUTH_SECRET).update(`known-device\0${kind}\0${loginKey}`).digest("base64url");
-}
-
-/** True when this account has failed too often and this browser is not one it signed in from. */
-export async function signInLocked(kind: SignInKind, loginKey: string): Promise<boolean> {
+/**
+ * True when this account has failed too often and this browser is not one it
+ * signed in from at the account's current session version. `version` is null
+ * for a login with no account.
+ */
+export async function signInLocked(
+  kind: SignInKind,
+  loginKey: string,
+  version: number | null,
+): Promise<boolean> {
   const policy = POLICY[kind];
   if ((await peekAccountCounter(scope(kind), policy, loginKey)) < policy.limit) return false;
   const mark = (await cookies()).get(cookieName(kind))?.value;
-  if (!mark) return true;
-  const a = Buffer.from(mark);
-  const b = Buffer.from(deviceMark(kind, loginKey));
-  return !(a.length === b.length && timingSafeEqual(a, b));
+  return !mark || !verifyDeviceMark(mark, AUTH_SECRET, kind, loginKey, version);
 }
 
 /**
@@ -67,12 +69,17 @@ export async function recordSignInFailure(kind: SignInKind, loginKey: string): P
 }
 
 /** After a correct password: this browser may sign in to this account through a lockout. */
-export async function rememberSignInDevice(kind: SignInKind, loginKey: string): Promise<void> {
-  (await cookies()).set(cookieName(kind), deviceMark(kind, loginKey), {
+export async function rememberSignInDevice(
+  kind: SignInKind,
+  loginKey: string,
+  version: number,
+): Promise<void> {
+  const mark = signDeviceMark(AUTH_SECRET, kind, loginKey, version, Date.now() + DEVICE_MARK_TTL_MS);
+  (await cookies()).set(cookieName(kind), mark, {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
     path: "/",
-    maxAge: DEVICE_DAYS * 24 * 60 * 60,
+    maxAge: Math.floor(DEVICE_MARK_TTL_MS / 1000),
   });
 }

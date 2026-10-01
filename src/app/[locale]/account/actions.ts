@@ -125,17 +125,17 @@ export async function signInAction(formData: FormData): Promise<void> {
   // The login as typed, normalised — not the user id — so an unknown login
   // is counted and refused exactly like a real one (lib/signInGuard.ts).
   const loginKey = login ? (login.kind === "code" ? `code:${login.code}` : `email:${login.email}`) : null;
-  if (loginKey && (await signInLocked("customer", loginKey))) {
+  const user = login ? await findUserForSignIn(login) : null;
+  if (loginKey && (await signInLocked("customer", loginKey, user?.sessionVersion ?? null))) {
     redirect(`/${locale}/account/signin?error=rate-limit`);
   }
-  const user = login ? await findUserForSignIn(login) : null;
   const ok = await verifyPassword(password ?? "", user ? user.passwordHash : DUMMY_PASSWORD_HASH);
 
   if (!user || !ok) {
     if (loginKey) await recordSignInFailure("customer", loginKey);
     redirect(`/${locale}/account/signin?error=failed`);
   }
-  if (loginKey) await rememberSignInDevice("customer", loginKey);
+  if (loginKey) await rememberSignInDevice("customer", loginKey, user.sessionVersion);
   if (needsRehash(user.passwordHash)) {
     await upgradePasswordHash(user.id, user.passwordHash, await hashPassword(password ?? ""));
   }
