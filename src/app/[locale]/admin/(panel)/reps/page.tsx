@@ -13,6 +13,8 @@ import { listAllTargets, listRecentDeliveries, listRepTotals } from "@/db/repMon
 import { persianYearMonth } from "@/lib/persianCalendar";
 import { targetFor } from "@/lib/repStats";
 import { GroupedAmountInput } from "@/components/GroupedAmountInput";
+import { ShareButton } from "@/components/ShareButton";
+import { siteOrigin } from "@/lib/siteOrigin";
 
 const ERROR_KEY = {
   incomplete: "required",
@@ -36,14 +38,17 @@ export default async function AdminRepsPage({
   await requireAdmin(l);
   const t = getDict(l);
   const { error } = await searchParams;
-  const [reps, totals, recent, targets] = await Promise.all([
+  const [reps, totals, recent, targets, origin] = await Promise.all([
     listReps(),
     listRepTotals(),
     // Forty days always covers the current Persian month; the rows are placed
     // in months here, because Postgres has no Persian calendar.
     listRecentDeliveries(40),
     listAllTargets(),
+    siteOrigin(),
   ]);
+  // The same address the credential hand-over message gives a new rep.
+  const repSignInUrl = `${origin}/${l}/rep/signin`;
   const current = persianYearMonth(new Date());
   const thisMonth = new Map<string, number>();
   for (const row of recent) {
@@ -115,6 +120,16 @@ export default async function AdminRepsPage({
 
       <section className="mb-4 border border-[var(--color-rule)] p-3">
         <h2 className="mb-3 text-[13px] font-bold">{t.newRep}</h2>
+        <div className="mb-3 max-w-[680px] border border-[var(--color-rule)] bg-[var(--color-navy-tint)] p-2 text-[12px]">
+          <p className="mb-1 font-bold">{t.repSignInPage}</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <code className="tech min-w-0 break-all" dir="ltr" data-testid="rep-signin-url">
+              {repSignInUrl}
+            </code>
+            <ShareButton text={repSignInUrl} label={t.copy} copiedLabel={t.copied} copyOnly />
+          </div>
+          <p className="mt-1 text-[11px] text-[var(--color-ink-muted)]">{t.repSignInPageNote}</p>
+        </div>
         <form action={createRepAction} className="grid max-w-[680px] gap-3 sm:grid-cols-2">
           <input type="hidden" name="locale" value={l} />
           <RepFields t={t} disabled={DEMO_MODE} />

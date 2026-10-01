@@ -922,6 +922,8 @@ const en = {
   targetSaved: "Target saved.",
   repThisMonth: "Sales this month",
   monthlyTargetOptional: "Monthly target in rial (optional)",
+  repSignInPage: "Sales rep sign-in page",
+  repSignInPageNote: "Sales reps must sign in at this address. The customer sign-in page does not accept a rep's username.",
 };
 
 /**
@@ -1788,6 +1790,8 @@ const fa: typeof en = {
   targetSaved: "هدف ذخیره شد.",
   repThisMonth: "فروش این ماه",
   monthlyTargetOptional: "هدف فروش ماهانه به ریال (اختیاری)",
+  repSignInPage: "صفحهٔ ورود نمایندگان فروش",
+  repSignInPageNote: "نمایندگان فروش باید از این نشانی وارد شوند. صفحهٔ ورود مشتریان نام کاربری نماینده را نمی‌پذیرد.",
 };
 
 export type Dict = typeof en;
