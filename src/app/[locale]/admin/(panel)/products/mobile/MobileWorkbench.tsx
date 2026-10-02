@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, type RefObject } from "react";
+import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   categoryNodeKey,
@@ -103,6 +103,14 @@ export function MobileWorkbench(props: MobileWorkbenchProps) {
   const [flash, setFlash] = useState<string | null>(null);
   const [savingAll, setSavingAll] = useState(false);
   const [recent, setRecent] = useState<TaxonomyNodeKey[]>([]);
+  /**
+   * The open sheet's history entry carries this token. A token rather than
+   * a flag: entries keep their state across reloads, and an older sheet's
+   * leftover mark must never pass for the open one's.
+   */
+  const sheetToken = useRef<string | null>(null);
+  const onSheetEntry = () =>
+    sheetToken.current !== null && window.history.state?.mtxSheet === sheetToken.current;
 
   const familyKey = node?.kind === "family" ? node.key : null;
   const pending = dirtyCount + productPending;
@@ -140,7 +148,8 @@ export function MobileWorkbench(props: MobileWorkbenchProps) {
     const go = () => {
       setSheet(null);
       setFlash(null);
-      const fromSheet = window.history.state?.mtxSheet === true;
+      const fromSheet = onSheetEntry();
+      sheetToken.current = null;
       // `mtxReturn` marks a screen whose own back button can simply go Back.
       const state = options.returnable ? { mtxReturn: true } : null;
       if (fromSheet) window.history.replaceState(state, "", url);
@@ -166,18 +175,24 @@ export function MobileWorkbench(props: MobileWorkbenchProps) {
 
   function openSheet(next: SheetState) {
     setSheet(next);
-    window.history.pushState({ mtxSheet: true }, "", window.location.href);
+    sheetToken.current = `${Date.now()}-${Math.random()}`;
+    window.history.pushState({ mtxSheet: sheetToken.current }, "", window.location.href);
   }
 
   const closeSheet = useCallback(() => {
-    if (window.history.state?.mtxSheet === true) window.history.back();
-    else setSheet(null);
+    if (sheetToken.current !== null && window.history.state?.mtxSheet === sheetToken.current) {
+      window.history.back();
+    } else setSheet(null);
   }, []);
 
   // Back closes an open sheet; the sheet's entry is what Back just left.
   useEffect(() => {
     const onPopState = () => {
-      if (window.history.state?.mtxSheet !== true) setSheet(null);
+      if (sheetToken.current === null) return;
+      if (window.history.state?.mtxSheet !== sheetToken.current) {
+        sheetToken.current = null;
+        setSheet(null);
+      }
     };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);

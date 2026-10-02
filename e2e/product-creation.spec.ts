@@ -104,7 +104,9 @@ for (const locale of ["en", "fa"] as Locale[]) {
     await form.locator('input[type="file"]').setInputFiles({ name: "review.csv", mimeType: "text/csv",
       buffer: Buffer.from("part_number,price_usd\n,10\n,not-a-price\n") });
     await form.getByRole("button", { name: new RegExp(t.uploadCsv) }).click();
-    const confirm = form.getByRole("button", { name: t.reviewConfirm, exact: true });
+    // "Confirm and import" on desktop, "Import 1 rows" on a phone: the same
+    // submit button, so found by what it submits.
+    const confirm = form.locator('button[name="stage"][value="apply"]');
     await expect(confirm).toBeDisabled();
     const number = new Intl.NumberFormat(locale).format(1);
     await form.getByLabel(t.reviewSkipBadRows.replace("{bad}", number).replace("{good}", number), { exact: true }).check();

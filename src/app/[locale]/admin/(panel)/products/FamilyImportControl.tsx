@@ -9,6 +9,7 @@ import { IMPORT_MAX_BYTES } from "@/lib/importLimits";
 import { csvFileForUpload } from "@/lib/importUploadClient";
 import { ColumnReview } from "./ColumnReview";
 import { ImportFeedback } from "./ImportFeedback";
+import { MobileColumnReview } from "./mobile/MobileColumnReview";
 
 type PreparedUpload = {
   browserUrl: string;
@@ -168,6 +169,12 @@ export function FamilyImportControl({
     }
   }
 
+  /** The phone's review Cancel: the uploaded file is dropped, as with no file. */
+  function cancelReview() {
+    choose(undefined);
+    if (fileInput.current) fileInput.current.value = "";
+  }
+
   if (variant === "mobile") {
     return (
       <form onSubmit={submit} className="taxonomy-import-form mtx-import-form">
@@ -195,7 +202,7 @@ export function FamilyImportControl({
         {extras}
 
         {state?.kind === "review" && (
-          <ColumnReview
+          <MobileColumnReview
             key={JSON.stringify(state.plan)}
             initialPlan={state.plan}
             headers={state.headers}
@@ -207,6 +214,9 @@ export function FamilyImportControl({
             blankRows={state.blankRows}
             locale={locale}
             pending={pending}
+            fileName={picked?.name ?? ""}
+            familyName={familyName}
+            onCancel={cancelReview}
           />
         )}
         {state && state.kind !== "review" && (

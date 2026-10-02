@@ -28,15 +28,15 @@ import type { ImportError } from "@/lib/importCsv";
  * and confirmation posts only the signed handle plus these decisions.
  */
 
-type MissingRow = MissingColumn & { productCount: number };
+export type MissingRow = MissingColumn & { productCount: number };
 
 /** What the single "treat as" dropdown offers, flattened. */
-const SPEC_OPTION = "__spec__";
-const IGNORE_OPTION = "__ignore__";
+export const SPEC_OPTION = "__spec__";
+export const IGNORE_OPTION = "__ignore__";
 
 /** A long file can fail on thousands of rows; the first screenful is what
  *  someone acts on. */
-const MAX_SHOWN = 50;
+export const MAX_SHOWN = 50;
 
 export function ColumnReview({
   headers,
@@ -62,90 +62,27 @@ export function ColumnReview({
   initialPlan: ImportPlan;
 }) {
   const t = getDict(locale);
-  const [plans, setPlans] = useState<HeaderPlan[]>(initialPlan.headers);
-  const [dropKeys, setDropKeys] = useState<string[]>(initialPlan.dropKeys);
-  const [mode, setMode] = useState<ImportMode>(initialPlan.mode);
-  const [skipBadRows, setSkipBadRows] = useState(initialPlan.skipBadRows);
-  /** Starts off: minting codes is never the default, in any locale or flow. */
-  const [autoNumber, setAutoNumber] = useState(initialPlan.autoNumber ?? false);
-
-  const update = (i: number, next: HeaderPlan) =>
-    setPlans((prev) => prev.map((p, j) => (j === i ? next : p)));
-
-  /** Switching role has to invent the fields the new role needs. */
-  function setRole(i: number, value: string) {
-    const header = plans[i].header;
-    if (value === IGNORE_OPTION) return update(i, { role: "ignore", header });
-    if (value === SPEC_OPTION) {
-      const label = prettifyLabel(header);
-      const original = headers[i].plan;
-      // Coming back to "spec" restores what was proposed, so flipping a column
-      // to ignored and back does not lose the inferred kind.
-      return update(
-        i,
-        original.role === "spec"
-          ? original
-          : {
-              role: "spec",
-              header,
-              key: slugifyKey(header),
-              labelEn: label,
-              labelFa: label,
-              unit: "",
-              specKind: "text",
-              inTable: false,
-              inDetail: true,
-              filterable: false,
-            },
-      );
-    }
-    update(i, { role: "builtin", header, field: value as BuiltinField });
-  }
-
-  const newOnes = headers
-    .map((h, i) => ({ h, i }))
-    .filter(({ h }) => h.isNew);
-  const matched = headers
-    .map((h, i) => ({ h, i }))
-    .filter(({ h }) => !h.isNew);
-
-  /**
-   * Which column already holds each built-in field.
-   *
-   * There is one `documents` slot, one `price_usd`, one part number. Offering
-   * a slot that is already taken is offering a mistake — the confirm step
-   * refuses it, so the only thing a second choice can produce is an error.
-   * Shown as disabled, named after its owner, rather than hidden: "taken by
-   * documents" explains the absence where a missing row would puzzle.
-   */
-  const owners = new Map<string, string>();
-  for (const p of plans) if (p.role === "builtin") owners.set(p.field, p.header);
-
-  /*
-   * What the catalog table would carry after this import: the part number,
-   * every spec column this file marks for the table, and the family's existing
-   * table columns that the file does not carry and is not dropping — those
-   * survive the import and keep their place in the table.
-   */
-  const tableColumns =
-    1 +
-    plans.filter((p) => p.role === "spec" && p.inTable).length +
-    missing.filter((m) => m.inTable && !dropKeys.includes(m.key)).length;
-
-  /**
-   * A file can leave the part number cells empty, or leave the column out
-   * altogether. Both mean the same thing — every row is a new product — but
-   * the sentence that explains it is different, and "31 rows have an empty
-   * part number" would be a lie about a file that has no such column.
-   */
-  const hasPartColumn = plans.some((p) => p.role === "builtin" && p.field === "part_number");
-  const plan = JSON.stringify({ headers: plans, dropKeys, mode, skipBadRows, autoNumber });
-  const badRowCount = new Set(rowProblems.map((e) => e.row)).size;
-  // Confirming with bad rows and no decision about them would just bounce back.
-  // Blank part numbers are the same shape of problem: the server refuses to
-  // mint codes nobody asked for, so confirming without the tick achieves
-  // nothing except a round trip.
-  const blocked = (badRowCount > 0 && !skipBadRows) || (blankRows > 0 && !autoNumber);
+  const {
+    plans,
+    update,
+    setRole,
+    dropKeys,
+    setDropKeys,
+    mode,
+    setMode,
+    skipBadRows,
+    setSkipBadRows,
+    autoNumber,
+    setAutoNumber,
+    newOnes,
+    matched,
+    owners,
+    tableColumns,
+    hasPartColumn,
+    plan,
+    badRowCount,
+    blocked,
+  } = useColumnPlan({ initialPlan, headers, missing, rowProblems, blankRows });
 
   return (
     <div className="mt-2 border border-[var(--color-rule)] bg-white p-3">
@@ -475,4 +412,131 @@ export function ColumnReview({
       )}
     </div>
   );
+}
+
+/**
+ * The review's decisions and what follows from them, shared by the desktop
+ * table and the phone's full-screen review so both post the same plan and
+ * block on the same conditions.
+ */
+export function useColumnPlan({
+  initialPlan,
+  headers,
+  missing,
+  rowProblems,
+  blankRows,
+}: {
+  initialPlan: ImportPlan;
+  headers: AnalyzedHeader[];
+  missing: MissingRow[];
+  rowProblems: ImportError[];
+  blankRows: number;
+}) {
+  const [plans, setPlans] = useState<HeaderPlan[]>(initialPlan.headers);
+  const [dropKeys, setDropKeys] = useState<string[]>(initialPlan.dropKeys);
+  const [mode, setMode] = useState<ImportMode>(initialPlan.mode);
+  const [skipBadRows, setSkipBadRows] = useState(initialPlan.skipBadRows);
+  /** Starts off: minting codes is never the default, in any locale or flow. */
+  const [autoNumber, setAutoNumber] = useState(initialPlan.autoNumber ?? false);
+
+  const update = (i: number, next: HeaderPlan) =>
+    setPlans((prev) => prev.map((p, j) => (j === i ? next : p)));
+
+  /** Switching role has to invent the fields the new role needs. */
+  function setRole(i: number, value: string) {
+    const header = plans[i].header;
+    if (value === IGNORE_OPTION) return update(i, { role: "ignore", header });
+    if (value === SPEC_OPTION) {
+      const label = prettifyLabel(header);
+      const original = headers[i].plan;
+      // Coming back to "spec" restores what was proposed, so flipping a column
+      // to ignored and back does not lose the inferred kind.
+      return update(
+        i,
+        original.role === "spec"
+          ? original
+          : {
+              role: "spec",
+              header,
+              key: slugifyKey(header),
+              labelEn: label,
+              labelFa: label,
+              unit: "",
+              specKind: "text",
+              inTable: false,
+              inDetail: true,
+              filterable: false,
+            },
+      );
+    }
+    update(i, { role: "builtin", header, field: value as BuiltinField });
+  }
+
+  const newOnes = headers
+    .map((h, i) => ({ h, i }))
+    .filter(({ h }) => h.isNew);
+  const matched = headers
+    .map((h, i) => ({ h, i }))
+    .filter(({ h }) => !h.isNew);
+
+  /**
+   * Which column already holds each built-in field.
+   *
+   * There is one `documents` slot, one `price_usd`, one part number. Offering
+   * a slot that is already taken is offering a mistake — the confirm step
+   * refuses it, so the only thing a second choice can produce is an error.
+   * Shown as disabled, named after its owner, rather than hidden: "taken by
+   * documents" explains the absence where a missing row would puzzle.
+   */
+  const owners = new Map<string, string>();
+  for (const p of plans) if (p.role === "builtin") owners.set(p.field, p.header);
+
+  /*
+   * What the catalog table would carry after this import: the part number,
+   * every spec column this file marks for the table, and the family's existing
+   * table columns that the file does not carry and is not dropping — those
+   * survive the import and keep their place in the table.
+   */
+  const tableColumns =
+    1 +
+    plans.filter((p) => p.role === "spec" && p.inTable).length +
+    missing.filter((m) => m.inTable && !dropKeys.includes(m.key)).length;
+
+  /**
+   * A file can leave the part number cells empty, or leave the column out
+   * altogether. Both mean the same thing — every row is a new product — but
+   * the sentence that explains it is different, and "31 rows have an empty
+   * part number" would be a lie about a file that has no such column.
+   */
+  const hasPartColumn = plans.some((p) => p.role === "builtin" && p.field === "part_number");
+  const plan = JSON.stringify({ headers: plans, dropKeys, mode, skipBadRows, autoNumber });
+  const badRowCount = new Set(rowProblems.map((e) => e.row)).size;
+  // Confirming with bad rows and no decision about them would just bounce back.
+  // Blank part numbers are the same shape of problem: the server refuses to
+  // mint codes nobody asked for, so confirming without the tick achieves
+  // nothing except a round trip.
+  const blocked = (badRowCount > 0 && !skipBadRows) || (blankRows > 0 && !autoNumber);
+
+
+  return {
+    plans,
+    update,
+    setRole,
+    dropKeys,
+    setDropKeys,
+    mode,
+    setMode,
+    skipBadRows,
+    setSkipBadRows,
+    autoNumber,
+    setAutoNumber,
+    newOnes,
+    matched,
+    owners,
+    tableColumns,
+    hasPartColumn,
+    plan,
+    badRowCount,
+    blocked,
+  };
 }
