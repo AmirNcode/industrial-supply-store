@@ -1,47 +1,36 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ReactNode, type RefObject } from "react";
-import { useRouter } from "next/navigation";
 import type { FamilyProductsResponse } from "@/app/api/admin/family/[id]/products/route";
 import {
   PRODUCT_PAGE_SIZE,
   cellText,
-  productFingerprint,
   productTableColumns,
-  type CellId,
   type ProductColumn,
-  type ProductRecord,
 } from "@/lib/productTable";
 import { getDict, type Locale } from "@/lib/i18n";
 import { formatInt } from "@/lib/money";
-import { saveFamilyProductsAction } from "./productTableActions";
+import { cellKey, useProductDrafts, type ProductTableHandle } from "./productDrafts";
 
 /** Enough rows to scan and edit; few enough that edit mode stays quick. */
 const PAGE_SIZE = PRODUCT_PAGE_SIZE;
 
-/** What the workbench's leave-the-page guard needs from this table. */
-export type ProductTableHandle = { save: () => Promise<boolean>; discard: () => void };
-
-type Draft = Record<string, Partial<Record<CellId, string>>>;
-type Notice = { kind: "ok" | "error"; text: string };
-
-const cellKey = (partNumber: string, cell: CellId) => `${partNumber}\u0000${cell}`;
+export type { ProductTableHandle };
 
 /**
  * A family's products, readable at a glance and editable in place.
  *
  * Follows the admin editing rules in docs/ARCHITECTURE.md. Typing changes
- * local state only, and Save writes every edited row in one action. A cell
- * counts as edited only while it differs from what was loaded, so typing a
- * value back clears it. Every cell must pass before anything is written. The
- * workbench's guard covers leaving the page with edits unsaved, including
- * picking another family in the tree.
+ * local state only, and Save writes every edited row in one action; the
+ * drafts and that Save live in `useProductDrafts`, shared with the phone's
+ * product list. The workbench's guard covers leaving the page with edits
+ * unsaved, including picking another family in the tree.
  *
  * The rows are fetched by this component, not rendered with the page: the
  * workbench switches family without a server round trip. One page at a time
- * (review M-21); every row loaded so far is remembered in `known`, so an edit
- * made on page 3 can still be saved — with the fingerprint it was loaded
- * with — from page 7.
+ * (review M-21); every row loaded so far is remembered, so an edit made on
+ * page 3 can still be saved — with the fingerprint it was loaded with — from
+ * page 7.
  */
 export function FamilyProductTable({
   familyId,
@@ -63,29 +52,38 @@ export function FamilyProductTable({
   onPendingChange: (changedProducts: number) => void;
 }) {
   const t = getDict(locale);
-  const router = useRouter();
   const [data, setData] = useState<FamilyProductsResponse | null>(null);
   const [failed, setFailed] = useState(false);
   const [reloadToken, setReloadToken] = useState(0);
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState<Draft>({});
-  const [invalid, setInvalid] = useState<ReadonlySet<string>>(() => new Set());
   const [page, setPage] = useState(0);
-  const [saving, setSaving] = useState(false);
-  const [notice, setNotice] = useState<Notice | null>(null);
-  // Every row loaded so far in this family, with its position, by part number.
-  const [known, setKnown] = useState<ReadonlyMap<string, { product: ProductRecord; index: number }>>(
-    () => new Map(),
-  );
+  const drafts = useProductDrafts({
+    familyId,
+    locale,
+    onPendingChange,
+    onSaved: (fresh) =>
+      setData((previous) =>
+        previous && {
+          ...previous,
+          products: previous.products.map((product) => fresh.get(product.partNumber) ?? product),
+        },
+      ),
+    onInvalid: ({ index }) => {
+      if (index !== undefined) setPage(Math.floor(index / PAGE_SIZE));
+    },
+    onStale: () => setReloadToken((token) => token + 1),
+  });
+  const { draft, invalid, saving, notice, setNotice, changed, change } = drafts;
 
   // Another family, or a refresh after an import: nothing loaded still holds.
   const [loadedFor, setLoadedFor] = useState({ familyId, refreshKey });
   if (loadedFor.familyId !== familyId || loadedFor.refreshKey !== refreshKey) {
     setLoadedFor({ familyId, refreshKey });
-    setKnown(new Map());
+    drafts.forget();
     setPage(0);
   }
 
+  const remember = drafts.remember;
   useEffect(() => {
     const controller = new AbortController();
     fetch(`/api/admin/family/${familyId}/products?page=${page}`, {
@@ -95,124 +93,33 @@ export function FamilyProductTable({
       .then((response) => (response.ok ? response.json() : Promise.reject(response.status)))
       .then((body: FamilyProductsResponse) => {
         setData(body);
-        setKnown((previous) => {
-          const next = new Map(previous);
-          body.products.forEach((product, i) =>
-            next.set(product.partNumber, { product, index: body.page * PAGE_SIZE + i }),
-          );
-          return next;
-        });
+        remember(body.products, body.page * PAGE_SIZE);
         setFailed(false);
       })
       .catch(() => {
         if (!controller.signal.aborted) setFailed(true);
       });
     return () => controller.abort();
+    // `remember` only calls a state setter; listing it would refetch on
+    // every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [familyId, refreshKey, reloadToken, page]);
 
   const columns = useMemo(() => productTableColumns(data?.defs ?? []), [data]);
-  const changed = Object.keys(draft).length;
   const pages = Math.max(1, Math.ceil((data?.total ?? 0) / PAGE_SIZE));
   const currentPage = Math.min(page, pages - 1);
   const rows = data?.products ?? [];
 
-  useEffect(() => {
-    onPendingChange(changed);
-  }, [changed, onPendingChange]);
-  useEffect(() => () => onPendingChange(0), [onPendingChange]);
-
-  function change(product: ProductRecord, cell: CellId, value: string) {
-    setDraft((previous) => {
-      const row = { ...previous[product.partNumber] };
-      if (value === cellText(product, cell)) delete row[cell];
-      else row[cell] = value;
-      const next = { ...previous };
-      if (Object.keys(row).length === 0) delete next[product.partNumber];
-      else next[product.partNumber] = row;
-      return next;
-    });
-    const key = cellKey(product.partNumber, cell);
-    if (invalid.has(key)) {
-      setInvalid((previous) => {
-        const next = new Set(previous);
-        next.delete(key);
-        return next;
-      });
-    }
-  }
-
   function discard() {
-    setDraft({});
-    setInvalid(new Set());
+    drafts.discard();
     setEditing(false);
-    setNotice(null);
   }
 
   async function save(): Promise<boolean> {
     if (saving || !data) return false;
-    if (changed === 0) {
-      setEditing(false);
-      return true;
-    }
-    setSaving(true);
-    setNotice(null);
-    const payload = Object.entries(draft).flatMap(([partNumber, edits]) => {
-      const product = known.get(partNumber)?.product;
-      return product ? [{ partNumber, fingerprint: productFingerprint(product), edits }] : [];
-    });
-    try {
-      const result = await saveFamilyProductsAction(familyId, payload);
-      if (result.kind === "saved") {
-        // The stored rows replace the edited ones in the same render as the
-        // draft clears, so the table never flashes the old values.
-        const fresh = new Map(result.products.map((product) => [product.partNumber, product]));
-        setData((previous) =>
-          previous && {
-            ...previous,
-            products: previous.products.map((product) => fresh.get(product.partNumber) ?? product),
-          },
-        );
-        setKnown((previous) => {
-          const next = new Map(previous);
-          for (const [partNumber, product] of fresh) {
-            const entry = next.get(partNumber);
-            if (entry) next.set(partNumber, { ...entry, product });
-          }
-          return next;
-        });
-        setDraft({});
-        setInvalid(new Set());
-        setEditing(false);
-        setNotice({ kind: "ok", text: t.productsSaved.replace("{n}", formatInt(result.count, locale)) });
-        // The tree's stock counts; `refreshKey` then reloads these rows too.
-        router.refresh();
-        return true;
-      }
-      if (result.kind === "invalid") {
-        setInvalid(new Set(result.cells.map(({ partNumber, cell }) => cellKey(partNumber, cell))));
-        const first = known.get(result.cells[0]?.partNumber ?? "")?.index ?? -1;
-        if (first >= 0) setPage(Math.floor(first / PAGE_SIZE));
-        setNotice({
-          kind: "error",
-          text: t.productsInvalid.replace("{n}", formatInt(result.cells.length, locale)),
-        });
-      } else if (result.kind === "stale") {
-        // Fresh rows under the same edits: the person checks, then saves again.
-        setReloadToken((token) => token + 1);
-        setNotice({
-          kind: "error",
-          text: t.productsStale.replace("{n}", formatInt(result.partNumbers.length, locale)),
-        });
-      } else {
-        setNotice({ kind: "error", text: t.productsSaveFailed });
-      }
-      return false;
-    } catch {
-      setNotice({ kind: "error", text: t.productsSaveFailed });
-      return false;
-    } finally {
-      setSaving(false);
-    }
+    const ok = await drafts.save();
+    if (ok) setEditing(false);
+    return ok;
   }
 
   // The guard reads these when someone leaves with edits unsaved.

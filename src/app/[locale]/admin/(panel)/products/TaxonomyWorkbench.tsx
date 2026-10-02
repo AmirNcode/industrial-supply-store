@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  TAXONOMY_MOBILE_QUERY,
   categoryNodeKey,
   moveSibling,
   parseTaxonomyNodeKey,
@@ -21,15 +22,36 @@ import {
   createTaxonomyNodeAction,
   saveTaxonomyWorkbenchAction,
   type TaxonomyCreateResult,
+  type TaxonomySaveResponse,
   type TaxonomySaveResult,
 } from "./actions";
 import { DeleteControl } from "./DeleteControl";
 import { FamilyImportControl } from "./FamilyImportControl";
 import { FamilyProductTable, type ProductTableHandle } from "./FamilyProductTable";
 import { UnsavedOrderGuard } from "./UnsavedOrderGuard";
+import { MobileWorkbench } from "./mobile/MobileWorkbench";
+import { createErrorText, nodeName, saveErrorText } from "./taxonomyText";
+import { useTaxonomyMobile } from "./useTaxonomyMobile";
 
 type OrderMap = Record<string, number[]>;
-type ContentEdit = { aboutEn: string; aboutFa: string; file?: File };
+/**
+ * One node's unsaved content. The desktop pane edits the description and the
+ * image file; the phone's details page edits the rest of the node from the
+ * same draft, so both views count it as one pending change under one Save.
+ * Optional fields are absent until touched, and absent means "as stored".
+ */
+export type ContentEdit = {
+  aboutEn: string;
+  aboutFa: string;
+  file?: File;
+  nameEn?: string;
+  nameFa?: string;
+  imageUrl?: string;
+  removeImage?: boolean;
+  diagramFile?: File;
+  diagramUrl?: string;
+  removeDiagram?: boolean;
+};
 type ContentMap = Record<TaxonomyNodeKey, ContentEdit>;
 type Adding = { kind: "category" | "family"; parentId: number | null };
 type MediaEditor = { key: TaxonomyNodeKey; description: string; file?: File };
@@ -37,8 +59,20 @@ type MediaEditor = { key: TaxonomyNodeKey; description: string; file?: File };
 const rootScope = "root";
 const scopeKey = (parentId: number | null) => parentId === null ? rootScope : String(parentId);
 
-function nodeName(node: AdminTaxonomyNode, locale: Locale): string {
-  return locale === "fa" ? node.nameFa || node.nameEn : node.nameEn;
+/** Whether a content draft still says anything the stored node does not. */
+function contentIsStored(node: AdminTaxonomyNode, edit: ContentEdit): boolean {
+  return (
+    !edit.file &&
+    !edit.diagramFile &&
+    !edit.removeImage &&
+    !edit.removeDiagram &&
+    edit.aboutEn === node.aboutEn &&
+    edit.aboutFa === node.aboutFa &&
+    (edit.nameEn === undefined || edit.nameEn === node.nameEn) &&
+    (edit.nameFa === undefined || edit.nameFa === node.nameFa) &&
+    (edit.imageUrl === undefined || edit.imageUrl === node.imageUrl) &&
+    (edit.diagramUrl === undefined || edit.diagramUrl === node.diagramUrl)
+  );
 }
 
 function sorted(nodes: AdminTaxonomyNode[]): AdminTaxonomyNode[] {
@@ -57,6 +91,7 @@ export function TaxonomyWorkbench({
   const t = getDict(locale);
   const router = useRouter();
   const searchParams = useSearchParams();
+  const mobile = useTaxonomyMobile();
 
   const model = useMemo(() => {
     const byKey = new Map<TaxonomyNodeKey, AdminTaxonomyNode>();
@@ -117,6 +152,9 @@ export function TaxonomyWorkbench({
   );
   const [saving, setSaving] = useState(false);
   const [saveResult, setSaveResult] = useState<TaxonomySaveResult | null>(null);
+  // Which field of which node a refused save was about; only the phone's
+  // details page has a place to show it.
+  const [saveFailure, setSaveFailure] = useState<TaxonomySaveResponse["failure"] | null>(null);
   // The product table's unsaved rows, and its Save/Discard for the guard.
   const [productPending, setProductPending] = useState(0);
   const productTable = useRef<ProductTableHandle | null>(null);
@@ -178,8 +216,12 @@ export function TaxonomyWorkbench({
 
   // Ensure even the default pane has a durable URL. This synchronises an
   // external system (browser history) and does not mirror props into state.
+  // Not on a phone, where no `cat` is the top-level list rather than "the
+  // first category". Read from the media query itself, not from `mobile`:
+  // this first runs during hydration, before `mobile` has turned true.
   useEffect(() => {
     if (!selected) return;
+    if (window.matchMedia(TAXONOMY_MOBILE_QUERY).matches) return;
     if (!urlSelection || !model.byKey.has(urlSelection)) updateUrl(selected.key, "replace");
   }, [selected, urlSelection, model.byKey]);
 
@@ -259,12 +301,13 @@ export function TaxonomyWorkbench({
   function setNodeContent(node: AdminTaxonomyNode, next: ContentEdit) {
     setContent((previous) => {
       const updated = { ...previous };
-      if (!next.file && next.aboutEn === node.aboutEn && next.aboutFa === node.aboutFa) {
+      if (contentIsStored(node, next)) {
         delete updated[node.key];
       } else updated[node.key] = next;
       return updated;
     });
     setSaveResult(null);
+    setSaveFailure(null);
   }
 
   function changeDescription(node: AdminTaxonomyNode, value: string) {
@@ -285,7 +328,10 @@ export function TaxonomyWorkbench({
   }
 
   function toggleVisibility(node: AdminTaxonomyNode) {
-    const next = !effectiveVisibility(node);
+    setNodeVisibility(node, !effectiveVisibility(node));
+  }
+
+  function setNodeVisibility(node: AdminTaxonomyNode, next: boolean) {
     setVisibility((previous) => setVisibilityDraft(
       previous,
       node.key,
@@ -293,6 +339,7 @@ export function TaxonomyWorkbench({
       next,
     ));
     setSaveResult(null);
+    setSaveFailure(null);
   }
 
   function startMediaEdit(node: AdminTaxonomyNode) {
@@ -332,12 +379,14 @@ export function TaxonomyWorkbench({
     setEditing(null);
     setArrange(false);
     setSaveResult(null);
+    setSaveFailure(null);
   }
 
   async function saveAll(): Promise<boolean> {
     if (saving || dirtyCount === 0) return dirtyCount === 0;
     setSaving(true);
     setSaveResult(null);
+    setSaveFailure(null);
     try {
       const orders = [
         ...Object.entries(activeCategoryOrders).map(([scope, orderedIds]) => ({
@@ -357,12 +406,28 @@ export function TaxonomyWorkbench({
         const node = model.byKey.get(key as TaxonomyNodeKey);
         if (!node) return null;
         if (edit.file) formData.set(`image_${index}`, edit.file);
+        if (edit.diagramFile) formData.set(`diagram_${index}`, edit.diagramFile);
+        const renamed = edit.nameEn !== undefined || edit.nameFa !== undefined;
+        // Only what was touched is sent, so the desktop pane's payload is
+        // exactly what it always was.
         return {
           kind: node.kind,
           id: node.id,
           aboutEn: edit.aboutEn,
           aboutFa: edit.aboutFa,
           ...(edit.file ? { imageIndex: index } : {}),
+          ...(edit.diagramFile ? { diagramIndex: index } : {}),
+          ...(renamed
+            ? { nameEn: edit.nameEn ?? node.nameEn, nameFa: edit.nameFa ?? node.nameFa }
+            : {}),
+          ...(edit.imageUrl !== undefined && edit.imageUrl !== node.imageUrl
+            ? { imageUrl: edit.imageUrl }
+            : {}),
+          ...(edit.diagramUrl !== undefined && edit.diagramUrl !== node.diagramUrl
+            ? { diagramUrl: edit.diagramUrl }
+            : {}),
+          ...(edit.removeImage ? { removeImage: true } : {}),
+          ...(edit.removeDiagram ? { removeDiagram: true } : {}),
         };
       }).filter((edit) => edit !== null);
       const submittedVisibility = Object.entries(visibility).map(([key, isVisible]) => {
@@ -376,8 +441,9 @@ export function TaxonomyWorkbench({
         visibility: submittedVisibility,
       }));
 
-      const result = await saveTaxonomyWorkbenchAction(formData);
+      const { result, failure } = await saveTaxonomyWorkbenchAction(formData);
       setSaveResult(result);
+      setSaveFailure(failure ?? null);
       if (result !== "saved") return false;
       discardAll();
       setSaveResult("saved");
@@ -465,6 +531,36 @@ export function TaxonomyWorkbench({
   };
   for (const root of orderedCategories(null)) addBranch(root);
 
+  if (mobile) {
+    return (
+      <MobileWorkbench
+        nodes={nodes}
+        locale={locale}
+        demo={demo}
+        byKey={model.byKey}
+        categoriesById={model.categoriesById}
+        orderedCategories={orderedCategories}
+        orderedFamilies={orderedFamilies}
+        ancestorsFor={ancestorsFor}
+        effectiveContent={effectiveContent}
+        setNodeContent={setNodeContent}
+        effectiveVisibility={effectiveVisibility}
+        setNodeVisibility={setNodeVisibility}
+        dirtyCount={dirtyCount}
+        saving={saving}
+        saveResult={saveResult}
+        saveFailure={saveFailure}
+        onDismissSaved={() => setSaveResult((current) => current === "saved" ? null : current)}
+        saveAll={saveAll}
+        discardAll={discardAll}
+        productPending={productPending}
+        onProductPending={setProductPending}
+        productTable={productTable}
+        guardRequest={guardRequest}
+      />
+    );
+  }
+
   if (!selected) {
     return (
       <div className="taxonomy-empty-page">
@@ -545,25 +641,6 @@ export function TaxonomyWorkbench({
             : t.taxonomyPendingMany.replace("{n}", formatInt(dirtyCount + productPending, locale)),
         }}
       />
-
-      <div className="taxonomy-mobile-picker">
-        <label htmlFor="taxonomy-node-picker">{t.taxonomyChooseNode}</label>
-        <select
-          id="taxonomy-node-picker"
-          className="admin-select"
-          value={selected.key}
-          onChange={(event) => selectNode(event.target.value as TaxonomyNodeKey)}
-        >
-          {nodes
-            .slice()
-            .sort((a, b) => a.path.localeCompare(b.path) || a.kind.localeCompare(b.kind))
-            .map((node) => (
-              <option key={node.key} value={node.key}>
-                {`${"— ".repeat(node.depth)}${nodeName(node, locale)}${node.kind === "family" ? ` · ${t.taxonomyFamilyTag}` : ""}`}
-              </option>
-            ))}
-        </select>
-      </div>
 
       <div className="taxonomy-body">
         <aside className="taxonomy-rail" aria-label={t.taxonomyTreeLabel}>
@@ -1383,33 +1460,4 @@ function VisibilityIcon({ visible }: { visible: boolean }) {
       )}
     </svg>
   );
-}
-
-function createErrorText(
-  message: Extract<TaxonomyCreateResult, { kind: "error" }>["message"],
-  t: ReturnType<typeof getDict>,
-): string {
-  return message === "no-name"
-    ? t.taxonomyCreateNoName
-    : message === "has-families"
-      ? t.taxonomyCreateHasFamilies
-      : message === "has-subcategories"
-        ? t.taxonomyCreateHasSubcategories
-        : message === "duplicate-name"
-          ? t.taxonomyCreateDuplicate
-          : t.taxonomyCreateParentGone;
-}
-
-function saveErrorText(result: Exclude<TaxonomySaveResult, "saved">, t: ReturnType<typeof getDict>): string {
-  return result === "bad-file-type"
-    ? t.catalogEditBadFileType
-    : result === "too-large"
-      ? t.catalogEditTooLarge
-      : result === "storage-missing"
-        ? t.catalogEditStorageMissing
-        : result === "upload-failed"
-          ? t.catalogEditUploadFailed
-          : result === "bad-data"
-            ? t.taxonomySaveBadData
-            : t.taxonomySaveStale;
 }

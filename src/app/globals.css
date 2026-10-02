@@ -2610,35 +2610,17 @@ html[lang="fa"] .taxonomy-kind-chip {
   margin-inline-end: auto;
   color: var(--color-navy);
 }
-.taxonomy-mobile-picker {
-  display: none;
-  border-bottom: 1px solid var(--color-rule);
-  background: var(--color-panel-alt);
-  padding: 8px;
-}
-.taxonomy-mobile-picker label {
-  display: block;
-  margin-bottom: 3px;
-  color: var(--color-ink-muted);
-  font-size: 11px;
-  font-weight: 600;
-}
-.taxonomy-mobile-picker select {
-  width: 100%;
-}
-
+/*
+ * Below 1100px the products page is the phone flow (src/app/[locale]/admin/
+ * (panel)/products/mobile), not this card. The server always renders the
+ * card — it cannot know the width — so it is hidden here until the page's
+ * script swaps it out, rather than flashing past on a phone. The width is
+ * `TAXONOMY_MOBILE_QUERY` in src/lib/adminTaxonomy.ts; change both together.
+ */
 @media (max-width: 1099px) {
-  .taxonomy-mobile-picker {
-    display: block;
-  }
-  .taxonomy-rail {
+  .taxonomy-card,
+  .taxonomy-empty-page {
     display: none;
-  }
-  .taxonomy-body {
-    min-height: 0;
-  }
-  .taxonomy-pane {
-    padding-inline: 12px;
   }
 }
 
@@ -2666,6 +2648,891 @@ html[lang="fa"] .taxonomy-kind-chip {
   .taxonomy-save-bar {
     flex-wrap: wrap;
   }
+}
+
+/* --------------------------------------------------------------------------
+   Products page on phones (`.mtx`)
+
+   The taxonomy workbench's phone flow: one level of the tree per screen,
+   built for a thumb. Sizes here are the handoff's touch rules, not taste —
+   every target at least 44px, every input at least 16px so iOS does not zoom
+   the page when it takes focus. Only ever rendered below 1100px.
+   -------------------------------------------------------------------------- */
+.mtx {
+  --mtx-navy: #12356b;
+  --mtx-accent: #2a5db0;
+  --mtx-ink: #14181f;
+  --mtx-ink-2: #57606f;
+  --mtx-ink-3: #667085;
+  --mtx-chevron: #8c99ac;
+  --mtx-disabled: #9aa5b5;
+  --mtx-border: #d8dde5;
+  --mtx-control: #b8c5d8;
+  --mtx-divider: #edf0f5;
+  --mtx-grabber: #cfd6e2;
+  --mtx-form-bg: #eceff4;
+  --mtx-browse-bg: #f4f6fa;
+  --mtx-disabled-bg: #f7f9fc;
+  --mtx-edited-bg: #f4f7fc;
+  --mtx-danger: #b42318;
+  --mtx-bar-shadow: 0 -6px 18px rgba(16, 26, 48, 0.07);
+  /* Bleeds through the admin layout's 12px gutter to the screen edge. */
+  margin-inline: -12px;
+  min-height: 70vh;
+  /* Room for the fixed bottom bar, whichever one is showing. */
+  padding-bottom: 150px;
+  background: var(--mtx-browse-bg);
+  color: var(--mtx-ink);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.35;
+}
+html[lang="fa"] .mtx {
+  font-family: var(--font-fa);
+}
+.mtx.is-deep,
+.mtx-screen.is-form {
+  background: var(--mtx-form-bg);
+}
+/* Deep pages drop the admin tab strip, as the design does: the nav row's ‹
+   is the way out, and the strip's five tabs cost a screenful of thumb room. */
+body:has(.mtx.is-deep) .admin-tabs {
+  display: none;
+}
+/* Between phone and desktop, the same column, centred. */
+@media (min-width: 721px) {
+  .mtx {
+    max-width: 560px;
+    margin-inline: auto;
+  }
+}
+.mtx button,
+.mtx input,
+.mtx select,
+.mtx textarea {
+  font: inherit;
+  color: inherit;
+}
+.mtx button {
+  cursor: pointer;
+}
+.mtx button:disabled {
+  cursor: default;
+}
+.mtx :focus-visible {
+  outline: 2px solid var(--mtx-accent);
+  outline-offset: 2px;
+}
+.mtx-mono,
+.mtx-node-meta,
+.mtx-row-meta,
+.mtx-section-count,
+.mtx-jump-path,
+.mtx-sheet-path,
+.mtx-part {
+  font-family: var(--font-mono);
+}
+
+/* Buttons. Primary and full-width 52px; secondary 48px. */
+.mtx-button {
+  display: inline-flex;
+  min-height: 52px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  padding: 0 16px;
+  font-size: 16px;
+  font-weight: 600;
+  text-align: center;
+}
+.mtx-primary {
+  background: var(--mtx-navy);
+  color: #fff !important;
+}
+.mtx-ghost {
+  border-color: var(--mtx-control);
+  background: #fff;
+  color: var(--mtx-navy) !important;
+}
+.mtx-secondary {
+  min-height: 48px;
+  font-size: 15px;
+}
+.mtx-primary:disabled,
+.mtx-blocked,
+.mtx-destructive:disabled {
+  border-color: var(--mtx-border);
+  background: var(--mtx-disabled-bg);
+  color: var(--mtx-disabled) !important;
+}
+.mtx-ghost:disabled {
+  color: var(--mtx-disabled) !important;
+}
+.mtx-danger-ghost {
+  border-color: #e0b4b0;
+  color: var(--mtx-danger) !important;
+}
+.mtx-destructive {
+  background: var(--mtx-danger);
+  color: #fff !important;
+}
+.mtx-text-button {
+  min-height: 44px;
+  border: 0;
+  background: none;
+  padding: 0 8px;
+  color: var(--mtx-navy);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+/* Nav row: ‹ Parent and the Jump pill. */
+.mtx-nav-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid var(--mtx-border);
+  background: #fff;
+  padding: 8px 12px;
+}
+.mtx-back {
+  display: inline-flex;
+  min-height: 44px;
+  max-width: 45%;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  background: none;
+  padding: 0 4px;
+  color: var(--mtx-navy);
+  font-size: 15px;
+  font-weight: 600;
+}
+.mtx-back span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+html[dir="rtl"] .mtx-chevron-back,
+html[dir="rtl"] .mtx-chevron-forward {
+  transform: scaleX(-1);
+}
+.mtx-jump-pill {
+  display: flex;
+  min-height: 44px;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--mtx-control);
+  border-radius: 22px;
+  background: var(--mtx-disabled-bg);
+  padding: 0 14px;
+  color: var(--mtx-ink-3);
+  font-size: 15px;
+  text-align: start;
+}
+.mtx-jump-pill span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Node header. */
+.mtx-node-header {
+  border-bottom: 1px solid var(--mtx-border);
+  background: #fff;
+  padding: 14px 16px 16px;
+}
+.mtx-node-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+.mtx-node-title h1 {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+  text-wrap: pretty;
+}
+.mtx-node-header.is-family .mtx-node-title h1 {
+  flex: 1 1 100%;
+  font-size: 22px;
+}
+.mtx-kind-chip {
+  display: inline-block;
+  border-radius: 3px;
+  background: #e8eef7;
+  padding: 5px 7px;
+  color: var(--mtx-navy);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.mtx-kind-chip.is-family {
+  background: #e3f1e6;
+  color: #1f6b36;
+}
+.mtx-node-meta {
+  margin: 6px 0 0;
+  color: var(--mtx-ink-2);
+  font-size: 13px;
+}
+.mtx-node-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+.mtx-node-actions > .mtx-button {
+  flex: 1;
+}
+.mtx-more {
+  display: inline-flex;
+  width: 48px;
+  min-height: 48px;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--mtx-control);
+  border-radius: 5px;
+  background: #fff;
+  color: var(--mtx-navy);
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+.mtx-more:disabled {
+  color: var(--mtx-disabled);
+}
+.mtx-top-bar .mtx-more {
+  width: 44px;
+  min-height: 44px;
+  border: 0;
+  background: none;
+}
+
+/* Section blocks and headings. */
+.mtx-section,
+.mtx-list {
+  margin-top: 10px;
+  border-block: 1px solid var(--mtx-border);
+  background: #fff;
+}
+.mtx-section {
+  padding: 14px 16px;
+}
+.mtx-section-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 0 10px;
+  color: var(--mtx-ink-3);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.mtx-list > .mtx-section-heading {
+  margin: 0;
+  padding: 14px 16px 8px;
+}
+.mtx-section-count {
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+}
+html[lang="fa"] .mtx-section-heading,
+html[lang="fa"] .mtx-kind-chip,
+html[lang="fa"] .mtx-tag,
+html[lang="fa"] .mtx-stock-flag,
+html[lang="fa"] .mtx-top-bar-kind {
+  font-family: var(--font-fa);
+  letter-spacing: 0;
+  text-transform: none;
+}
+.mtx-list ul,
+.mtx-jump-results ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Rows: the whole row is the target. */
+.mtx-row,
+.mtx-jump-row {
+  display: flex;
+  width: 100%;
+  min-height: 64px;
+  align-items: center;
+  gap: 12px;
+  border: 0;
+  border-top: 1px solid var(--mtx-divider);
+  background: #fff;
+  padding: 15px 16px;
+  text-align: start;
+}
+.mtx-row-main,
+.mtx-jump-main {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 4px;
+}
+.mtx-row-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--mtx-navy);
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+.mtx-eye-slash {
+  flex: none;
+  color: var(--mtx-ink-3);
+}
+.mtx-row-meta {
+  color: var(--mtx-ink-3);
+  font-size: 12.5px;
+}
+.mtx-chevron-forward {
+  flex: none;
+  color: var(--mtx-chevron);
+}
+
+/* Empty state. */
+.mtx-empty {
+  display: grid;
+  gap: 12px;
+  margin-top: 10px;
+  border-block: 1px solid var(--mtx-border);
+  background: #fff;
+  padding: 24px 28px;
+  text-align: center;
+}
+.mtx-empty h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+}
+.mtx-empty p {
+  margin: 0 0 4px;
+  color: var(--mtx-ink-2);
+  font-size: 14.5px;
+  line-height: 1.55;
+}
+
+/* Fixed bottom areas: the add bar and the pending bar. */
+.mtx-bottom-bar,
+.mtx-pending-bar {
+  position: fixed;
+  z-index: 40;
+  bottom: 0;
+  left: 50%;
+  width: min(100%, 560px);
+  transform: translateX(-50%);
+  padding: 10px 16px max(26px, calc(env(safe-area-inset-bottom) + 10px));
+}
+.mtx-bottom-bar {
+  border-top: 1px solid var(--mtx-border);
+  background: #fff;
+  box-shadow: var(--mtx-bar-shadow);
+}
+.mtx-bottom-actions {
+  display: flex;
+  gap: 8px;
+}
+.mtx-bottom-actions > .mtx-button {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.mtx-bottom-actions > .mtx-primary {
+  flex-grow: 1.7;
+}
+.mtx-rule-reason {
+  margin: 8px 0 0;
+  color: var(--mtx-ink-3);
+  font-size: 12.5px;
+  text-align: center;
+}
+.mtx-pending-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--mtx-navy);
+  color: #fff;
+}
+.mtx-pending-text {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+}
+.mtx-pending-text strong {
+  font-size: 15px;
+  font-weight: 700;
+}
+.mtx-pending-text span {
+  color: #c9d6e9;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+.mtx-pending-discard,
+.mtx-pending-save {
+  min-height: 48px;
+  border-radius: 5px;
+  padding: 0 14px;
+  font-size: 15px;
+  font-weight: 700;
+}
+.mtx-pending-discard {
+  border: 1px solid #6d86b3;
+  background: transparent;
+  color: #fff;
+}
+.mtx-pending-save {
+  border: 1px solid #fff;
+  background: #fff;
+  color: var(--mtx-navy);
+}
+.mtx-pending-discard:disabled,
+.mtx-pending-save:disabled {
+  opacity: 0.6;
+}
+
+/* Banners. */
+.mtx-banners:empty {
+  display: none;
+}
+.mtx-banners {
+  display: grid;
+  gap: 8px;
+  margin: 10px 16px 0;
+}
+.mtx-banner {
+  margin: 0;
+  border: 1px solid;
+  border-radius: 5px;
+  padding: 10px 12px;
+  font-size: 14px;
+  line-height: 1.45;
+}
+.mtx-banner.is-ok {
+  border-color: #b6d7bb;
+  background: #f0f8f1;
+  color: #1f6b36;
+}
+.mtx-banner.is-error {
+  border-color: #e0b4b0;
+  background: #fdf2f1;
+  color: var(--mtx-danger);
+}
+.mtx-banner.is-warn {
+  border-color: #e0c9a0;
+  background: #fdf8ef;
+  color: #7a4b00;
+}
+.mtx-banner button {
+  display: block;
+  min-height: 44px;
+  margin-top: 6px;
+}
+
+/* Sheets. */
+.mtx-scrim {
+  position: fixed;
+  z-index: 60;
+  inset: 0;
+  background: rgba(10, 18, 36, 0.35);
+  backdrop-filter: blur(1.5px);
+  -webkit-backdrop-filter: blur(1.5px);
+}
+.mtx-sheet {
+  position: fixed;
+  bottom: 0;
+  left: 50%;
+  display: flex;
+  width: min(100%, 560px);
+  max-height: calc(100dvh - 40px);
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  transform: translateX(-50%);
+  border-radius: 16px 16px 0 0;
+  background: #fff;
+  padding: 10px 16px max(30px, calc(env(safe-area-inset-bottom) + 14px));
+  box-shadow: 0 -10px 40px rgba(10, 18, 36, 0.3);
+  color: var(--mtx-ink);
+  font-family: var(--font-sans);
+  font-size: 15px;
+}
+html[lang="fa"] .mtx-sheet {
+  font-family: var(--font-fa);
+}
+.mtx-sheet.is-full {
+  top: 58px;
+  max-height: none;
+  padding-top: 16px;
+}
+.mtx-grabber {
+  width: 40px;
+  height: 4px;
+  flex: none;
+  align-self: center;
+  border-radius: 2px;
+  background: var(--mtx-grabber, #cfd6e2);
+}
+.mtx-sheet-title {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 700;
+}
+.mtx-sheet-path {
+  margin: 4px 0 0;
+  color: var(--mtx-ink-3, #667085);
+  font-size: 13px;
+}
+.mtx-sheet-body {
+  margin: 0;
+  color: var(--mtx-ink-2, #57606f);
+  font-size: 14.5px;
+  line-height: 1.5;
+}
+.mtx-sheet-form {
+  display: grid;
+  gap: 12px;
+}
+/* The guard sheet renders outside `.mtx`'s variables in one case (a page
+   with no phone root), so its buttons carry their own colours. */
+.mtx-sheet .mtx-button {
+  width: 100%;
+}
+.mtx-sheet .mtx-primary {
+  background: #12356b;
+}
+.mtx-sheet .mtx-ghost {
+  border-color: #b8c5d8;
+  color: #12356b !important;
+}
+.mtx-sheet .mtx-danger-ghost {
+  border-color: #e0b4b0;
+  color: #b42318 !important;
+}
+
+/* Fields. */
+.mtx-field {
+  display: grid;
+  gap: 6px;
+}
+.mtx-field-label {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+.mtx-field-unit {
+  color: var(--mtx-ink-3, #667085);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 400;
+}
+.mtx-tag {
+  margin-inline-start: auto;
+  color: var(--mtx-accent, #2a5db0);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.mtx-tag.is-danger {
+  color: var(--mtx-danger, #b42318);
+}
+.mtx-input {
+  width: 100%;
+  min-height: 50px;
+  border: 1px solid var(--mtx-control, #b8c5d8);
+  border-radius: 5px;
+  background: #fff;
+  padding: 0 14px;
+  font-size: 16px !important;
+}
+textarea.mtx-input {
+  min-height: 96px;
+  padding: 12px 14px;
+  line-height: 1.45;
+  resize: vertical;
+}
+.mtx-input[dir="rtl"] {
+  font-family: var(--font-fa);
+}
+.mtx-input.is-edited,
+.mtx-input.is-invalid {
+  border-width: 2px;
+  padding-inline: 13px;
+}
+textarea.mtx-input.is-edited,
+textarea.mtx-input.is-invalid {
+  padding: 11px 13px;
+}
+.mtx-input.is-edited {
+  border-color: var(--mtx-accent, #2a5db0);
+}
+.mtx-input.is-invalid {
+  border-color: var(--mtx-danger, #b42318);
+}
+.mtx-input:read-only:not(textarea) {
+  background: var(--mtx-browse-bg, #f4f6fa);
+}
+.mtx-input:disabled {
+  background: var(--mtx-disabled-bg, #f7f9fc);
+  color: var(--mtx-ink-2, #57606f);
+}
+.mtx-delete-input {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+.mtx-field-error {
+  color: var(--mtx-danger, #b42318);
+  font-size: 12.5px;
+}
+.mtx-hint {
+  margin: 0;
+  color: var(--mtx-ink-3, #667085);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+.mtx-fields {
+  display: grid;
+  gap: 14px;
+}
+.mtx-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+/* Toggles: a 51×31 track in a 48px row; the whole row toggles. */
+.mtx-toggle-row,
+.mtx-check-row {
+  position: relative;
+  display: flex;
+  min-height: 48px;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+}
+.mtx-check-row {
+  min-height: 44px;
+  font-size: 15px;
+  font-weight: 600;
+}
+.mtx-toggle-text {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 2px;
+}
+.mtx-toggle-label {
+  font-size: 15px;
+  font-weight: 600;
+}
+.mtx-toggle-hint {
+  color: var(--mtx-ink-3, #667085);
+  font-size: 13px;
+}
+.mtx-switch-input,
+.mtx-check-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+.mtx-switch {
+  position: relative;
+  width: 51px;
+  height: 31px;
+  flex: none;
+  border-radius: 16px;
+  background: var(--mtx-grabber, #cfd6e2);
+  transition: background 0.15s;
+}
+.mtx-switch::after {
+  position: absolute;
+  top: 2px;
+  inset-inline-start: 2px;
+  width: 27px;
+  height: 27px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(16, 26, 48, 0.25);
+  content: "";
+  transition: inset-inline-start 0.15s;
+}
+.mtx-switch-input:checked + .mtx-switch {
+  background: var(--mtx-navy, #12356b);
+}
+.mtx-switch-input:checked + .mtx-switch::after {
+  inset-inline-start: 22px;
+}
+.mtx-switch-input:focus-visible + .mtx-switch,
+.mtx-check-input:focus-visible + .mtx-check {
+  outline: 2px solid var(--mtx-accent, #2a5db0);
+  outline-offset: 2px;
+}
+.mtx-switch-input:disabled + .mtx-switch,
+.mtx-check-input:disabled + .mtx-check {
+  opacity: 0.5;
+}
+.mtx-check {
+  position: relative;
+  width: 24px;
+  height: 24px;
+  flex: none;
+  border: 1.5px solid var(--mtx-control, #b8c5d8);
+  border-radius: 4px;
+  background: #fff;
+}
+.mtx-check-input:checked + .mtx-check {
+  border-color: var(--mtx-navy, #12356b);
+  background: var(--mtx-navy, #12356b);
+}
+.mtx-check-input:checked + .mtx-check::after {
+  position: absolute;
+  top: 3px;
+  left: 7px;
+  width: 6px;
+  height: 11px;
+  border: solid #fff;
+  border-width: 0 2.5px 2.5px 0;
+  content: "";
+  transform: rotate(45deg);
+}
+
+/* Segmented control. */
+.mtx-segmented {
+  display: flex;
+  border: 1px solid var(--mtx-control, #b8c5d8);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.mtx-segmented button {
+  min-height: 44px;
+  flex: 1;
+  border: 0;
+  background: #fff;
+  color: var(--mtx-navy, #12356b);
+  font-size: 15px;
+  font-weight: 600;
+}
+.mtx-segmented button + button {
+  border-inline-start: 1px solid var(--mtx-control, #b8c5d8);
+}
+.mtx-segmented button.is-selected {
+  background: var(--mtx-navy, #12356b);
+  color: #fff;
+}
+
+/* Jump. */
+.mtx-jump-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.mtx-jump-search {
+  display: flex;
+  min-height: 50px;
+  align-items: center;
+  gap: 8px;
+  border: 2px solid var(--mtx-accent, #2a5db0);
+  border-radius: 5px;
+  padding-inline: 12px 4px;
+  color: var(--mtx-ink-3, #667085);
+}
+.mtx-jump-search input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  outline: 0;
+  background: none;
+  color: var(--mtx-ink, #14181f);
+  font-size: 16px;
+}
+/* The field's own 2px border is the focus mark. */
+.mtx-jump-search input:focus-visible {
+  outline: none;
+}
+.mtx-jump-search input::-webkit-search-cancel-button {
+  display: none;
+}
+.mtx-jump-clear {
+  width: 44px;
+  height: 44px;
+  flex: none;
+  border: 0;
+  background: none;
+  color: var(--mtx-ink-3, #667085);
+  font-size: 22px;
+}
+.mtx-jump-results {
+  margin-inline: -16px;
+}
+.mtx-jump-count,
+.mtx-list-note {
+  margin: 0;
+  padding: 6px 16px 8px;
+  color: var(--mtx-ink-3, #667085);
+  font-size: 13px;
+}
+.mtx-list-note {
+  padding-block: 18px;
+  font-size: 14.5px;
+  text-align: center;
+}
+.mtx-jump-path {
+  color: var(--mtx-ink-3, #667085);
+  font-size: 12px;
+}
+.mtx-jump-row mark {
+  border-radius: 2px;
+  background: #fdf0c2;
+  color: inherit;
+}
+.mtx-recent {
+  padding: 8px 16px;
+}
+.mtx-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+/* Chips are 40px tall; with the 8px gap that is a 44px+ hit area, and the
+   2px padding on the hit box keeps neighbours from stealing a near-miss. */
+.mtx-chip {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  border: 1px solid var(--mtx-control, #b8c5d8);
+  border-radius: 20px;
+  background: #fff;
+  padding: 0 16px;
+  color: var(--mtx-navy, #12356b) !important;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none !important;
 }
 
 /* --------------------------------------------------------------------------

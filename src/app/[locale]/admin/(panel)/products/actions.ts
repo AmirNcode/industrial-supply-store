@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { revalidateCatalogPages } from "@/lib/revalidateCatalog";
 import { assertAdminWrite } from "@/lib/admin";
-import { catalogImageFileProblem } from "@/lib/catalogImages";
+import { catalogImageFileProblem, normalizeCatalogImageUrl } from "@/lib/catalogImages";
 import { CatalogStorageError, uploadCatalogImage } from "@/lib/catalogStorage";
 import { categoryNodeKey, familyNodeKey, type TaxonomyNodeKey } from "@/lib/adminTaxonomy";
 import { isLocale, safeLocale, type Locale } from "@/lib/i18n";
@@ -131,9 +131,27 @@ export async function createTaxonomyNodeAction(
   };
 }
 
+/**
+ * One node's content edit as posted. The description and the image file are
+ * what the desktop pane sends; the phone flow edits a node's whole details
+ * page under the same Save all, so it may also send both names, an image or
+ * diagram address, a diagram file and the two remove flags. Everything past
+ * the description is optional, and absent means "leave it as it is".
+ */
+type SubmittedContent = Omit<TaxonomyContentChange, "imageUrl" | "diagramUrl" | "names"> & {
+  imageIndex?: number;
+  diagramIndex?: number;
+  nameEn?: string;
+  nameFa?: string;
+  imageUrl?: string;
+  diagramUrl?: string;
+  removeImage?: boolean;
+  removeDiagram?: boolean;
+};
+
 type TaxonomySavePayload = {
   orders: TaxonomyOrderChange[];
-  content: Array<Omit<TaxonomyContentChange, "imageUrl"> & { imageIndex?: number }>;
+  content: SubmittedContent[];
   visibility: TaxonomyVisibilityChange[];
 };
 
@@ -144,60 +162,77 @@ export type TaxonomySaveResult =
   | "bad-file-type"
   | "too-large"
   | "storage-missing"
-  | "upload-failed";
+  | "upload-failed"
+  | "no-name"
+  | "bad-url";
+
+/**
+ * The result, and — when one field of one node is at fault — which. The phone
+ * flow puts the message under that field; the desktop pane only reads
+ * `result`, which is everything it ever showed.
+ */
+export type TaxonomySaveResponse = {
+  result: TaxonomySaveResult;
+  failure?: { kind: "category" | "family"; id: number; field: "name" | "image" | "diagram" };
+};
 
 /** Save all reversible workbench changes in one validated database transaction. */
 export async function saveTaxonomyWorkbenchAction(
   formData: FormData,
-): Promise<TaxonomySaveResult> {
+): Promise<TaxonomySaveResponse> {
   await assertAdminWrite();
   const locale = safeLocale(formData);
   const raw = String(formData.get("payload") ?? "");
-  if (utf8ByteLength(raw) > REQUEST_LIMITS.importerControlBytes) return "bad-data";
+  const refuse = (result: TaxonomySaveResult): TaxonomySaveResponse => ({ result });
+  if (utf8ByteLength(raw) > REQUEST_LIMITS.importerControlBytes) return refuse("bad-data");
 
   let payload: TaxonomySavePayload;
   try {
     payload = JSON.parse(raw) as TaxonomySavePayload;
   } catch {
-    return "bad-data";
+    return refuse("bad-data");
   }
   if (
     !Array.isArray(payload.orders) ||
     !Array.isArray(payload.content) ||
     !Array.isArray(payload.visibility)
-  ) return "bad-data";
+  ) return refuse("bad-data");
   if (
     payload.orders.length > 120 ||
     payload.content.length > 220 ||
     payload.visibility.length > 220
-  ) return "bad-data";
+  ) return refuse("bad-data");
 
   const orders: TaxonomyOrderChange[] = [];
   const orderScopes = new Set<string>();
   for (const order of payload.orders) {
-    if (order?.kind !== "category" && order?.kind !== "family") return "bad-data";
-    if (!Array.isArray(order.orderedIds) || order.orderedIds.length > 240) return "bad-data";
-    if (!order.orderedIds.every((id) => Number.isInteger(id) && id > 0)) return "bad-data";
+    if (order?.kind !== "category" && order?.kind !== "family") return refuse("bad-data");
+    if (!Array.isArray(order.orderedIds) || order.orderedIds.length > 240) return refuse("bad-data");
+    if (!order.orderedIds.every((id) => Number.isInteger(id) && id > 0)) return refuse("bad-data");
     if (order.kind === "category") {
       if (
         order.parentId !== null &&
         (!Number.isInteger(order.parentId) || order.parentId <= 0)
-      ) return "bad-data";
+      ) return refuse("bad-data");
     } else if (!Number.isInteger(order.parentId) || order.parentId <= 0) {
-      return "bad-data";
+      return refuse("bad-data");
     }
     const scope = `${order.kind}:${order.parentId ?? "root"}`;
-    if (orderScopes.has(scope)) return "bad-data";
+    if (orderScopes.has(scope)) return refuse("bad-data");
     orderScopes.add(scope);
     orders.push(order);
   }
 
   const content: TaxonomyContentChange[] = [];
   const contentKeys = new Set<string>();
-  const uploads: Array<{ edit: TaxonomyContentChange; file: File }> = [];
+  const uploads: Array<{ edit: TaxonomyContentChange; slot: "image" | "diagram"; file: File }> = [];
   for (const submitted of payload.content) {
-    if (submitted?.kind !== "category" && submitted?.kind !== "family") return "bad-data";
-    if (!Number.isInteger(submitted.id) || submitted.id <= 0) return "bad-data";
+    if (submitted?.kind !== "category" && submitted?.kind !== "family") return refuse("bad-data");
+    if (!Number.isInteger(submitted.id) || submitted.id <= 0) return refuse("bad-data");
+    const fail = (result: TaxonomySaveResult, field: "name" | "image" | "diagram") => ({
+      result,
+      failure: { kind: submitted.kind, id: submitted.id, field },
+    });
     const aboutEn = boundedString(
       submitted.aboutEn,
       REQUEST_LIMITS.catalogDescriptionChars,
@@ -208,9 +243,9 @@ export async function saveTaxonomyWorkbenchAction(
       REQUEST_LIMITS.catalogDescriptionChars,
       { allowEmpty: true, trim: false },
     );
-    if (aboutEn === null || aboutFa === null) return "bad-data";
+    if (aboutEn === null || aboutFa === null) return refuse("bad-data");
     const key = `${submitted.kind}:${submitted.id}`;
-    if (contentKeys.has(key)) return "bad-data";
+    if (contentKeys.has(key)) return refuse("bad-data");
     contentKeys.add(key);
 
     const edit: TaxonomyContentChange = {
@@ -219,28 +254,79 @@ export async function saveTaxonomyWorkbenchAction(
       aboutEn,
       aboutFa,
     };
-    if (submitted.imageIndex !== undefined) {
-      if (!Number.isInteger(submitted.imageIndex) || submitted.imageIndex < 0) {
-        return "bad-data";
-      }
-      const candidate = formData.get(`image_${submitted.imageIndex}`);
-      if (!(candidate instanceof File) || candidate.size === 0) return "bad-data";
-      const problem = catalogImageFileProblem(candidate);
-      if (problem === "file-type") return "bad-file-type";
-      if (problem === "file-too-large") return "too-large";
-      uploads.push({ edit, file: candidate });
+
+    // Both names or neither, and neither blank: the same rule the category
+    // editor's `saveCatalogMediaAction` applies to the same two columns.
+    if (submitted.nameEn !== undefined || submitted.nameFa !== undefined) {
+      const nameEn = boundedString(submitted.nameEn, 160, { allowEmpty: true });
+      const nameFa = boundedString(submitted.nameFa, 160, { allowEmpty: true });
+      if (nameEn === null || nameFa === null) return refuse("bad-data");
+      if (!nameEn || !nameFa) return fail("no-name", "name");
+      edit.names = { nameEn, nameFa };
     }
+
+    /*
+     * One slot, read the way `saveCatalogMediaAction` reads it: a chosen file
+     * wins, then the remove tick, then a typed address. The image file has
+     * been part of this payload since the workbench shipped; the rest is the
+     * phone's details page.
+     */
+    const readSlot = (
+      slot: "image" | "diagram",
+      index: number | undefined,
+      url: string | undefined,
+      remove: boolean | undefined,
+    ): TaxonomySaveResponse | null => {
+      if (remove !== undefined && typeof remove !== "boolean") return refuse("bad-data");
+      if (url !== undefined && typeof url !== "string") return refuse("bad-data");
+      if (index !== undefined) {
+        if (!Number.isInteger(index) || index < 0) return refuse("bad-data");
+        const candidate = formData.get(`${slot}_${index}`);
+        if (!(candidate instanceof File) || candidate.size === 0) return refuse("bad-data");
+        const problem = catalogImageFileProblem(candidate);
+        if (problem === "file-type") return fail("bad-file-type", slot);
+        if (problem === "file-too-large") return fail("too-large", slot);
+        uploads.push({ edit, slot, file: candidate });
+        return null;
+      }
+      if (remove) {
+        if (slot === "image") edit.imageUrl = "";
+        else edit.diagramUrl = "";
+        return null;
+      }
+      if (url !== undefined && url.trim() !== "") {
+        const normalized = normalizeCatalogImageUrl(url.trim());
+        if (normalized === null) return fail("bad-url", slot);
+        if (slot === "image") edit.imageUrl = normalized;
+        else edit.diagramUrl = normalized;
+      }
+      return null;
+    };
+    const imageProblem = readSlot(
+      "image",
+      submitted.imageIndex,
+      submitted.imageUrl,
+      submitted.removeImage,
+    );
+    if (imageProblem) return imageProblem;
+    const diagramProblem = readSlot(
+      "diagram",
+      submitted.diagramIndex,
+      submitted.diagramUrl,
+      submitted.removeDiagram,
+    );
+    if (diagramProblem) return diagramProblem;
     content.push(edit);
   }
 
   const visibility: TaxonomyVisibilityChange[] = [];
   const visibilityKeys = new Set<string>();
   for (const submitted of payload.visibility) {
-    if (submitted?.kind !== "category" && submitted?.kind !== "family") return "bad-data";
-    if (!Number.isInteger(submitted.id) || submitted.id <= 0) return "bad-data";
-    if (typeof submitted.isVisible !== "boolean") return "bad-data";
+    if (submitted?.kind !== "category" && submitted?.kind !== "family") return refuse("bad-data");
+    if (!Number.isInteger(submitted.id) || submitted.id <= 0) return refuse("bad-data");
+    if (typeof submitted.isVisible !== "boolean") return refuse("bad-data");
     const key = `${submitted.kind}:${submitted.id}`;
-    if (visibilityKeys.has(key)) return "bad-data";
+    if (visibilityKeys.has(key)) return refuse("bad-data");
     visibilityKeys.add(key);
     visibility.push({
       kind: submitted.kind,
@@ -252,29 +338,28 @@ export async function saveTaxonomyWorkbenchAction(
   // Upload only after every field and every file is valid. Object storage
   // cannot join a Postgres transaction, so a later DB-staleness refusal can
   // still orphan an immutable object; the existing media editor has the same
-  // unavoidable boundary.
+  // unavoidable boundary. Sequential, so a failure stops further uploads.
   for (const upload of uploads) {
     try {
-      upload.edit.imageUrl = await uploadCatalogImage(
-        upload.edit.kind,
-        upload.edit.id,
-        upload.file,
-      );
+      const url = await uploadCatalogImage(upload.edit.kind, upload.edit.id, upload.file);
+      if (upload.slot === "image") upload.edit.imageUrl = url;
+      else upload.edit.diagramUrl = url;
     } catch (error) {
+      const failure = { kind: upload.edit.kind, id: upload.edit.id, field: upload.slot };
       if (error instanceof CatalogStorageError && error.problem === "not-configured") {
-        return "storage-missing";
+        return { result: "storage-missing", failure };
       }
-      return "upload-failed";
+      return { result: "upload-failed", failure };
     }
   }
 
-  if (!(await saveAdminTaxonomyChanges(orders, content, visibility))) return "stale";
+  if (!(await saveAdminTaxonomyChanges(orders, content, visibility))) return refuse("stale");
 
   // Order, names, images and visibility all show only on the cached catalog
   // pages; family and list pages render per request.
   revalidateCatalogPages();
   revalidatePath(`/${locale}/admin/products`);
-  return "saved";
+  return { result: "saved" };
 }
 
 export type FamilyOrderResult = "saved" | "stale";

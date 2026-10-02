@@ -22,6 +22,8 @@ export type AdminTaxonomyNode = {
   nameEn: string;
   nameFa: string;
   imageUrl: string;
+  /** Second image slot, the dimension diagram beside the description. */
+  diagramUrl: string;
   aboutEn: string;
   aboutFa: string;
   isVisible: boolean;
@@ -35,6 +37,15 @@ export type AdminTaxonomyNode = {
   /** Products referenced by a past order; used by the existing delete guard. */
   orderedProducts: number;
 };
+
+/**
+ * Where the products page drops the tree rail and shows the phone flow.
+ *
+ * One string for the CSS rule and the script that picks which view to render,
+ * so the two can never disagree about which side of the line a width is on.
+ * Kept in step with the `max-width: 1099px` rules in globals.css.
+ */
+export const TAXONOMY_MOBILE_QUERY = "(max-width: 1099px)";
 
 export function categoryNodeKey(id: number): TaxonomyNodeKey {
   return `c:${id}`;

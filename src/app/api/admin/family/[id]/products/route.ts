@@ -7,7 +7,7 @@ export type FamilyProductsResponse = {
   /** One page, `PRODUCT_PAGE_SIZE` rows at most, in the export's order. */
   products: ProductRecord[];
   page: number;
-  /** Every product in the family, for the pager. */
+  /** Every product in the family (or matching `q`), for the pager. */
   total: number;
 };
 
@@ -33,9 +33,17 @@ export async function GET(
   const family = await getFamilyForImport(Number(id));
   if (!family) return new Response("Not found", { status: 404 });
 
-  const raw = new URL(req.url).searchParams.get("page") ?? "0";
+  const search = new URL(req.url).searchParams;
+  const raw = search.get("page") ?? "0";
   const page = /^\d{1,6}$/.test(raw) ? Number(raw) : 0;
-  const { products, total } = await getProductsPage(family.id, page * PRODUCT_PAGE_SIZE, PRODUCT_PAGE_SIZE);
+  // Optional part-number search; a part number is at most 64 characters.
+  const query = (search.get("q") ?? "").trim().slice(0, 64);
+  const { products, total } = await getProductsPage(
+    family.id,
+    page * PRODUCT_PAGE_SIZE,
+    PRODUCT_PAGE_SIZE,
+    query,
+  );
   const body: FamilyProductsResponse = {
     defs: family.defs.map(({ key, labelEn, labelFa, unit, kind }) => ({ key, labelEn, labelFa, unit, kind })),
     products,
