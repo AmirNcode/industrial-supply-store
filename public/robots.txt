@@ -1,3 +1,29 @@
-# v1 runs locally on generated demo data and should not be indexed.
+# The storefront (home, categories, product families) is open to every crawler.
+#
+# Disallowed: areas behind a sign-in, per-visitor pages, and the API. Search is
+# out too: every query string is a new URL, so a crawler following search links
+# never runs out of pages and burns the monthly request quota doing it.
+#
+# Each locale is spelled out rather than written `/*/rep`: in robots.txt `*`
+# also matches slashes, so the wildcard would hide any product family whose
+# slug starts with "rep", "cart", "quote" and so on (/fa/f/repair-kits).
+#
+# Public pages that must stay out of results (/track, /pay, /invoice) are NOT
+# listed on purpose: they carry a `noindex` tag, and a crawler barred here
+# never fetches the page to see it, so it could still list the bare URL.
 User-agent: *
-Disallow: /
+Disallow: /api/
+Disallow: /en/admin
+Disallow: /fa/admin
+Disallow: /en/rep
+Disallow: /fa/rep
+Disallow: /en/account
+Disallow: /fa/account
+Disallow: /en/cart
+Disallow: /fa/cart
+Disallow: /en/quick-order
+Disallow: /fa/quick-order
+Disallow: /en/quote
+Disallow: /fa/quote
+Disallow: /en/search
+Disallow: /fa/search
