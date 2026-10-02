@@ -3829,6 +3829,63 @@ html[dir="rtl"] .mtx-product-row.is-invalid {
   color: var(--mtx-danger);
 }
 
+/* Edit details: image and diagram slots. */
+.mtx-image-slot {
+  display: grid;
+  gap: 10px;
+}
+.mtx-image-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.mtx-thumb {
+  display: flex;
+  width: 76px;
+  height: 76px;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid var(--mtx-border);
+  border-radius: 5px;
+  background: #fff;
+}
+.mtx-thumb img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+.mtx-thumb.is-empty {
+  background: repeating-linear-gradient(
+    135deg,
+    #eef1f5 0 6px,
+    #e3e8ef 6px 12px
+  );
+}
+.mtx-image-actions {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 4px;
+}
+.mtx-image-actions .mtx-file {
+  width: 100%;
+}
+.mtx-link-button {
+  min-height: 44px;
+  justify-self: start;
+  border: 0;
+  background: none;
+  padding: 0 4px;
+  color: var(--mtx-navy);
+  font-size: 15px;
+  font-weight: 600;
+}
+.mtx-image-slot.is-invalid .mtx-thumb {
+  border: 2px solid var(--mtx-danger);
+}
+
 /* --------------------------------------------------------------------------
    Mobile
    -------------------------------------------------------------------------- */
