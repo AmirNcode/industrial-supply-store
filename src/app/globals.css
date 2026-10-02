@@ -2611,7 +2611,7 @@ html[lang="fa"] .taxonomy-kind-chip {
   color: var(--color-navy);
 }
 /*
- * Below 1100px the products page is the phone flow (src/app/[locale]/admin/
+ * Below 1024px the products page is the phone flow (src/app/[locale]/admin/
  * (panel)/products/mobile), not this card. The server always renders the
  * card — it cannot know the width — so it is hidden here until the page's
  * script swaps it out, rather than flashing past on a phone. The width is
@@ -2620,7 +2620,7 @@ html[lang="fa"] .taxonomy-kind-chip {
 .taxonomy-mobile-wait {
   display: none;
 }
-@media (max-width: 1099px) {
+@media (max-width: 1023px) {
   .taxonomy-card,
   .taxonomy-empty-page {
     display: none;
@@ -2668,7 +2668,7 @@ html[lang="fa"] .taxonomy-kind-chip {
    The taxonomy workbench's phone flow: one level of the tree per screen,
    built for a thumb. Sizes here are the handoff's touch rules, not taste —
    every target at least 44px, every input at least 16px so iOS does not zoom
-   the page when it takes focus. Only ever rendered below 1100px.
+   the page when it takes focus. Only ever rendered below 1024px.
    -------------------------------------------------------------------------- */
 .mtx {
   --mtx-navy: #12356b;
