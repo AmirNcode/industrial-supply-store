@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import {
   categoryNodeKey,
   parseTaxonomyNodeKey,
@@ -91,7 +91,6 @@ export function MobileWorkbench(props: MobileWorkbenchProps) {
     guardRequest,
   } = props;
   const t = getDict(locale);
-  const router = useRouter();
   const searchParams = useSearchParams();
 
   const catKey = parseTaxonomyNodeKey(searchParams.get("cat"));
@@ -377,7 +376,9 @@ export function MobileWorkbench(props: MobileWorkbenchProps) {
           onDeleted={(name) => {
             navigate(parentRoute(sheet.node));
             setFlash(t.deleteDone.replace("{name}", name));
-            router.refresh();
+            // No refresh here: the action's own revalidation already brings
+            // the new tree, and a second refresh racing it made Next fall
+            // back to a full reload, which drops this banner.
           }}
           onClose={closeSheet}
         />
