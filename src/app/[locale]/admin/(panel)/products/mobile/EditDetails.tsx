@@ -18,8 +18,9 @@ const IMAGE_ACCEPT = "image/jpeg,image/png,image/webp";
  * Nothing here saves on its own. Every field writes into the workbench's
  * draft for this node — the same draft the desktop pane's description and
  * image edits use — so it counts as one pending change and goes out with Save
- * all, in the one `saveTaxonomyWorkbenchAction` transaction. Cancel returns to
- * the node with the draft kept; the pending bar's Discard is what drops it.
+ * all, in the one `saveTaxonomyWorkbenchAction` transaction. Cancel undoes
+ * this node's details edits and returns to the node; other pending work —
+ * product edits, other nodes — is left as it was.
  */
 export function EditDetails(
   props: MobileShared & { node: AdminTaxonomyNode; onCancel: () => void },
@@ -29,6 +30,13 @@ export function EditDetails(
   const content = props.effectiveContent(node);
   const visible = props.effectiveVisibility(node);
   const change = (patch: Partial<ContentEdit>) => props.setNodeContent(node, { ...content, ...patch });
+
+  function cancel() {
+    // The stored values: the workbench drops a draft that matches them.
+    props.setNodeContent(node, { aboutEn: node.aboutEn, aboutFa: node.aboutFa });
+    if (visible !== node.isVisible) props.setNodeVisibility(node, node.isVisible);
+    props.onCancel();
+  }
 
   const failure =
     props.saveFailure &&
@@ -55,7 +63,7 @@ export function EditDetails(
     <div className="mtx-screen is-form">
       <TopBar
         start={
-          <button type="button" className="mtx-text-button" onClick={props.onCancel}>
+          <button type="button" className="mtx-text-button" onClick={cancel}>
             {t.fxCancel}
           </button>
         }
