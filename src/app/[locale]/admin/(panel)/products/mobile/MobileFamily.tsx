@@ -184,7 +184,6 @@ function FamilyPage(
             autoCorrect="off"
             spellCheck={false}
             enterKeyHint="search"
-            dir="ltr"
             onChange={(event) => products.setInput(event.target.value)}
           />
         </div>

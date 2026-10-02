@@ -2963,6 +2963,18 @@ html[dir="rtl"] .mtx-chevron-forward {
   letter-spacing: 0;
   text-transform: none;
 }
+/* Plex Mono has no Persian letters, and the monospace fallbacks draw them
+   unjoined; Persian meta lines use the Persian face. Part numbers and other
+   codes keep the mono face (they are Latin in either language). */
+html[lang="fa"] .mtx-node-meta,
+html[lang="fa"] .mtx-row-meta,
+html[lang="fa"] .mtx-jump-path,
+html[lang="fa"] .mtx-sheet-path,
+html[lang="fa"] .mtx-section-count,
+html[lang="fa"] .mtx-pending-text span,
+html[lang="fa"] .mtx-field-unit,
+html[lang="fa"] .mtx-bad-row,
+html[lang="fa"] .mtx-step,
 html[lang="fa"] .mtx-section-heading,
 html[lang="fa"] .mtx-kind-chip,
 html[lang="fa"] .mtx-tag,
@@ -3482,6 +3494,7 @@ textarea.mtx-input.is-invalid {
 }
 .mtx-jump-search input {
   min-width: 0;
+  min-height: 46px;
   flex: 1;
   border: 0;
   outline: 0;
