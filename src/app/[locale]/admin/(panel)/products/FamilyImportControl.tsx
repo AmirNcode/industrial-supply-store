@@ -57,8 +57,11 @@ export function FamilyImportControl({
   const [picked, setPicked] = useState<File | null>(null);
   const [handle, setHandle] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  // Says so after a Discard, until the next file is chosen.
+  const [discarded, setDiscarded] = useState(false);
 
   function choose(file: File | undefined) {
+    setDiscarded(false);
     setHandle(null);
     setPicked(file ?? null);
     if (!file) setState(null);
@@ -169,11 +172,30 @@ export function FamilyImportControl({
     }
   }
 
-  /** The phone's review Cancel: the uploaded file is dropped, as with no file. */
-  function cancelReview() {
+  /**
+   * The wrong file: forget it here, and delete the uploaded copy from import
+   * storage rather than leave it for the two-hour expiry. The screen clears
+   * at once; the server's answer changes nothing the admin sees, because a
+   * copy the delete misses is swept on the next upload anyway.
+   */
+  function discard() {
+    const staged = handle;
     choose(undefined);
+    setDiscarded(true);
     if (fileInput.current) fileInput.current.value = "";
+    if (staged) {
+      fetch("/api/admin/import", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ kind: "discard", familyId, handle: staged }),
+      }).catch(() => {
+        // Best effort, as above.
+      });
+    }
   }
+
+  // Before the import has run: a file chosen, uploaded, or refused.
+  const canDiscard = !demo && picked !== null && state?.kind !== "ok";
 
   if (variant === "mobile") {
     return (
@@ -199,7 +221,13 @@ export function FamilyImportControl({
             {t.uploadCsv}
           </button>
         </div>
+        {canDiscard && state?.kind !== "review" && (
+          <button type="button" className="mtx-link-button" disabled={pending} onClick={discard}>
+            {t.importDiscard}
+          </button>
+        )}
         {extras}
+        {discarded && <p className="mtx-hint mtx-import-feedback">{t.importDiscarded}</p>}
 
         {state?.kind === "review" && (
           <MobileColumnReview
@@ -216,7 +244,7 @@ export function FamilyImportControl({
             pending={pending}
             fileName={picked?.name ?? ""}
             familyName={familyName}
-            onCancel={cancelReview}
+            onCancel={discard}
           />
         )}
         {state && state.kind !== "review" && (
@@ -233,6 +261,7 @@ export function FamilyImportControl({
       <div className={`taxonomy-import-controls ${prominent ? "taxonomy-import-prominent" : ""}`}>
         <label className={`btn-file ${picked ? "btn-file-set" : ""}`}>
           <input
+            ref={fileInput}
             type="file"
             accept=".csv,text/csv"
             disabled={demo || pending}
@@ -249,7 +278,16 @@ export function FamilyImportControl({
           <span className="btn-file-step">2</span>
           {t.uploadCsv}
         </button>
+        {/* While reviewing, Discard sits beside Confirm instead. */}
+        {canDiscard && state?.kind !== "review" && (
+          <button type="button" className="btn-small" disabled={pending} onClick={discard}>
+            {t.importDiscard}
+          </button>
+        )}
       </div>
+      {discarded && (
+        <p className="mt-1 text-[11px] text-[var(--color-ink-muted)]">{t.importDiscarded}</p>
+      )}
 
       {state?.kind === "review" && (
         <ColumnReview
@@ -264,6 +302,7 @@ export function FamilyImportControl({
           blankRows={state.blankRows}
           locale={locale}
           pending={pending}
+          onDiscard={discard}
         />
       )}
       {state && state.kind !== "review" && (

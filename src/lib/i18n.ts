@@ -719,6 +719,8 @@ const en = {
   productsUnsavedTitle: "Unsaved changes",
   stockShortfall: "Not enough stock for:",
   importReadOnly: "Importing is disabled in demo mode.",
+  importDiscard: "Discard",
+  importDiscarded: "Upload discarded. Nothing was imported.",
   // Products page on phones
   mobileEditDetails: "Edit details",
   mobileEditCategory: "Edit category",
@@ -1641,6 +1643,8 @@ const fa: typeof en = {
   productsUnsavedTitle: "تغییرات ذخیره‌نشده",
   stockShortfall: "موجودی کافی نیست برای:",
   importReadOnly: "بارگذاری در حالت نمایشی غیرفعال است.",
+  importDiscard: "کنار گذاشتن فایل",
+  importDiscarded: "فایل بارگذاری‌شده کنار گذاشته شد. چیزی ثبت نشد.",
   // Products page on phones
   mobileEditDetails: "ویرایش جزئیات",
   mobileEditCategory: "ویرایش دسته\u200cبندی",

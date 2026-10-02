@@ -4,6 +4,7 @@ import { processCatalogImport } from "@/lib/catalogImport";
 import { getFamilyForImport } from "@/db/importQueries";
 import {
   ImportStorageError,
+  discardImportUpload,
   downloadImportUpload,
   prepareImportUpload,
   removeImportUpload,
@@ -157,6 +158,34 @@ export async function POST(request: Request) {
       return NextResponse.json({ state }, { headers: NO_STORE });
     } catch (error) {
       return storageFailure(error, familyId, "process");
+    }
+  }
+
+  /*
+   * The admin chose Discard after uploading: delete the staged file now
+   * rather than leaving it for the two-hour expiry and the next prepare's
+   * sweep. The browser clears its own state whatever this answers, so a
+   * failure here costs only a file the sweep removes later.
+   */
+  if (input.kind === "discard") {
+    const handle = boundedString(input.handle, 2_000);
+    if (!handle || !Number.isSafeInteger(familyId) || familyId <= 0) {
+      return NextResponse.json({ error: "invalid request" }, { status: 400, headers: NO_STORE });
+    }
+    try {
+      await discardImportUpload(handle, familyId);
+      return NextResponse.json({ discarded: true }, { headers: NO_STORE });
+    } catch (error) {
+      console.error("Catalog import discard failed.", {
+        problem: error instanceof ImportStorageError ? error.problem : "unexpected",
+      });
+      return NextResponse.json(
+        { discarded: false },
+        {
+          status: error instanceof ImportStorageError && error.problem === "invalid-upload" ? 400 : 503,
+          headers: NO_STORE,
+        },
+      );
     }
   }
 

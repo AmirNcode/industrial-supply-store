@@ -181,3 +181,18 @@ export async function removeImportUpload(path: string): Promise<void> {
   const { error } = await client(storage).storage.from(storage.bucket).remove([path]);
   if (error) throw new ImportStorageError("upload-failed", error.message);
 }
+
+/**
+ * Throw away an upload the admin decided against before importing it.
+ *
+ * Only the object the signed handle names, and only for the family it was
+ * prepared for: the handle is the same proof of ownership the import itself
+ * requires, so a discard can never reach another upload's file.
+ */
+export async function discardImportUpload(handle: string, familyId: number): Promise<void> {
+  const claim = verifyImportUploadClaim(handle, AUTH_SECRET);
+  if (!claim || claim.familyId !== familyId) {
+    throw new ImportStorageError("invalid-upload", "Invalid or expired import upload.");
+  }
+  await removeImportUpload(claim.path);
+}

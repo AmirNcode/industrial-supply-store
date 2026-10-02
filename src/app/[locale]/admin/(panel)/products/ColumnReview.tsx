@@ -49,6 +49,7 @@ export function ColumnReview({
   locale,
   pending,
   initialPlan,
+  onDiscard,
 }: {
   headers: AnalyzedHeader[];
   missing: MissingRow[];
@@ -60,6 +61,8 @@ export function ColumnReview({
   locale: Locale;
   pending: boolean;
   initialPlan: ImportPlan;
+  /** Drops the uploaded file: the way out when it was the wrong one. */
+  onDiscard?: () => void;
 }) {
   const t = getDict(locale);
   const {
@@ -398,6 +401,11 @@ export function ColumnReview({
         >
           {t.reviewConfirm}
         </button>
+        {onDiscard && (
+          <button type="button" className="btn-small" disabled={pending} onClick={onDiscard}>
+            {t.importDiscard}
+          </button>
+        )}
         {/* The same advice the column editor gives, at the same count, so an
             import cannot quietly build the table the editor would warn about.
             Advice only — the import is not blocked. */}
