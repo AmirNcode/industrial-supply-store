@@ -3886,6 +3886,16 @@ html[dir="rtl"] .mtx-product-row.is-invalid {
   border: 2px solid var(--mtx-danger);
 }
 
+/* Add a product on a phone: the page's own heading gives way to the top bar. */
+body:has(.mtx-new-product) .new-product-desktop-head {
+  display: none;
+}
+.mtx-text-link {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none !important;
+}
+
 /* --------------------------------------------------------------------------
    Mobile
    -------------------------------------------------------------------------- */

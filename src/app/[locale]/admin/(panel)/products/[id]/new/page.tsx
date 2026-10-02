@@ -29,18 +29,24 @@ export default async function NewProductPage({
   const family = await getFamilyForImport(familyId);
   if (!family) notFound();
 
+  // Back to this family, open, as it was left — not the tree's default.
+  const backHref = `/${l}/admin/products?cat=${familyNodeKey(familyId)}`;
   return (
     <>
-      {/* Back to this family, open, as it was left — not the tree's default. */}
-      <Link href={`/${l}/admin/products?cat=${familyNodeKey(familyId)}`} className="text-[11px]">
-        ← {t.columnsBack}
-      </Link>
-      <h1 className="mt-1 mb-1 border-b border-[var(--color-ink)] pb-1 text-[17px] font-bold">
-        {t.newProductTitle.replace("{family}", pick(family, "name", l))}
-      </h1>
-      <p className="mb-4 text-[12px] text-[var(--color-ink-muted)]">{t.newProductIntro}</p>
+      {/* The phone layout has its own top bar; globals.css hides this one. */}
+      <div className="new-product-desktop-head">
+        <Link href={backHref} className="text-[11px]">
+          ← {t.columnsBack}
+        </Link>
+        <h1 className="mt-1 mb-1 border-b border-[var(--color-ink)] pb-1 text-[17px] font-bold">
+          {t.newProductTitle.replace("{family}", pick(family, "name", l))}
+        </h1>
+        <p className="mb-4 text-[12px] text-[var(--color-ink-muted)]">{t.newProductIntro}</p>
+      </div>
       <NewProductForm
         familyId={familyId}
+        familyName={pick(family, "name", l)}
+        backHref={backHref}
         defs={family.defs}
         locale={l}
         demo={DEMO_MODE}
