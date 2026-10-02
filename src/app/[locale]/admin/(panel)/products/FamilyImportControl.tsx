@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
 import { getDict, type Locale } from "@/lib/i18n";
@@ -25,17 +25,29 @@ type PreparedUpload = {
  * Keeping this component independent lets the taxonomy pane move the same
  * control between a category row and the selected-family panel without
  * weakening any of the importer validation or review surfaces.
+ *
+ * The phone flow shows the same control as two large numbered buttons, with
+ * the family's Template / Export / Columns links under them (`extras`). Only
+ * the presentation differs; the upload, its checks and the review are one.
  */
 export function FamilyImportControl({
   familyId,
   locale,
   demo,
   prominent = false,
+  variant = "desktop",
+  familyName = "",
+  extras,
 }: {
   familyId: number;
   locale: Locale;
   demo: boolean;
   prominent?: boolean;
+  variant?: "desktop" | "mobile";
+  /** For the phone's column check, which names the family it imports into. */
+  familyName?: string;
+  /** Shown under the phone's buttons, above any import result. */
+  extras?: ReactNode;
 }) {
   const t = getDict(locale);
   const router = useRouter();
@@ -43,6 +55,7 @@ export function FamilyImportControl({
   const [pending, setPending] = useState(false);
   const [picked, setPicked] = useState<File | null>(null);
   const [handle, setHandle] = useState<string | null>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
 
   function choose(file: File | undefined) {
     setHandle(null);
@@ -153,6 +166,56 @@ export function FamilyImportControl({
     } finally {
       setPending(false);
     }
+  }
+
+  if (variant === "mobile") {
+    return (
+      <form onSubmit={submit} className="taxonomy-import-form mtx-import-form">
+        <div className="mtx-import-buttons">
+          <label className={`mtx-button mtx-ghost mtx-secondary mtx-file ${demo || pending ? "is-disabled" : ""}`}>
+            <input
+              ref={fileInput}
+              type="file"
+              accept=".csv,text/csv"
+              disabled={demo || pending}
+              onChange={(event) => choose(event.target.files?.[0])}
+            />
+            <span className="mtx-step">1</span>
+            <span className="mtx-file-name">{picked?.name ?? t.chooseCsv}</span>
+          </label>
+          <button
+            type="submit"
+            className={`mtx-button mtx-secondary ${picked && !demo ? "mtx-primary" : "mtx-blocked"}`}
+            disabled={demo || pending || !picked}
+          >
+            <span className="mtx-step">2</span>
+            {t.uploadCsv}
+          </button>
+        </div>
+        {extras}
+
+        {state?.kind === "review" && (
+          <ColumnReview
+            key={JSON.stringify(state.plan)}
+            initialPlan={state.plan}
+            headers={state.headers}
+            missing={state.missing}
+            rowCount={state.rowCount}
+            problems={state.problems}
+            rowProblems={state.rowProblems}
+            goodRows={state.goodRows}
+            blankRows={state.blankRows}
+            locale={locale}
+            pending={pending}
+          />
+        )}
+        {state && state.kind !== "review" && (
+          <div className="mtx-import-feedback">
+            <ImportFeedback state={state} locale={locale} />
+          </div>
+        )}
+      </form>
+    );
   }
 
   return (

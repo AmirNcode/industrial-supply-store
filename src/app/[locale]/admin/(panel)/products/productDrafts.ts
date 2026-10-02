@@ -16,7 +16,11 @@ import { saveFamilyProductsAction } from "./productTableActions";
 export type ProductTableHandle = { save: () => Promise<boolean>; discard: () => void };
 
 export type ProductDraft = Record<string, Partial<Record<CellId, string>>>;
-export type ProductNotice = { kind: "ok" | "error"; text: string };
+/**
+ * The outcome of the last Save. `invalid` and `stale` are errors the desktop
+ * shows like any other; the phone gives them their own banners.
+ */
+export type ProductNotice = { kind: "ok" | "error" | "invalid" | "stale"; text: string };
 
 /**
  * Every row loaded so far in this family, by part number. `index` is the
@@ -152,14 +156,14 @@ export function useProductDrafts({
         const partNumber = result.cells[0]?.partNumber;
         if (partNumber) onInvalid({ partNumber, index: known.get(partNumber)?.index });
         setNotice({
-          kind: "error",
+          kind: "invalid",
           text: t.productsInvalid.replace("{n}", formatInt(result.cells.length, locale)),
         });
       } else if (result.kind === "stale") {
         // Fresh rows under the same edits: the person checks, then saves again.
         onStale();
         setNotice({
-          kind: "error",
+          kind: "stale",
           text: t.productsStale.replace("{n}", formatInt(result.partNumbers.length, locale)),
         });
       } else {
