@@ -225,10 +225,12 @@ function TextField({
   };
   return (
     <div className="mtx-field">
-      <label className="mtx-field-label" htmlFor={id}>
-        <span>{label}</span>
+      {/* The label is the name alone; the tag beside it is not part of what
+          a screen reader announces as the field's name. */}
+      <div className="mtx-field-label">
+        <label htmlFor={id}>{label}</label>
         {edited && !error && <span className="mtx-tag">{editedLabel}</span>}
-      </label>
+      </div>
       {multiline ? (
         <textarea {...shared} rows={3} onChange={(event) => onChange(event.target.value)} />
       ) : (

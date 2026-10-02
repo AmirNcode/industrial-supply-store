@@ -377,12 +377,15 @@ function MobileNewProduct({
               </SectionHeading>
               <div className="mtx-fields">
                 {defs.map((def) => (
-                  <label key={def.key} className="mtx-field">
-                    <span className="mtx-field-label">
-                      <span>{locale === "fa" ? def.labelFa || def.labelEn : def.labelEn}</span>
-                      {def.unit && <span className="mtx-field-unit" aria-hidden="true">({def.unit})</span>}
-                    </span>
+                  <div key={def.key} className="mtx-field">
+                    <div className="mtx-field-label">
+                      <label htmlFor={`new-spec-${def.key}`}>
+                        {locale === "fa" ? def.labelFa || def.labelEn : def.labelEn}
+                      </label>
+                      {def.unit && <span className="mtx-field-unit">({def.unit})</span>}
+                    </div>
                     <input
+                      id={`new-spec-${def.key}`}
                       name={`spec.${def.key}`}
                       dir="ltr"
                       className={inputClass(`spec.${def.key}`)}
@@ -390,7 +393,7 @@ function MobileNewProduct({
                       inputMode={def.kind === "number" ? "decimal" : undefined}
                       autoComplete="off"
                     />
-                  </label>
+                  </div>
                 ))}
               </div>
             </section>
@@ -400,10 +403,12 @@ function MobileNewProduct({
             <SectionHeading>{t.newProductCommercial}</SectionHeading>
             <div className="mtx-fields">
               <div className="mtx-field">
-                <label className="mtx-field-label" htmlFor="price_usd">
-                  <span>{t.price}</span>
-                  <span className="mtx-field-unit" aria-hidden="true">(USD)</span>
-                </label>
+                {/* The label is the name alone, the unit beside it: the field is
+                    announced, and found, as "Price". */}
+                <div className="mtx-field-label">
+                  <label htmlFor="price_usd">{t.price}</label>
+                  <span className="mtx-field-unit">(USD)</span>
+                </div>
                 <input
                   id="price_usd"
                   name="price_usd"

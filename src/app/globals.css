@@ -3384,12 +3384,28 @@ textarea.mtx-input.is-invalid {
   color: var(--mtx-ink-3, #667085);
   font-size: 13px;
 }
+/* The real control lies invisibly over the drawn one, so a tap — or a
+   test's click — aimed at the box or the track reaches the input itself,
+   not just the row's label. */
 .mtx-switch-input,
 .mtx-check-input {
   position: absolute;
-  width: 1px;
-  height: 1px;
+  z-index: 1;
+  top: 50%;
+  margin: 0;
   opacity: 0;
+  cursor: pointer;
+  transform: translateY(-50%);
+}
+.mtx-switch-input {
+  inset-inline-end: 0;
+  width: 51px;
+  height: 31px;
+}
+.mtx-check-input {
+  inset-inline-start: 0;
+  width: 24px;
+  height: 24px;
 }
 .mtx-switch {
   position: relative;

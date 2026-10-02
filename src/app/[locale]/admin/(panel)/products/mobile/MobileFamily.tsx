@@ -438,11 +438,13 @@ function ProductEditor(props: FamilyProps & { part: string; products: Products }
     const inputId = `mtx-cell-${id}`;
     return (
       <div key={id} className="mtx-field">
-        <label className="mtx-field-label" htmlFor={inputId}>
-          <span>{name}</span>
+        {/* The label is the name alone: unit and tag sit beside it, so the
+            field is announced — and found — by its name. */}
+        <div className="mtx-field-label">
+          <label htmlFor={inputId}>{name}</label>
           {unit && <span className="mtx-field-unit">({unit})</span>}
           {bad ? null : edited && <span className="mtx-tag">{t.mobileEdited}</span>}
-        </label>
+        </div>
         <input
           id={inputId}
           type="text"
