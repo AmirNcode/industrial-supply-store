@@ -6,7 +6,6 @@ import type { AdminTaxonomyNode } from "@/lib/adminTaxonomy";
 import { getDict, type Locale } from "@/lib/i18n";
 import { formatInt } from "@/lib/money";
 import {
-  PRODUCT_PAGE_SIZE,
   cellText,
   productTableColumns,
   type CellId,
@@ -20,7 +19,7 @@ import { EditDetails } from "./EditDetails";
 import { NavRow, NodeHeader } from "./MobileBrowse";
 import { backTarget, type MobileShared } from "./MobileWorkbench";
 import { Banner, ChevronForward, Magnifier, SectionHeading, TopBar, ChevronBack, ToggleRow } from "./parts";
-import { useFamilyProducts } from "./useFamilyProducts";
+import { MOBILE_PAGE_SIZE, useFamilyProducts } from "./useFamilyProducts";
 
 type FamilyProps = MobileShared & {
   node: AdminTaxonomyNode;
@@ -228,7 +227,7 @@ function FamilyPage(
               {products.loadingMore
                 ? t.productsLoading
                 : t.mobileShowMore
-                    .replace("{n}", formatInt(Math.min(PRODUCT_PAGE_SIZE, left), locale))
+                    .replace("{n}", formatInt(Math.min(MOBILE_PAGE_SIZE, left), locale))
                     .replace("{left}", formatInt(left, locale))}
             </button>
           </div>

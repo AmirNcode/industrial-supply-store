@@ -4,7 +4,7 @@ import { PRODUCT_PAGE_SIZE, type ProductRecord, type ProductTableDef } from "@/l
 
 export type FamilyProductsResponse = {
   defs: ProductTableDef[];
-  /** One page, `PRODUCT_PAGE_SIZE` rows at most, in the export's order. */
+  /** One page, `size` rows at most (default `PRODUCT_PAGE_SIZE`), in the export's order. */
   products: ProductRecord[];
   page: number;
   /** Every product in the family (or matching `q`), for the pager. */
@@ -38,12 +38,13 @@ export async function GET(
   const page = /^\d{1,6}$/.test(raw) ? Number(raw) : 0;
   // Optional part-number search; a part number is at most 64 characters.
   const query = (search.get("q") ?? "").trim().slice(0, 64);
-  const { products, total } = await getProductsPage(
-    family.id,
-    page * PRODUCT_PAGE_SIZE,
-    PRODUCT_PAGE_SIZE,
-    query,
-  );
+  // Optional smaller page, for the phone's Show more; never larger than the
+  // desktop's, so no request can ask for a whole family at once (M-21).
+  const rawSize = search.get("size") ?? "";
+  const size = /^\d{1,3}$/.test(rawSize)
+    ? Math.min(PRODUCT_PAGE_SIZE, Math.max(1, Number(rawSize)))
+    : PRODUCT_PAGE_SIZE;
+  const { products, total } = await getProductsPage(family.id, page * size, size, query);
   const body: FamilyProductsResponse = {
     defs: family.defs.map(({ key, labelEn, labelFa, unit, kind }) => ({ key, labelEn, labelFa, unit, kind })),
     products,

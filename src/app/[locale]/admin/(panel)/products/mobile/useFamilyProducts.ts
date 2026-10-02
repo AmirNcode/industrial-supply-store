@@ -2,15 +2,18 @@
 
 import { useEffect, useRef, useState, type RefObject } from "react";
 import type { FamilyProductsResponse } from "@/app/api/admin/family/[id]/products/route";
-import {
-  PRODUCT_PAGE_SIZE,
-  type ProductRecord,
-  type ProductTableDef,
-} from "@/lib/productTable";
+import type { ProductRecord, ProductTableDef } from "@/lib/productTable";
 import type { Locale } from "@/lib/i18n";
 import { useProductDrafts, type ProductTableHandle } from "../productDrafts";
 
 type Status = "loading" | "ready" | "failed";
+
+/**
+ * Rows per Show more. Half the desktop's page: the first screen arrives with
+ * half the data, and one tap still adds about four screens of rows, so most
+ * families are whole after one or two taps.
+ */
+export const MOBILE_PAGE_SIZE = 50;
 
 /** How long the search waits for the person to stop typing. */
 const SEARCH_DELAY_MS = 300;
@@ -21,7 +24,7 @@ async function fetchPage(
   query: string,
   signal?: AbortSignal,
 ): Promise<FamilyProductsResponse> {
-  const params = new URLSearchParams({ page: String(page) });
+  const params = new URLSearchParams({ page: String(page), size: String(MOBILE_PAGE_SIZE) });
   if (query) params.set("q", query);
   const response = await fetch(`/api/admin/family/${familyId}/products?${params}`, {
     cache: "no-store",
@@ -80,7 +83,7 @@ export function useFamilyProducts({
       if (!rows.some((row) => row.partNumber === partNumber) && index !== undefined) {
         setInput("");
         setQuery("");
-        wanted.current = Math.floor(index / PRODUCT_PAGE_SIZE) + 1;
+        wanted.current = Math.floor(index / MOBILE_PAGE_SIZE) + 1;
         setReloadToken((token) => token + 1);
       }
     },
@@ -114,7 +117,7 @@ export function useFamilyProducts({
         setPages(count);
         // A search result's place in the full list is unknown.
         for (const body of bodies) {
-          remember(body.products, query ? null : body.page * PRODUCT_PAGE_SIZE);
+          remember(body.products, query ? null : body.page * MOBILE_PAGE_SIZE);
         }
         setStatus("ready");
       })
@@ -136,7 +139,7 @@ export function useFamilyProducts({
       setTotal(body.total);
       setPages(pages + 1);
       wanted.current = pages + 1;
-      remember(body.products, query ? null : body.page * PRODUCT_PAGE_SIZE);
+      remember(body.products, query ? null : body.page * MOBILE_PAGE_SIZE);
     } catch {
       setStatus("failed");
     } finally {
