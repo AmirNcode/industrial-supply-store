@@ -89,9 +89,22 @@ export function useProductDrafts({
     });
   }
 
-  /** Nothing loaded still holds, e.g. after an import refreshed the page. */
+  /**
+   * Nothing loaded still holds, e.g. after an import refreshed the page —
+   * except the rows with unsaved edits. Save sends only rows it has a record
+   * of, so dropping those would silently drop the edits on every page but the
+   * one reloaded. They keep the version they were edited against; if that
+   * has changed underneath, the server says so and nothing is lost.
+   */
   function forget() {
-    setKnown(new Map());
+    setKnown((previous) => {
+      const next = new Map<string, { product: ProductRecord; index?: number }>();
+      for (const partNumber of Object.keys(draft)) {
+        const entry = previous.get(partNumber);
+        if (entry) next.set(partNumber, entry);
+      }
+      return next;
+    });
   }
 
   function change(product: ProductRecord, cell: CellId, value: string) {
