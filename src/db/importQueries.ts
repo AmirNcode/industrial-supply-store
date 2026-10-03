@@ -90,59 +90,6 @@ export async function countProductsWithSpec(
   return out;
 }
 
-export type FamilyListRow = {
-  id: number;
-  slug: string;
-  nameEn: string;
-  nameFa: string;
-  productCount: number;
-  categoryId: number;
-  categoryNameEn: string;
-  categoryNameFa: string;
-  categoryImageUrl: string;
-  categoryIsVisible: boolean;
-  imageUrl: string;
-  isVisible: boolean;
-  inventoryAvailable: number;
-  inventoryOnHold: number;
-  inventorySold: number;
-  /** Products with a past order against them, for the delete confirmation. */
-  orderedProducts: number;
-};
-
-export async function getFamiliesGrouped(): Promise<FamilyListRow[]> {
-  return sql<FamilyListRow[]>`
-    SELECT f.id, f.slug, f.name_en AS "nameEn", f.name_fa AS "nameFa",
-           f.product_count AS "productCount", f.image_url AS "imageUrl",
-           f.is_visible AS "isVisible",
-           c.id AS "categoryId", c.name_en AS "categoryNameEn",
-           c.name_fa AS "categoryNameFa", c.image_url AS "categoryImageUrl",
-           c.is_visible AS "categoryIsVisible",
-           COALESCE(s.available, 0)::int AS "inventoryAvailable",
-           COALESCE(s.on_hold, 0)::int   AS "inventoryOnHold",
-           COALESCE(s.sold, 0)::int      AS "inventorySold",
-           COALESCE(o.n, 0)::int         AS "orderedProducts"
-    FROM product_families f
-    JOIN categories c ON c.id = f.category_id
-    -- Same shape as the stock roll-up: one pass, not a subquery per family.
-    LEFT JOIN (
-      SELECT p.family_id, count(DISTINCT p.id) AS n
-      FROM products p JOIN order_items i ON i.product_id = p.id
-      GROUP BY p.family_id
-    ) o ON o.family_id = f.id
-    -- Aggregated once per family rather than per product: this page lists
-    -- every family, and a per-row subquery would be one scan each.
-    LEFT JOIN (
-      SELECT family_id,
-             SUM(inventory_available) AS available,
-             SUM(inventory_on_hold)   AS on_hold,
-             SUM(inventory_sold)      AS sold
-      FROM products GROUP BY family_id
-    ) s ON s.family_id = f.id
-    ORDER BY c.sort, c.id, f.sort, f.id
-  `;
-}
-
 export type ExportProduct = {
   partNumber: string;
   specs: Record<string, unknown>;

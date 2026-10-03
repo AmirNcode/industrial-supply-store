@@ -638,18 +638,6 @@ export async function getProductsInSubtree(
   `;
 }
 
-export async function countProductsInSubtree(path: string): Promise<number> {
-  const rows = await sql<{ n: number }[]>`
-    SELECT count(*)::int AS n
-    FROM products p
-    JOIN product_families f ON f.id = p.family_id
-    JOIN categories c ON c.id = f.category_id
-    WHERE (c.path = ${path} OR c.path LIKE ${path + "/%"})
-      AND ${FAMILY_VISIBLE}
-  `;
-  return rows[0]?.n ?? 0;
-}
-
 /** Exact part-number lookup used by quick order. */
 export async function findByPartNumbers(
   partNumbers: string[],

@@ -96,15 +96,6 @@ export async function getOrderForRep(
 }
 
 /**
- * Whether this rep may see the order. The same rule as every read above, for
- * pages that then load the order another way.
- */
-export async function repCanSeeOrder(repId: string, ref: string): Promise<boolean> {
-  const rows = await sql`SELECT 1 FROM orders o WHERE o.ref = ${ref} AND ${visibleTo(repId)} LIMIT 1`;
-  return rows.length > 0;
-}
-
-/**
  * Whether this rep may *act* on the order — invoice it, take its receipts,
  * read them: only an order credited to them. Seeing a moved customer's older
  * orders is read-only (review M-17).

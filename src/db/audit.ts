@@ -1,6 +1,5 @@
 import "server-only";
 import type { Sql, TransactionSql } from "postgres";
-import { sql as appSql } from "./index";
 
 /**
  * The audit trail (review finding M-11): who changed money or order state.
@@ -38,26 +37,5 @@ export async function recordAudit(db: Db, entry: AuditEntry): Promise<void> {
     INSERT INTO audit_log (actor_kind, actor_id, action, subject_kind, subject_id, detail)
     VALUES (${entry.actor.kind}, ${actorId(entry.actor)}, ${entry.action},
             ${entry.subject.kind}, ${String(entry.subject.id)}, ${JSON.stringify(entry.detail ?? {})}::jsonb)
-  `;
-}
-
-export type AuditRow = {
-  at: string;
-  actorKind: string;
-  actorId: string | null;
-  action: string;
-  detail: Record<string, unknown>;
-};
-
-/** One subject's history, newest first. */
-export async function listAudit(
-  subject: AuditEntry["subject"],
-  db: Db = appSql,
-): Promise<AuditRow[]> {
-  return db<AuditRow[]>`
-    SELECT at, actor_kind AS "actorKind", actor_id AS "actorId", action, detail
-    FROM audit_log
-    WHERE subject_kind = ${subject.kind} AND subject_id = ${String(subject.id)}
-    ORDER BY at DESC, id DESC
   `;
 }

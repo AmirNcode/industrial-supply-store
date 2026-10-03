@@ -153,24 +153,3 @@ export async function findShortfalls(
   }
   return byOrder;
 }
-
-export type FamilyInventory = {
-  familyId: number;
-  available: number;
-  onHold: number;
-  sold: number;
-  products: number;
-};
-
-/** Per-family totals for the products page. */
-export async function getFamilyInventory(): Promise<Map<number, FamilyInventory>> {
-  const rows = await sql<FamilyInventory[]>`
-    SELECT family_id AS "familyId",
-           COALESCE(SUM(inventory_available), 0)::int AS "available",
-           COALESCE(SUM(inventory_on_hold), 0)::int   AS "onHold",
-           COALESCE(SUM(inventory_sold), 0)::int      AS "sold",
-           count(*)::int                              AS "products"
-    FROM products GROUP BY family_id
-  `;
-  return new Map(rows.map((r) => [r.familyId, r]));
-}

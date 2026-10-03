@@ -19,15 +19,6 @@
  */
 export const DIAGRAM_SIZE = 240;
 
-/**
- * The box the diagram is contained in, `240 x 160`.
- *
- * Tailwind needs the literals in the class strings, so `CatalogCallout` spells
- * both out; these constants are what the tests read, and the pair has to move
- * together if either changes.
- */
-export const DIAGRAM_BOX_HEIGHT = 160;
-
 /** Anything standing in for one stays a thumbnail. */
 export const CALLOUT_THUMB_SIZE = 46;
 

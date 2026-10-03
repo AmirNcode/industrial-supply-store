@@ -269,16 +269,6 @@ export async function removeLine(productId: number): Promise<void> {
   });
 }
 
-export async function clearCart(): Promise<void> {
-  const id = await getCartId();
-  if (!id) return;
-  await sql.begin(async (tx) => {
-    if (!(await lockCart(tx, id))) return;
-    await tx`DELETE FROM cart_items WHERE cart_id = ${id}`;
-    await tx`UPDATE carts SET updated_at = now() WHERE id = ${id}`;
-  });
-}
-
 /** Re-exported: the rule is pure and tested in `priceTiers.ts`. */
 export { unitPriceAt };
 

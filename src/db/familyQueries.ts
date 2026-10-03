@@ -18,21 +18,7 @@ import {
  * sensible default and is editable later.
  */
 
-export type CategoryChoice = {
-  id: number;
-  path: string;
-  nameEn: string;
-  nameFa: string;
-};
-
-/**
- * The description callout's editable content, identical on both entity types.
- *
- * Split out because the admin *index* reads every category in the taxonomy and
- * has no use for the prose — keeping it off `CatalogCategoryListRow` stops that
- * page from carrying two locales of description for 97 rows it renders as
- * one-line links.
- */
+/** The description callout's editable content, identical on both entity types. */
 export type CatalogDescriptionFields = {
   aboutEn: string;
   aboutFa: string;
@@ -51,11 +37,6 @@ type CatalogCategoryBaseRow = {
 };
 
 export type CatalogCategoryEditorRow = CatalogCategoryBaseRow & CatalogDescriptionFields;
-
-export type CatalogCategoryListRow = CatalogCategoryBaseRow & {
-  depth: number;
-  productCount: number;
-};
 
 export type CatalogFamilyEditorRow = {
   id: number;
@@ -147,17 +128,6 @@ export async function getAdminTaxonomyNodes(): Promise<AdminTaxonomyNode[]> {
   }));
 }
 
-/** Every taxonomy node, including branch categories that own no family rows. */
-export async function getCatalogCategoriesForAdmin(): Promise<CatalogCategoryListRow[]> {
-  return sql<CatalogCategoryListRow[]>`
-    SELECT id, path, depth, name_en AS "nameEn", name_fa AS "nameFa", icon,
-           image_url AS "imageUrl", is_visible AS "isVisible",
-           product_count AS "productCount"
-    FROM categories
-    ORDER BY path
-  `;
-}
-
 /** Everything editable from one category's media page. */
 export async function getCatalogCategoryEditor(
   categoryId: number,
@@ -237,16 +207,6 @@ export async function updateCatalogFamily(input: CatalogEntityUpdate): Promise<b
     RETURNING id
   `;
   return rows.length > 0;
-}
-
-/** Childless categories used by the legacy family picker. Any depth is valid. */
-export async function getLeafCategories(): Promise<CategoryChoice[]> {
-  return sql<CategoryChoice[]>`
-    SELECT c.id, c.path, c.name_en AS "nameEn", c.name_fa AS "nameFa"
-    FROM categories c
-    WHERE NOT EXISTS (SELECT 1 FROM categories k WHERE k.parent_id = c.id)
-    ORDER BY c.path
-  `;
 }
 
 /** A slug: lowercase, hyphenated, ASCII. */
@@ -338,56 +298,6 @@ export async function createCategory(
 }
 
 /**
- * What deleting would destroy, so the confirmation can say so.
- *
- * Orders are counted but not blocked on: `order_items` keeps its own copy of
- * the part number, family name and specs, and its `product_id` is ON DELETE SET
- * NULL, so a past order stays readable and correctly priced after the product
- * it referenced is gone. The count is shown because "12 products, 3 of them on
- * past orders" is a different decision from "12 products".
- */
-export type DeleteImpact = {
-  families: number;
-  products: number;
-  orderedProducts: number;
-};
-
-export async function getFamilyImpact(familyId: number): Promise<DeleteImpact | null> {
-  const [row] = await sql<DeleteImpact[]>`
-    SELECT 1::int AS families,
-           count(p.id)::int AS products,
-           count(DISTINCT p.id) FILTER (WHERE i.id IS NOT NULL)::int AS "orderedProducts"
-    FROM product_families f
-    LEFT JOIN products p ON p.family_id = f.id
-    LEFT JOIN order_items i ON i.product_id = p.id
-    WHERE f.id = ${familyId}
-    GROUP BY f.id
-  `;
-  return row ?? null;
-}
-
-export async function getCategoryImpact(categoryId: number): Promise<DeleteImpact | null> {
-  const [exists] = await sql<{ path: string }[]>`
-    SELECT path FROM categories WHERE id = ${categoryId}
-  `;
-  if (!exists) return null;
-
-  // The whole subtree, not just the category itself — deleting a branch takes
-  // its children with it, and the confirmation has to say how much that is.
-  const [row] = await sql<DeleteImpact[]>`
-    SELECT count(DISTINCT f.id)::int AS families,
-           count(p.id)::int AS products,
-           count(DISTINCT p.id) FILTER (WHERE i.id IS NOT NULL)::int AS "orderedProducts"
-    FROM categories c
-    LEFT JOIN product_families f ON f.category_id = c.id
-    LEFT JOIN products p ON p.family_id = f.id
-    LEFT JOIN order_items i ON i.product_id = p.id
-    WHERE c.path = ${exists.path} OR c.path LIKE ${exists.path + "/%"}
-  `;
-  return row ?? { families: 0, products: 0, orderedProducts: 0 };
-}
-
-/**
  * Delete a family and everything under it.
  *
  * `products`, `spec_defs` and `product_spec_values` all cascade from the
@@ -440,48 +350,6 @@ async function recountCategories(tx: Parameters<Parameters<typeof sql.begin>[1]>
     ) sub
     WHERE c.id = sub.id
   `;
-}
-
-/**
- * Write a category's families into the order the operator arranged them in.
- *
- * A whole category at once, not one move at a time: moving a family seven
- * places is one intention and should be one write, and the admin page only
- * sends this when Save is pressed. It also renumbers rather than swapping —
- * `sort` defaults to 0, so a seeded category is a run of ties that
- * `ORDER BY sort, id` breaks by id, and swapping two zeros would reorder
- * nothing.
- *
- * The submitted ids must be exactly the category's own families, no more and
- * no fewer. A list that has drifted is refused whole rather than applied in
- * part: the page it came from was drawn before something else changed the
- * category, so its order is an answer to a question that has moved on.
- */
-export async function saveFamilyOrder(
-  categoryId: number,
-  orderedIds: readonly number[],
-): Promise<boolean> {
-  if (orderedIds.length === 0) return false;
-  if (new Set(orderedIds).size !== orderedIds.length) return false;
-
-  return sql.begin(async (tx) => {
-    const current = await tx<{ id: number }[]>`
-      SELECT id FROM product_families WHERE category_id = ${categoryId}
-    `;
-    const actual = new Set(current.map((f) => f.id));
-    if (actual.size !== orderedIds.length) return false;
-    if (!orderedIds.every((id) => actual.has(id))) return false;
-
-    const ids = [...orderedIds];
-    await tx`
-      UPDATE product_families f SET sort = u.sort
-      FROM unnest(${ids}::int[]) WITH ORDINALITY AS u(id, sort)
-      -- The category is re-asserted here as well as checked above, so even a
-      -- mismatch that slipped past cannot move a family out of its category.
-      WHERE f.id = u.id AND f.category_id = ${categoryId}
-    `;
-    return true;
-  });
 }
 
 export type TaxonomyOrderChange =

@@ -14,22 +14,6 @@ export function ax(
 
 // --- Reusable value pools --------------------------------------------------
 
-export const ELASTOMERS = [
-  "Buna-N",
-  "Viton",
-  "Silicone",
-  "EPDM",
-  "Neoprene",
-  "PTFE",
-  "Polyurethane",
-];
-
-export const HARDNESS = [
-  "Durometer 50A (Soft)",
-  "Durometer 70A (Medium)",
-  "Durometer 90A (Hard)",
-];
-
 export const FASTENER_MATERIALS = [
   "18-8 Stainless Steel",
   "316 Stainless Steel",
@@ -39,16 +23,6 @@ export const FASTENER_MATERIALS = [
   "Brass",
   "Nylon",
   "Titanium",
-];
-
-export const STRUCTURAL_MATERIALS = [
-  "Low-Carbon Steel",
-  "18-8 Stainless Steel",
-  "316 Stainless Steel",
-  "6061 Aluminum",
-  "Brass",
-  "Copper",
-  "Cast Iron",
 ];
 
 export const PLASTICS = [
