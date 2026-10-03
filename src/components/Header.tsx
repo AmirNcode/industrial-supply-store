@@ -62,12 +62,15 @@ export async function Header({ locale }: { locale: Locale }) {
               same second — the bursts that exhausted the pooler (review
               finding H-2). `src/lib/prefetch.test.ts` keeps it that way. */}
           <Link prefetch={false} href={`/${locale}`} className="shrink-0 hover:no-underline">
-            {/* Attributes carry the *display* size, not the file's 1908×543.
+            {/* Attributes carry the *display* size, not the file's 369×105.
                 Same 3.5 ratio either way, so this still reserves the right box
-                and prevents layout shift — but if the stylesheet ever fails to
-                arrive, the fallback is a 123px logo instead of a 1908px one
-                that widens the document and makes phones shrink-to-fit the
-                entire page. */}
+                and prevents layout shift — and if the stylesheet ever fails to
+                arrive, the fallback is a 123px logo, not one that widens the
+                document and makes phones shrink-to-fit the entire page.
+                The file is 3× this 35px display height (sharp on 3× phone
+                screens) and ~13 KB. It was once the 1908px original at 95 KB,
+                loaded on every page: a crawler hammering the site made it
+                most of the month's data transfer. */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src="/temex-logo-cropped.jpg"

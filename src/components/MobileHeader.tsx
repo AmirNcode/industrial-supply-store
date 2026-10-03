@@ -112,7 +112,7 @@ export function MobileHeader({
       <div className="relative z-10 bg-[var(--color-navy)] px-3 pt-2 pb-1">
         <Link prefetch={false} href={`/${locale}`} className="flex items-center gap-2 hover:no-underline">
           {/* alt carries the brand name, and the attributes carry the display
-              size rather than the file's 1908×543 — see the note in Header.tsx
+              size rather than the file's 369×105 — see the note in Header.tsx
               for why that matters on a phone. */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
