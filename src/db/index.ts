@@ -8,8 +8,8 @@ import * as schema from "./schema";
  * One long-lived container can happily hold a dozen connections. A managed
  * functions platform runs many instances, so the same `max` multiplies by the
  * instance count and exhausts Postgres. Each instance therefore keeps a very
- * small pool and leans on the provider's connection pooler (Neon's `-pooler`
- * host, Supabase's pgBouncer port) to fan out.
+ * small pool and leans on the provider's connection pooler (Supabase's pgBouncer
+ * port) to fan out.
  *
  * `prepare: false` is what makes that safe: transaction-mode poolers reject
  * prepared statements, because a statement prepared on one backend is not
@@ -30,7 +30,7 @@ import * as schema from "./schema";
  * had to be retried — and a build that slow is also a build that can fail.
  */
 const isBuild = process.env.NEXT_PHASE === "phase-production-build";
-const isServerless = Boolean(process.env.VERCEL || process.env.NETLIFY) && !isBuild;
+const isServerless = Boolean(process.env.VERCEL) && !isBuild;
 
 /**
  * The build goes direct; requests go through the pooler.

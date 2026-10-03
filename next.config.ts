@@ -20,10 +20,10 @@ const catalogImageHost = storageHost();
 const nextConfig: NextConfig = {
   /**
    * Standalone output exists for the Docker image, which runs `server.js`
-   * without node_modules. Vercel and Netlify build Next themselves and do not
-   * want it, so it is switched off there rather than left to be ignored.
+   * without node_modules. Vercel builds Next itself and does not want it, so
+   * it is switched off there rather than left to be ignored.
    */
-  output: process.env.VERCEL || process.env.NETLIFY ? undefined : "standalone",
+  output: process.env.VERCEL ? undefined : "standalone",
   /**
    * Testing on a real phone means hitting the dev server at the machine's LAN
    * address, and `next dev` blocks `/_next/*` and the HMR socket for every
