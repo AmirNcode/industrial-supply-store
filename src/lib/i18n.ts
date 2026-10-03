@@ -50,13 +50,10 @@ const en = {
   browseCatalog: "BROWSE CATALOG",
   search: "Search",
   searchPlaceholder: "Search",
-  logIn: "Log in",
   order: "ORDER",
-  orderHistory: "ORDER HISTORY",
   allCategories: "All Categories",
   chooseCategory: "Choose a Category",
   filterBy: "Filter by",
-  filterHelp: "Choose specifications to narrow the results",
   clearAll: "Clear all",
   products: "Products",
   productsLower: "products",
@@ -177,7 +174,6 @@ const en = {
   cancelOrder: "Cancel order",
   courier: "Courier",
   trackingNumber: "Tracking number",
-  allOrders: "All",
   needsAction: "Needs action",
   trackingRequired: "Enter both a courier and a tracking number.",
   // Invoicing
@@ -194,7 +190,6 @@ const en = {
   orderConflict: "That order changed while you were working on it. Check its current status and try again.",
   badRequest: "That request could not be understood.",
   // Footer
-  locations: "Locations",
   returns: "Returns",
   help: "Help",
   terms: "Terms and Conditions",
@@ -259,7 +254,6 @@ const en = {
   // Invoice
   invoice: "Invoice",
   invoiceTo: "Bill to",
-  invoiceFrom: "From",
   invoiceDate: "Date",
   invoiceOrderRef: "Order reference",
   invoiceDescription: "Description",
@@ -328,8 +322,6 @@ const en = {
   profileSaved: "Profile saved.",
   defaultPoNumber: "Default PO number",
   noOrdersYet: "No orders yet.",
-  orderPlaced: "Placed",
-  viewOrder: "View",
   viewInvoice: "View invoice",
   signedInAs: "Signed in as",
   invoiceCancelled: "CANCELLED — this invoice is void and must not be paid.",
@@ -390,9 +382,6 @@ const en = {
     "With an account you can see prices, invoices and every order in one place.",
   trackFromSubmitted: "You can check on it any time from the tracking page.",
   // Import
-  importProducts: "Import products",
-  importIntro:
-    "Download a family's template or its current products, edit in Excel, and upload the same file back. Nothing is written unless every row is valid.",
   downloadTemplate: "Template",
   exportProducts: "Export",
   chooseCsv: "Choose CSV file",
@@ -431,9 +420,7 @@ const en = {
   reviewRoleSpec: "Product spec",
   reviewRoleIgnore: "Ignore this column",
   reviewFieldTaken: "already {column}",
-  reviewShowIn: "Show in",
   reviewInTable: "Catalog table",
-  reviewInDetail: "Product details",
   reviewKind: "Values",
   reviewKindNumber: "Numbers",
   reviewKindText: "Text",
@@ -487,30 +474,17 @@ const en = {
   importNeedsNumbers:
     "Some rows have no part number. Choose to create part numbers for them, or upload a different file.",
   reviewConfirm: "Confirm and import",
-  reviewStartOver: "Choose a different file",
   reviewProblems: "This cannot be imported yet:",
   importBadPlan: "Those column choices could not be read. Upload the file again.",
   importAddedColumns: "{n} columns added",
   importDroppedColumns: "{n} columns deleted",
   importPriceless:
     "Imported with no price, so they show “call for price” until one is set:",
-  // Adding a family
-  newFamily: "Add a product family",
-  newFamilyIntro:
-    "An empty family for a CSV to land in. The first upload defines its columns.",
-  newFamilyCategory: "Category",
-  newFamilyNameEn: "Name (English)",
-  newFamilyNameFa: "Name (Persian)",
-  newFamilyAdd: "Add family",
-  newFamilyCreated: "Added “{name}”. Upload a CSV into it below.",
-  newFamilyNoName: "Give the family an English name.",
-  newFamilyNoCategory: "Choose a category.",
   // Products taxonomy workbench
   taxonomyLoading: "Loading catalog taxonomy…",
   taxonomyTreeLabel: "Catalog taxonomy",
   taxonomyFindCategory: "Find a category",
   taxonomyNoMatches: "No matching categories or families.",
-  taxonomyChooseNode: "Choose a category or family",
   taxonomyArrange: "Arrange",
   taxonomyDone: "Done",
   taxonomyDoneArranging: "Done arranging",
@@ -595,7 +569,6 @@ const en = {
   deleteDone: "Deleted “{name}”.",
   deleteNotConfirmed: "Type DELETE to confirm.",
   // Editing a family's columns
-  editCategory: "Edit",
   editImage: "Image",
   catalogHidden: "Hidden from catalog",
   catalogEditTitle: "Edit {category}",
@@ -640,9 +613,6 @@ const en = {
   catalogEditUploadFailed: "The image could not be uploaded. Try again.",
   catalogEditNotFound: "That category or family no longer exists.",
   catalogEditBack: "Back to products",
-  catalogManageCategories: "Manage all categories",
-  catalogManageCategoriesIntro:
-    "Edit branch categories and subcategories that do not have product families of their own.",
   editColumns: "Columns",
   columnsTitle: "Columns for {family}",
   columnsIntro:
@@ -663,10 +633,7 @@ const en = {
   // Catalog order of the families inside one category. Arranged with the same
   // arrows as the columns above, and saved the same way — deliberately, since
   // moving a family seven places is one intention, not seven writes.
-  orderSave: "Save order",
   orderDiscard: "Discard",
-  orderSaved: "Order saved.",
-  orderFailed: "That order could not be saved — this category has changed since the page loaded. Reload and arrange it again.",
   orderUnsavedTitle: "Unsaved order changes",
   orderUnsavedBody:
     "The catalog order of {n} has been changed and not saved yet. Leaving now loses the arrangement.",
@@ -995,13 +962,10 @@ const fa: typeof en = {
   browseCatalog: "مرور کاتالوگ",
   search: "جستجو",
   searchPlaceholder: "جستجو",
-  logIn: "ورود",
   order: "سفارش",
-  orderHistory: "سابقه سفارش‌ها",
   allCategories: "همه دسته‌بندی‌ها",
   chooseCategory: "انتخاب دسته‌بندی",
   filterBy: "فیلتر بر اساس",
-  filterHelp: "برای محدود کردن نتایج، مشخصات را انتخاب کنید",
   clearAll: "پاک کردن همه",
   products: "کالا",
   productsLower: "کالا",
@@ -1117,7 +1081,6 @@ const fa: typeof en = {
   cancelOrder: "لغو سفارش",
   courier: "شرکت حمل",
   trackingNumber: "کد رهگیری",
-  allOrders: "همه",
   needsAction: "نیازمند اقدام",
   trackingRequired: "نام شرکت حمل و کد رهگیری هر دو الزامی است.",
   createInvoice: "ایجاد صورتحساب",
@@ -1131,7 +1094,6 @@ const fa: typeof en = {
   orderNotFound: "این سفارش دیگر وجود ندارد.",
   orderConflict: "وضعیت این سفارش در حین کار شما تغییر کرد. وضعیت فعلی را بررسی و دوباره تلاش کنید.",
   badRequest: "این درخواست قابل پردازش نبود.",
-  locations: "شعب",
   returns: "مرجوعی",
   help: "راهنما",
   terms: "شرایط و مقررات",
@@ -1193,7 +1155,6 @@ const fa: typeof en = {
   fxStale: "بیش از ۳۶ ساعت است که قیمت بازار دریافت نشده. قیمت‌ها با آخرین نرخ معتبر نمایش داده می‌شوند.",
   invoice: "صورتحساب",
   invoiceTo: "صورتحساب برای",
-  invoiceFrom: "از طرف",
   invoiceDate: "تاریخ",
   invoiceOrderRef: "شماره سفارش",
   invoiceDescription: "شرح کالا",
@@ -1260,8 +1221,6 @@ const fa: typeof en = {
   profileSaved: "مشخصات ذخیره شد.",
   defaultPoNumber: "شماره سفارش خرید پیش‌فرض",
   noOrdersYet: "هنوز سفارشی ثبت نشده است.",
-  orderPlaced: "تاریخ ثبت",
-  viewOrder: "مشاهده",
   viewInvoice: "مشاهده صورتحساب",
   signedInAs: "واردشده با",
   invoiceCancelled: "لغو شده — این صورتحساب باطل است و نباید پرداخت شود.",
@@ -1322,9 +1281,6 @@ const fa: typeof en = {
     "با ساخت حساب کاربری می‌توانید قیمت‌ها، صورتحساب‌ها و همه سفارش‌ها را یکجا ببینید.",
   trackFromSubmitted: "هر زمان می‌توانید از صفحه پیگیری وضعیت آن را ببینید.",
   // Import
-  importProducts: "بارگذاری گروهی کالا",
-  importIntro:
-    "قالب یک خانواده یا کالاهای فعلی آن را دریافت کنید، در اکسل ویرایش کنید و همان فایل را بارگذاری کنید. تا وقتی همه سطرها معتبر نباشند چیزی ثبت نمی‌شود.",
   downloadTemplate: "قالب",
   exportProducts: "خروجی",
   chooseCsv: "انتخاب فایل CSV",
@@ -1363,9 +1319,7 @@ const fa: typeof en = {
   reviewRoleSpec: "مشخصه کالا",
   reviewRoleIgnore: "نادیده گرفتن",
   reviewFieldTaken: "قبلاً {column}",
-  reviewShowIn: "نمایش در",
   reviewInTable: "جدول کاتالوگ",
-  reviewInDetail: "جزئیات کالا",
   reviewKind: "مقادیر",
   reviewKindNumber: "عددی",
   reviewKindText: "متنی",
@@ -1419,29 +1373,17 @@ const fa: typeof en = {
   importNeedsNumbers:
     "برخی سطرها شماره قطعه ندارند. یا ساخت شماره قطعه را انتخاب کنید یا فایل دیگری بارگذاری کنید.",
   reviewConfirm: "تأیید و ثبت",
-  reviewStartOver: "انتخاب فایل دیگر",
   reviewProblems: "فعلاً قابل ثبت نیست:",
   importBadPlan: "تنظیمات ستون‌ها خوانده نشد. فایل را دوباره بارگذاری کنید.",
   importAddedColumns: "{n} ستون افزوده شد",
   importDroppedColumns: "{n} ستون حذف شد",
   importPriceless:
     "بدون قیمت ثبت شدند و تا تعیین قیمت «تماس بگیرید» نمایش داده می‌شوند:",
-  // Adding a family
-  newFamily: "افزودن خانواده کالا",
-  newFamilyIntro:
-    "یک خانواده خالی برای بارگذاری فایل CSV. اولین بارگذاری، ستون‌های آن را می‌سازد.",
-  newFamilyCategory: "دسته‌بندی",
-  newFamilyNameEn: "نام (انگلیسی)",
-  newFamilyNameFa: "نام (فارسی)",
-  newFamilyAdd: "افزودن خانواده",
-  newFamilyCreated: "«{name}» افزوده شد. اکنون فایل CSV را در آن بارگذاری کنید.",
-  newFamilyNoName: "برای خانواده یک نام انگلیسی وارد کنید.",
-  newFamilyNoCategory: "یک دسته‌بندی انتخاب کنید.",
+  // Products taxonomy workbench
   taxonomyLoading: "در حال بارگذاری ساختار کاتالوگ…",
   taxonomyTreeLabel: "ساختار کاتالوگ",
   taxonomyFindCategory: "جستجوی دسته‌بندی",
   taxonomyNoMatches: "دسته‌بندی یا خانواده‌ای پیدا نشد.",
-  taxonomyChooseNode: "انتخاب دسته‌بندی یا خانواده",
   taxonomyArrange: "چیدمان",
   taxonomyDone: "تمام",
   taxonomyDoneArranging: "پایان چیدمان",
@@ -1526,7 +1468,6 @@ const fa: typeof en = {
   deleteDone: "«{name}» حذف شد.",
   deleteNotConfirmed: "برای تأیید DELETE بنویسید.",
   // Editing a family's columns
-  editCategory: "ویرایش",
   editImage: "تصویر",
   catalogHidden: "در کاتالوگ پنهان است",
   catalogEditTitle: "ویرایش {category}",
@@ -1570,9 +1511,6 @@ const fa: typeof en = {
   catalogEditUploadFailed: "بارگذاری تصویر انجام نشد. دوباره تلاش کنید.",
   catalogEditNotFound: "این دسته‌بندی یا خانواده دیگر وجود ندارد.",
   catalogEditBack: "بازگشت به کالاها",
-  catalogManageCategories: "مدیریت همه دسته‌بندی‌ها",
-  catalogManageCategoriesIntro:
-    "دسته‌بندی‌های شاخه‌ای و زیردسته‌هایی را که خانواده کالای مستقیم ندارند ویرایش کنید.",
   editColumns: "ستون‌ها",
   columnsTitle: "ستون‌های {family}",
   columnsIntro:
@@ -1587,11 +1525,7 @@ const fa: typeof en = {
   columnsSave: "ذخیره ستون‌ها",
   columnsSaved: "ستون‌ها ذخیره شد.",
   columnsTooMany: "برای خوانایی بهتر، انتخاب را به ۱۰ ستون محدود کنید.",
-  orderSave: "ذخیره ترتیب",
   orderDiscard: "لغو تغییرات",
-  orderSaved: "ترتیب ذخیره شد.",
-  orderFailed:
-    "ترتیب ذخیره نشد — این دسته‌بندی پس از باز شدن صفحه تغییر کرده است. صفحه را دوباره بارگذاری کنید و ترتیب را دوباره بچینید.",
   orderUnsavedTitle: "تغییرات ذخیره‌نشده",
   orderUnsavedBody:
     "ترتیب کاتالوگ در {n} تغییر کرده و هنوز ذخیره نشده است. با خروج از صفحه این چیدمان از دست می‌رود.",

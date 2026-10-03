@@ -173,10 +173,6 @@ export function formatMoneyExact(
   return formatPriceExact(cents, currency, locale, rate);
 }
 
-export function currencyLabelFor(currency: Currency, locale: Locale): string {
-  return currencyLabel(currency, locale);
-}
-
 const intFmtFa = new Intl.NumberFormat("fa-IR");
 const intFmtEn = new Intl.NumberFormat("en-US");
 

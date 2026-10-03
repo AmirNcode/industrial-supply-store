@@ -90,15 +90,6 @@ export function toggleHref(
   return qs ? `${base}?${qs}` : base;
 }
 
-/** Href with every value of one spec removed. */
-export function clearKeyHref(base: string, sp: RawSearchParams, key: string): string {
-  const params = toParams(sp);
-  params.delete(FILTER_PREFIX + key);
-  resetFamilyWindow(params);
-  const qs = params.toString();
-  return qs ? `${base}?${qs}` : base;
-}
-
 /** Href with all filters removed but non-filter params (like `pn`) preserved. */
 export function clearAllHref(base: string, sp: RawSearchParams): string {
   const params = new URLSearchParams();

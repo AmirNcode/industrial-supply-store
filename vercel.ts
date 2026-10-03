@@ -19,10 +19,10 @@ export const config: VercelConfig = {
    * them, so co-locating the functions with the database is worth more here
    * than picking a region close to the buyer.
    *
-   * `fra1` (Frankfurt) assumes a Neon project in `aws-eu-central-1`, which is
-   * the closest sensible region for an Iranian market. CHANGE THIS to match
-   * whichever region the database actually lives in — a mismatch is the single
-   * easiest way to make the deployed site feel slower than localhost.
+   * `fra1` (Frankfurt) sits beside the demo database in Supabase's
+   * `eu-central-1`, the closest sensible region for an Iranian market. If the
+   * database ever moves, move this with it — a mismatch is the single easiest
+   * way to make the deployed site feel slower than localhost.
    *
    * Hobby plans are limited to one region; Pro and Enterprise can list several.
    */

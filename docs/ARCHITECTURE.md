@@ -2,8 +2,12 @@
 
 Orientation for someone — human or coding agent — picking this up cold. It
 covers what the pieces are, which invariants are load-bearing, and where the
-traps are. Deployment lives in [`DEPLOYMENT.md`](DEPLOYMENT.md); the design
-history lives in `docs/superpowers/`.
+traps are. Deployment lives in [`DEPLOYMENT.md`](DEPLOYMENT.md).
+
+Code comments tagged `review X-N` cite the 2026-09-28 code review. Each comment
+states its own reason, so the review does not need reading; it left git on
+2026-10-03 and is recoverable with
+`git log --diff-filter=D -- docs/review/CODE-REVIEW.md`.
 
 **Agents: read [`../CLAUDE.md`](../CLAUDE.md) first.** It sets how to work in
 this repository and — the part most often got wrong — how to report back.
@@ -68,7 +72,8 @@ They share nothing on purpose.
   with a key derived from `AUTH_SECRET` and the password, expires on the
   server after 8 hours, and carries `app_settings.admin_session_version`:
   changing the password or pressing Settings → "Sign out everywhere" ends
-  every admin session. No named accounts or audit trail. Login and write surfaces use the shared database
+  every admin session. No named accounts, so the audit trail records "admin"
+  rather than a person. Login and write surfaces use the shared database
   rate limiter. `assertAdminWrite()` guards every write and refuses under
   `DEMO_MODE`.
 - **Customers** — per-account scrypt passwords, signed session cookie
@@ -132,8 +137,9 @@ one exchange alone) from the last reading. The rate lives in `app_settings`
 as `fx_market_rate`, a bare number read by every priced page, beside
 `fx_market_state`, the history only the job and admin read. No page cache is
 purged: every page that shows a price renders per request. Manual mode ignores
-all of it. The schedule is Vercel-only — see "Moving off Vercel" in
-[`DEPLOYMENT.md`](DEPLOYMENT.md) before self-hosting.
+all of it. On Vercel the schedule is in `vercel.ts`; self-hosted, the
+`scheduler` service in `docker-compose.yml` calls the route (see
+[`DEPLOYMENT.md`](DEPLOYMENT.md)).
 
 **Invoices must not round.** `formatPriceExact` / `formatMoneyExact` skip the
 nearest-1,000 Rial rounding `formatPrice` does, or a column of lines disagrees with its
@@ -238,8 +244,8 @@ the values the server rendered. Together those made the column editor unable to
 save anything: the payload posted was the page's first render, and the display
 then snapped back so the failure looked like a caching problem. Build the
 payload in an `onSubmit` handler from current state, as `ColumnEditor` and
-`CatalogMediaEditor` both now do. `ColumnReview`/`ImportPanel` still carry the
-hidden-input version of this defect and are tracked separately.
+`CatalogMediaEditor` both now do. `ColumnReview` and `MobileColumnReview` still
+carry the hidden-input version of this defect and are tracked separately.
 
 **A category or family has two image slots, and their sizes mean different
 things.** `image_url` is the catalog thumbnail: it identifies the entity in a
@@ -291,11 +297,11 @@ wrapper used to carry; the table is built to fit the window at 1024 and up.
 
 **Catalog order is `sort`, and admin renumbers a whole run when it changes.**
 `categories.sort` and `product_families.sort` default to 0, so a seeded run is a
-set of ties broken by `id`. `saveFamilyOrder` renumbers the category's families
-from the order the operator arranged rather than swapping two rows, because
-swapping two zeros changes nothing. It refuses any list that is not exactly the
-category's own families — no partial orders from a page drawn before something
-else changed.
+set of ties broken by `id`. `saveAdminTaxonomyChanges` renumbers each changed
+sibling run from the order the operator arranged rather than swapping two rows,
+because swapping two zeros changes nothing. It refuses any run that is not
+exactly the parent's own children — no partial orders from a page drawn before
+something else changed.
 
 **Taxonomy children are one kind per category, at any depth.** A category may
 hold subcategories or product families, never both. A family may therefore hang
@@ -386,6 +392,26 @@ rep's id, taken from the session, in its own `WHERE` (`customerQueries.ts`,
 `noteQueries.ts`, `repOrderQueries.ts`), so a posted id for someone else's
 customer or order matches nothing. Pages turn that into a 404, not a 403,
 which would confirm the id exists.
+
+## Catalog data and Persian display
+
+**Spec values are stored in English and translated when rendered**
+(`src/lib/specValues.ts`). A Persian copy per value would double the facet
+index and make filter URLs depend on language: `?f_material=Viton` must mean
+the same thing to an English-reading engineer and a Persian-reading buyer who
+share a link. `npm run i18n:missing` lists values that still render in English.
+
+**Dimensions and part numbers stay in Latin digits in both locales**, pinned
+`dir="ltr"`; prices and counts use Persian digits (`formatInt`, `formatPrice`).
+Buyers match dimensions against manufacturers' catalogs, which are Latin.
+
+**The demo catalog derives what depends on something else.** In `src/seed/`,
+an O-ring's OD is `ID + 2 × width` and a bearing's OD and width follow its bore
+and series; a material's service temperature comes from the material. An
+independent axis for either would emit impossible parts (an 80 mm bore in a
+10 mm race) or rows that differ only by a number nobody can choose. O-ring
+`-0xx` sizes are the real AS568 values; the larger series are generated from
+each series' base size and step.
 
 ## TEMEX part numbers
 
@@ -528,7 +554,8 @@ is delivered.
 ```
 src/
   app/[locale]/          pages; admin split under admin/(panel)/
-  app/api/               cart, suggest, admin CSV/export/import routes
+  app/api/               cart, suggest, shown-once, admin CSV/export/import,
+                         payment-proof download, the exchange-rate cron
   app/actions.ts         cart + order submission Server Actions
   components/            ConfirmSubmit, FxRatePanel, OrderTimeline, …
   db/schema.ts           Drizzle schema (definition only)
@@ -573,7 +600,6 @@ Full detail, plus five other traps, in [`DEPLOYMENT.md`](DEPLOYMENT.md).
 
 ## Known gaps
 
-Recorded in `docs/superpowers/specs/2026-07-31-accounts-orders-admin-design.md`.
 The load-bearing ones: no email anywhere (staff send invoices by hand), sessions
 cannot be revoked individually, and `/admin` has no named staff accounts —
 which is why `order_comments` has no author column, and why `audit_log` (who

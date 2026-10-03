@@ -40,16 +40,6 @@ export type PriceTier = { minQty: number; priceCents: number };
 export type ProductDocument = { label: string; url: string };
 
 /**
- * Where a spec column appears.
- *
- * A family can hold far more columns than a table can show — the first real
- * gate valve file has 45. `table` columns identify a product while scanning a
- * list; `detail` columns describe it once it is the product you care about, and
- * render only in the expanded row.
- */
-export type SpecDisplay = "table" | "detail";
-
-/**
  * How one uploaded CSV header maps onto something that is not a spec: a
  * built-in product field, or nothing at all.
  *
@@ -58,7 +48,6 @@ export type SpecDisplay = "table" | "detail";
  * what stops a column someone deliberately dropped from being re-proposed as
  * new on every subsequent upload.
  */
-export const IGNORED_FIELD = "__ignore__";
 export type FieldAliases = Record<string, string>;
 
 // ---------------------------------------------------------------------------

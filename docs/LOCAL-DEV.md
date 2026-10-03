@@ -22,7 +22,7 @@ it stays on the host where `npm run dev` reloads in milliseconds.
   │  Next.js on :3000        │──────────► │  Postgres 17 on :5432   │
   │                          │  port 5434 │  volume: isupply-pgdata │
   │  npm run db:seed         │            └─────────────────────────┘
-  │  npm run db:column-tiers │
+  │  npm run db:migrate      │
   └──────────────────────────┘
 ```
 
@@ -95,8 +95,8 @@ npm run dev
 ```
 
 Runs Next.js on your Mac, connecting to the container over port 5434. Open
-<http://localhost:3000>; it redirects to `/en`, and Persian is at `/fa`. Admin
-is at `/en/admin` with the password from `ADMIN_PASSWORD` in `.env`, defaulting
+<http://localhost:3000>; it redirects to `/fa`, and English is at `/en`. Admin
+is at `/fa/admin` with the password from `ADMIN_PASSWORD` in `.env`, defaulting
 to `changeme` in development.
 
 Leave this running. It watches your files and reloads on save.
@@ -233,7 +233,7 @@ node -e 'for (const f of [".env.production.local",".env.local",".env"]) { try { 
 | Watch the database logs | `docker compose logs -f db` |
 | Open a SQL prompt | `docker exec -it isupply-db psql -U isupply -d isupply` |
 | Run one SQL statement | `docker exec isupply-db psql -U isupply -d isupply -c "select count(*) from products;"` |
-| Wipe and rebuild the data | `npm run db:reset` |
+| Wipe and rebuild the data | `npm run db:bootstrap:local` |
 | Add demo sales reps, customers and orders | `npm run db:seed:reps` |
 
 Two of those deserve a note.

@@ -54,9 +54,9 @@ const COLUMNS: readonly (readonly [string, string])[] = [
   ["orders", "invoice_number"],
   ["orders", "user_id"],
   ["orders", "submission_key"],
-  // Added 2026-08-12 by `db:column-tiers` (whose `display` column was dropped
-  // on 2026-09-30, review L-4). Every family page selects these, so a build
-  // that ships before they exist errors on the whole catalog, not just admin.
+  // Pre-baseline columns (2026-08-12). Every family page selects these, so a
+  // build that ships before they exist errors on the whole catalog, not just
+  // admin.
   ["spec_defs", "mobile"],
   ["spec_defs", "csv_alias"],
   ["product_families", "field_aliases"],
@@ -109,10 +109,12 @@ console.log(
   }`,
 );
 
-// `quotes` still existing means the rename has not been run. Pushing the schema
-// over the top of it would create an empty `orders` and drop the real data.
+// `quotes` still existing means a database from before the August rename of
+// quotes to orders, older than the migration baseline. Pushing the schema over
+// it would create an empty `orders` and drop the real data, and replaying the
+// old one-shot scripts is not a supported upgrade (DEPLOYMENT.md, trap 0).
 if (have.has("quotes")) {
-  console.log("            ✗ `quotes` still exists — run db:rename-orders:remote FIRST");
+  console.log("            ✗ `quotes` still exists — this database predates the baseline; stop and review");
 }
 
 const cols = await sql<{ table_name: string; column_name: string }[]>`
