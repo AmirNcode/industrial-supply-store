@@ -19,9 +19,18 @@ docker-compose.override.yml
 # `vercel env pull` output — carries real project keys.
 venv.txt
 
-# Local design prototypes retained as implementation reference.
-docs/design_handoff_admin_products_taxonomy/
-docs/admin-products-page-redesign-handoff/
+# Finished plans, specs, reviews, design handoffs and brand originals. Kept on
+# this machine for reference, out of git and out of agents' code search: the
+# plans hold stale copies of source files that every search used to return.
+.archive/
+
+# Plans that agent workflows write while a feature is in progress. Local only,
+# for the same reason; move one into .archive/ when its work has shipped.
+docs/superpowers/
+
+# Design prototypes dropped into docs/ while a screen is being built.
+docs/design_handoff_*/
+docs/*-handoff/
 
 # Local files for testing and debugging. Not part of the project.
 other_ignore/

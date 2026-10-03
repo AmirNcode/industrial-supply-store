@@ -15,8 +15,9 @@ test-results
 docker-compose.override.yml
 venv.txt
 other_ignore/
-products/
-docs/design_handoff_admin_products_taxonomy/
-docs/admin-products-page-redesign-handoff/
-PLAN.md
+.archive/
+.superpowers/
+docs/superpowers/
+docs/design_handoff_*/
+docs/*-handoff/
 README.md

@@ -17,10 +17,13 @@ const eslintConfig = [
       // Flat config does not read .gitignore, so these need saying twice.
       "playwright-report/**",
       "test-results/**",
-      // Standalone design prototype runtimes, not application source. They ship
-      // deprecated React 17 helpers so the handoff HTML can open by itself.
-      "docs/design_handoff_admin_products_taxonomy/**",
-      "docs/admin-products-page-redesign-handoff/**",
+      // Local-only folders (see .gitignore). The design prototypes in them ship
+      // deprecated React 17 runtimes so the handoff HTML can open by itself.
+      ".archive/**",
+      ".superpowers/**",
+      "other_ignore/**",
+      "docs/design_handoff_*/**",
+      "docs/*-handoff/**",
     ],
   },
 ];
