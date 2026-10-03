@@ -188,7 +188,16 @@ export async function getProductsPage(
   familyId: number,
   offset: number,
   limit: number,
+  /**
+   * Part numbers containing this text, case-insensitively. The phone's
+   * product list searches the whole family with it, not only the rows it has
+   * loaded. A scan within one family; no index needed at catalog sizes.
+   */
+  partQuery = "",
 ): Promise<{ products: ExportProduct[]; total: number }> {
+  // The text is matched literally: `%` and `_` in a part number are not wildcards.
+  const pattern = partQuery ? `%${partQuery.replace(/[\\%_]/g, (c) => `\\${c}`)}%` : "";
+  const match = pattern ? sql`AND part_number ILIKE ${pattern}` : sql``;
   const [products, [{ total }]] = await Promise.all([
     sql<ExportProduct[]>`
       SELECT part_number AS "partNumber", specs, price_cents AS "priceCents",
@@ -197,11 +206,13 @@ export async function getProductsPage(
              inventory_on_hold AS "inventoryOnHold",
              inventory_sold AS "inventorySold", image_url AS "imageUrl"
       FROM products
-      WHERE family_id = ${familyId}
+      WHERE family_id = ${familyId} ${match}
       ORDER BY sort, id
       LIMIT ${limit} OFFSET ${offset}
     `,
-    sql<{ total: number }[]>`SELECT count(*)::int AS total FROM products WHERE family_id = ${familyId}`,
+    sql<{ total: number }[]>`
+      SELECT count(*)::int AS total FROM products WHERE family_id = ${familyId} ${match}
+    `,
   ]);
   return { products, total };
 }

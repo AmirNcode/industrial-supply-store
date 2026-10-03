@@ -39,6 +39,12 @@ import { formatInt } from "@/lib/money";
  * cancelled, so the guard listens in the capture phase — ahead of the router's
  * own listener — puts the page's address back, and asks; the move the person
  * pressed becomes the navigation to make if they choose to leave.
+ *
+ * On a phone the products page is several screens on one URL — a family's
+ * list, one of its products, its details — and Back between them keeps every
+ * draft. `shouldGuard` lets that page say which moves really drop work, so
+ * Back from a product to its list is not met with a dialog about losing it.
+ * The phone also gets the same three choices as a bottom sheet (`variant`).
  */
 type Pending = { href: string } | { go: () => void };
 export function UnsavedOrderGuard({
@@ -48,6 +54,8 @@ export function UnsavedOrderGuard({
   onDiscard,
   copy,
   requestRef,
+  shouldGuard,
+  variant = "dialog",
 }: {
   /** How many categories hold an unsaved arrangement. */
   dirtyCount: number;
@@ -59,6 +67,9 @@ export function UnsavedOrderGuard({
   copy?: { title: string; body: string; scope: string };
   /** Filled with a function that opens this dialog for an in-page move. */
   requestRef?: RefObject<((go: () => void) => void) | null>;
+  /** Whether moving to this address would drop the unsaved work. Default: always. */
+  shouldGuard?: (destination: URL) => boolean;
+  variant?: "dialog" | "sheet";
 }) {
   const t = getDict(locale);
   const router = useRouter();
@@ -71,10 +82,11 @@ export function UnsavedOrderGuard({
    * state would mean a window, however small, where a click lands between the
    * remove and the add.
   */
-  const state = useRef({ dirtyCount, pending });
+  const state = useRef({ dirtyCount, pending, shouldGuard });
   useEffect(() => {
-    state.current = { dirtyCount, pending };
-  }, [dirtyCount, pending]);
+    state.current = { dirtyCount, pending, shouldGuard };
+  }, [dirtyCount, pending, shouldGuard]);
+  const guards = (destination: URL) => state.current.shouldGuard?.(destination) ?? true;
 
   // Where this page is, to put back when Back or Forward is pressed with
   // unsaved work. Refreshed only while nothing is unsaved: the router
@@ -119,6 +131,8 @@ export function UnsavedOrderGuard({
         return;
       }
 
+      if (!guards(url)) return;
+
       event.preventDefault();
       event.stopPropagation();
       setPending({ href });
@@ -135,6 +149,12 @@ export function UnsavedOrderGuard({
     const onPopState = (event: PopStateEvent) => {
       if (state.current.dirtyCount === 0 || state.current.pending !== null || !here.current) return;
       const target = window.location.pathname + window.location.search + window.location.hash;
+      if (!guards(new URL(window.location.href))) {
+        // A move that keeps the work: let it happen, and remember it as the
+        // page to come back to if a later Back does need asking about.
+        here.current = { href: window.location.href, state: window.history.state };
+        return;
+      }
       // Keep the router from acting on it, and stay where the work is.
       event.stopImmediatePropagation();
       window.history.pushState(here.current.state, "", here.current.href);
@@ -155,6 +175,7 @@ export function UnsavedOrderGuard({
       if (nav.navigationType !== "traverse" || !nav.cancelable) return;
       const url = new URL(nav.destination.url);
       if (url.origin !== window.location.origin) return;
+      if (!guards(url)) return;
       event.preventDefault();
       setPending({ href: url.pathname + url.search + url.hash });
     };
@@ -182,8 +203,12 @@ export function UnsavedOrderGuard({
       return;
     }
     const url = new URL(to.href, window.location.href);
-    if (url.origin === window.location.origin) router.push(url.pathname + url.search + url.hash);
-    else window.location.href = to.href;
+    if (url.origin === window.location.origin) {
+      router.push(url.pathname + url.search + url.hash);
+      // The phone's screens share one page, which stays standing after a
+      // move between them; the sheet must close or it would stay up for good.
+      if (variant === "sheet" && url.pathname === window.location.pathname) setPending(null);
+    } else window.location.href = to.href;
   };
 
   const scope =
@@ -193,6 +218,61 @@ export function UnsavedOrderGuard({
       : t.orderUnsavedMany.replace("{n}", formatInt(dirtyCount, locale)));
   const title = copy?.title ?? t.orderUnsavedTitle;
   const body = (copy?.body ?? t.orderUnsavedBody).replace("{n}", scope);
+
+  async function saveAndLeave(to: Pending) {
+    setSaving(true);
+    const ok = await onSave();
+    setSaving(false);
+    // A save that failed leaves the dialog up with the reason already
+    // rendered behind it; leaving now would discard the work anyway.
+    if (ok) leave(to);
+    else setPending(null);
+  }
+
+  if (variant === "sheet") {
+    return (
+      <div className="mtx-scrim" onClick={() => !saving && setPending(null)}>
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="mtx-guard-title"
+          className="mtx-sheet"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <span className="mtx-grabber" aria-hidden="true" />
+          <h2 id="mtx-guard-title" className="mtx-sheet-title">{title}</h2>
+          <p className="mtx-sheet-body">{body}</p>
+          <button
+            type="button"
+            className="mtx-button mtx-primary"
+            disabled={saving}
+            onClick={() => saveAndLeave(pending)}
+          >
+            {saving ? t.productsSaving : t.orderSaveAndLeave}
+          </button>
+          <button
+            type="button"
+            className="mtx-button mtx-ghost mtx-danger-ghost"
+            disabled={saving}
+            onClick={() => {
+              onDiscard();
+              leave(pending);
+            }}
+          >
+            {t.orderDiscardAndLeave}
+          </button>
+          <button
+            type="button"
+            className="mtx-button mtx-ghost"
+            disabled={saving}
+            onClick={() => setPending(null)}
+          >
+            {t.orderStay}
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -235,15 +315,7 @@ export function UnsavedOrderGuard({
             type="button"
             className="btn-primary"
             disabled={saving}
-            onClick={async () => {
-              setSaving(true);
-              const ok = await onSave();
-              setSaving(false);
-              // A save that failed leaves the dialog up with the reason already
-              // rendered behind it; leaving now would discard the work anyway.
-              if (ok) leave(pending);
-              else setPending(null);
-            }}
+            onClick={() => saveAndLeave(pending)}
           >
             {t.orderSaveAndLeave}
           </button>

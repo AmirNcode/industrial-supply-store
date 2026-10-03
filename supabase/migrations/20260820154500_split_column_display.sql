@@ -17,15 +17,28 @@ ALTER TABLE public.spec_defs
 
 -- Every family keeps rendering exactly as it does today: a table column stays
 -- out of the expanded row, a detail column stays out of the table.
-UPDATE public.spec_defs
-   SET in_table = (display = 'table'),
-       in_detail = (display = 'detail');
+--
+-- Only where `display` still exists. 20260930130000 drops it, and the schema
+-- no longer declares it, so a database built fresh — CI's, a new self-hosted
+-- install — has no `display` to copy from when this file is replayed. The
+-- live database ran this file while the column existed; this guard changes
+-- nothing there, and migrations are tracked by version, so it is not re-run.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'spec_defs' AND column_name = 'display'
+  ) THEN
+    UPDATE public.spec_defs
+       SET in_table = (display = 'table'),
+           in_detail = (display = 'detail');
+    COMMENT ON COLUMN public.spec_defs.display IS
+      'Superseded by in_table/in_detail on 2026-08-20. Retained unread for one release; dropped by a later migration.';
+  END IF;
+END $$;
 
 COMMENT ON COLUMN public.spec_defs.in_table IS
   'Renders as a catalog spec-table column. Independent of in_detail; neither set means the column renders nowhere.';
 
 COMMENT ON COLUMN public.spec_defs.in_detail IS
   'Renders in the expanded product row. Independent of in_table.';
-
-COMMENT ON COLUMN public.spec_defs.display IS
-  'Superseded by in_table/in_detail on 2026-08-20. Retained unread for one release; dropped by a later migration.';

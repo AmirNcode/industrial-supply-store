@@ -91,7 +91,7 @@ export const getFxRate = cache(async (): Promise<number> => {
 
 /** Where `getFxRate` came from; "placeholder" means nobody set a rate. */
 export async function getFxRateSource(): Promise<FxRateSource> {
-  return fxRateSource(await getFxSettings(), hasConfiguredFxRate());
+  return fxRateSource(await getFxSettings(), hasConfiguredFxRate(process.env.USD_TO_RIAL, process.env.USD_TO_TOMAN));
 }
 
 /**

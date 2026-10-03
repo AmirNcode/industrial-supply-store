@@ -111,7 +111,8 @@ export async function getAdminTaxonomyNodes(): Promise<AdminTaxonomyNode[]> {
     SELECT 'category'::text AS kind, c.id, c.parent_id AS "parentId",
            c.depth, c.slug, c.path, c.sort,
            c.name_en AS "nameEn", c.name_fa AS "nameFa",
-           c.image_url AS "imageUrl", c.about_en AS "aboutEn",
+           c.image_url AS "imageUrl", c.diagram_url AS "diagramUrl",
+           c.about_en AS "aboutEn",
            c.about_fa AS "aboutFa", c.is_visible AS "isVisible",
            c.product_count AS "productCount",
            COALESCE(fr.family_count, 0)::int AS "familyCount",
@@ -126,7 +127,8 @@ export async function getAdminTaxonomyNodes(): Promise<AdminTaxonomyNode[]> {
     SELECT 'family'::text AS kind, f.id, f.category_id AS "parentId",
            c.depth + 1 AS depth, f.slug, c.path || '/' || f.slug AS path,
            f.sort, f.name_en AS "nameEn", f.name_fa AS "nameFa",
-           f.image_url AS "imageUrl", f.about_en AS "aboutEn",
+           f.image_url AS "imageUrl", f.diagram_url AS "diagramUrl",
+           f.about_en AS "aboutEn",
            f.about_fa AS "aboutFa", f.is_visible AS "isVisible",
            f.product_count AS "productCount", 0::int AS "familyCount",
            COALESCE(i.available, 0)::int AS "inventoryAvailable",
@@ -493,6 +495,14 @@ export type TaxonomyContentChange = {
   aboutFa: string;
   /** Undefined preserves the current object; a string replaces it. */
   imageUrl?: string;
+  /** Same rule as `imageUrl`, for the diagram slot. */
+  diagramUrl?: string;
+  /**
+   * Both names together or neither. The phone flow edits names on the same
+   * page as the description, under the same Save all; the desktop pane never
+   * sends them, so its saves leave the names exactly as they are.
+   */
+  names?: { nameEn: string; nameFa: string };
 };
 
 export type TaxonomyVisibilityChange = {
@@ -589,12 +599,20 @@ export async function saveAdminTaxonomyChanges(
 
     for (const edit of content) {
       const preserveImage = edit.imageUrl === undefined;
+      const preserveDiagram = edit.diagramUrl === undefined;
+      const preserveNames = edit.names === undefined;
       if (edit.kind === "category") {
         await tx`
           UPDATE categories
           SET about_en = ${edit.aboutEn}, about_fa = ${edit.aboutFa},
               image_url = CASE WHEN ${preserveImage}
-                THEN image_url ELSE ${edit.imageUrl ?? ""} END
+                THEN image_url ELSE ${edit.imageUrl ?? ""} END,
+              diagram_url = CASE WHEN ${preserveDiagram}
+                THEN diagram_url ELSE ${edit.diagramUrl ?? ""} END,
+              name_en = CASE WHEN ${preserveNames}
+                THEN name_en ELSE ${edit.names?.nameEn ?? ""} END,
+              name_fa = CASE WHEN ${preserveNames}
+                THEN name_fa ELSE ${edit.names?.nameFa ?? ""} END
           WHERE id = ${edit.id}
         `;
       } else {
@@ -602,7 +620,13 @@ export async function saveAdminTaxonomyChanges(
           UPDATE product_families
           SET about_en = ${edit.aboutEn}, about_fa = ${edit.aboutFa},
               image_url = CASE WHEN ${preserveImage}
-                THEN image_url ELSE ${edit.imageUrl ?? ""} END
+                THEN image_url ELSE ${edit.imageUrl ?? ""} END,
+              diagram_url = CASE WHEN ${preserveDiagram}
+                THEN diagram_url ELSE ${edit.diagramUrl ?? ""} END,
+              name_en = CASE WHEN ${preserveNames}
+                THEN name_en ELSE ${edit.names?.nameEn ?? ""} END,
+              name_fa = CASE WHEN ${preserveNames}
+                THEN name_fa ELSE ${edit.names?.nameFa ?? ""} END
           WHERE id = ${edit.id}
         `;
       }

@@ -54,10 +54,15 @@ export function envFxRate(): number {
   return configuredFxRate(process.env.USD_TO_RIAL, process.env.USD_TO_TOMAN);
 }
 
-/** Whether the environment names a rate at all, rather than leaving the placeholder. */
+/**
+ * Whether the environment names a rate at all, rather than leaving the
+ * placeholder. Both values are passed in, as `configuredFxRate` takes them:
+ * defaulting them from `process.env` made an explicit `undefined` ("not set")
+ * read the real environment instead, so the answer depended on the machine.
+ */
 export function hasConfiguredFxRate(
-  rialValue: string | undefined = process.env.USD_TO_RIAL,
-  legacyTomanValue: string | undefined = process.env.USD_TO_TOMAN,
+  rialValue: string | undefined,
+  legacyTomanValue: string | undefined,
 ): boolean {
   const rial = Number(rialValue);
   const toman = Number(legacyTomanValue);

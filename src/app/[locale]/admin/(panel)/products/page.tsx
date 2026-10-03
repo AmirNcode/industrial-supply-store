@@ -34,6 +34,9 @@ export default async function AdminProductsPage({
           {t.importReadOnly}
         </p>
       )}
+      {/* Phones only, until the phone flow has replaced the hidden desktop
+          card; globals.css hides it on desktop and once `.mtx` is up. */}
+      <p className="taxonomy-mobile-wait">{t.taxonomyLoading}</p>
       <Suspense fallback={<div className="taxonomy-loading">{t.taxonomyLoading}</div>}>
         <TaxonomyWorkbench nodes={nodes} locale={l} demo={DEMO_MODE} />
       </Suspense>

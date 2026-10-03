@@ -32,16 +32,21 @@ for (const locale of locales) {
       locale,
       `203.0.113.${20 + testInfo.workerIndex + (locale === "fa" ? 10 : 0)}`,
     );
-    await expect(page.locator(".taxonomy-card")).toBeVisible();
-    await expect(page).toHaveURL(/\?cat=c%3A\d+|\?cat=c:\d+/);
-
     if (isMobile) {
-      const picker = page.getByLabel(t.taxonomyChooseNode);
-      await expect(picker).toBeVisible();
-      const familyValue = await picker.locator('option[value^="f:"]').first().getAttribute("value");
-      expect(familyValue).toBeTruthy();
-      await picker.selectOption(familyValue!);
+      // Phones start on the top-level list: no `cat` until a category opens.
+      await expect(page.locator(".mtx")).toBeVisible();
+      await page.locator(".mtx-row").first().click();
+      await expect(page).toHaveURL(/\?cat=c%3A\d+|\?cat=c:\d+/);
+      await page.locator(".mtx-jump-pill").click();
+      await page.getByRole("searchbox", { name: t.taxonomyFindCategory }).fill("o-ring");
+      await page
+        .locator(".mtx-jump-row")
+        .filter({ has: page.locator(".mtx-kind-chip.is-family") })
+        .first()
+        .click();
     } else {
+      await expect(page.locator(".taxonomy-card")).toBeVisible();
+      await expect(page).toHaveURL(/\?cat=c%3A\d+|\?cat=c:\d+/);
       await expect(page.locator(".taxonomy-rail")).toBeVisible();
       const search = page.getByRole("searchbox", { name: t.taxonomyFindCategory });
       await search.fill("o-ring");
@@ -52,7 +57,7 @@ for (const locale of locales) {
 
     await expect(page).toHaveURL(/\?cat=f%3A\d+|\?cat=f:\d+/);
     await expect(page.getByRole("heading", { name: t.taxonomyCatalogImport })).toBeVisible();
-    await expectNoAccessibilityViolations(page, testInfo, ".taxonomy-card");
+    await expectNoAccessibilityViolations(page, testInfo, isMobile ? ".mtx" : ".taxonomy-card");
 
     await page.goBack();
     await expect(page).toHaveURL(/\?cat=c%3A\d+|\?cat=c:\d+/);
