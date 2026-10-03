@@ -18,8 +18,10 @@ found the hard way, and most fail silently.
   2026-09-30 so the review fixes could ship. Raise it with Amir before the
   next deploy after that date: anyone can still register a real customer's address first
   and lock the owner out of it. It needs an email or SMS provider (SMS fits
-  Iran better), which is Amir's cost decision. Details in
-  `docs/review/CODE-REVIEW.md`, M-13.
+  Iran better), which is Amir's cost decision. The detail: `signUpAction`
+  accepts any address and `createUser` rejects a second account with it, so
+  the real owner can never sign up and has no recovery. Fix: verify before the
+  address is bound, or at minimum give the admin a "release email" tool.
 
 ## The two databases
 
@@ -121,30 +123,6 @@ write without it, which prevents a forgotten value in an env file becoming a
 permanent bypass. Migration files are applied in timestamp order and recorded
 in `supabase_migrations.schema_migrations`; a second run is a no-op.
 
-For the September 2026 part-number release, apply
-`20260920120000_add_temex_part_numbers.sql` **before pushing the new application
-to main**. Imports and product creation require its registry and family columns.
-The migration preserves all product numbers; it also binds reservations left by
-earlier local feature testing to their still-live products. Existing products
-will not be renumbered. The release verifier checks the registry's indexes,
-deletion behavior, product links, counters, and migration ledger.
-
-For the sales-rep release, apply `20260927120000_add_sales_reps.sql` **before
-pushing the new application to main**. Every account, order, invoice and admin
-page reads its columns — `users.customer_code`, the rep columns on `users` and
-`orders`, and `orders.pay_token` — so the old schema breaks those pages the
-moment the new code runs. The migration gives every existing customer a
-seven-digit ID (the last seven digits of their phone where free, otherwise a
-random one) and every existing order a pay token; it moves no data between
-customers and credits no rep with any past order. A trigger
-(`users_customer_code_default`) gives the same kind of ID to any new account
-whose insert names none, so the live site's current sign-up keeps working
-between the migration and the deploy, and after a rollback. `db:verify:remote`
-checks its four tables, the new columns and constraints, the four unique
-indexes (`users_customer_code_key`, `orders_pay_token_key`,
-`sales_reps_username_key`, `sales_reps_referral_code_key`), the trigger and
-the migration version.
-
 **Every migration must accept the previous release's writes.** Migrations are
 applied before the code that needs them is live, and a rollback runs old code
 against the new schema. So a migration may add a `NOT NULL` column only with
@@ -153,37 +131,6 @@ inserts or status moves can violate, and may not drop or rename anything the
 old code reads. Review each new migration against the live code's insert and
 update shapes; `salesReps.integration.test.ts` runs the pre-rep release's
 user and order inserts against the migrated schema as an example.
-
-For the invoice VAT release, apply `20260928120000_add_invoice_vat.sql`
-**before pushing the new application to main**. Every invoice, order and
-account page reads `orders.vat_rate_bp`. The migration adds that one nullable
-column and its check; existing invoices keep NULL and print exactly as before.
-The rate itself is set afterwards in Admin → Settings → VAT and starts at 0%.
-`db:verify:remote` checks the column, `orders_vat_rate_check` and the
-migration version.
-
-For the proof-of-payment release, apply `20260929120000_add_payment_proofs.sql`
-**before pushing the new application to main**. It adds the `payment_review`
-status (replacing three order check constraints), one order column
-(`payment_submitted_at`) and the `payment_proofs` table. Receipt files need Storage configured on the deployment (the same
-`SUPABASE_URL` and secret as catalog images); the bucket creates itself.
-
-For the audit-trail release, apply `20260930120000_add_audit_log.sql` **before
-pushing the new application to main**, after the three above. It adds the
-append-only `audit_log` table and `rep_payouts.voided_at`; every order status
-move, invoice, payment confirmation, password reset, customer reassignment,
-pay-link replacement and payout writes a row in the same transaction, so the
-new code fails those actions without it. The previous release never reads
-either. `db:verify:remote` checks the table, the column and the version.
-
-`20260930140000_revoke_api_role_grants.sql` takes every privilege on the
-app's tables, sequences and functions away from Supabase's `anon` and
-`authenticated` roles. The app never uses them; it is safe in either order.
-
-`20260930130000_drop_spec_defs_display.sql` drops the dead
-`spec_defs.display` column. Neither the live release nor this one reads or
-writes it, so its order relative to the push does not matter; apply it with
-the others.
 
 The storefront's bare root redirects to `/fa`; `/en/...` remains available
 through the language switch. This is a fixed application default, with no admin
@@ -198,22 +145,14 @@ acknowledgements above, locks the participating tables, preserves each SKU's
 total stock while reallocating available/held/sold, verifies the result, and
 commits all-or-nothing. Keep its JSON output with the release record.
 
-A healthy result:
+A healthy result has a ✓ on every line and ends with:
 
 ```
-tables      13/13 ✓
-columns     17/17 ✓
-extensions.sql 13/13 ✓
-submission key unique index ✓
-constraints 20/20 validated ✓
-rate limits  indexes ✓
-migration ledger 20260817010000, 20260817020000, 20260818025101 ✓
-invoice_seq ✓
-search fns  4/4 ✓
-row-level security ✓ on every table
-integrity   canonical and derived data agree ✓
 ✓ database looks correct
 ```
+
+The `migration ledger` line lists every file in `supabase/migrations`; a version
+missing from it is a migration not yet applied.
 
 ## The evening exchange-rate job
 
@@ -234,30 +173,13 @@ reading in the panel proves both are reachable from there.
 
 ### Moving off Vercel: the job needs a new scheduler
 
-**Chosen: option 1.** `docker-compose.yml` now has a `scheduler` service
-(profile `full`) that calls the route at 17:30 UTC with `CRON_SECRET`; set
-that variable on the server. The reasoning is kept below.
-
-A self-hosted deployment — the client's servers in Iran — gets
-no cron from `vercel.ts`. Nothing calls the route, the automatic rate freezes
-at its last reading, and the only symptom is the 36-hour warning in admin.
-Before cutting over, decide what calls the route once a day. Options found so
-far:
-
-1. **A scheduler service in `docker-compose.yml`** (preferred): a small
-   container beside `app` that calls
-   `curl -fsS -H "Authorization: Bearer $CRON_SECRET" http://app:3000/api/cron/fx-rate`
-   once a day. It ships and starts with the site, so no one has to remember
-   server configuration.
-2. **The host's own crontab**, running the same `curl`. One line, but it lives
-   outside the repository and is easy to lose when the server is rebuilt.
-3. **`pg_cron` + `pg_net`**, only if the self-hosted stack is full Supabase.
-   Ties a site job to the database.
-
-Whichever is chosen, keep the same bearer header and the evening Tehran time.
-The Telegram-based and foreign rate sources were rejected partly because they
-are unreachable from inside Iran; the two exchanges are domestic, so the source
-itself should not need to change.
+A self-hosted deployment gets no cron from `vercel.ts`; without a caller the
+automatic rate freezes at its last reading and the only symptom is the 36-hour
+warning in admin. `docker-compose.yml` therefore has a `scheduler` service
+(profile `full`) that calls the route at 17:30 UTC with `CRON_SECRET`. It ships
+and starts with the site, so nobody has to remember server configuration. Set
+`CRON_SECRET` on the server. The two exchanges are Iranian, so the source should
+stay reachable from servers inside Iran.
 
 ---
 
@@ -313,8 +235,8 @@ immediately run `npm run db:extensions` and verify the database.
 
 `npm run db:verify:remote` still warns when `quotes` exists because a very old
 database may predate the rename. Stop and review that exceptional upgrade; do
-not substitute a schema push. The retained `db:rename-orders:remote` command is
-historical recovery tooling, not part of the normal release path.
+not substitute a schema push. The one-shot rename script was removed on
+2026-10-03 and is in git history if such a database ever turns up.
 
 ### 3. Empty bootstrap and live migration are different commands
 

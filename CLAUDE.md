@@ -2,9 +2,11 @@
 
 Instructions for Claude, or any other coding agent, working in this repository.
 The technical orientation is [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md);
-deployment and its traps are [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md); the
-local setup is [`docs/LOCAL-DEV.md`](docs/LOCAL-DEV.md). Read those for *what
-the code is*. This file is about *how to work and how to report*.
+deployment and its traps are [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md). Read
+those for *what the code is*. [`docs/LOCAL-DEV.md`](docs/LOCAL-DEV.md) is the
+local setup, written for a person at the keyboard; open it when you need to run
+something, not as orientation. This file is about *how to work and how to
+report*.
 
 ## Who you are reporting to
 
