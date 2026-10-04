@@ -31,9 +31,11 @@ looking is what I need from you.
 
 **Worth saying:**
 
-- **What you could not verify, and why.** Especially anything gated behind the
-  admin password — you do not type credentials, so say plainly which paths went
-  unexercised rather than implying the whole feature is proven.
+- **What you could not verify, and why.** Especially signed-in paths (admin,
+  rep portal, customer account) on the live site or a preview — you do not type
+  real credentials there. Locally the e2e suite covers admin with a dummy
+  password; say which paths it did and did not reach, rather than implying the
+  whole feature is proven.
 - **Where you deviated from what I asked, and the reason.** Including scope you
   deliberately did not take, so I can decide whether I want it.
 - **Costs that only appear later.** Anything that is fine at 40 rows and hurts
@@ -85,11 +87,25 @@ nothing important; padding it hides the times there is.
 - **Match the surrounding code.** Comments here explain *why*, and the trap the
   decision avoids, not what the line does. Keep that.
 - **Both locales, always.** `src/lib/i18n.ts` types the Persian dictionary as
-  `typeof en`, so a missing key is a compile error — but a lazy translation is
-  not. RTL is a first-class layout, not a mirror.
-- **`npx tsc --noEmit` and `npm test` must both be clean** before you say you
-  are finished. `npm run build` too, for anything touching a route segment.
+  `typeof en`, so a missing key is a compile error — and `npm run i18n:missing`
+  lists values still in English — but a poor translation passes both. RTL is a
+  first-class layout, not a mirror.
+- **`npm run lint`, `npm run typecheck` and `npm test` must all be clean**
+  before you say you are finished. Add `npm run test:db` for anything touching
+  SQL or `src/db/`, `npm run build` for anything touching a route segment, and
+  `npm run audit:prod` when dependencies change. CI runs all of these; a red CI
+  is not "finished".
+- **Ask before anything that touches the live database, costs money, or
+  deletes data.** Including `*:remote` scripts and `drizzle-kit push` against
+  anything but local Docker.
+- **Free Supabase plan, no backups:** every `db:migrate:remote` is preceded by `npm run db:backup:remote`.
+- **Commands for me carry real values, never `<placeholders>`** — I paste them as written.
+- `processCatalogImport` throws at `revalidatePath` outside Next *after* committing; integration tests treat that as success and assert the database.
+- Do not move commits or uncommitted work between branches without asking.
 - Commit or push only when asked.
+- **Keep this file current.** When you discover a non-obvious convention,
+  gotcha, or command, propose a CLAUDE.md update at task end. Keep entries one
+  line. Don't add what's obvious from code.
 
 <!-- BEGIN:nextjs-agent-rules -->
 
