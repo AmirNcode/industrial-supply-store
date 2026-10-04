@@ -1,5 +1,6 @@
 import "server-only";
 import { sql } from "./index";
+import { lockPartNumberWrites } from "./partNumberQueries";
 import {
   categoryNodeKey,
   familyNodeKey,
@@ -310,6 +311,45 @@ export async function deleteFamily(familyId: number): Promise<boolean> {
     if (gone.length === 0) return false;
     await recountCategories(tx);
     return true;
+  });
+}
+
+/**
+ * Delete chosen products from one family; returns the part numbers deleted.
+ *
+ * The same deletion an import in `replace` mode makes, and it leaves the same
+ * things behind: `product_spec_values` and cart lines cascade, `order_items`
+ * keep their snapshot with `product_id` set null, and a reserved part number
+ * stays reserved (its registry row's `product_id` goes null), so the code is
+ * never handed to a different product. Scoped to the family, so a part number
+ * posted from another family's table deletes nothing.
+ *
+ * Takes the part-number lock an import takes: an import in the same family
+ * reads the family's rows before writing them, and a row deleted between the
+ * two would be upserted back.
+ */
+export async function deleteFamilyProducts(
+  familyId: number,
+  partNumbers: readonly string[],
+): Promise<string[] | null> {
+  return sql.begin(async (tx) => {
+    await lockPartNumberWrites(tx);
+    const [family] = await tx`SELECT id FROM product_families WHERE id = ${familyId} FOR UPDATE`;
+    if (!family) return null;
+    const gone = await tx<{ partNumber: string }[]>`
+      DELETE FROM products
+      WHERE family_id = ${familyId} AND part_number = ANY(${partNumbers as string[]}::text[])
+      RETURNING part_number AS "partNumber"
+    `;
+    if (gone.length > 0) {
+      await tx`
+        UPDATE product_families SET product_count =
+          (SELECT count(*)::int FROM products WHERE family_id = ${familyId})
+        WHERE id = ${familyId}
+      `;
+      await recountCategories(tx);
+    }
+    return gone.map((row) => row.partNumber);
   });
 }
 

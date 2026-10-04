@@ -1,6 +1,8 @@
 "use server";
 
 import { assertAdminWrite } from "@/lib/admin";
+import { revalidateCatalogPages } from "@/lib/revalidateCatalog";
+import { deleteFamilyProducts } from "@/db/familyQueries";
 import { getFamilyForImport, getProductsForExport, writeImport } from "@/db/importQueries";
 import { PartNumberUnavailable } from "@/db/partNumberQueries";
 import { applyProductEdits, type ProductEdits } from "@/lib/productEdits";
@@ -118,4 +120,42 @@ export async function saveFamilyProductsAction(
     }
     throw error;
   }
+}
+
+export type ProductTableDeleteResult =
+  | { kind: "deleted"; count: number }
+  | { kind: "error"; message: "not-found" | "bad-data" };
+
+/**
+ * Delete the rows ticked in the admin product table, all in one transaction.
+ *
+ * The confirmation is the browser's dialog listing every part number; there
+ * is no typed word as on a family delete, because the list itself is what the
+ * person has to read. Part numbers already gone count as nothing to do, not as
+ * an error — another tab may have deleted them first — so the reply says how
+ * many this call actually removed.
+ *
+ * Family tiles on the cached catalog pages show a product count, so those are
+ * revalidated; nothing else cached shows a product.
+ */
+export async function deleteFamilyProductsAction(
+  familyId: number,
+  partNumbers: string[],
+): Promise<ProductTableDeleteResult> {
+  await assertAdminWrite();
+  if (
+    !Number.isInteger(familyId) ||
+    familyId <= 0 ||
+    !Array.isArray(partNumbers) ||
+    partNumbers.length === 0 ||
+    partNumbers.length > IMPORT_MAX_ROWS ||
+    !partNumbers.every((part) => typeof part === "string" && part !== "" && part.length <= 64)
+  ) {
+    return { kind: "error", message: "bad-data" };
+  }
+
+  const gone = await deleteFamilyProducts(familyId, [...new Set(partNumbers)]);
+  if (gone === null) return { kind: "error", message: "not-found" };
+  if (gone.length > 0) revalidateCatalogPages();
+  return { kind: "deleted", count: gone.length };
 }

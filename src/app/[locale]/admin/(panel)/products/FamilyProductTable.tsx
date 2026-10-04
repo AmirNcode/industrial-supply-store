@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode, type RefObject } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
+import { useRouter } from "next/navigation";
 import type { FamilyProductsResponse } from "@/app/api/admin/family/[id]/products/route";
 import {
   PRODUCT_PAGE_SIZE,
@@ -10,7 +11,9 @@ import {
 } from "@/lib/productTable";
 import { getDict, type Locale } from "@/lib/i18n";
 import { formatInt } from "@/lib/money";
+import { useModalFocus } from "@/lib/useModalFocus";
 import { cellKey, useProductDrafts, type ProductTableHandle } from "./productDrafts";
+import { deleteFamilyProductsAction } from "./productTableActions";
 
 /** Enough rows to scan and edit; few enough that edit mode stays quick. */
 const PAGE_SIZE = PRODUCT_PAGE_SIZE;
@@ -31,6 +34,12 @@ export type { ProductTableHandle };
  * (review M-21); every row loaded so far is remembered, so an edit made on
  * page 3 can still be saved — with the fingerprint it was loaded with — from
  * page 7.
+ *
+ * Deleting rows is a separate mode from editing, and the two never overlap:
+ * a row deleted while it held an unsaved edit would leave a draft Save could
+ * only fail on. Ticks are kept by part number, so they survive paging, and
+ * nothing is deleted until the dialog listing every ticked part number is
+ * confirmed.
  */
 export function FamilyProductTable({
   familyId,
@@ -57,6 +66,16 @@ export function FamilyProductTable({
   const [reloadToken, setReloadToken] = useState(0);
   const [editing, setEditing] = useState(false);
   const [page, setPage] = useState(0);
+  const router = useRouter();
+  // Null while not choosing rows to delete; the ticked part numbers otherwise.
+  const [selected, setSelected] = useState<ReadonlySet<string> | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const deleteOpener = useRef<HTMLButtonElement>(null);
+  const deleteDialog = useRef<HTMLDivElement>(null);
+  useModalFocus(confirming, deleteDialog, deleteOpener, () => {
+    if (!deleting) setConfirming(false);
+  });
   const drafts = useProductDrafts({
     familyId,
     locale,
@@ -81,6 +100,8 @@ export function FamilyProductTable({
     setLoadedFor({ familyId, refreshKey });
     drafts.forget();
     setPage(0);
+    setSelected(null);
+    setConfirming(false);
   }
 
   const remember = drafts.remember;
@@ -121,6 +142,45 @@ export function FamilyProductTable({
     if (ok) setEditing(false);
     return ok;
   }
+
+  function toggle(partNumbers: readonly string[], on: boolean) {
+    setSelected((previous) => {
+      const next = new Set(previous);
+      for (const partNumber of partNumbers) {
+        if (on) next.add(partNumber);
+        else next.delete(partNumber);
+      }
+      return next;
+    });
+  }
+
+  async function deleteSelected() {
+    if (deleting || !selected || selected.size === 0) return;
+    setDeleting(true);
+    setNotice(null);
+    try {
+      const result = await deleteFamilyProductsAction(familyId, [...selected]);
+      if (result.kind === "deleted") {
+        setSelected(null);
+        setConfirming(false);
+        setNotice({ kind: "ok", text: t.productsDeleted.replace("{n}", formatInt(result.count, locale)) });
+        // The tree's counts; the new `refreshKey` then reloads these rows
+        // from the first page, so no page is left pointing past the end.
+        router.refresh();
+      } else {
+        setConfirming(false);
+        setNotice({ kind: "error", text: t.productsDeleteFailed });
+      }
+    } catch {
+      setConfirming(false);
+      setNotice({ kind: "error", text: t.productsDeleteFailed });
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  const pageParts = rows.map((product) => product.partNumber);
+  const pageTicked = selected ? pageParts.filter((partNumber) => selected.has(partNumber)).length : 0;
 
   // The guard reads these when someone leaves with edits unsaved.
   useEffect(() => {
@@ -171,7 +231,7 @@ export function FamilyProductTable({
             <button
               type="button"
               className="taxonomy-ghost-button"
-              disabled={demo || !data || data.total === 0}
+              disabled={demo || !data || data.total === 0 || selected !== null}
               onClick={() => {
                 setEditing(true);
                 setNotice(null);
@@ -240,7 +300,22 @@ export function FamilyProductTable({
               <tr>
                 {columns.map((column, index) => (
                   <th key={index} scope="col" className={columnClass(column)}>
-                    {label(column)}
+                    {selected && column.kind === "part" ? (
+                      <label className="product-table-select">
+                        <input
+                          type="checkbox"
+                          aria-label={t.productsSelectPage}
+                          checked={pageTicked > 0 && pageTicked === pageParts.length}
+                          ref={(box) => {
+                            if (box) box.indeterminate = pageTicked > 0 && pageTicked < pageParts.length;
+                          }}
+                          onChange={(event) => toggle(pageParts, event.target.checked)}
+                        />
+                        {label(column)}
+                      </label>
+                    ) : (
+                      label(column)
+                    )}
                   </th>
                 ))}
               </tr>
@@ -248,13 +323,29 @@ export function FamilyProductTable({
             <tbody>
               {rows.map((product) => {
                 const edits = draft[product.partNumber];
+                const ticked = selected?.has(product.partNumber) ?? false;
                 return (
-                  <tr key={product.partNumber} className={edits ? "is-changed" : undefined}>
+                  <tr
+                    key={product.partNumber}
+                    className={ticked ? "is-selected" : edits ? "is-changed" : undefined}
+                  >
                     {columns.map((column, index) => {
                       if (column.kind === "part") {
                         return (
                           <th key={index} scope="row" className="product-table-part tech">
-                            {product.partNumber}
+                            {selected ? (
+                              <label className="product-table-select">
+                                <input
+                                  type="checkbox"
+                                  aria-label={t.productsSelectRow.replace("{part}", product.partNumber)}
+                                  checked={ticked}
+                                  onChange={(event) => toggle([product.partNumber], event.target.checked)}
+                                />
+                                {product.partNumber}
+                              </label>
+                            ) : (
+                              product.partNumber
+                            )}
                           </th>
                         );
                       }
@@ -309,6 +400,94 @@ export function FamilyProductTable({
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {data && data.total > 0 && (
+        <div className="product-table-foot">
+          {selected === null ? (
+            <button
+              type="button"
+              className="taxonomy-ghost-button"
+              disabled={demo || editing}
+              onClick={() => {
+                setSelected(new Set());
+                setNotice(null);
+              }}
+            >
+              {t.productsSelectToDelete}
+            </button>
+          ) : (
+            <>
+              <button
+                ref={deleteOpener}
+                type="button"
+                className="taxonomy-danger-button"
+                disabled={demo || selected.size === 0}
+                onClick={() => setConfirming(true)}
+              >
+                {t.reviewDelete}
+              </button>
+              <button type="button" className="taxonomy-ghost-button" onClick={() => setSelected(null)}>
+                {t.productsSelectDiscard}
+              </button>
+              <span className="tech">
+                {t.productsSelected.replace("{n}", formatInt(selected.size, locale))}
+              </span>
+            </>
+          )}
+        </div>
+      )}
+
+      {confirming && selected && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-3"
+          // A backdrop click is a Cancel, like Escape — but not mid-delete,
+          // when closing would hide whether it worked.
+          onClick={() => {
+            if (!deleting) setConfirming(false);
+          }}
+        >
+          <div
+            ref={deleteDialog}
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="product-delete-title"
+            aria-describedby="product-delete-warn"
+            tabIndex={-1}
+            className="product-delete-dialog"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h2 id="product-delete-title">
+              {t.productsDeleteTitle.replace("{n}", formatInt(selected.size, locale))}
+            </h2>
+            <p id="product-delete-warn">{t.productsDeleteWarn}</p>
+            <ul className="product-delete-list tech" dir="ltr">
+              {[...selected].sort().map((partNumber) => (
+                <li key={partNumber}>{partNumber}</li>
+              ))}
+            </ul>
+            <p className="product-delete-note">{t.productsDeleteOrders}</p>
+            <div className="product-delete-actions">
+              <button
+                data-dialog-initial-focus
+                type="button"
+                className="taxonomy-ghost-button"
+                disabled={deleting}
+                onClick={() => setConfirming(false)}
+              >
+                {t.fxCancel}
+              </button>
+              <button
+                type="button"
+                className="taxonomy-danger-button"
+                disabled={demo || deleting}
+                onClick={deleteSelected}
+              >
+                {deleting ? t.productsDeleting : t.reviewDelete}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </>

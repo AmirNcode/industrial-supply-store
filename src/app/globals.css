@@ -2594,6 +2594,85 @@ html[lang="fa"] .taxonomy-kind-chip {
 .product-table td.is-invalid .product-cell-input {
   border-color: var(--color-danger);
 }
+/*
+ * Choosing rows to delete. The tick sits inside the pinned part-number cell
+ * rather than in a column of its own, so it stays on screen with the code it
+ * belongs to however far the table is scrolled sideways.
+ */
+.product-table-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+.product-table tr.is-selected th,
+.product-table tr.is-selected td {
+  background: #fdf2f1;
+}
+.product-table-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  margin-top: 8px;
+  color: var(--color-ink-muted);
+  font-size: 11px;
+}
+.taxonomy-danger-button {
+  border: 1px solid var(--color-danger);
+  border-radius: 3px;
+  background: var(--color-danger);
+  padding: 2px 8px;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.taxonomy-danger-button:disabled {
+  border-color: #e0b4b0;
+  background: #e9c5c2;
+  cursor: not-allowed;
+}
+.product-delete-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  max-width: 440px;
+  max-height: 80vh;
+  border: 1px solid var(--color-ink);
+  background: #fff;
+  padding: 16px;
+  font-size: 12px;
+  text-align: start;
+}
+.product-delete-dialog h2 {
+  border-bottom: 1px solid var(--color-rule);
+  padding-bottom: 4px;
+  font-size: 14px;
+  font-weight: 700;
+}
+.product-delete-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 2px 12px;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--color-rule-light);
+  background: var(--color-panel-alt);
+  padding: 6px 8px;
+  font-weight: 600;
+}
+.product-delete-note {
+  color: var(--color-ink-muted);
+}
+.product-delete-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  border-top: 1px solid var(--color-rule);
+  padding-top: 10px;
+}
 .taxonomy-save-bar {
   position: sticky;
   z-index: 20;

@@ -10,6 +10,7 @@ import {
   FamilyCapacityExhausted,
 } from "./partNumberQueries";
 import { writeImport } from "./importQueries";
+import { deleteFamilyProducts } from "./familyQueries";
 import { processCatalogImport } from "@/lib/catalogImport";
 import { MAX_VARIANTS_PER_FAMILY } from "@/lib/partNumber";
 import { sql as appSql } from "./index";
@@ -334,6 +335,36 @@ test("a product deletion leaves a reservation that refuses explicit reuse", asyn
     await writeImport(familyId, [next]);
     assert.notEqual(next.partNumber, row.partNumber);
   });
+});
+
+test("deleting chosen products keeps counts right and touches no other family", async () => {
+  await withFamily(`pn-delete-${Date.now()}`, async (familyId) => {
+    await withFamily(`pn-delete-other-${Date.now()}`, async (otherId) => {
+      const rows = [importRow(), importRow(), importRow()];
+      await writeImport(familyId, rows);
+      const other = importRow();
+      await writeImport(otherId, [other]);
+
+      // The other family's code is posted alongside, as a forged request would.
+      const gone = await deleteFamilyProducts(familyId, [rows[0].partNumber, rows[2].partNumber, other.partNumber]);
+      assert.deepEqual(gone?.sort(), [rows[0].partNumber, rows[2].partNumber].sort());
+
+      const [family] = await sql`SELECT product_count FROM product_families WHERE id = ${familyId}`;
+      assert.equal(family.product_count, 1);
+      const [category] = await sql`
+        SELECT c.product_count FROM categories c JOIN product_families f ON f.category_id = c.id
+        WHERE f.id = ${familyId}
+      `;
+      assert.equal(category.product_count, 1, "the category roll-up moves with the family");
+      const [survivor] = await sql`SELECT count(*)::int AS n FROM products WHERE part_number = ${other.partNumber}`;
+      assert.equal(survivor.n, 1, "a part number from another family is not deleted");
+
+      // Retired, like any deleted product's code.
+      await assert.rejects(writeImport(familyId, [importRow(rows[0].partNumber)]), PartNumberUnavailable);
+      assert.deepEqual(await deleteFamilyProducts(familyId, [rows[0].partNumber]), [], "already gone is nothing to do");
+    });
+  });
+  assert.equal(await deleteFamilyProducts(-1, ["X"]), null, "a missing family says so");
 });
 
 test("supplied TEMEX codes are reserved before blank rows in the same import", async () => {
