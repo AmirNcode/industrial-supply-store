@@ -34,3 +34,5 @@ docs/*-handoff/
 
 # Local files for testing and debugging. Not part of the project.
 other_ignore/
+# Database backups hold customer data; they never leave this machine.
+db_backups/

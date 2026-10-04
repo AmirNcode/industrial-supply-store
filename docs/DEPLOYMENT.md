@@ -109,6 +109,7 @@ order**:
 npm run db:verify:remote        # what state is it in?
 npm run db:migrate:check:remote # dry-run: prints the exact pending files
 npm run db:reconcile:check:remote # read-only canonical/derived-data report
+npm run db:backup:remote        # Free plan has no Supabase backups: take one
 # Verify a restorable backup/PITR recovery point and a recent restore test.
 MIGRATION_BACKUP_VERIFIED=YYYY-MM-DD npm run db:migrate:remote
 # Only when the check reported derived drift and its output was reviewed:
@@ -262,6 +263,16 @@ Before a remote migration, verify that the target has a restorable backup/PITR
 recovery point and that the restore procedure has been exercised recently. Only
 then pass today's UTC date as `MIGRATION_BACKUP_VERIFIED`. A dry run never needs
 the acknowledgement because it performs no write.
+
+The live project is on Supabase's Free plan, which keeps **no** backups, so the
+recovery point is `npm run db:backup:remote`: a plain-SQL `pg_dump` of `public`
+and the migration ledger into the gitignored `db_backups/`, run in Docker so no
+local Postgres is needed. It refuses to keep a file without pg_dump's completion
+marker. To restore: `psql -f <file>` into an empty database, then
+`npm run db:extensions` for the trigram indexes (extensions are not in a
+schema-scoped dump). Restore last exercised against the local container on
+2026-10-04: products, orders, users and retired part numbers matched row for
+row, and the part-number trigger came back.
 
 ### 4. Row-level security is correct here, and push fights it
 
