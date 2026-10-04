@@ -442,6 +442,13 @@ something else on a customer's quote. A reservation is bound to its product by
 the same live product that owns it. A tombstone — a reservation whose product is
 gone — is refused, and that refusal is the guarantee, not an edge case.
 
+The registry only holds TEMEX-shaped codes, so `retired_part_numbers` keeps the
+rest: every part number a deleted product held, in any format, upper-cased. A
+statement-level trigger on `products` fills it, so the four delete paths (a row
+in the admin table, a `replace` upload, a family delete, a category delete — the
+last two by cascade) cannot forget, and neither can a fifth. The minter skips
+these codes and `registerExistingPartNumbers` refuses them on every write.
+
 **Everything mints inside the write transaction.** `writeImport` takes a
 transaction-scoped advisory lock (`lockPartNumberWrites`) before any family or
 product row lock, because prefixes and supplied codes share one namespace across
@@ -458,11 +465,19 @@ for codes. Minting is the one step of an import that cannot be undone, so it is
 never the default in any locale or flow. Every line in a file is one item: two
 blank rows are two products, not a duplicate.
 
-**Creating a single product is insert-only.** `createProductAction` calls
-`writeImport` with `insertOnly`, enforced by the upsert's own `WHERE` clause
-rather than a check before the insert, which would leave a race. Without it,
-re-entering an existing number rewrote that product's price and specs while the
-screen reported success.
+**A part number in a file means "update this product of this family".** Any
+other code — a deleted one, another family's, a supplier's, or a TEMEX number
+typed rather than issued — is listed on the review screen with its reason
+(`findForeignPartNumbers`), and the only ways on are a second tick that gives
+those rows new numbers (`plan.renumber`) or discarding the upload. Re-checked at
+apply, not trusted from the review. The result lists old → new, because the
+operator's file is now out of step and uploading it again would create those
+products twice. A supplier's own code belongs in an ordinary column.
+
+**Creating a single product always mints.** The form has no part number field:
+by the rule above, a typed code could only be refused. `createProductAction`
+still calls `writeImport` with `insertOnly`, enforced by the upsert's own
+`WHERE` clause, as a backstop.
 
 Existing products keep the part numbers they already have; nothing renumbers the
 catalog. `scripts/verify-remote.mts` checks the registry's indexes, its

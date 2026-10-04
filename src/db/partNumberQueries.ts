@@ -60,6 +60,7 @@ export async function ensureFamilyNumber(tx: Tx, familyId: number): Promise<numb
       SELECT family_number::text AS prefix FROM product_families WHERE family_number IS NOT NULL
       UNION SELECT family_number::text FROM part_number_registry
       UNION SELECT left(part_number, 4) FROM products
+      UNION SELECT left(part_number, 4) FROM retired_part_numbers
     )
     SELECT n AS candidate FROM generate_series(${MIN_FAMILY_NUMBER}::int, ${MAX_FAMILY_NUMBER}::int) n
     WHERE NOT EXISTS (SELECT 1 FROM occupied WHERE prefix = n::text)
@@ -83,6 +84,7 @@ export async function allocatePartNumbers(tx: Tx, familyId: number, count: numbe
     SELECT upper(part_number) AS "partNumber" FROM products
     WHERE part_number LIKE ${`${familyNumber}%`}
     UNION SELECT part_number FROM part_number_registry WHERE family_number = ${familyNumber}
+    UNION SELECT part_number FROM retired_part_numbers WHERE part_number LIKE ${`${familyNumber}%`}
   `;
   const used = new Set(occupied.map((row) => row.partNumber));
   const codes: string[] = [];
@@ -109,10 +111,24 @@ export async function allocatePartNumbers(tx: Tx, familyId: number, count: numbe
  * reusable only by the same live product, never a replacement after deletion.
  * Uppercase keys also protect lowercase supplier spellings. Arbitrary supplier
  * codes remain supported and need no invented TEMEX ordinal.
+ *
+ * A code a deleted product held, in any format, is refused first. The CSV
+ * review catches these earlier and offers a new number; this is what stops
+ * every other path — and a deletion landing between review and apply.
  */
 export async function registerExistingPartNumbers(tx: Tx, familyId: number, partNumbers: readonly string[]): Promise<void> {
   await lockPartNumberWrites(tx);
-  const codes = [...new Set(partNumbers.map((part) => part.toUpperCase()).filter(isTemexPartNumber))];
+  const supplied = [...new Set(partNumbers.map((part) => part.toUpperCase()))];
+  if (supplied.length === 0) return;
+  // A code both retired and live is a product someone re-created by hand in
+  // the database; updating it is not reuse.
+  const retired = await tx<{ partNumber: string }[]>`
+    SELECT x.part_number AS "partNumber" FROM retired_part_numbers x
+    WHERE x.part_number = ANY(${supplied}::text[])
+      AND NOT EXISTS (SELECT 1 FROM products p WHERE upper(p.part_number) = x.part_number)
+  `;
+  if (retired.length) throw new PartNumberUnavailable(retired.map((r) => r.partNumber), "reserved");
+  const codes = supplied.filter(isTemexPartNumber);
   if (codes.length === 0) return;
   const unavailable = await tx<{ partNumber: string }[]>`
     SELECT r.part_number AS "partNumber" FROM part_number_registry r

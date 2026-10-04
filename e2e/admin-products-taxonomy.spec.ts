@@ -156,8 +156,8 @@ test("a family row opens an add-a-product form built from its own columns", asyn
   await expect(page).toHaveURL(/\/admin\/products\/\d+\/new$/);
   await expect(page.getByRole("heading", { level: 1 })).toContainText("Add a product to");
 
-  // The part number is optional here, exactly as a blank cell is in a file.
-  await expect(page.getByLabel(t.partNumber)).toBeVisible();
+  // No part number field: the system always issues it.
+  await expect(page.getByLabel(t.partNumber)).toHaveCount(0);
   await expect(page.getByText(t.newProductPartNumberHint).first()).toBeVisible();
 
   // Nothing is written: a rejected entry stays on screen to be corrected.

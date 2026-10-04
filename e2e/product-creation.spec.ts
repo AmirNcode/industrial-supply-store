@@ -13,7 +13,7 @@ const sql = postgres(databaseUrl, { max: 1 });
 test.afterAll(() => sql.end());
 
 for (const locale of ["en", "fa"] as Locale[]) {
-  test(`${locale}: creating a product refuses duplicate and deleted part numbers`, async ({ page }, testInfo) => {
+  test(`${locale}: creating a product always issues a fresh part number`, async ({ page }, testInfo) => {
     const t = getDict(locale);
     const slug = `e2e-product-${locale}-${testInfo.workerIndex}-${Date.now()}`;
     const [category] = await sql`INSERT INTO categories (slug, path, depth, name_en, name_fa)
@@ -28,6 +28,8 @@ for (const locale of ["en", "fa"] as Locale[]) {
       await page.getByRole("button", { name: t.signIn }).click();
       await expect(page).toHaveURL(new RegExp(`/${locale}/admin/orders`));
       await page.goto(`/${locale}/admin/products/${familyId}/new`);
+      // Nothing to type: only the system issues part numbers.
+      await expect(page.getByLabel(t.partNumber)).toHaveCount(0);
       await page.getByLabel(t.price, { exact: true }).fill("12.34");
       await page.getByRole("button", { name: t.newProduct, exact: true }).click();
       await expect.poll(async () => {
@@ -37,24 +39,23 @@ for (const locale of ["en", "fa"] as Locale[]) {
       const [product] = await sql`SELECT id, part_number, price_cents FROM products WHERE family_id = ${familyId}`;
       await expect(page.getByText(t.newProductCreated.replace("{part}", product.part_number), { exact: true })).toBeVisible();
       expect(product.price_cents).toBe(1234);
-      await page.getByLabel(t.partNumber, { exact: true }).fill(product.part_number);
+      // A deleted product's number is never issued again, nor its slot refilled.
+      await sql`DELETE FROM products WHERE id = ${product.id}`;
       await page.getByLabel(t.price, { exact: true }).fill("99.99");
       await page.getByRole("button", { name: t.newProduct, exact: true }).click();
-      await expect(page.getByText(t.newProductAlreadyExists, { exact: true })).toBeVisible();
-      await expect(page.getByLabel(t.price, { exact: true })).toHaveValue("99.99");
-      const [unchanged] = await sql`SELECT price_cents FROM products WHERE id = ${product.id}`;
-      expect(unchanged.price_cents).toBe(1234);
-      await sql`DELETE FROM products WHERE id = ${product.id}`;
-      await page.getByRole("button", { name: t.newProduct, exact: true }).click();
-      await expect(page.getByText(t.importReservedNumber, { exact: true })).toBeVisible();
-      const [remaining] = await sql`SELECT count(*)::int AS n FROM products WHERE family_id = ${familyId}`;
-      expect(remaining.n).toBe(0);
-      await page.screenshot({ path: testInfo.outputPath(`${locale}-duplicate-protection.png`), fullPage: true });
+      await expect.poll(async () => {
+        const [result] = await sql`SELECT count(*)::int AS n FROM products WHERE family_id = ${familyId!}`;
+        return result.n;
+      }).toBe(1);
+      const [next] = await sql`SELECT part_number FROM products WHERE family_id = ${familyId}`;
+      expect(next.part_number).not.toBe(product.part_number);
+      await page.screenshot({ path: testInfo.outputPath(`${locale}-fresh-number.png`), fullPage: true });
     } finally {
       const [family] = await sql`SELECT family_number FROM product_families WHERE category_id = ${category.id}`;
       await sql`DELETE FROM categories WHERE id = ${category.id}`;
       if (family?.family_number) {
         await sql`DELETE FROM part_number_registry WHERE family_number = ${family.family_number}`;
+        await sql`DELETE FROM retired_part_numbers WHERE part_number LIKE ${`${family.family_number}%`}`;
       }
     }
   });
@@ -84,13 +85,13 @@ for (const locale of ["en", "fa"] as Locale[]) {
       } else if (input.stage === "review") {
         await route.fulfill({ json: { state: { kind: "review", familyId: family.id,
           headers, missing: [], rowCount: 2, problems: [],
-          rowProblems: [{ row: 3, column: "price_usd", message: "Not a number" }], goodRows: 1, blankRows: 1,
+          rowProblems: [{ row: 3, column: "price_usd", message: "Not a number" }], goodRows: 1, blankRows: 1, foreign: [],
           plan: { headers: headers.map((h) => h.plan), dropKeys: [], mode: "update", skipBadRows: false },
         } } });
       } else {
         appliedPlan = JSON.parse(input.plan);
         await route.fulfill({ json: { state: { kind: "ok", familyId: family.id, inserted: 1,
-          updated: 0, removed: 0, addedColumns: 0, droppedColumns: 0, skipped: [], priceless: [], mismatches: [],
+          updated: 0, removed: 0, addedColumns: 0, droppedColumns: 0, skipped: [], priceless: [], mismatches: [], renumbered: [],
         } } });
       }
     });

@@ -13,8 +13,10 @@ import {
 import { IMPORT_MAX_ROWS, importTextTooLarge } from "./importLimits";
 import {
   countProductsWithSpec,
+  findForeignPartNumbers,
   getFamilyForImport,
   writeImport,
+  type ForeignPart,
 } from "@/db/importQueries";
 import { FamilyCapacityExhausted, FamilyNumbersExhausted, PartNumberUnavailable } from "@/db/partNumberQueries";
 
@@ -30,6 +32,8 @@ export type ImportState =
       goodRows: number;
       /** Rows whose part number cell is empty; each becomes a new product. */
       blankRows: number;
+      /** Part numbers in the file that are not products of this family. */
+      foreign: ForeignPart[];
       plan: ImportPlan;
     }
   | {
@@ -43,6 +47,8 @@ export type ImportState =
       skipped: ImportError[];
       priceless: string[];
       mismatches: { partNumber: string; column: string; uploaded: number; computed: number }[];
+      /** Rows whose file part number could not be used, and what they got. */
+      renumbered: { from: string; to: string }[];
     }
   | { kind: "errors"; familyId: number; errors: ImportError[] }
   | { kind: "conflicts"; familyId: number; parts: string[] }
@@ -118,6 +124,21 @@ export async function processCatalogImport(input: {
     return { kind: "message", familyId, message: "too-large" };
   }
 
+  // A part number in a file may only name a product this family already has.
+  // Re-checked here, not trusted from the review: a product may have been
+  // deleted, or moved, since the screen was drawn. The operator's only ways
+  // on are new numbers for those rows or discarding the upload.
+  const foreign = await findForeignPartNumbers(familyId, rows.map((row) => row.partNumber));
+  if (foreign.length > 0 && plan.renumber !== true) {
+    return review(familyId, text, family, [], plan);
+  }
+  const flagged = new Set(foreign.map((part) => part.partNumber.toUpperCase()));
+  const renumbered = rows
+    .filter((row) => flagged.has(row.partNumber.toUpperCase()))
+    .map((row) => ({ from: row.partNumber, row }));
+  // Blank, so `writeImport` mints for them exactly as for an empty cell.
+  for (const { row } of renumbered) row.partNumber = "";
+
   const existing = new Set(family.defs.map((definition) => definition.key));
   const addedColumns = plan.headers.filter(
     (header) => header.role === "spec" && !existing.has(header.key),
@@ -155,6 +176,8 @@ export async function processCatalogImport(input: {
     droppedColumns: plan.dropKeys.length,
     priceless: pricelessParts(rows),
     mismatches: result.mismatches,
+    // `writeImport` writes each minted code back into the row it was handed.
+    renumbered: renumbered.map(({ from, row }) => ({ from, to: row.partNumber })),
   };
 }
 
@@ -197,6 +220,7 @@ async function review(
   // Counted from the same dry run the operator is about to look at, so the
   // number on screen is the number of codes the apply would actually mint.
   const blankRows = dryRun.rows.filter((row) => row.partNumber === "").length;
+  const foreign = await findForeignPartNumbers(familyId, dryRun.rows.map((row) => row.partNumber));
 
   return {
     kind: "review",
@@ -211,6 +235,7 @@ async function review(
     rowProblems,
     goodRows: analysis.rowCount - badRows.size,
     blankRows,
+    foreign,
     plan: proposed,
   };
 }

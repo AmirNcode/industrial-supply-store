@@ -224,6 +224,53 @@ function buildSearchText(
     .slice(0, 2000);
 }
 
+/**
+ * Why a part number in an uploaded file cannot be used as given.
+ *
+ * A part number in a file means "update this product of this family"; a new
+ * product's cell is left blank and the system issues its number. Anything else
+ * is one of these.
+ */
+export type ForeignPartReason =
+  /** A deleted product held it. Never given out again. */
+  | "deleted"
+  /** A product in another family holds it. */
+  | "other-family"
+  /** No product of this family has it: a supplier's code, a sample's, or a
+   *  TEMEX number typed in rather than issued. */
+  | "not-issued";
+
+export type ForeignPart = { partNumber: string; reason: ForeignPartReason };
+
+/**
+ * The part numbers in `partNumbers` that are not products of this family, and
+ * why. Matched upper-cased, like every part-number lookup; a different-case
+ * spelling of this family's own code is a case variant, refused later by
+ * `writeImport`, not a foreign code.
+ */
+export async function findForeignPartNumbers(
+  familyId: number,
+  partNumbers: readonly string[],
+): Promise<ForeignPart[]> {
+  const typedAs = new Map(partNumbers.filter(Boolean).map((part) => [part.toUpperCase(), part]));
+  if (typedAs.size === 0) return [];
+  const found = await sql<{ code: string; here: boolean; retired: boolean; elsewhere: boolean }[]>`
+    SELECT u.code,
+      EXISTS (SELECT 1 FROM products p
+              WHERE upper(p.part_number) = u.code AND p.family_id = ${familyId}) AS here,
+      EXISTS (SELECT 1 FROM retired_part_numbers x WHERE x.part_number = u.code) AS retired,
+      EXISTS (SELECT 1 FROM products p
+              WHERE upper(p.part_number) = u.code AND p.family_id <> ${familyId}) AS elsewhere
+    FROM unnest(${[...typedAs.keys()]}::text[]) AS u(code)
+  `;
+  return found
+    .filter((row) => !row.here)
+    .map((row) => ({
+      partNumber: typedAs.get(row.code)!,
+      reason: row.retired ? "deleted" : row.elsewhere ? "other-family" : "not-issued",
+    }));
+}
+
 export type ImportResult = {
   inserted: number;
   updated: number;

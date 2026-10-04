@@ -2666,6 +2666,11 @@ html[lang="fa"] .taxonomy-kind-chip {
 .product-delete-note {
   color: var(--color-ink-muted);
 }
+.product-delete-warn {
+  border: 1px solid var(--color-warn-line);
+  background: var(--color-warn-soft);
+  padding: 5px 8px;
+}
 .product-delete-actions {
   display: flex;
   justify-content: flex-end;

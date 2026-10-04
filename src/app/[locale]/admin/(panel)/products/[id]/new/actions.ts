@@ -6,7 +6,7 @@ import { getFamilyForImport, writeImport } from "@/db/importQueries";
 import { parseNumeric } from "@/lib/columnPlan";
 import { normalizeCatalogImageUrl } from "@/lib/catalogImages";
 import type { ImportRow } from "@/lib/importCsv";
-import { FamilyCapacityExhausted, FamilyNumbersExhausted, PartNumberUnavailable } from "@/db/partNumberQueries";
+import { FamilyCapacityExhausted, FamilyNumbersExhausted } from "@/db/partNumberQueries";
 
 export type CreateProductState =
   | { kind: "ok"; partNumber: string }
@@ -79,9 +79,9 @@ export async function createProductAction(
   if (imageRaw !== "" && imageUrl === null) return { kind: "error", message: "bad-image" };
 
   const row: ImportRow = {
-    // Blank mints a code, the same rule the uploader follows. A typed value is
-    // kept as given, so a supplier's own code can still be recorded.
-    partNumber: String(form.get("part_number") ?? "").trim(),
+    // Always minted. A typed code could only be a deleted one, another
+    // family's or a guess; a supplier's own code belongs in a column.
+    partNumber: "",
     specs,
     priceCents,
     packQty,
@@ -98,19 +98,10 @@ export async function createProductAction(
   try {
     result = await writeImport(familyId, [row], undefined, { insertOnly: true });
   } catch (error) {
-    if (error instanceof PartNumberUnavailable) {
-      return { kind: "error", message: error.reason === "existing" ? "already-exists" : "reserved" };
-    }
     if (error instanceof FamilyCapacityExhausted || error instanceof FamilyNumbersExhausted) {
       return { kind: "error", message: "numbers-exhausted" };
     }
     throw error;
-  }
-  if (result.conflicts.length > 0) {
-    return { kind: "error", message: "wrong-family", column: result.conflicts[0] };
-  }
-  if (result.caseVariants.length > 0) {
-    return { kind: "error", message: "case-variant", column: result.caseVariants[0] };
   }
   if (result.inserted !== 1) return { kind: "error", message: "not-created" };
 

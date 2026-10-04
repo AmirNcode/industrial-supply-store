@@ -10,7 +10,7 @@ import {
   FamilyCapacityExhausted,
 } from "./partNumberQueries";
 import { writeImport } from "./importQueries";
-import { deleteFamilyProducts } from "./familyQueries";
+import { deleteFamily, deleteFamilyProducts } from "./familyQueries";
 import { processCatalogImport } from "@/lib/catalogImport";
 import { MAX_VARIANTS_PER_FAMILY } from "@/lib/partNumber";
 import { sql as appSql } from "./index";
@@ -40,6 +40,7 @@ async function cleanUp(slug: string): Promise<void> {
   await sql`DELETE FROM categories WHERE slug = ${slug}`;
   if (family?.familyNumber != null) {
     await sql`DELETE FROM part_number_registry WHERE family_number = ${family.familyNumber}`;
+    await sql`DELETE FROM retired_part_numbers WHERE part_number LIKE ${`${family.familyNumber}%`}`;
   }
 }
 
@@ -365,6 +366,125 @@ test("deleting chosen products keeps counts right and touches no other family", 
     });
   });
   assert.equal(await deleteFamilyProducts(-1, ["X"]), null, "a missing family says so");
+});
+
+/**
+ * An import that writes ends by purging the cached catalog pages, which only
+ * works inside a Next request; here it throws once the write has committed.
+ * `"written"` stands for that success — the database is then the evidence.
+ */
+async function applyImport(input: Parameters<typeof processCatalogImport>[0]) {
+  try {
+    return await processCatalogImport(input);
+  } catch (error) {
+    if (String(error).includes("static generation store missing")) return "written" as const;
+    throw error;
+  }
+}
+
+const isRetired = async (code: string) =>
+  (await sql`SELECT 1 FROM retired_part_numbers WHERE part_number = ${code.toUpperCase()}`).length === 1;
+
+test("every way of deleting a product retires its part number, in any format", async () => {
+  const stamp = Date.now();
+  const codes = [`sup-row-${stamp}`, `SUP-REPLACE-${stamp}`, `SUP-KEEP-${stamp}`, `SUP-FAMILY-${stamp}`, `SUP-CATEGORY-${stamp}`];
+  try {
+    await withFamily(`pn-retire-${stamp}`, async (familyId) => {
+      await writeImport(familyId, [importRow(codes[0]), importRow(codes[1]), importRow(codes[2])]);
+      // A row ticked in the admin table; stored upper-cased whatever the spelling.
+      await deleteFamilyProducts(familyId, [codes[0]]);
+      assert.ok(await isRetired(codes[0]));
+      // A `replace` upload that leaves a product out.
+      const text = `part_number,price_usd\n${codes[2]},10\n`;
+      const review = await processCatalogImport({ familyId, text, stage: "review" });
+      assert.equal(review.kind, "review");
+      if (review.kind !== "review") return;
+      const applied = await applyImport({ familyId, text, stage: "apply",
+        rawPlan: JSON.stringify({ ...review.plan, mode: "replace" }) });
+      assert.equal(applied, "written");
+      assert.ok(await isRetired(codes[1]));
+      assert.ok(!(await isRetired(codes[2])), "a kept product is not retired");
+    });
+    await withFamily(`pn-retire-family-${stamp}`, async (familyId) => {
+      await writeImport(familyId, [importRow(codes[3])]);
+      assert.ok(await deleteFamily(familyId));
+      assert.ok(await isRetired(codes[3]), "a family delete cascades to its products");
+    });
+    const slug = `pn-retire-category-${stamp}`;
+    await withFamily(slug, async (familyId) => {
+      await writeImport(familyId, [importRow(codes[4])]);
+      await sql`DELETE FROM categories WHERE slug = ${slug}`;
+      assert.ok(await isRetired(codes[4]), "a category delete cascades to its products");
+    });
+  } finally {
+    await sql`DELETE FROM retired_part_numbers WHERE part_number = ANY(${codes.map((c) => c.toUpperCase())}::text[])`;
+  }
+});
+
+test("a deleted supplier code is refused on every write path", async () => {
+  const code = `SUP-GONE-${Date.now()}`;
+  try {
+    await withFamily(`pn-gone-${Date.now()}`, async (familyId) => {
+      await writeImport(familyId, [importRow(code)]);
+      await deleteFamilyProducts(familyId, [code]);
+      await assert.rejects(writeImport(familyId, [importRow(code)]),
+        (error: unknown) => error instanceof PartNumberUnavailable && error.reason === "reserved");
+      await assert.rejects(writeImport(familyId, [importRow(code.toLowerCase())]), PartNumberUnavailable);
+    });
+  } finally {
+    await sql`DELETE FROM retired_part_numbers WHERE part_number = ${code}`;
+  }
+});
+
+test("an upload naming part numbers the family does not own offers new numbers, never reuse", async () => {
+  const supplier = `SUP-NEW-${Date.now()}`;
+  await withFamily(`pn-foreign-${Date.now()}`, async (familyId) => {
+    await withFamily(`pn-foreign-other-${Date.now()}`, async (otherId) => {
+      const [keep, gone] = [importRow(), importRow()];
+      await writeImport(familyId, [keep, gone]);
+      const prefix = keep.partNumber.slice(0, 4);
+      assert.deepEqual([keep.partNumber, gone.partNumber], [`${prefix}A001`, `${prefix}A002`]);
+      await deleteFamilyProducts(familyId, [gone.partNumber]);
+      const other = importRow();
+      await writeImport(otherId, [other]);
+      const typed = `${prefix}A900`;
+
+      const text = ["part_number,price_usd", `${keep.partNumber},10`, `${gone.partNumber},11`,
+        `${other.partNumber},12`, `${supplier},13`, `${typed},14`].join("\n");
+      const review = await processCatalogImport({ familyId, text, stage: "review" });
+      assert.equal(review.kind, "review");
+      if (review.kind !== "review") return;
+      assert.deepEqual(
+        Object.fromEntries(review.foreign.map((part) => [part.partNumber, part.reason])),
+        { [gone.partNumber]: "deleted", [other.partNumber]: "other-family", [supplier]: "not-issued", [typed]: "not-issued" },
+      );
+
+      // Without the tick nothing is written and the review comes back.
+      const refused = await processCatalogImport({ familyId, text, stage: "apply", rawPlan: JSON.stringify(review.plan) });
+      assert.equal(refused.kind, "review");
+      const [{ n: untouched }] = await sql`SELECT count(*)::int AS n FROM products WHERE family_id = ${familyId}`;
+      assert.equal(untouched, 1);
+
+      const applied = await applyImport({ familyId, text, stage: "apply",
+        rawPlan: JSON.stringify({ ...review.plan, renumber: true }) });
+      assert.equal(applied, "written");
+      // Issued after the last number ever used, in file order: the deleted
+      // A002 is skipped, not refilled, and the typed A900 is not honoured.
+      const rows = await sql`
+        SELECT part_number, price_cents FROM products WHERE family_id = ${familyId} ORDER BY part_number
+      `;
+      assert.deepEqual(rows.map((row) => [row.part_number, row.price_cents]), [
+        [keep.partNumber, 1000],
+        [`${prefix}A003`, 1100],
+        [`${prefix}A004`, 1200],
+        [`${prefix}A005`, 1300],
+        [`${prefix}A006`, 1400],
+      ]);
+      const [theirs] = await sql`SELECT family_id, price_cents FROM products WHERE part_number = ${other.partNumber}`;
+      assert.equal(theirs.family_id, otherId, "another family's product is not touched");
+      assert.equal(theirs.price_cents, 100);
+    });
+  });
 });
 
 test("supplied TEMEX codes are reserved before blank rows in the same import", async () => {

@@ -2,7 +2,7 @@
 
 import { assertAdminWrite } from "@/lib/admin";
 import { revalidateCatalogPages } from "@/lib/revalidateCatalog";
-import { deleteFamilyProducts } from "@/db/familyQueries";
+import { countProductsOnOpenOrders, deleteFamilyProducts } from "@/db/familyQueries";
 import { getFamilyForImport, getProductsForExport, writeImport } from "@/db/importQueries";
 import { PartNumberUnavailable } from "@/db/partNumberQueries";
 import { applyProductEdits, type ProductEdits } from "@/lib/productEdits";
@@ -122,6 +122,26 @@ export async function saveFamilyProductsAction(
   }
 }
 
+/** A Server Action receives whatever was posted, not what its type says. */
+function isPartList(value: unknown): value is string[] {
+  return (
+    Array.isArray(value) &&
+    value.length > 0 &&
+    value.length <= IMPORT_MAX_ROWS &&
+    value.every((part) => typeof part === "string" && part !== "" && part.length <= 64)
+  );
+}
+
+/** For the delete dialog: how many of the ticked rows are on unfinished orders. */
+export async function countOpenOrderProductsAction(
+  familyId: number,
+  partNumbers: string[],
+): Promise<number | null> {
+  await assertAdminWrite();
+  if (!Number.isInteger(familyId) || familyId <= 0 || !isPartList(partNumbers)) return null;
+  return countProductsOnOpenOrders(familyId, [...new Set(partNumbers)]);
+}
+
 export type ProductTableDeleteResult =
   | { kind: "deleted"; count: number }
   | { kind: "error"; message: "not-found" | "bad-data" };
@@ -143,14 +163,7 @@ export async function deleteFamilyProductsAction(
   partNumbers: string[],
 ): Promise<ProductTableDeleteResult> {
   await assertAdminWrite();
-  if (
-    !Number.isInteger(familyId) ||
-    familyId <= 0 ||
-    !Array.isArray(partNumbers) ||
-    partNumbers.length === 0 ||
-    partNumbers.length > IMPORT_MAX_ROWS ||
-    !partNumbers.every((part) => typeof part === "string" && part !== "" && part.length <= 64)
-  ) {
+  if (!Number.isInteger(familyId) || familyId <= 0 || !isPartList(partNumbers)) {
     return { kind: "error", message: "bad-data" };
   }
 

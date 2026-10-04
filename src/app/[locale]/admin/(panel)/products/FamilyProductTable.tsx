@@ -13,7 +13,7 @@ import { getDict, type Locale } from "@/lib/i18n";
 import { formatInt } from "@/lib/money";
 import { useModalFocus } from "@/lib/useModalFocus";
 import { cellKey, useProductDrafts, type ProductTableHandle } from "./productDrafts";
-import { deleteFamilyProductsAction } from "./productTableActions";
+import { countOpenOrderProductsAction, deleteFamilyProductsAction } from "./productTableActions";
 
 /** Enough rows to scan and edit; few enough that edit mode stays quick. */
 const PAGE_SIZE = PRODUCT_PAGE_SIZE;
@@ -71,6 +71,10 @@ export function FamilyProductTable({
   const [selected, setSelected] = useState<ReadonlySet<string> | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  // Null until known; the dialog does not wait for it.
+  const [onOpenOrders, setOnOpenOrders] = useState<number | null>(null);
+  // Only the latest opening's answer counts; an earlier one may land late.
+  const openOrdersAsk = useRef(0);
   const deleteOpener = useRef<HTMLButtonElement>(null);
   const deleteDialog = useRef<HTMLDivElement>(null);
   useModalFocus(confirming, deleteDialog, deleteOpener, () => {
@@ -424,7 +428,16 @@ export function FamilyProductTable({
                 type="button"
                 className="taxonomy-danger-button"
                 disabled={demo || selected.size === 0}
-                onClick={() => setConfirming(true)}
+                onClick={() => {
+                  setConfirming(true);
+                  setOnOpenOrders(null);
+                  const ask = ++openOrdersAsk.current;
+                  countOpenOrderProductsAction(familyId, [...selected])
+                    .then((n) => {
+                      if (ask === openOrdersAsk.current) setOnOpenOrders(n);
+                    })
+                    .catch(() => {});
+                }}
               >
                 {t.reviewDelete}
               </button>
@@ -468,6 +481,11 @@ export function FamilyProductTable({
               ))}
             </ul>
             <p className="product-delete-note">{t.productsDeleteOrders}</p>
+            {onOpenOrders !== null && onOpenOrders > 0 && (
+              <p className="product-delete-warn">
+                {t.productsDeleteOpenOrders.replace("{n}", formatInt(onOpenOrders, locale))}
+              </p>
+            )}
             <div className="product-delete-actions">
               <button
                 data-dialog-initial-focus

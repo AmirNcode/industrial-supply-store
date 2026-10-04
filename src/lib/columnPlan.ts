@@ -110,6 +110,14 @@ export type ImportPlan = {
    * when a caller has not thought about it.
    */
   autoNumber?: boolean;
+  /**
+   * The operator has seen which part numbers in the file are not products of
+   * this family — deleted, another family's, or never issued here — and asked
+   * for new numbers in their place. Absent means no, for the same reason as
+   * `autoNumber`: it mints codes, and only a person on the review screen may
+   * ask for that.
+   */
+  renumber?: boolean;
 };
 
 /** A family's current column, as the analyzer needs to see it. */
@@ -449,7 +457,7 @@ export function parsePlanJson(raw: unknown): ImportPlan | null {
   }
   if (typeof parsed !== "object" || parsed === null) return null;
 
-  const { headers, dropKeys, mode, skipBadRows, autoNumber } = parsed as Record<
+  const { headers, dropKeys, mode, skipBadRows, autoNumber, renumber } = parsed as Record<
     string,
     unknown
   >;
@@ -459,6 +467,7 @@ export function parsePlanJson(raw: unknown): ImportPlan | null {
   if (typeof skipBadRows !== "boolean") return null;
   // Absent means no: a plan that does not mention minting must never mint.
   if (autoNumber !== undefined && typeof autoNumber !== "boolean") return null;
+  if (renumber !== undefined && typeof renumber !== "boolean") return null;
 
   const out: HeaderPlan[] = [];
   for (const h of headers) {
@@ -497,7 +506,14 @@ export function parsePlanJson(raw: unknown): ImportPlan | null {
     }
   }
 
-  return { headers: out, dropKeys, mode, skipBadRows, autoNumber: autoNumber === true };
+  return {
+    headers: out,
+    dropKeys,
+    mode,
+    skipBadRows,
+    autoNumber: autoNumber === true,
+    renumber: renumber === true,
+  };
 }
 
 export function validatePlan(plan: ImportPlan): string[] {

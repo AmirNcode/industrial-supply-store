@@ -240,6 +240,7 @@ export function FamilyImportControl({
             rowProblems={state.rowProblems}
             goodRows={state.goodRows}
             blankRows={state.blankRows}
+            foreign={state.foreign}
             locale={locale}
             pending={pending}
             fileName={picked?.name ?? ""}
@@ -300,6 +301,7 @@ export function FamilyImportControl({
           rowProblems={state.rowProblems}
           goodRows={state.goodRows}
           blankRows={state.blankRows}
+          foreign={state.foreign}
           locale={locale}
           pending={pending}
           onDiscard={discard}

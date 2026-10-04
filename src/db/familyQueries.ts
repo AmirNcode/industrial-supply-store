@@ -354,6 +354,28 @@ export async function deleteFamilyProducts(
 }
 
 /**
+ * How many of these products sit on an order still in progress — anything
+ * not yet delivered or cancelled. Said in the delete dialog: those orders keep
+ * their own copy of the line and can still be completed, but stock held for
+ * them goes with the product.
+ */
+export async function countProductsOnOpenOrders(
+  familyId: number,
+  partNumbers: readonly string[],
+): Promise<number> {
+  const [row] = await sql<{ n: number }[]>`
+    SELECT count(DISTINCT p.id)::int AS n
+    FROM products p
+    JOIN order_items i ON i.product_id = p.id
+    JOIN orders o ON o.id = i.order_id
+    WHERE p.family_id = ${familyId}
+      AND p.part_number = ANY(${partNumbers as string[]}::text[])
+      AND o.status NOT IN ('delivered', 'cancelled')
+  `;
+  return row.n;
+}
+
+/**
  * Delete a category, its descendants, and their families and products.
  *
  * `categories.parent_id` cascades to children and `product_families.category_id`

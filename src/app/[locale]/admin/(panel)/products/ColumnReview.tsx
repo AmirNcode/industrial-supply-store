@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { getDict, type Locale } from "@/lib/i18n";
+import { getDict, type Dict, type Locale } from "@/lib/i18n";
 import { formatInt } from "@/lib/money";
 import {
   BUILTIN_FIELDS,
@@ -16,6 +16,7 @@ import {
   type MissingColumn,
 } from "@/lib/columnPlan";
 import type { ImportError } from "@/lib/importCsv";
+import type { ForeignPart } from "@/db/importQueries";
 
 /**
  * The screen between choosing a file and importing it.
@@ -38,6 +39,22 @@ export const IGNORE_OPTION = "__ignore__";
  *  someone acts on. */
 export const MAX_SHOWN = 50;
 
+/** Why a file's part number cannot be used, in a few words. */
+export function foreignReason(t: Dict, part: ForeignPart): string {
+  if (part.reason === "deleted") return t.reviewForeignDeleted;
+  if (part.reason === "other-family") return t.reviewForeignOtherFamily;
+  return t.reviewForeignNotIssued;
+}
+
+export type BlockedBy = "foreign" | "blanks" | "rows" | null;
+
+/** The note under a disabled Confirm, naming the decision still missing. */
+export function blockedNote(t: Dict, blockedBy: BlockedBy): string {
+  if (blockedBy === "foreign") return t.reviewBlockedForeign;
+  if (blockedBy === "blanks") return t.reviewBlockedBlanks;
+  return t.reviewBlocked;
+}
+
 export function ColumnReview({
   headers,
   missing,
@@ -46,6 +63,7 @@ export function ColumnReview({
   rowProblems,
   goodRows,
   blankRows,
+  foreign,
   locale,
   pending,
   initialPlan,
@@ -58,6 +76,7 @@ export function ColumnReview({
   rowProblems: ImportError[];
   goodRows: number;
   blankRows: number;
+  foreign: ForeignPart[];
   locale: Locale;
   pending: boolean;
   initialPlan: ImportPlan;
@@ -77,6 +96,8 @@ export function ColumnReview({
     setSkipBadRows,
     autoNumber,
     setAutoNumber,
+    renumber,
+    setRenumber,
     newOnes,
     matched,
     owners,
@@ -85,7 +106,8 @@ export function ColumnReview({
     plan,
     badRowCount,
     blocked,
-  } = useColumnPlan({ initialPlan, headers, missing, rowProblems, blankRows });
+    blockedBy,
+  } = useColumnPlan({ initialPlan, headers, missing, rowProblems, blankRows, foreign });
 
   return (
     <div className="mt-2 border border-[var(--color-rule)] bg-white p-3">
@@ -173,6 +195,40 @@ export function ColumnReview({
               onChange={(e) => setAutoNumber(e.target.checked)}
             />
             <span>{t.reviewBlankPartsGenerate}</span>
+          </label>
+        </fieldset>
+      )}
+
+      {foreign.length > 0 && (
+        <fieldset className="mt-3 border border-[#e0b4b0] bg-[#fdf2f1] px-2.5 py-1.5">
+          <legend className="text-[12px] font-bold text-[var(--color-danger)]">
+            {t.reviewForeignParts}
+          </legend>
+          <p className="text-[11px] text-[var(--color-ink-muted)]">
+            {t.reviewForeignPartsHint.replace("{count}", formatInt(foreign.length, locale))}
+          </p>
+          <ul className="mt-1 grid gap-0.5 text-[11px]">
+            {foreign.slice(0, MAX_SHOWN).map((part) => (
+              <li key={part.partNumber}>
+                <span className="tech font-semibold" dir="ltr">{part.partNumber}</span>
+                {" — "}
+                {foreignReason(t, part)}
+              </li>
+            ))}
+          </ul>
+          {foreign.length > MAX_SHOWN && (
+            <p className="mt-1 text-[11px] text-[var(--color-ink-muted)]">
+              + {formatInt(foreign.length - MAX_SHOWN, locale)}
+            </p>
+          )}
+          <label className="mt-1 flex items-start gap-1.5 text-[12px]">
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={renumber}
+              onChange={(e) => setRenumber(e.target.checked)}
+            />
+            <span>{t.reviewForeignRenumber}</span>
           </label>
         </fieldset>
       )}
@@ -415,7 +471,7 @@ export function ColumnReview({
       </div>
       {blocked && (
         <p className="mt-1 text-[11px] text-[var(--color-danger)]">
-          {blankRows > 0 && !autoNumber ? t.reviewBlockedBlanks : t.reviewBlocked}
+          {blockedNote(t, blockedBy)}
         </p>
       )}
     </div>
@@ -433,12 +489,14 @@ export function useColumnPlan({
   missing,
   rowProblems,
   blankRows,
+  foreign,
 }: {
   initialPlan: ImportPlan;
   headers: AnalyzedHeader[];
   missing: MissingRow[];
   rowProblems: ImportError[];
   blankRows: number;
+  foreign: ForeignPart[];
 }) {
   const [plans, setPlans] = useState<HeaderPlan[]>(initialPlan.headers);
   const [dropKeys, setDropKeys] = useState<string[]>(initialPlan.dropKeys);
@@ -446,6 +504,8 @@ export function useColumnPlan({
   const [skipBadRows, setSkipBadRows] = useState(initialPlan.skipBadRows);
   /** Starts off: minting codes is never the default, in any locale or flow. */
   const [autoNumber, setAutoNumber] = useState(initialPlan.autoNumber ?? false);
+  /** Starts off for the same reason: new numbers for these rows burn codes. */
+  const [renumber, setRenumber] = useState(initialPlan.renumber ?? false);
 
   const update = (i: number, next: HeaderPlan) =>
     setPlans((prev) => prev.map((p, j) => (j === i ? next : p)));
@@ -517,13 +577,23 @@ export function useColumnPlan({
    * part number" would be a lie about a file that has no such column.
    */
   const hasPartColumn = plans.some((p) => p.role === "builtin" && p.field === "part_number");
-  const plan = JSON.stringify({ headers: plans, dropKeys, mode, skipBadRows, autoNumber });
+  const plan = JSON.stringify({ headers: plans, dropKeys, mode, skipBadRows, autoNumber, renumber });
   const badRowCount = new Set(rowProblems.map((e) => e.row)).size;
   // Confirming with bad rows and no decision about them would just bounce back.
   // Blank part numbers are the same shape of problem: the server refuses to
   // mint codes nobody asked for, so confirming without the tick achieves
   // nothing except a round trip.
-  const blocked = (badRowCount > 0 && !skipBadRows) || (blankRows > 0 && !autoNumber);
+  // Part numbers the family does not own are the same again: the server sends
+  // the file back until someone asks for new numbers or discards it.
+  const blockedBy: BlockedBy =
+    foreign.length > 0 && !renumber
+      ? "foreign"
+      : blankRows > 0 && !autoNumber
+        ? "blanks"
+        : badRowCount > 0 && !skipBadRows
+          ? "rows"
+          : null;
+  const blocked = blockedBy !== null;
 
 
   return {
@@ -538,6 +608,8 @@ export function useColumnPlan({
     setSkipBadRows,
     autoNumber,
     setAutoNumber,
+    renumber,
+    setRenumber,
     newOnes,
     matched,
     owners,
@@ -546,5 +618,6 @@ export function useColumnPlan({
     plan,
     badRowCount,
     blocked,
+    blockedBy,
   };
 }

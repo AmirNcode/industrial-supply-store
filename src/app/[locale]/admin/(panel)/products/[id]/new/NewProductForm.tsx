@@ -75,17 +75,9 @@ export function NewProductForm({
               ? t.newProductBadCount
               : state.message === "bad-image"
                 ? t.newProductBadImage
-                : state.message === "wrong-family"
-                  ? t.importWrongFamily
-                  : state.message === "already-exists"
-                    ? t.newProductAlreadyExists
-                  : state.message === "reserved"
-                    ? t.importReservedNumber
-                  : state.message === "numbers-exhausted"
-                    ? t.importNumbersExhausted
-                  : state.message === "case-variant"
-                    ? t.importCaseVariant
-                    : t.newProductFailed
+                : state.message === "numbers-exhausted"
+                  ? t.importNumbersExhausted
+                  : t.newProductFailed
       : null;
 
   if (mobile) {
@@ -115,20 +107,11 @@ export function NewProductForm({
   return (
     <form ref={formRef} onSubmit={submit} className="max-w-2xl">
       <fieldset disabled={demo || pending} className="grid gap-3">
+        {/* Not a field: only the system issues part numbers, so one typed here
+            could only be a deleted code, another family's, or a guess. */}
         <div className="grid gap-0.5 text-[12px]">
-          <label className="font-bold" htmlFor="part_number">
-            {t.partNumber}
-          </label>
-          <input
-            id="part_number"
-            name="part_number"
-            className="admin-input"
-            aria-describedby="part_number_hint"
-            autoComplete="off"
-          />
-          <span id="part_number_hint" className="text-[11px] text-[var(--color-ink-muted)]">
-            {t.newProductPartNumberHint}
-          </span>
+          <span className="font-bold">{t.partNumber}</span>
+          <span className="text-[11px] text-[var(--color-ink-muted)]">{t.newProductPartNumberHint}</span>
         </div>
 
         {defs.length > 0 && (
@@ -237,11 +220,6 @@ function fieldInError(state: CreateProductState | null): string | null {
       return "inventory_available";
     case "bad-image":
       return "image_url";
-    case "already-exists":
-    case "reserved":
-    case "wrong-family":
-    case "case-variant":
-      return "part_number";
     default:
       return null;
   }
@@ -348,23 +326,8 @@ function MobileNewProduct({
         <fieldset className="mtx-fieldset" disabled={demo || pending}>
           <section className="mtx-section">
             <div className="mtx-field">
-              <label className="mtx-field-label" htmlFor="part_number">
-                {t.partNumber}
-              </label>
-              <input
-                id="part_number"
-                name="part_number"
-                dir="ltr"
-                className={inputClass("part_number", true)}
-                aria-describedby={describedBy("part_number", "part_number_hint")}
-                autoComplete="off"
-                autoCapitalize="characters"
-                autoCorrect="off"
-                spellCheck={false}
-              />
-              <span id="part_number_hint" className="mtx-hint">
-                {t.newProductPartNumberHint}
-              </span>
+              <span className="mtx-field-label">{t.partNumber}</span>
+              <span className="mtx-hint">{t.newProductPartNumberHint}</span>
             </div>
           </section>
 

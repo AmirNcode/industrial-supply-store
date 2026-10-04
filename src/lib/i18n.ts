@@ -442,7 +442,7 @@ const en = {
     "One product, typed in. The technical fields below are this family's own columns. Leave the part number empty and a new TEMEX number is created for it.",
   newProductSpecs: "Technical details",
   newProductCommercial: "Price and stock",
-  newProductPartNumberHint: "Leave empty to create a new TEMEX part number",
+  newProductPartNumberHint: "A new TEMEX part number is issued when you save.",
   newProductPriceHint: "Leave empty for call-for-price",
   newProductImage: "Image address",
   newProductCreated: "Added {part}.",
@@ -452,7 +452,6 @@ const en = {
   newProductBadCount: "Lead time and available stock must be whole numbers.",
   newProductBadImage: "That image address is not a valid link.",
   newProductFailed: "The product was not added.",
-  newProductAlreadyExists: "This part number already exists. Open the existing product to edit it, or leave the part number blank to create a new product.",
   importReservedNumber: "This part number was previously issued and cannot be reused. Leave it blank to generate a new number.",
   importNumbersExhausted: "There are no available part numbers in this range. No products were changed.",
   packQty: "Pack quantity",
@@ -461,6 +460,16 @@ const en = {
   reviewNoPartColumnHint:
     "Nothing in the file identifies an existing product, so all {count} rows are treated as new products, each with a new TEMEX part number. Numbers are never reused, so cancel and add a part_number column if you meant to update existing products.",
   reviewBlockedBlanks: "Tick the box above to create part numbers, or upload a different file.",
+  reviewForeignParts: "Part numbers that can’t be used",
+  reviewForeignPartsHint:
+    "A part number in the file must belong to a product already in this family; leave it blank for a new product. These {count} rows can get new TEMEX part numbers, or you can discard this upload.",
+  reviewForeignDeleted: "deleted — never used again",
+  reviewForeignOtherFamily: "belongs to another family",
+  reviewForeignNotIssued: "not a part number of this family",
+  reviewForeignRenumber: "Give these rows new TEMEX part numbers",
+  reviewBlockedForeign: "Tick the box above to give those rows new part numbers, or discard the upload.",
+  importRenumbered:
+    "{n} rows got new part numbers. Your file still has the old ones — download a fresh export before editing it again, or the next upload will create these products a second time.",
   reviewMode: "Existing products in this family",
   reviewModeUpdate: "Update and add",
   reviewModeUpdateHint:
@@ -692,6 +701,7 @@ const en = {
   productsDeleteTitle: "Delete {n} products?",
   productsDeleteWarn: "These products will be deleted for good. This cannot be undone.",
   productsDeleteOrders: "Past orders keep their own record of them.",
+  productsDeleteOpenOrders: "{n} of them are on orders still in progress. Those orders keep their own copy and can still be completed, but stock held for them is deleted with the product.",
   productsDeleting: "Deleting…",
   productsDeleted: "{n} products deleted.",
   productsDeleteFailed: "The products could not be deleted. Nothing was deleted.",
@@ -1352,7 +1362,7 @@ const fa: typeof en = {
     "یک کالا، به‌صورت دستی. فیلدهای فنی زیر ستون‌های همین خانواده هستند. اگر شماره قطعه را خالی بگذارید، شماره قطعه تمکس تازه‌ای برای آن ساخته می‌شود.",
   newProductSpecs: "مشخصات فنی",
   newProductCommercial: "قیمت و موجودی",
-  newProductPartNumberHint: "برای ساخت شماره قطعه تمکس تازه، خالی بگذارید",
+  newProductPartNumberHint: "هنگام ذخیره، شماره قطعهٔ تمکس جدید صادر می‌شود.",
   newProductPriceHint: "برای «استعلام قیمت» خالی بگذارید",
   newProductImage: "نشانی تصویر",
   newProductCreated: "افزوده شد: {part}",
@@ -1362,7 +1372,6 @@ const fa: typeof en = {
   newProductBadCount: "زمان تحویل و موجودی باید عدد درست باشند.",
   newProductBadImage: "نشانی تصویر معتبر نیست.",
   newProductFailed: "کالا افزوده نشد.",
-  newProductAlreadyExists: "این شماره قطعه از قبل وجود دارد. برای ویرایش، کالای موجود را باز کنید یا برای ساخت کالای جدید، شماره قطعه را خالی بگذارید.",
   importReservedNumber: "این شماره قطعه قبلاً صادر شده و قابل استفاده مجدد نیست. برای ساخت شماره جدید، آن را خالی بگذارید.",
   importNumbersExhausted: "در این محدوده شماره قطعه‌ای باقی نمانده است. هیچ کالایی تغییر نکرد.",
   packQty: "تعداد در بسته",
@@ -1371,6 +1380,16 @@ const fa: typeof en = {
   reviewNoPartColumnHint:
     "چیزی در فایل کالای موجود را مشخص نمی‌کند، بنابراین هر {count} سطر کالای تازه در نظر گرفته می‌شود و هرکدام شماره قطعه تمکس تازه می‌گیرد. شماره‌ها هرگز دوباره صادر نمی‌شوند؛ اگر می‌خواستید کالاهای موجود را به‌روزرسانی کنید، لغو کنید و ستون part_number را اضافه کنید.",
   reviewBlockedBlanks: "برای ساخت شماره قطعه گزینه بالا را علامت بزنید، یا فایل دیگری بارگذاری کنید.",
+  reviewForeignParts: "شماره قطعه‌های غیرقابل استفاده",
+  reviewForeignPartsHint:
+    "شماره قطعهٔ هر سطر فایل باید متعلق به کالایی باشد که هم‌اکنون در این خانواده است؛ برای کالای جدید آن را خالی بگذارید. می‌توان برای این {count} سطر شماره قطعهٔ تمکس جدید صادر کرد، یا این بارگذاری را کنار گذاشت.",
+  reviewForeignDeleted: "حذف‌شده — دیگر استفاده نمی‌شود",
+  reviewForeignOtherFamily: "متعلق به خانوادهٔ دیگری است",
+  reviewForeignNotIssued: "شماره قطعهٔ این خانواده نیست",
+  reviewForeignRenumber: "برای این سطرها شماره قطعهٔ تمکس جدید صادر شود",
+  reviewBlockedForeign: "برای صدور شماره جدید گزینهٔ بالا را علامت بزنید، یا این بارگذاری را کنار بگذارید.",
+  importRenumbered:
+    "برای {n} سطر شماره قطعهٔ جدید صادر شد. فایل شما هنوز شماره‌های قبلی را دارد؛ پیش از ویرایش دوباره، خروجی تازه بگیرید، وگرنه بارگذاری بعدی این کالاها را دوباره می‌سازد.",
   reviewMode: "کالاهای موجود در این خانواده",
   reviewModeUpdate: "به‌روزرسانی و افزودن",
   reviewModeUpdateHint:
@@ -1594,6 +1613,7 @@ const fa: typeof en = {
   productsDeleteTitle: "{n} کالا حذف شود؟",
   productsDeleteWarn: "این کالاها برای همیشه حذف می‌شوند. این کار برگشت‌پذیر نیست.",
   productsDeleteOrders: "سفارش‌های گذشته سوابق خود را از این کالاها حفظ می‌کنند.",
+  productsDeleteOpenOrders: "{n} مورد از آن‌ها در سفارش‌های در جریان هستند. این سفارش‌ها نسخهٔ خود را حفظ می‌کنند و قابل تکمیل‌اند، اما موجودی رزروشده برای آن‌ها همراه کالا حذف می‌شود.",
   productsDeleting: "در حال حذف…",
   productsDeleted: "{n} کالا حذف شد.",
   productsDeleteFailed: "کالاها حذف نشدند. هیچ کالایی حذف نشد.",

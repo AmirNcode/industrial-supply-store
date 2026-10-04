@@ -35,7 +35,7 @@ const TABLES = [
   "spec_defs", "carts", "cart_items", "orders", "order_items", "users",
   "app_settings", "order_comments", "request_rate_limits", "part_number_registry",
   "sales_reps", "customer_notes", "rep_payouts", "rep_targets", "payment_proofs",
-  "audit_log",
+  "audit_log", "retired_part_numbers",
 ] as const;
 
 /**
@@ -258,6 +258,7 @@ const REQUIRED_MIGRATIONS = [
   "20260930120000",
   "20260930130000",
   "20260930140000",
+  "20261004120000",
 ] as const;
 let recordedMigrations = new Set<string>();
 if (hasMigrationLedger) {
@@ -301,6 +302,15 @@ const [{ hasCodeTrigger }] = await sql<{ hasCodeTrigger: boolean }[]>`
   ) AS "hasCodeTrigger"
 `;
 console.log(`code default ${hasCodeTrigger ? "✓" : "✗ MISSING — an insert without a customer code fails"}`);
+
+// Every product delete records its part number here; without the trigger a
+// deleted code silently becomes available to the next upload.
+const [{ hasRetireTrigger }] = await sql<{ hasRetireTrigger: boolean }[]>`
+  SELECT EXISTS (
+    SELECT 1 FROM pg_trigger WHERE tgname = 'products_retire_part_numbers' AND NOT tgisinternal
+  ) AS "hasRetireTrigger"
+`;
+console.log(`retired codes ${hasRetireTrigger ? "✓" : "✗ MISSING — deleted part numbers are not recorded"}`);
 
 // queries.ts calls these in every search and suggest query; without them the
 // search page and /api/suggest 500 outright. They are dropped-and-forgotten
@@ -476,6 +486,7 @@ const ok =
   missingMigrations.length === 0 &&
   hasSeq &&
   hasCodeTrigger &&
+  hasRetireTrigger &&
   apiGrants === 0 &&
   rlsOff.length === 0 &&
   integrityIssues.length === 0 &&

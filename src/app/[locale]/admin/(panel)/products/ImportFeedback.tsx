@@ -39,6 +39,28 @@ export function ImportFeedback({
             .replace("{updated}", formatInt(state.updated, locale))}
           {columnNotes.length > 0 && ` ${columnNotes.join(" · ")}.`}
         </p>
+        {/* Said before anything else that might need doing: the operator's
+            file is now out of step, and uploading it again as it stands
+            would add these products a second time under fresh numbers. */}
+        {state.renumbered.length > 0 && (
+          <div className="mt-1.5 border border-[var(--color-warn-line)] bg-[var(--color-warn-soft)] px-2.5 py-1.5">
+            <p className="mb-1 text-[12px] font-bold">
+              {t.importRenumbered.replace("{n}", formatInt(state.renumbered.length, locale))}
+            </p>
+            <ul className="grid gap-0.5 text-[11px]">
+              {state.renumbered.slice(0, MAX_SHOWN).map((change) => (
+                <li key={change.to} className="tech" dir="ltr">
+                  {change.from} → <span className="font-semibold">{change.to}</span>
+                </li>
+              ))}
+            </ul>
+            {state.renumbered.length > MAX_SHOWN && (
+              <p className="mt-1 text-[11px] text-[var(--color-ink-muted)]">
+                + {formatInt(state.renumbered.length - MAX_SHOWN, locale)}
+              </p>
+            )}
+          </div>
+        )}
         {state.priceless.length > 0 && (
           <div className="mt-1.5 border border-[var(--color-warn-line)] bg-[var(--color-warn-soft)] px-2.5 py-1.5">
             <p className="mb-1 text-[12px] font-bold">{t.importPriceless}</p>

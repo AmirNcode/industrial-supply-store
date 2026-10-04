@@ -206,6 +206,25 @@ export const partNumberRegistry = pgTable(
 );
 
 /**
+ * Every part number a deleted product held, in any format, upper-cased.
+ *
+ * Filled only by the `products_retire_part_numbers` trigger (migration
+ * 20261004120000), on every delete path including cascades. Nothing may give
+ * one of these codes to a product again; `registerExistingPartNumbers` refuses
+ * them and the CSV review offers a new number instead.
+ */
+export const retiredPartNumbers = pgTable(
+  "retired_part_numbers",
+  {
+    partNumber: text("part_number").primaryKey(),
+    retiredAt: timestamp("retired_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check("retired_part_numbers_upper_check", sql`${t.partNumber} = upper(${t.partNumber})`),
+  ],
+);
+
+/**
  * Declares the spec table columns for one family: which jsonb keys render, in
  * what order, with what label and unit, and whether they get a facet.
  * The spec table is entirely data-driven off this table — adding a new product

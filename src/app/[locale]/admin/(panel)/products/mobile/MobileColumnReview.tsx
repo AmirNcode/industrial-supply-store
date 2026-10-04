@@ -10,10 +10,13 @@ import {
   type ImportPlan,
 } from "@/lib/columnPlan";
 import type { ImportError } from "@/lib/importCsv";
+import type { ForeignPart } from "@/db/importQueries";
 import {
   IGNORE_OPTION,
   MAX_SHOWN,
   SPEC_OPTION,
+  blockedNote,
+  foreignReason,
   useColumnPlan,
   type MissingRow,
 } from "../ColumnReview";
@@ -35,6 +38,7 @@ export function MobileColumnReview({
   rowProblems,
   goodRows,
   blankRows,
+  foreign,
   locale,
   pending,
   initialPlan,
@@ -49,6 +53,7 @@ export function MobileColumnReview({
   rowProblems: ImportError[];
   goodRows: number;
   blankRows: number;
+  foreign: ForeignPart[];
   locale: Locale;
   pending: boolean;
   initialPlan: ImportPlan;
@@ -58,7 +63,7 @@ export function MobileColumnReview({
 }) {
   const t = getDict(locale);
   useBodyScrollLock();
-  const review = useColumnPlan({ initialPlan, headers, missing, rowProblems, blankRows });
+  const review = useColumnPlan({ initialPlan, headers, missing, rowProblems, blankRows, foreign });
   const { plans, newOnes, matched, owners, badRowCount, blocked } = review;
   const importing = review.skipBadRows && badRowCount > 0 ? goodRows : rowCount;
 
@@ -177,6 +182,28 @@ export function MobileColumnReview({
             label={t.reviewBlankPartsGenerate}
             checked={review.autoNumber}
             onChange={review.setAutoNumber}
+          />
+        </section>
+      )}
+
+      {foreign.length > 0 && (
+        <section className="mtx-warn-box">
+          <h2>{t.reviewForeignParts}</h2>
+          <p className="mtx-hint">
+            {t.reviewForeignPartsHint.replace("{count}", formatInt(foreign.length, locale))}
+          </p>
+          <ul className="mtx-hint">
+            {foreign.slice(0, MAX_SHOWN).map((part) => (
+              <li key={part.partNumber}>
+                <span className="tech" dir="ltr">{part.partNumber}</span> — {foreignReason(t, part)}
+              </li>
+            ))}
+            {foreign.length > MAX_SHOWN && <li>+ {formatInt(foreign.length - MAX_SHOWN, locale)}</li>}
+          </ul>
+          <CheckRow
+            label={t.reviewForeignRenumber}
+            checked={review.renumber}
+            onChange={review.setRenumber}
           />
         </section>
       )}
@@ -334,7 +361,7 @@ export function MobileColumnReview({
       <div className="mtx-bottom-bar mtx-layer-bar">
         {blocked && (
           <p className="mtx-field-error mtx-bar-note">
-            {blankRows > 0 && !review.autoNumber ? t.reviewBlockedBlanks : t.reviewBlocked}
+            {blockedNote(t, review.blockedBy)}
           </p>
         )}
         {review.tableColumns > MAX_LEGIBLE_COLUMNS && (
