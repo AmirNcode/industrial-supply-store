@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   cellText,
+  newRowHasContent,
   productFingerprint,
   type CellId,
   type ProductRecord,
@@ -30,6 +31,11 @@ export type ProductNotice = { kind: "ok" | "error" | "invalid" | "stale"; text: 
 export type KnownProducts = ReadonlyMap<string, { product: ProductRecord; index?: number }>;
 
 export const cellKey = (partNumber: string, cell: CellId) => `${partNumber}\u0000${cell}`;
+/** A new row's cells have no part number yet; keyed by position instead. */
+export const newCellKey = (index: number, cell: CellId) => `\u0000new${index}\u0000${cell}`;
+
+/** The cells typed into one new row. */
+export type NewRowDraft = Partial<Record<CellId, string>>;
 
 /**
  * A family's unsaved product edits, and the one Save that writes them.
@@ -69,8 +75,12 @@ export function useProductDrafts({
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<ProductNotice | null>(null);
   const [known, setKnown] = useState<KnownProducts>(() => new Map());
+  // New products typed into the table's blank rows. The phone list never adds
+  // any, so for it this stays empty and Save behaves exactly as before.
+  const [newRows, setNewRows] = useState<NewRowDraft[]>([]);
 
-  const changed = Object.keys(draft).length;
+  const filledNewRows = newRows.filter(newRowHasContent);
+  const changed = Object.keys(draft).length + filledNewRows.length;
 
   useEffect(() => {
     onPendingChange(changed);
@@ -127,8 +137,34 @@ export function useProductDrafts({
     }
   }
 
+  /**
+   * A cell of the new row at `index`; typing in the trailing blank row makes it
+   * a new row of its own. Rows emptied again stay in place — removing one
+   * would shift every row under it while someone is typing — and are simply
+   * not sent.
+   */
+  function changeNew(index: number, cell: CellId, value: string) {
+    setNewRows((previous) => {
+      const next = [...previous];
+      const row = { ...next[index] };
+      if (value === "") delete row[cell];
+      else row[cell] = value;
+      next[index] = row;
+      return next;
+    });
+    const key = newCellKey(index, cell);
+    if (invalid.has(key)) {
+      setInvalid((previous) => {
+        const next = new Set(previous);
+        next.delete(key);
+        return next;
+      });
+    }
+  }
+
   function discard() {
     setDraft({});
+    setNewRows([]);
     setInvalid(new Set());
     setNotice(null);
   }
@@ -142,8 +178,15 @@ export function useProductDrafts({
       const product = known.get(partNumber)?.product;
       return product ? [{ partNumber, fingerprint: productFingerprint(product), edits }] : [];
     });
+    // Sent without the empty ones, so the server's positions differ from the
+    // table's; `sentAs` maps a refused cell back to the row it came from.
+    const sentAs = newRows.flatMap((row, index) => (newRowHasContent(row) ? [index] : []));
     try {
-      const result = await saveFamilyProductsAction(familyId, payload);
+      const result = await saveFamilyProductsAction(
+        familyId,
+        payload,
+        sentAs.map((index) => newRows[index]),
+      );
       if (result.kind === "saved") {
         // The stored rows replace the edited ones in the same render as the
         // draft clears, so the list never flashes the old values.
@@ -158,16 +201,33 @@ export function useProductDrafts({
           return next;
         });
         setDraft({});
+        setNewRows([]);
         setInvalid(new Set());
-        setNotice({ kind: "ok", text: t.productsSaved.replace("{n}", formatInt(result.count, locale)) });
+        const saved = result.count > 0 || result.created.length === 0
+          ? t.productsSaved.replace("{n}", formatInt(result.count, locale))
+          : "";
+        const created = result.created.length > 0
+          ? t.productsCreated
+              .replace("{n}", formatInt(result.created.length, locale))
+              .replace("{parts}", result.created.join(", "))
+          : "";
+        setNotice({ kind: "ok", text: [saved, created].filter(Boolean).join(" ") });
         // The tree's stock counts; `refreshKey` then reloads these rows too.
         router.refresh();
         return true;
       }
       if (result.kind === "invalid") {
-        setInvalid(new Set(result.cells.map(({ partNumber, cell }) => cellKey(partNumber, cell))));
-        const partNumber = result.cells[0]?.partNumber;
-        if (partNumber) onInvalid({ partNumber, index: known.get(partNumber)?.index });
+        setInvalid(
+          new Set(
+            result.cells.map((bad) =>
+              "partNumber" in bad ? cellKey(bad.partNumber, bad.cell) : newCellKey(sentAs[bad.newRow], bad.cell),
+            ),
+          ),
+        );
+        const first = result.cells.find((bad) => "partNumber" in bad);
+        if (first && "partNumber" in first) {
+          onInvalid({ partNumber: first.partNumber, index: known.get(first.partNumber)?.index });
+        }
         setNotice({
           kind: "invalid",
           text: t.productsInvalid.replace("{n}", formatInt(result.cells.length, locale)),
@@ -193,6 +253,7 @@ export function useProductDrafts({
 
   return {
     draft,
+    newRows,
     invalid,
     known,
     saving,
@@ -202,6 +263,7 @@ export function useProductDrafts({
     remember,
     forget,
     change,
+    changeNew,
     discard,
     save,
   };

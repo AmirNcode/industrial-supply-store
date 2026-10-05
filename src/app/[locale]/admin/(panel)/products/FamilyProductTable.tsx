@@ -4,15 +4,17 @@ import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } 
 import { useRouter } from "next/navigation";
 import type { FamilyProductsResponse } from "@/app/api/admin/family/[id]/products/route";
 import {
+  BLANK_PRODUCT,
   PRODUCT_PAGE_SIZE,
   cellText,
+  newRowHasContent,
   productTableColumns,
   type ProductColumn,
 } from "@/lib/productTable";
 import { getDict, type Locale } from "@/lib/i18n";
 import { formatInt } from "@/lib/money";
 import { useModalFocus } from "@/lib/useModalFocus";
-import { cellKey, useProductDrafts, type ProductTableHandle } from "./productDrafts";
+import { cellKey, newCellKey, useProductDrafts, type ProductTableHandle } from "./productDrafts";
 import { countOpenOrderProductsAction, deleteFamilyProductsAction } from "./productTableActions";
 
 /** Enough rows to scan and edit; few enough that edit mode stays quick. */
@@ -34,6 +36,11 @@ export type { ProductTableHandle };
  * (review M-21); every row loaded so far is remembered, so an edit made on
  * page 3 can still be saved — with the fingerprint it was loaded with — from
  * page 7.
+ *
+ * Edit mode also ends in blank rows for new products — the table's
+ * replacement for the old "Add a product" page. Their part number cell reads
+ * "New" and the number is issued on Save, with the edits, in one write. The
+ * phone keeps its own add screen; a row this wide does not fit one.
  *
  * Deleting rows is a separate mode from editing, and the two never overlap:
  * a row deleted while it held an unsaved edit would leave a draft Save could
@@ -96,7 +103,11 @@ export function FamilyProductTable({
     },
     onStale: () => setReloadToken((token) => token + 1),
   });
-  const { draft, invalid, saving, notice, setNotice, changed, change } = drafts;
+  const { draft, newRows, invalid, saving, notice, setNotice, changed, change, changeNew } = drafts;
+  // Always one blank row after the last filled one, so the next product has
+  // somewhere to go without a button.
+  const shownNewRows =
+    newRows.length === 0 || newRowHasContent(newRows[newRows.length - 1]) ? [...newRows, {}] : newRows;
 
   // Another family, or a refresh after an import: nothing loaded still holds.
   const [loadedFor, setLoadedFor] = useState({ familyId, refreshKey });
@@ -235,7 +246,8 @@ export function FamilyProductTable({
             <button
               type="button"
               className="taxonomy-ghost-button"
-              disabled={demo || !data || data.total === 0 || selected !== null}
+              // Allowed on an empty family: its first product is added here.
+              disabled={demo || !data || selected !== null}
               onClick={() => {
                 setEditing(true);
                 setNotice(null);
@@ -293,7 +305,7 @@ export function FamilyProductTable({
         <p className="taxonomy-error-banner">{t.productsLoadFailed}</p>
       ) : !data ? (
         <p className="product-table-empty">{t.productsLoading}</p>
-      ) : data.total === 0 ? (
+      ) : data.total === 0 && !editing ? (
         <p className="product-table-empty">{t.productsEmpty}</p>
       ) : (
         // Scrolls both ways inside its own box, so the horizontal scrollbar and
@@ -402,6 +414,56 @@ export function FamilyProductTable({
                   </tr>
                 );
               })}
+              {editing &&
+                shownNewRows.map((row, rowIndex) => (
+                  <tr key={`new-${rowIndex}`} className="is-new">
+                    {columns.map((column, index) => {
+                      if (column.kind === "part") {
+                        return (
+                          <th key={index} scope="row" className="product-table-part product-table-new-part">
+                            {t.productsNewRow}
+                          </th>
+                        );
+                      }
+                      if (column.kind === "readonly") {
+                        return <td key={index} className="num tech product-table-readonly" />;
+                      }
+                      const id = column.id;
+                      const value = row[id] ?? "";
+                      const bad = invalid.has(newCellKey(rowIndex, id));
+                      const name = `${label(column)} — ${t.productsNewRowLabel} ${formatInt(rowIndex + 1, locale)}`;
+                      // What a blank cell becomes, shown faintly: no stock, a
+                      // pack of one, no lead time. Price stays empty — blank is
+                      // call-for-price, and "0.00" would read as free.
+                      const fallback =
+                        id === "qty" || id === "packQty" || id === "leadDays" ? cellText(BLANK_PRODUCT, id) : undefined;
+                      return (
+                        <td key={index} className={`${columnClass(column)} ${bad ? "is-invalid" : ""}`}>
+                          {id === "inStock" ? (
+                            <input
+                              type="checkbox"
+                              aria-label={name}
+                              checked={(row.inStock ?? "yes") === "yes"}
+                              onChange={(event) => changeNew(rowIndex, id, event.target.checked ? "yes" : "no")}
+                            />
+                          ) : (
+                            <input
+                              type="text"
+                              dir="ltr"
+                              aria-label={name}
+                              aria-invalid={bad || undefined}
+                              className="product-cell-input"
+                              placeholder={fallback}
+                              size={Math.min(60, Math.max(6, value.length + 1))}
+                              value={value}
+                              onChange={(event) => changeNew(rowIndex, id, event.target.value)}
+                            />
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
             </tbody>
           </table>
         </div>

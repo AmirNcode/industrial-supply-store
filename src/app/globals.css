@@ -2594,6 +2594,16 @@ html[lang="fa"] .taxonomy-kind-chip {
 .product-table td.is-invalid .product-cell-input {
   border-color: var(--color-danger);
 }
+/* A row for a new product: its part number is issued on Save. */
+.product-table .product-table-new-part {
+  color: var(--color-ink-faint);
+  font-weight: 400;
+  font-style: italic;
+}
+.product-table tr.is-new td,
+.product-table tr.is-new th {
+  background: var(--color-panel);
+}
 /*
  * Choosing rows to delete. The tick sits inside the pinned part-number cell
  * rather than in a column of its own, so it stays on screen with the code it

@@ -687,6 +687,9 @@ const en = {
   productsEmpty: "No products in this family yet.",
   productsTableLabel: "Products in this family",
   productsSaved: "{n} products saved.",
+  productsCreated: "{n} new products added: {parts}.",
+  productsNewRow: "New",
+  productsNewRowLabel: "new product",
   productsInvalid:
     "{n} cells cannot be saved — they are marked in red. Nothing was saved.",
   productsStale:
@@ -1599,6 +1602,9 @@ const fa: typeof en = {
   productsEmpty: "هنوز کالایی در این خانواده نیست.",
   productsTableLabel: "کالاهای این خانواده",
   productsSaved: "{n} کالا ذخیره شد.",
+  productsCreated: "{n} کالای جدید اضافه شد: {parts}.",
+  productsNewRow: "جدید",
+  productsNewRowLabel: "کالای جدید",
   productsInvalid:
     "{n} خانه قابل ذخیره نیست و با رنگ قرمز مشخص شده است. هیچ تغییری ذخیره نشد.",
   productsStale:

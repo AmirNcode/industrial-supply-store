@@ -137,33 +137,34 @@ test("products taxonomy stages and discards reversible work without writing", as
   await expectNoAccessibilityViolations(page, testInfo, ".taxonomy-card");
 });
 
-test("a family row opens an add-a-product form built from its own columns", async (
+test("a family's table adds products in edit mode, not from a separate page", async (
   { page, isMobile },
   testInfo,
 ) => {
-  test.skip(isMobile, "The inline family rows this link sits on are desktop controls.");
+  test.skip(isMobile, "The wide product table is a desktop control; the phone keeps its add screen.");
   const locale: Locale = "en";
   const t = getDict(locale);
   await openProducts(page, locale, `203.0.113.${80 + testInfo.workerIndex}`);
 
   await page.getByRole("searchbox", { name: t.taxonomyFindCategory }).fill("o-ring");
-  const category = page
-    .locator(".taxonomy-tree-row:not(.is-family) .taxonomy-node-name")
-    .filter({ hasText: /^O-Rings$/ });
-  await category.click();
+  await page.locator(".taxonomy-tree-row.is-family .taxonomy-node-name").first().click();
+  await expect(page.locator(".product-table")).toBeVisible();
+  await expect(page.getByRole("link", { name: t.newProduct, exact: true })).toHaveCount(0);
 
-  await page.getByRole("link", { name: t.newProduct }).first().click();
-  await expect(page).toHaveURL(/\/admin\/products\/\d+\/new$/);
-  await expect(page.getByRole("heading", { level: 1 })).toContainText("Add a product to");
+  await page.getByRole("button", { name: t.productsEdit, exact: true }).click();
+  const newRow = page.locator(".product-table tr.is-new");
+  await expect(newRow).toHaveCount(1);
+  await expect(newRow.locator("th")).toHaveText(t.productsNewRow);
 
-  // No part number field: the system always issues it.
-  await expect(page.getByLabel(t.partNumber)).toHaveCount(0);
-  await expect(page.getByText(t.newProductPartNumberHint).first()).toBeVisible();
-
-  // Nothing is written: a rejected entry stays on screen to be corrected.
-  await page.getByLabel(t.price, { exact: true }).fill("not-a-price");
-  await page.getByRole("button", { name: t.newProduct }).click();
-  await expect(page.getByText(t.newProductBadPrice)).toBeVisible();
+  // Nothing is written: a refused cell is marked and the row stays to be fixed.
+  const price = page.getByLabel(`${t.productsPriceUsd} — ${t.productsNewRowLabel} 1`, { exact: true });
+  await price.fill("not-a-price");
+  await expect(newRow).toHaveCount(2);
+  await page.getByRole("button", { name: t.productsSave, exact: true }).click();
+  await expect(page.getByText(t.productsInvalid.replace("{n}", "1"))).toBeVisible();
+  await expect(price).toHaveAttribute("aria-invalid", "true");
+  await page.getByRole("button", { name: t.orderDiscard, exact: true }).click();
+  await expect(newRow).toHaveCount(0);
 });
 
 test("a family's product table edits in place, refuses a bad cell, and saves", async (

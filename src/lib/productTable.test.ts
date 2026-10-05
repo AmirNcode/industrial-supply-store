@@ -1,7 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  BLANK_PRODUCT,
   cellText,
+  newRowHasContent,
   productFingerprint,
   productTableColumns,
   type ProductRecord,
@@ -117,4 +119,31 @@ test("the fingerprint moves when anything the table shows moves, stock included"
   assert.notEqual(productFingerprint({ ...oring, inventoryOnHold: 6 }), before);
   assert.notEqual(productFingerprint({ ...oring, specs: { ...oring.specs, dash: "-011" } }), before);
   assert.notEqual(productFingerprint({ ...oring, imageUrl: "" }), before);
+});
+
+test("a new row counts only once something other than the in-stock tick is typed", () => {
+  assert.equal(newRowHasContent({}), false);
+  assert.equal(newRowHasContent({ inStock: "no" }), false, "the default tick alone is a mis-click");
+  assert.equal(newRowHasContent({ price: "   " }), false);
+  assert.equal(newRowHasContent({ "spec:dash": "-012" }), true);
+});
+
+test("a new row becomes a full product with the add-a-product defaults", () => {
+  const result = applyProductEdits(BLANK_PRODUCT, { "spec:dash": "-012", "spec:width": "0.07", price: "" }, defs);
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  assert.deepEqual(result.row, {
+    partNumber: "",
+    specs: { dash: "-012", width: 0.07 },
+    priceCents: 0,
+    packQty: 1,
+    leadDays: 0,
+    inStock: true,
+    inventoryAvailable: 0,
+    inventoryOnHold: 0,
+    inventorySold: 0,
+    imageUrl: undefined,
+  });
+  const bad = applyProductEdits(BLANK_PRODUCT, { "spec:width": "wide", packQty: "0" }, defs);
+  assert.deepEqual(bad, { ok: false, invalid: ["spec:width", "packQty"] });
 });

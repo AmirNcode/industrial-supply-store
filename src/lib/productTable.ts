@@ -28,6 +28,35 @@ export type ProductRecord = {
   imageUrl: string;
 };
 
+/**
+ * What a new row in the table starts as: the defaults "Add a product" and a
+ * blank CSV cell give — no stock, call-for-price, a pack of one, in stock.
+ * Its part number is issued on save.
+ */
+export const BLANK_PRODUCT: ProductRecord = {
+  partNumber: "",
+  specs: {},
+  priceCents: 0,
+  packQty: 1,
+  leadDays: 0,
+  inStock: true,
+  inventoryAvailable: 0,
+  inventoryOnHold: 0,
+  inventorySold: 0,
+  imageUrl: "",
+};
+
+/**
+ * Whether a new row holds anything worth creating a product for. The in-stock
+ * tick alone does not count: it is on by default, and a product that is
+ * nothing but "not in stock" is a mis-click, not an item.
+ */
+export function newRowHasContent(edits: Partial<Record<CellId, string>>): boolean {
+  return Object.entries(edits).some(
+    ([cell, value]) => cell !== "inStock" && typeof value === "string" && value.trim() !== "",
+  );
+}
+
 /** A family column, in the order the /columns page sets. */
 export type ProductTableDef = {
   key: string;
