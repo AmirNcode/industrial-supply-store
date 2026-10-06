@@ -31,11 +31,29 @@ export type ProductNotice = { kind: "ok" | "error" | "invalid" | "stale"; text: 
 export type KnownProducts = ReadonlyMap<string, { product: ProductRecord; index?: number }>;
 
 export const cellKey = (partNumber: string, cell: CellId) => `${partNumber}\u0000${cell}`;
-/** A new row's cells have no part number yet; keyed by position instead. */
-export const newCellKey = (index: number, cell: CellId) => `\u0000new${index}\u0000${cell}`;
+/** A new row's cells have no part number yet; keyed by the row's id instead. */
+export const newCellKey = (id: number, cell: CellId) => `\u0000new${id}\u0000${cell}`;
 
 /** The cells typed into one new row. */
 export type NewRowDraft = Partial<Record<CellId, string>>;
+
+/**
+ * A product not saved yet. `id` is stable for the life of the edit, unlike a
+ * position: rows can be removed, and a copy has to keep pointing at its source.
+ */
+export type NewRow = {
+  id: number;
+  cells: NewRowDraft;
+  /**
+   * Where a copy came from, and which cells it took. Save refuses a copy that
+   * still matches its source in every one of them but stock: that would be
+   * the same product twice under two part numbers.
+   */
+  copyOf?: { partNumber: string; cells: CellId[] } | { newId: number };
+};
+
+/** What an unset cell of a new row means: in stock, everything else blank. */
+const newRowValue = (row: NewRow, cell: CellId) => (row.cells[cell] ?? (cell === "inStock" ? "yes" : "")).trim();
 
 /**
  * A family's unsaved product edits, and the one Save that writes them.
@@ -77,9 +95,14 @@ export function useProductDrafts({
   const [known, setKnown] = useState<KnownProducts>(() => new Map());
   // New products typed into the table's blank rows. The phone list never adds
   // any, so for it this stays empty and Save behaves exactly as before.
-  const [newRows, setNewRows] = useState<NewRowDraft[]>([]);
+  const [newRows, setNewRows] = useState<NewRow[]>([]);
+  // The id the next new row gets — also the trailing blank row's key, so the
+  // input someone starts typing in is the same element once it becomes a row.
+  const [nextNewId, setNextNewId] = useState(1);
+  /** Copies refused for matching their source, with the source's part number ("" for a new row). */
+  const [sameAs, setSameAs] = useState<ReadonlyMap<number, string>>(() => new Map());
 
-  const filledNewRows = newRows.filter(newRowHasContent);
+  const filledNewRows = newRows.filter((row) => newRowHasContent(row.cells));
   const changed = Object.keys(draft).length + filledNewRows.length;
 
   useEffect(() => {
@@ -137,34 +160,97 @@ export function useProductDrafts({
     }
   }
 
-  /**
-   * A cell of the new row at `index`; typing in the trailing blank row makes it
-   * a new row of its own. Rows emptied again stay in place — removing one
-   * would shift every row under it while someone is typing — and are simply
-   * not sent.
-   */
-  function changeNew(index: number, cell: CellId, value: string) {
-    setNewRows((previous) => {
-      const next = [...previous];
-      const row = { ...next[index] };
-      if (value === "") delete row[cell];
-      else row[cell] = value;
-      next[index] = row;
-      return next;
-    });
-    const key = newCellKey(index, cell);
-    if (invalid.has(key)) {
-      setInvalid((previous) => {
-        const next = new Set(previous);
-        next.delete(key);
+  /** Forget a new row's refusals once someone changes it. */
+  function clearNewRowMarks(id: number, cell?: CellId) {
+    if (cell !== undefined) {
+      const key = newCellKey(id, cell);
+      if (invalid.has(key)) {
+        setInvalid((previous) => {
+          const next = new Set(previous);
+          next.delete(key);
+          return next;
+        });
+      }
+    }
+    if (sameAs.has(id)) {
+      setSameAs((previous) => {
+        const next = new Map(previous);
+        next.delete(id);
         return next;
       });
     }
   }
 
+  /**
+   * A cell of new row `id`, or — with `id` null — of the trailing blank row,
+   * which becomes a row of its own on the first keystroke. Rows emptied again
+   * stay where they are and are simply not sent; Remove takes one out.
+   */
+  function changeNew(id: number | null, cell: CellId, value: string) {
+    const rowId = id ?? nextNewId;
+    if (id === null) setNextNewId(nextNewId + 1);
+    setNewRows((previous) => {
+      const existing = previous.find((row) => row.id === rowId);
+      const cells = { ...existing?.cells };
+      if (value === "") delete cells[cell];
+      else cells[cell] = value;
+      return existing
+        ? previous.map((row) => (row.id === rowId ? { ...row, cells } : row))
+        : [...previous, { id: rowId, cells }];
+    });
+    clearNewRowMarks(rowId, cell);
+  }
+
+  /** A copy at the end of the new rows; returns its id so the table can focus it. */
+  function addCopy(cells: NewRowDraft, copyOf: NonNullable<NewRow["copyOf"]>): number {
+    const id = nextNewId;
+    setNextNewId(id + 1);
+    setNewRows((previous) => [...previous, { id, cells, copyOf }]);
+    return id;
+  }
+
+  function removeNew(id: number) {
+    setNewRows((previous) => previous.filter((row) => row.id !== id));
+    setInvalid((previous) => new Set([...previous].filter((key) => !key.startsWith(`\u0000new${id}\u0000`))));
+    clearNewRowMarks(id);
+  }
+
+  /**
+   * The copies still identical to their source in every cell they took, stock
+   * aside — stock is the one cell a copy is expected to differ in, and it is
+   * cleared on copying. A source no longer loaded or no longer there is not
+   * compared: there is nothing left to be a duplicate of.
+   */
+  function unchangedCopies(): Map<number, string> {
+    const found = new Map<number, string>();
+    for (const row of newRows) {
+      const copyOf = row.copyOf;
+      if (!copyOf || !newRowHasContent(row.cells)) continue;
+      if ("partNumber" in copyOf) {
+        const product = known.get(copyOf.partNumber)?.product;
+        if (!product) continue;
+        const edits = draft[copyOf.partNumber];
+        const same = copyOf.cells
+          .filter((cell) => cell !== "qty")
+          .every((cell) => newRowValue(row, cell) === (edits?.[cell] ?? cellText(product, cell)).trim());
+        if (same) found.set(row.id, copyOf.partNumber);
+      } else {
+        const source = newRows.find((other) => other.id === copyOf.newId);
+        if (!source) continue;
+        const cells = new Set([...Object.keys(row.cells), ...Object.keys(source.cells)] as CellId[]);
+        cells.delete("qty");
+        if ([...cells].every((cell) => newRowValue(row, cell) === newRowValue(source, cell))) {
+          found.set(row.id, "");
+        }
+      }
+    }
+    return found;
+  }
+
   function discard() {
     setDraft({});
     setNewRows([]);
+    setSameAs(new Map());
     setInvalid(new Set());
     setNotice(null);
   }
@@ -172,20 +258,29 @@ export function useProductDrafts({
   async function save(): Promise<boolean> {
     if (saving) return false;
     if (changed === 0) return true;
+    const copies = unchangedCopies();
+    setSameAs(copies);
+    if (copies.size > 0) {
+      setNotice({
+        kind: "invalid",
+        text: t.productsUnchangedCopies.replace("{n}", formatInt(copies.size, locale)),
+      });
+      return false;
+    }
     setSaving(true);
     setNotice(null);
     const payload = Object.entries(draft).flatMap(([partNumber, edits]) => {
       const product = known.get(partNumber)?.product;
       return product ? [{ partNumber, fingerprint: productFingerprint(product), edits }] : [];
     });
-    // Sent without the empty ones, so the server's positions differ from the
-    // table's; `sentAs` maps a refused cell back to the row it came from.
-    const sentAs = newRows.flatMap((row, index) => (newRowHasContent(row) ? [index] : []));
+    // Sent without the empty ones and by position; `sent` maps a refused
+    // cell back to the row it came from.
+    const sent = filledNewRows;
     try {
       const result = await saveFamilyProductsAction(
         familyId,
         payload,
-        sentAs.map((index) => newRows[index]),
+        sent.map((row) => row.cells),
       );
       if (result.kind === "saved") {
         // The stored rows replace the edited ones in the same render as the
@@ -202,6 +297,7 @@ export function useProductDrafts({
         });
         setDraft({});
         setNewRows([]);
+        setSameAs(new Map());
         setInvalid(new Set());
         const saved = result.count > 0 || result.created.length === 0
           ? t.productsSaved.replace("{n}", formatInt(result.count, locale))
@@ -220,7 +316,7 @@ export function useProductDrafts({
         setInvalid(
           new Set(
             result.cells.map((bad) =>
-              "partNumber" in bad ? cellKey(bad.partNumber, bad.cell) : newCellKey(sentAs[bad.newRow], bad.cell),
+              "partNumber" in bad ? cellKey(bad.partNumber, bad.cell) : newCellKey(sent[bad.newRow].id, bad.cell),
             ),
           ),
         );
@@ -254,6 +350,8 @@ export function useProductDrafts({
   return {
     draft,
     newRows,
+    nextNewId,
+    sameAs,
     invalid,
     known,
     saving,
@@ -264,6 +362,8 @@ export function useProductDrafts({
     forget,
     change,
     changeNew,
+    addCopy,
+    removeNew,
     discard,
     save,
   };

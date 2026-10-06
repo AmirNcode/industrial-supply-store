@@ -14,7 +14,14 @@ import {
 import { getDict, type Locale } from "@/lib/i18n";
 import { formatInt } from "@/lib/money";
 import { useModalFocus } from "@/lib/useModalFocus";
-import { cellKey, newCellKey, useProductDrafts, type ProductTableHandle } from "./productDrafts";
+import {
+  cellKey,
+  newCellKey,
+  useProductDrafts,
+  type NewRow,
+  type NewRowDraft,
+  type ProductTableHandle,
+} from "./productDrafts";
 import { countOpenOrderProductsAction, deleteFamilyProductsAction } from "./productTableActions";
 
 /** Enough rows to scan and edit; few enough that edit mode stays quick. */
@@ -41,6 +48,11 @@ export type { ProductTableHandle };
  * replacement for the old "Add a product" page. Their part number cell reads
  * "New" and the number is issued on Save, with the edits, in one write. The
  * phone keeps its own add screen; a row this wide does not fit one.
+ *
+ * Any row, loaded or new, can be copied into a new row at the bottom, the
+ * cursor landing in its first column, which is usually what differs (size,
+ * class, dash number). Everything is copied but stock, which is an actual
+ * count for that item; the empty stock cell is highlighted until it is filled.
  *
  * Deleting rows is a separate mode from editing, and the two never overlap:
  * a row deleted while it held an unsaved edit would leave a draft Save could
@@ -103,11 +115,25 @@ export function FamilyProductTable({
     },
     onStale: () => setReloadToken((token) => token + 1),
   });
-  const { draft, newRows, invalid, saving, notice, setNotice, changed, change, changeNew } = drafts;
+  const { draft, newRows, nextNewId, sameAs, invalid, saving, notice, setNotice, changed, change, changeNew } =
+    drafts;
   // Always one blank row after the last filled one, so the next product has
-  // somewhere to go without a button.
-  const shownNewRows =
-    newRows.length === 0 || newRowHasContent(newRows[newRows.length - 1]) ? [...newRows, {}] : newRows;
+  // somewhere to go without a button. Its key is the id it will take, so the
+  // input being typed in survives becoming a real row.
+  const blankRow: NewRow | null =
+    newRows.length === 0 || newRowHasContent(newRows[newRows.length - 1].cells)
+      ? { id: nextNewId, cells: {} }
+      : null;
+  const shownNewRows = blankRow ? [...newRows, blankRow] : newRows;
+
+  // A copy's first column takes the cursor once the copy has rendered.
+  const focusNewRow = useRef<number | null>(null);
+  useEffect(() => {
+    if (focusNewRow.current === null) return;
+    const input = document.querySelector<HTMLInputElement>(`[data-new-row-first="${focusNewRow.current}"]`);
+    focusNewRow.current = null;
+    input?.focus();
+  });
 
   // Another family, or a refresh after an import: nothing loaded still holds.
   const [loadedFor, setLoadedFor] = useState({ familyId, refreshKey });
@@ -157,6 +183,36 @@ export function FamilyProductTable({
     if (ok) setEditing(false);
     return ok;
   }
+
+  /** Every editable cell of a row except stock, as text, blanks left out. */
+  function copyCells(valueOf: (column: EditableColumn) => string): NewRowDraft {
+    const cells: NewRowDraft = {};
+    for (const column of columns) {
+      if (column.kind !== "spec" && column.kind !== "field") continue;
+      if (column.id === "qty") continue;
+      const value = valueOf(column);
+      if (value !== "") cells[column.id] = value;
+    }
+    return cells;
+  }
+
+  function copyProduct(product: (typeof rows)[number]) {
+    const edits = draft[product.partNumber];
+    const cells = copyCells((column) => edits?.[column.id] ?? cellText(product, column.id));
+    focusNewRow.current = drafts.addCopy(cells, {
+      partNumber: product.partNumber,
+      cells: columns.flatMap((column) => (column.kind === "spec" || column.kind === "field" ? [column.id] : [])),
+    });
+  }
+
+  function copyNewRow(row: NewRow) {
+    const cells = copyCells((column) => row.cells[column.id] ?? "");
+    focusNewRow.current = drafts.addCopy(cells, { newId: row.id });
+  }
+
+  // The first spec column, or price in a family with none: where a copy differs.
+  const firstCell = (columns.find((column) => column.kind === "spec") ??
+    columns.find((column) => column.kind === "field" && column.field === "price")) as EditableColumn | undefined;
 
   function toggle(partNumbers: readonly string[], on: boolean) {
     setSelected((previous) => {
@@ -359,6 +415,18 @@ export function FamilyProductTable({
                                 />
                                 {product.partNumber}
                               </label>
+                            ) : editing ? (
+                              <span className="product-table-part-tools">
+                                {product.partNumber}
+                                <button
+                                  type="button"
+                                  className="product-row-button"
+                                  aria-label={t.productsCopyRow.replace("{part}", product.partNumber)}
+                                  onClick={() => copyProduct(product)}
+                                >
+                                  {t.productsCopy}
+                                </button>
+                              </span>
                             ) : (
                               product.partNumber
                             )}
@@ -415,55 +483,96 @@ export function FamilyProductTable({
                 );
               })}
               {editing &&
-                shownNewRows.map((row, rowIndex) => (
-                  <tr key={`new-${rowIndex}`} className="is-new">
-                    {columns.map((column, index) => {
-                      if (column.kind === "part") {
+                shownNewRows.map((row, rowIndex) => {
+                  const isBlank = row === blankRow;
+                  const filled = newRowHasContent(row.cells);
+                  const duplicateOf = sameAs.get(row.id);
+                  const rowName = formatInt(rowIndex + 1, locale);
+                  return (
+                    <tr key={`new-${row.id}`} className={`is-new ${duplicateOf !== undefined ? "is-duplicate" : ""}`}>
+                      {columns.map((column, index) => {
+                        if (column.kind === "part") {
+                          return (
+                            <th key={index} scope="row" className="product-table-part product-table-new-part">
+                              <span className="product-table-part-tools">
+                                {duplicateOf === undefined
+                                  ? t.productsNewRow
+                                  : duplicateOf
+                                    ? t.productsSameAs.replace("{part}", duplicateOf)
+                                    : t.productsSameAsNew}
+                                {!isBlank && (
+                                  <>
+                                    <button
+                                      type="button"
+                                      className="product-row-button"
+                                      aria-label={t.productsCopyNewRow.replace("{n}", rowName)}
+                                      onClick={() => copyNewRow(row)}
+                                    >
+                                      {t.productsCopy}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="product-row-button"
+                                      aria-label={t.productsRemoveNewRow.replace("{n}", rowName)}
+                                      onClick={() => drafts.removeNew(row.id)}
+                                    >
+                                      {t.productsRemoveRow}
+                                    </button>
+                                  </>
+                                )}
+                              </span>
+                            </th>
+                          );
+                        }
+                        if (column.kind === "readonly") {
+                          return <td key={index} className="num tech product-table-readonly" />;
+                        }
+                        const id = column.id;
+                        const value = row.cells[id] ?? "";
+                        const bad = invalid.has(newCellKey(row.id, id));
+                        // A filled row with no stock yet: copies arrive like this on
+                        // purpose, and the cell says so until a number goes in.
+                        const needsStock = id === "qty" && filled && (value.trim() === "" || Number(value) === 0);
+                        const name = `${label(column)} — ${t.productsNewRowLabel} ${rowName}`;
+                        // What a blank cell becomes, shown faintly: no stock, a
+                        // pack of one, no lead time. Price stays empty — blank is
+                        // call-for-price, and "0.00" would read as free.
+                        const fallback =
+                          id === "qty" || id === "packQty" || id === "leadDays" ? cellText(BLANK_PRODUCT, id) : undefined;
+                        const target = isBlank ? null : row.id;
                         return (
-                          <th key={index} scope="row" className="product-table-part product-table-new-part">
-                            {t.productsNewRow}
-                          </th>
+                          <td
+                            key={index}
+                            className={`${columnClass(column)} ${bad ? "is-invalid" : ""} ${needsStock ? "needs-attention" : ""}`}
+                          >
+                            {id === "inStock" ? (
+                              <input
+                                type="checkbox"
+                                aria-label={name}
+                                checked={(row.cells.inStock ?? "yes") === "yes"}
+                                onChange={(event) => changeNew(target, id, event.target.checked ? "yes" : "no")}
+                              />
+                            ) : (
+                              <input
+                                type="text"
+                                dir="ltr"
+                                aria-label={name}
+                                aria-invalid={bad || undefined}
+                                title={needsStock ? t.productsEnterStock : undefined}
+                                className="product-cell-input"
+                                placeholder={fallback}
+                                data-new-row-first={column === firstCell ? row.id : undefined}
+                                size={Math.min(60, Math.max(6, value.length + 1))}
+                                value={value}
+                                onChange={(event) => changeNew(target, id, event.target.value)}
+                              />
+                            )}
+                          </td>
                         );
-                      }
-                      if (column.kind === "readonly") {
-                        return <td key={index} className="num tech product-table-readonly" />;
-                      }
-                      const id = column.id;
-                      const value = row[id] ?? "";
-                      const bad = invalid.has(newCellKey(rowIndex, id));
-                      const name = `${label(column)} — ${t.productsNewRowLabel} ${formatInt(rowIndex + 1, locale)}`;
-                      // What a blank cell becomes, shown faintly: no stock, a
-                      // pack of one, no lead time. Price stays empty — blank is
-                      // call-for-price, and "0.00" would read as free.
-                      const fallback =
-                        id === "qty" || id === "packQty" || id === "leadDays" ? cellText(BLANK_PRODUCT, id) : undefined;
-                      return (
-                        <td key={index} className={`${columnClass(column)} ${bad ? "is-invalid" : ""}`}>
-                          {id === "inStock" ? (
-                            <input
-                              type="checkbox"
-                              aria-label={name}
-                              checked={(row.inStock ?? "yes") === "yes"}
-                              onChange={(event) => changeNew(rowIndex, id, event.target.checked ? "yes" : "no")}
-                            />
-                          ) : (
-                            <input
-                              type="text"
-                              dir="ltr"
-                              aria-label={name}
-                              aria-invalid={bad || undefined}
-                              className="product-cell-input"
-                              placeholder={fallback}
-                              size={Math.min(60, Math.max(6, value.length + 1))}
-                              value={value}
-                              onChange={(event) => changeNew(rowIndex, id, event.target.value)}
-                            />
-                          )}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
+                      })}
+                    </tr>
+                  );
+                })}
             </tbody>
           </table>
         </div>
@@ -573,6 +682,8 @@ export function FamilyProductTable({
     </>
   );
 }
+
+type EditableColumn = Extract<ProductColumn, { kind: "spec" | "field" }>;
 
 /** Numbers right-aligned; long text given room. */
 function columnClass(column: ProductColumn): string {

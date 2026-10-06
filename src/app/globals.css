@@ -2604,6 +2604,40 @@ html[lang="fa"] .taxonomy-kind-chip {
 .product-table tr.is-new th {
   background: var(--color-panel);
 }
+.product-table-part-tools {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.product-row-button {
+  border: 1px solid var(--color-rule);
+  border-radius: 3px;
+  background: #fff;
+  padding: 0 5px;
+  color: var(--color-navy);
+  font-size: 10.5px;
+  font-style: normal;
+  font-weight: 600;
+  line-height: 1.6;
+}
+.product-row-button:hover {
+  border-color: var(--color-navy-lift);
+}
+/* A new product with no stock entered yet. */
+.product-table td.needs-attention {
+  background: var(--color-warn-soft);
+}
+.product-table td.needs-attention .product-cell-input {
+  border-color: var(--color-warn);
+}
+/* A copy still identical to its source; Save refused it. */
+.product-table tr.is-duplicate th,
+.product-table tr.is-duplicate td {
+  background: #fdf2f1;
+}
+.product-table tr.is-duplicate .product-table-new-part {
+  color: var(--color-danger);
+}
 /*
  * Choosing rows to delete. The tick sits inside the pinned part-number cell
  * rather than in a column of its own, so it stays on screen with the code it

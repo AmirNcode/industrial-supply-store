@@ -690,6 +690,16 @@ const en = {
   productsCreated: "{n} new products added: {parts}.",
   productsNewRow: "New",
   productsNewRowLabel: "new product",
+  productsCopy: "Copy",
+  productsCopyRow: "Copy {part} to a new row",
+  productsCopyNewRow: "Copy new row {n}",
+  productsRemoveRow: "Remove",
+  productsRemoveNewRow: "Remove new row {n}",
+  productsSameAs: "Same as {part}",
+  productsSameAsNew: "Same as the row it was copied from",
+  productsUnchangedCopies:
+    "{n} copied rows are still the same as the row they were copied from. Change a cell in each — or remove it — then save. Nothing was saved.",
+  productsEnterStock: "Enter the stock for this product",
   productsInvalid:
     "{n} cells cannot be saved — they are marked in red. Nothing was saved.",
   productsStale:
@@ -1605,6 +1615,16 @@ const fa: typeof en = {
   productsCreated: "{n} کالای جدید اضافه شد: {parts}.",
   productsNewRow: "جدید",
   productsNewRowLabel: "کالای جدید",
+  productsCopy: "کپی",
+  productsCopyRow: "کپی {part} در یک ردیف جدید",
+  productsCopyNewRow: "کپی ردیف جدید {n}",
+  productsRemoveRow: "حذف",
+  productsRemoveNewRow: "حذف ردیف جدید {n}",
+  productsSameAs: "مشابه {part}",
+  productsSameAsNew: "مشابه ردیفی که از آن کپی شده",
+  productsUnchangedCopies:
+    "{n} ردیف کپی‌شده هنوز با ردیف مبدأ خود یکسان است. در هر کدام یک خانه را تغییر دهید یا آن را حذف کنید، سپس ذخیره کنید. چیزی ذخیره نشد.",
+  productsEnterStock: "موجودی این کالا را وارد کنید",
   productsInvalid:
     "{n} خانه قابل ذخیره نیست و با رنگ قرمز مشخص شده است. هیچ تغییری ذخیره نشد.",
   productsStale:
