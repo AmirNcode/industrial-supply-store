@@ -27,3 +27,12 @@ Disallow: /en/quote
 Disallow: /fa/quote
 Disallow: /en/search
 Disallow: /fa/search
+
+# OpenAI's training crawler: ~80k requests a day in October 2026, most of the
+# free plan's monthly quota on its own. It only gathers training text, so
+# barring it costs no visibility — ChatGPT search (OAI-SearchBot) and
+# ChatGPT fetching a page on a user's behalf (ChatGPT-User) are separate
+# agents, still allowed by the group above. A bot obeys only its most specific
+# group, so this one is out of the whole site.
+User-agent: GPTBot
+Disallow: /
