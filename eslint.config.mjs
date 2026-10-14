@@ -22,6 +22,7 @@ const eslintConfig = [
       ".archive/**",
       ".superpowers/**",
       "other_ignore/**",
+      "local-tools/**",
       "docs/design_handoff_*/**",
       "docs/*-handoff/**",
     ],

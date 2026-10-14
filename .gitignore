@@ -36,3 +36,7 @@ docs/*-handoff/
 other_ignore/
 # Database backups hold customer data; they never leave this machine.
 db_backups/
+
+# Local operator tools (e.g. the free-tier usage check). Not part of the app,
+# never deployed; see local-tools/usage-check/README.md on this machine.
+local-tools/
