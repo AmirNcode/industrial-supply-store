@@ -103,9 +103,19 @@ nothing important; padding it hides the times there is.
 - `processCatalogImport` throws at `revalidatePath` outside Next *after* committing; integration tests treat that as success and assert the database.
 - Do not move commits or uncommitted work between branches without asking.
 - Commit or push only when asked.
+- **`local-tools/` is local-only and not part of the app** (gitignored, never deployed, never imported). `node local-tools/usage-check/check.mjs` prints a read-only free-tier usage report (Vercel firewall traffic + live DB stats); a pasted report is your brief — act on its `[ACT]`/`[WATCH]` lines; past runs are in `local-tools/usage-check/logs/` (layout in its README).
+- **Open follow-ups live in [`docs/FOLLOW-UPS.md`](docs/FOLLOW-UPS.md)** — read it before usage, crawler, caching or CI work; delete entries you finish.
+- **Every family-page request is a database read** (the route reads `searchParams`, so nothing is cached) — the main Supabase-egress lever. Anything that makes it crawlable per URL (new query params, unfollowed links) needs a robots.txt line.
+- **Plain `curl` to the live site gets `429 x-vercel-mitigated: challenge`** (Bot Protection is on Challenge); look at live pages in the built-in browser.
+- **Vercel Hobby firewall:** 3 custom rules (2 used), 10 IP blocks (full), traffic data only for the last 24h (`npx vercel@latest firewall traffic list|inspect`; global `vercel` is too old); rule edits are staged until `vercel firewall publish`.
 - **Keep this file current.** When you discover a non-obvious convention,
   gotcha, or command, propose a CLAUDE.md update at task end. Keep entries one
   line. Don't add what's obvious from code.
+
+## Product direction (decided, not yet built)
+
+- **Finance in the site means order money, not bookkeeping** — receipts, outstanding invoices, rep payouts, matching the bank's Excel statement against payments. Ledger, tax filings and payroll stay in the accountant's own software; the site helps it, never replaces it.
+- **Staff get named accounts with roles, behind one sign-in** — new departments are a role plus its tabs, never a separate site; reps fold in. Until it ships, the shared admin password is also the sales engineer's login, so weigh who can reach any new staff feature.
 
 <!-- BEGIN:nextjs-agent-rules -->
 
