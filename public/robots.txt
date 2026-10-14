@@ -27,6 +27,20 @@ Disallow: /en/quote
 Disallow: /fa/quote
 Disallow: /en/search
 Disallow: /fa/search
+# Filtered family views, for the same reason as search: each filter link opens
+# a URL carrying more filter links, so the combinations never run out, and the
+# family route reads its query string, so every one is rendered from the
+# database. In October 2026 ~90% of family renders were these, almost all from
+# crawlers, and they took the database past its monthly transfer quota. The
+# bare family page (no `?`) stays open.
+Disallow: /en/f/*?
+Disallow: /fa/f/*?
+
+# Baidu: no buyers in this market, and ~29k requests a day in October 2026,
+# mostly the filtered views above. The firewall denies it too; this is for the
+# crawler that reads robots.txt before it is refused.
+User-agent: Baiduspider
+Disallow: /
 
 # OpenAI's training crawler: ~80k requests a day in October 2026, most of the
 # free plan's monthly quota on its own. It only gathers training text, so
