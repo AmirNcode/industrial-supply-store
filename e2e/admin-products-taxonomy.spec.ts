@@ -202,7 +202,9 @@ test("a family's product table edits in place, refuses a bad cell, and saves", a
   // Not the first row: the order tests buy that product in parallel, and an
   // order moving its stock mid-edit is refused as stale — correctly.
   const row = table.locator("tbody tr").nth(20);
-  const partNumber = (await row.locator("th").innerText()).trim();
+  // In edit mode the cell also holds the row's Copy button; the part number is
+  // its first line.
+  const partNumber = (await row.locator("th").innerText()).split("\n")[0].trim();
   const price = page.getByLabel(`${t.productsPriceUsd} — ${partNumber}`, { exact: true });
   const original = await price.inputValue();
 
