@@ -651,7 +651,7 @@ const en = {
   orderSaveAndLeave: "Save and leave",
   orderDiscardAndLeave: "Discard and leave",
   orderStay: "Stay on this page",
-  columnsNone: "This family has no columns yet. Upload a CSV to create some.",
+  columnsNone: "This family has no columns yet. Add one in the New row, or upload a CSV.",
   columnsFixed: "fixed",
   columnsMobile: "Mobile",
   columnsDetail: "Detail view",
@@ -659,6 +659,12 @@ const en = {
     "Untick both Catalog table and Detail view to hide a column everywhere. Its values are kept.",
   columnsDeleteHint: "Deleting a column also deletes its values from every product.",
   columnsBack: "Back to products",
+  columnsNewHint:
+    "Type in the New row to add a column. Once saved it is in the CSV template; existing products have no value for it until one is filled in.",
+  columnsNewNoKey: "“{key}” needs a key or an English label before it can be saved.",
+  columnsNewNoKeyBlank: "A new column needs a key or an English label before it can be saved.",
+  columnsNewBuiltin: "“{key}” is a built-in product field and cannot be a column name.",
+  columnsNewDuplicate: "This family already has a column named “{key}”.",
   // The expanded product row
   productDetails: "Details",
   productDocuments: "Documents",
@@ -1577,7 +1583,7 @@ const fa: typeof en = {
   orderSaveAndLeave: "ذخیره و خروج",
   orderDiscardAndLeave: "خروج بدون ذخیره",
   orderStay: "ماندن در این صفحه",
-  columnsNone: "این خانواده هنوز ستونی ندارد. برای ساخت ستون یک فایل CSV بارگذاری کنید.",
+  columnsNone: "این خانواده هنوز ستونی ندارد. در ردیف «جدید» ستون اضافه کنید یا یک فایل CSV بارگذاری کنید.",
   columnsFixed: "ثابت",
   columnsMobile: "موبایل",
   columnsDetail: "نمای جزئیات",
@@ -1585,6 +1591,12 @@ const fa: typeof en = {
     "برای پنهان کردن کامل یک ستون، هم «جدول کاتالوگ» و هم «نمای جزئیات» را بردارید. مقادیر آن حفظ می‌شود.",
   columnsDeleteHint: "حذف یک ستون، مقادیر آن را از همه کالاها نیز حذف می‌کند.",
   columnsBack: "بازگشت به کالاها",
+  columnsNewHint:
+    "برای افزودن ستون، در ردیف «جدید» بنویسید. پس از ذخیره، ستون در قالب CSV قرار می‌گیرد؛ کالاهای موجود تا وقتی مقداری وارد نشود برای آن مقداری ندارند.",
+  columnsNewNoKey: "«{key}» پیش از ذخیره به کلید یا عنوان انگلیسی نیاز دارد.",
+  columnsNewNoKeyBlank: "ستون جدید پیش از ذخیره به کلید یا عنوان انگلیسی نیاز دارد.",
+  columnsNewBuiltin: "«{key}» یکی از فیلدهای ثابت کالاست و نمی‌تواند نام ستون باشد.",
+  columnsNewDuplicate: "این خانواده از قبل ستونی با نام «{key}» دارد.",
   // The expanded product row
   productDetails: "جزئیات",
   productDocuments: "مدارک",

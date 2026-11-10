@@ -2607,6 +2607,30 @@ html[lang="fa"] .taxonomy-kind-chip {
 .product-table tr.is-new th {
   background: var(--color-panel);
 }
+/* The column editor's New rows read as the product table's do. */
+.spec-table tr.column-editor-new td {
+  background: var(--color-panel);
+}
+/*
+ * One control height per row, centred. The text inputs set the height; the
+ * dropdown and buttons used to sit shorter and top-aligned beside them, so
+ * every row read as ragged.
+ */
+.spec-table.column-editor td {
+  vertical-align: middle;
+}
+.column-editor .admin-input,
+.column-editor .admin-select,
+.column-editor .btn-tiny {
+  box-sizing: border-box;
+  height: 30px;
+}
+.column-editor .btn-tiny {
+  padding: 0 8px;
+}
+.column-editor .admin-select {
+  padding-inline-start: 8px;
+}
 .product-table-part-tools {
   display: inline-flex;
   align-items: center;

@@ -7,6 +7,15 @@ import { saveColumnsAction, type ColumnsState } from "./actions";
 import { MAX_LEGIBLE_COLUMNS } from "@/lib/columnPlan";
 import { mobileAvailable, setInTable } from "@/lib/columnVisibility";
 import type { EditableDef } from "@/db/columnQueries";
+import {
+  NEW_COLUMN_DEFAULTS,
+  newColumnHasContent,
+  newColumnKey,
+  type NewColumnInput,
+} from "@/lib/newColumns";
+
+/** A typed-but-unsaved column. `id` is the React key; the column key is still being typed. */
+type NewRow = NewColumnInput & { id: number };
 
 /**
  * The column editor.
@@ -18,6 +27,12 @@ import type { EditableDef } from "@/db/columnQueries";
  * Deletion is staged, not immediate: a deleted column is struck through and
  * restorable until Save, so removing the wrong one of two similarly named
  * columns is an undo rather than a re-import.
+ *
+ * New columns are typed into a "New" row at the bottom, the way the product
+ * table takes new products: there is always one blank row after the last
+ * filled one, so the next column has somewhere to go without a button. They
+ * are created by the same Save, after the kept columns, and join the list as
+ * ordinary rows once it succeeds.
  */
 export function ColumnEditor({
   familyId,
@@ -37,6 +52,45 @@ export function ColumnEditor({
   );
   const [rows, setRows] = useState(defs);
   const [dropKeys, setDropKeys] = useState<string[]>([]);
+  const [newRows, setNewRows] = useState<NewRow[]>([]);
+  const [nextNewId, setNextNewId] = useState(1);
+  /** The new rows a save in flight carries, so only those leave the New list. */
+  const [submittedIds, setSubmittedIds] = useState<number[]>([]);
+
+  /*
+   * A save that created columns: they become ordinary rows, from what the
+   * server stored (keys slugged, blank labels filled), and the typed rows that
+   * produced them go. Adjusted during render rather than in an effect, so the
+   * table never paints a frame with both copies.
+   */
+  const [handled, setHandled] = useState(state);
+  if (state !== handled) {
+    setHandled(state);
+    if (state?.kind === "saved" && state.added.length > 0) {
+      setRows((prev) => [
+        ...prev,
+        ...state.added.map((a, i) => ({ ...a, sort: prev.length + i + 1, productCount: 0 })),
+      ]);
+      setNewRows((prev) => prev.filter((row) => !submittedIds.includes(row.id)));
+    }
+  }
+
+  // Always one blank row after the last filled one. Its id is the one it will
+  // keep, so the input being typed in survives becoming a real row.
+  const blankRow: NewRow | null =
+    newRows.length === 0 || newColumnHasContent(newRows[newRows.length - 1])
+      ? { ...NEW_COLUMN_DEFAULTS, id: nextNewId }
+      : null;
+  const shownNewRows = blankRow ? [...newRows, blankRow] : newRows;
+
+  function changeNew(id: number, patch: Partial<NewColumnInput>) {
+    if (blankRow && id === blankRow.id) {
+      setNewRows((prev) => [...prev, { ...blankRow, ...patch }]);
+      setNextNewId((n) => n + 1);
+      return;
+    }
+    setNewRows((prev) => prev.map((row) => (row.id === id ? { ...row, ...patch } : row)));
+  }
 
   const set = (key: string, patch: Partial<EditableDef>) =>
     setRows((prev) => prev.map((r) => (r.key === key ? { ...r, ...patch } : r)));
@@ -100,8 +154,20 @@ export function ColumnEditor({
             mobile: r.mobile,
           })),
         dropKeys,
+        adds: newRows.filter(newColumnHasContent).map((row) => ({
+          key: row.key,
+          labelEn: row.labelEn,
+          labelFa: row.labelFa,
+          unit: row.unit,
+          kind: row.kind,
+          inTable: row.inTable,
+          inDetail: row.inDetail,
+          filterable: row.filterable,
+          mobile: row.mobile,
+        })),
       }),
     );
+    setSubmittedIds(newRows.map((row) => row.id));
     formAction(formData);
   }
 
@@ -111,7 +177,9 @@ export function ColumnEditor({
    * column like any other, and the advice is about what they end up scanning.
    */
   const tableColumns =
-    1 + rows.filter((r) => r.inTable && !dropKeys.includes(r.key)).length;
+    1 +
+    rows.filter((r) => r.inTable && !dropKeys.includes(r.key)).length +
+    newRows.filter((r) => r.inTable && newColumnHasContent(r)).length;
 
   return (
     <form onSubmit={submit}>
@@ -122,14 +190,22 @@ export function ColumnEditor({
             ` ${t.importDroppedColumns.replace("{n}", formatInt(state.deleted, locale))}.`}
         </p>
       )}
-      {state?.kind === "error" && (
+      {(state?.kind === "error" || state?.kind === "newColumn") && (
         <p className="mb-2 border border-[#e0b4b0] bg-[#fdf2f1] px-2.5 py-1.5 text-[12px] text-[var(--color-danger)]">
-          {state.message}
+          {state.kind === "error"
+            ? state.message
+            : state.error.code === "builtin"
+              ? t.columnsNewBuiltin.replace("{key}", state.error.key)
+              : state.error.code === "duplicate"
+                ? t.columnsNewDuplicate.replace("{key}", state.error.key)
+                : state.error.key
+                  ? t.columnsNewNoKey.replace("{key}", state.error.key)
+                  : t.columnsNewNoKeyBlank}
         </p>
       )}
 
       <div className="scroll-x scroll-x-pad">
-        <table className="spec-table">
+        <table className="spec-table column-editor">
           <thead>
             <tr>
               <th className="num">{t.columnsOrder}</th>
@@ -310,6 +386,125 @@ export function ColumnEditor({
                 </tr>
               );
             })}
+            {shownNewRows.map((row) => {
+              const isBlank = row === blankRow;
+              // What the key will be if none is typed, shown where it would go.
+              const derived = row.key.trim() === "" ? newColumnKey(row) : null;
+              return (
+                <tr key={`new-${row.id}`} className="column-editor-new">
+                  <td className="num text-[10px] text-[var(--color-ink-muted)]">{t.productsNewRow}</td>
+                  <td>
+                    <input
+                      type="text"
+                      className="admin-input tech"
+                      dir="ltr"
+                      value={row.key}
+                      placeholder={derived ?? undefined}
+                      aria-label={`${t.productsNewRow} · ${t.columnsKey}`}
+                      disabled={demo}
+                      onChange={(e) => changeNew(row.id, { key: e.target.value })}
+                    />
+                  </td>
+                  <td>
+                    <input
+                      type="text"
+                      className="admin-input"
+                      dir="ltr"
+                      value={row.labelEn}
+                      aria-label={`${t.productsNewRow} · ${t.columnsHeadingEn}`}
+                      disabled={demo}
+                      onChange={(e) => changeNew(row.id, { labelEn: e.target.value })}
+                    />
+                  </td>
+                  <td>
+                    <input
+                      type="text"
+                      className="admin-input"
+                      dir="rtl"
+                      value={row.labelFa}
+                      aria-label={`${t.productsNewRow} · ${t.columnsHeadingFa}`}
+                      disabled={demo}
+                      onChange={(e) => changeNew(row.id, { labelFa: e.target.value })}
+                    />
+                  </td>
+                  <td>
+                    <input
+                      type="text"
+                      className="admin-input w-14"
+                      value={row.unit}
+                      aria-label={`${t.productsNewRow} · ${t.columnsUnit}`}
+                      disabled={demo}
+                      onChange={(e) => changeNew(row.id, { unit: e.target.value })}
+                    />
+                  </td>
+                  <td>
+                    <select
+                      className="admin-select"
+                      value={row.kind}
+                      aria-label={`${t.productsNewRow} · ${t.reviewKind}`}
+                      disabled={demo}
+                      onChange={(e) =>
+                        changeNew(row.id, { kind: e.target.value === "number" ? "number" : "text" })
+                      }
+                    >
+                      <option value="text">{t.reviewKindText}</option>
+                      <option value="number">{t.reviewKindNumber}</option>
+                    </select>
+                  </td>
+                  <td className="num">
+                    <input
+                      type="checkbox"
+                      checked={row.inTable}
+                      aria-label={`${t.productsNewRow} · ${t.reviewInTable}`}
+                      disabled={demo}
+                      onChange={(e) => changeNew(row.id, setInTable(row, e.target.checked))}
+                    />
+                  </td>
+                  <td className="num">
+                    <input
+                      type="checkbox"
+                      checked={row.mobile}
+                      aria-label={`${t.productsNewRow} · ${t.columnsMobile}`}
+                      disabled={demo || !mobileAvailable(row)}
+                      onChange={(e) => changeNew(row.id, { mobile: e.target.checked })}
+                    />
+                  </td>
+                  <td className="num">
+                    <input
+                      type="checkbox"
+                      checked={row.inDetail}
+                      aria-label={`${t.productsNewRow} · ${t.columnsDetail}`}
+                      disabled={demo}
+                      onChange={(e) => changeNew(row.id, { inDetail: e.target.checked })}
+                    />
+                  </td>
+                  <td className="num">
+                    <input
+                      type="checkbox"
+                      checked={row.filterable}
+                      aria-label={`${t.productsNewRow} · ${t.reviewFilterable}`}
+                      disabled={demo}
+                      onChange={(e) => changeNew(row.id, { filterable: e.target.checked })}
+                    />
+                  </td>
+                  <td />
+                  <td className="num">
+                    {/* Removing an unsaved row is not a delete — nothing exists
+                        yet — so it goes at once rather than being staged. */}
+                    {!isBlank && (
+                      <button
+                        type="button"
+                        className="btn-tiny"
+                        disabled={demo}
+                        onClick={() => setNewRows((prev) => prev.filter((r) => r.id !== row.id))}
+                      >
+                        {t.reviewDelete}
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -317,6 +512,7 @@ export function ColumnEditor({
       <p className="mt-1 text-[11px] text-[var(--color-ink-muted)]">
         {rows.length === 0 ? t.columnsNone : t.columnsDeleteHint}
       </p>
+      <p className="text-[11px] text-[var(--color-ink-muted)]">{t.columnsNewHint}</p>
       {rows.length > 0 && (
         <p className="text-[11px] text-[var(--color-ink-muted)]">{t.columnsDetailHint}</p>
       )}

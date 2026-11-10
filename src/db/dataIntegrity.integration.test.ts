@@ -9,7 +9,7 @@ import {
   reconcileInventoryForProducts,
   type DatabaseIntegrityReport,
 } from "./dataIntegrity";
-import { saveColumnsInTransaction } from "./columnQueries";
+import { ColumnKeyTaken, saveColumnsInTransaction } from "./columnQueries";
 import { randomCustomerCode } from "@/lib/customerCode";
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
@@ -212,6 +212,57 @@ test("constraints, corruption detection, and derived reconciliation share one in
           const repaired = await reconcileDerivedData(sp);
           assert.equal(repaired.changes.facetRowsDeleted, 0);
           assert.equal(repaired.changes.facetRowsUpserted, 0);
+
+          throw new RollBackSavepoint();
+        }),
+        RollBackSavepoint,
+      );
+
+      /*
+       * A column added from the editor lands after the kept ones, leaves the
+       * verifier clean, and a key that already exists rolls the save back
+       * rather than half-applying it.
+       */
+      await assert.rejects(
+        tx.savepoint(async (sp) => {
+          await sp`
+            INSERT INTO spec_defs (family_id, key, label_en, label_fa, kind, filterable, sort)
+            VALUES (${family.id}, 'bore', 'Bore', 'قطر', 'text', false, 0)
+          `;
+          const bore = {
+            key: "bore",
+            labelEn: "Bore",
+            labelFa: "قطر",
+            unit: "",
+            kind: "text" as const,
+            filterable: false,
+            inTable: true,
+            inDetail: false,
+            mobile: false,
+          };
+          const added = { ...bore, key: "weight", labelEn: "Weight", labelFa: "وزن", unit: "kg", filterable: true };
+          await saveColumnsInTransaction(sp, family.id, [bore], [], [added]);
+
+          const defs = await sp<{ key: string; sort: number; unit: string; filterable: boolean }[]>`
+            SELECT key, sort, unit, filterable FROM spec_defs
+            WHERE family_id = ${family.id} AND key IN ('bore', 'weight') ORDER BY sort
+          `;
+          assert.deepEqual([...defs], [
+            { key: "bore", sort: 1, unit: "", filterable: false },
+            { key: "weight", sort: 2, unit: "kg", filterable: true },
+          ]);
+          assert.equal((await inspectDatabaseIntegrity(sp)).facetMismatches, 0);
+
+          await assert.rejects(
+            sp.savepoint((inner) =>
+              saveColumnsInTransaction(inner, family.id, [{ ...bore, labelEn: "Changed" }], [], [added]),
+            ),
+            ColumnKeyTaken,
+          );
+          const [label] = await sp<{ labelEn: string }[]>`
+            SELECT label_en AS "labelEn" FROM spec_defs WHERE family_id = ${family.id} AND key = 'bore'
+          `;
+          assert.equal(label.labelEn, "Bore", "a refused add must take the edits beside it with it");
 
           throw new RollBackSavepoint();
         }),

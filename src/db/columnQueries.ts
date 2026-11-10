@@ -83,8 +83,20 @@ export async function saveColumns(
   familyId: number,
   edits: readonly ColumnEdit[],
   dropKeys: readonly string[],
+  adds: readonly ColumnEdit[] = [],
 ): Promise<void> {
-  await sql.begin((tx) => saveColumnsInTransaction(tx, familyId, edits, dropKeys));
+  await sql.begin((tx) => saveColumnsInTransaction(tx, familyId, edits, dropKeys, adds));
+}
+
+/**
+ * A new column's key turned out to exist already — another tab, or an import,
+ * created it after this editor loaded. Thrown to roll the whole save back, so
+ * the edits beside it do not land half-applied.
+ */
+export class ColumnKeyTaken extends Error {
+  constructor(readonly key: string) {
+    super(`column "${key}" already exists`);
+  }
 }
 
 /**
@@ -100,6 +112,7 @@ export async function saveColumnsInTransaction(
   familyId: number,
   edits: readonly ColumnEdit[],
   dropKeys: readonly string[],
+  adds: readonly ColumnEdit[] = [],
 ): Promise<void> {
   const before = await tx<
     { key: string; filterable: boolean; kind: string }[]
@@ -155,6 +168,42 @@ export async function saveColumnsInTransaction(
       FROM product_families f JOIN categories c ON c.id = f.category_id
       WHERE p.family_id = ${familyId} AND f.id = ${familyId}
     `;
+  }
+
+  /*
+   * New columns, after the kept ones.
+   *
+   * No product holds a value for them yet, so there is nothing to put in the
+   * facet index or the search document; the next import or table edit fills
+   * them like any other column. `ON CONFLICT DO NOTHING` plus the count is the
+   * race check: the editor already refused keys it knew about.
+   */
+  if (adds.length > 0) {
+    const inserted = await tx<{ key: string }[]>`
+      INSERT INTO spec_defs (family_id, key, label_en, label_fa, unit, kind,
+                             filterable, sort, in_table, in_detail, mobile)
+      SELECT ${familyId}, u.key, u.label_en, u.label_fa, u.unit, u.kind,
+             u.filterable::boolean, ${edits.length} + u.n, u.in_table::boolean,
+             u.in_detail::boolean, u.mobile::boolean
+      FROM unnest(
+        ${adds.map((a) => a.key)}::text[],
+        ${adds.map((a) => a.labelEn)}::text[],
+        ${adds.map((a) => a.labelFa)}::text[],
+        ${adds.map((a) => a.unit)}::text[],
+        ${adds.map((a) => a.kind)}::text[],
+        ${adds.map((a) => (a.filterable ? "t" : "f"))}::text[],
+        ${adds.map((a) => (a.inTable ? "t" : "f"))}::text[],
+        ${adds.map((a) => (a.inDetail ? "t" : "f"))}::text[],
+        ${adds.map((a) => (a.mobile ? "t" : "f"))}::text[]
+      ) WITH ORDINALITY AS u(key, label_en, label_fa, unit, kind, filterable,
+                             in_table, in_detail, mobile, n)
+      ON CONFLICT (family_id, key) DO NOTHING
+      RETURNING key
+    `;
+    if (inserted.length !== adds.length) {
+      const got = new Set(inserted.map((row) => row.key));
+      throw new ColumnKeyTaken(adds.find((a) => !got.has(a.key))?.key ?? adds[0].key);
+    }
   }
 
   const refresh = edits.filter((e) => {
