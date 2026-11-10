@@ -2308,6 +2308,9 @@ html[lang="fa"] .taxonomy-kind-chip {
   display: grid;
   gap: 4px;
 }
+.taxonomy-media-editor-fields > label + label {
+  margin-top: 8px;
+}
 .taxonomy-media-editor textarea,
 .taxonomy-family-detail textarea {
   width: 100%;

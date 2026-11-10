@@ -54,7 +54,13 @@ export type ContentEdit = {
 };
 type ContentMap = Record<TaxonomyNodeKey, ContentEdit>;
 type Adding = { kind: "category" | "family"; parentId: number | null };
-type MediaEditor = { key: TaxonomyNodeKey; description: string; file?: File };
+/**
+ * Both languages at once. Editing only the page's own language meant the
+ * Persian description could only be written from the Persian admin and the
+ * English one from the English admin, so whoever wrote one never saw the other
+ * drift out of step.
+ */
+type MediaEditor = { key: TaxonomyNodeKey; aboutEn: string; aboutFa: string; file?: File };
 
 const rootScope = "root";
 const scopeKey = (parentId: number | null) => parentId === null ? rootScope : String(parentId);
@@ -346,7 +352,8 @@ export function TaxonomyWorkbench({
     const current = effectiveContent(node);
     setEditing({
       key: node.key,
-      description: locale === "fa" ? current.aboutFa : current.aboutEn,
+      aboutEn: current.aboutEn,
+      aboutFa: current.aboutFa,
       file: current.file,
     });
     setAdding(null);
@@ -357,9 +364,8 @@ export function TaxonomyWorkbench({
     const current = effectiveContent(node);
     setNodeContent(node, {
       ...current,
-      ...(locale === "fa"
-        ? { aboutFa: editing.description }
-        : { aboutEn: editing.description }),
+      aboutEn: editing.aboutEn,
+      aboutFa: editing.aboutFa,
       file: editing.file,
     });
     setEditing(null);
@@ -878,10 +884,11 @@ export function TaxonomyWorkbench({
             <MediaEditorPanel
               node={selected}
               locale={locale}
-              value={editing.description}
+              aboutEn={editing.aboutEn}
+              aboutFa={editing.aboutFa}
               file={editing.file}
               pending={saving}
-              onChange={(description) => setEditing({ ...editing, description })}
+              onChange={(patch) => setEditing({ ...editing, ...patch })}
               onFile={(file) => setEditing({ ...editing, file })}
               onSave={() => commitMediaEdit(selected)}
               onCancel={() => setEditing(null)}
@@ -1140,7 +1147,8 @@ function MediaStrip({
 function MediaEditorPanel({
   node,
   locale,
-  value,
+  aboutEn,
+  aboutFa,
   file,
   pending,
   onChange,
@@ -1150,10 +1158,11 @@ function MediaEditorPanel({
 }: {
   node: AdminTaxonomyNode;
   locale: Locale;
-  value: string;
+  aboutEn: string;
+  aboutFa: string;
   file?: File;
   pending: boolean;
-  onChange: (value: string) => void;
+  onChange: (patch: { aboutEn?: string; aboutFa?: string }) => void;
   onFile: (file: File | undefined) => void;
   onSave: () => void;
   onCancel: () => void;
@@ -1175,12 +1184,29 @@ function MediaEditorPanel({
         <label>
           <strong>
             {node.kind === "family" ? t.taxonomyFamilyDescription : t.taxonomyCategoryDescription}
+            {" · "}
+            {t.english}
           </strong>
           <textarea
             rows={4}
             maxLength={2000}
-            value={value}
-            onChange={(event) => onChange(event.target.value)}
+            dir="ltr"
+            value={aboutEn}
+            onChange={(event) => onChange({ aboutEn: event.target.value })}
+          />
+        </label>
+        <label>
+          <strong>
+            {node.kind === "family" ? t.taxonomyFamilyDescription : t.taxonomyCategoryDescription}
+            {" · "}
+            {t.persian}
+          </strong>
+          <textarea
+            rows={4}
+            maxLength={2000}
+            dir="rtl"
+            value={aboutFa}
+            onChange={(event) => onChange({ aboutFa: event.target.value })}
           />
         </label>
         <div>
