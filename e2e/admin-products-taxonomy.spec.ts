@@ -94,7 +94,10 @@ test("products taxonomy stages and discards reversible work without writing", as
 
   await page.getByRole("button", { name: t.taxonomyEditImageText }).first().click();
   const editor = page.locator(".taxonomy-media-editor");
-  await editor.getByRole("textbox").fill("Temporary browser QA description");
+  // Both languages are edited from one panel, whatever the page's language.
+  const described = `${t.taxonomyCategoryDescription} · `;
+  await editor.getByRole("textbox", { name: described + t.english }).fill("Temporary browser QA description");
+  await editor.getByRole("textbox", { name: described + t.persian }).fill("توضیح موقت آزمایشی");
   await editor.getByRole("button", { name: t.taxonomySaveImageText }).click();
   const saveBar = page.locator(".taxonomy-save-bar");
   await expect(saveBar).toBeVisible();
