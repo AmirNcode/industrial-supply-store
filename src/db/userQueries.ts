@@ -237,7 +237,18 @@ export async function findUserIdByEmail(email: string): Promise<string | null> {
  * the random one an account is born with, or one the owner has forgotten, or
  * one a stranger set before the owner proved the address. Clearing
  * `chose_own_password` sends the account to choose one (`needsPassword`).
+ *
+ * Distrusting it has to be real, not a flag: the old password is replaced by
+ * an unusable one and every open session ends. Otherwise whoever held the old
+ * password or an old session keeps it — and since the choose-a-password form
+ * asks for no current password, an old session could set the new one first.
+ * The caller reissues only the browser that entered the code.
  */
-export async function requireNewPassword(userId: string): Promise<void> {
-  await sql`UPDATE users SET chose_own_password = false WHERE id = ${userId} AND origin <> 'rep'`;
+export async function requireNewPassword(userId: string, unusableHash: string): Promise<void> {
+  await sql`
+    UPDATE users
+    SET chose_own_password = false, password_hash = ${unusableHash},
+        session_version = session_version + 1
+    WHERE id = ${userId} AND origin <> 'rep'
+  `;
 }

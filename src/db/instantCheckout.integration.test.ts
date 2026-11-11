@@ -18,7 +18,7 @@ import {
   updateAddress,
   type AddressInput,
 } from "./addressQueries";
-import { createUser } from "./userQueries";
+import { createUser, requireNewPassword } from "./userQueries";
 import { inspectDatabaseIntegrity, reconcileInventoryForProducts } from "./dataIntegrity";
 import { LOGIN_CODE_MAX_ATTEMPTS } from "@/lib/loginCode";
 import { splitCart } from "@/lib/checkoutSplit";
@@ -630,6 +630,21 @@ test("sign-in codes: right code once, wrong codes counted, a newer code replaces
     await issueLoginCode(other.id);
     assert.notEqual(await redeemLoginCode(other.id, mine), "ok");
   } finally {
+
+    // After a code sign-in the old password and every old session stop working.
+    const state = async () => {
+      const [row] = await sql<{ hash: string; version: number; chose: boolean }[]>`
+        SELECT password_hash AS hash, session_version AS version, chose_own_password AS chose
+        FROM users WHERE id = ${user.id}`;
+      return row;
+    };
+    await sql`UPDATE users SET password_hash = 'known', chose_own_password = true WHERE id = ${user.id}`;
+    const before = await state();
+    await requireNewPassword(user.id, "unusable");
+    const afterReset = await state();
+    assert.equal(afterReset.hash, "unusable");
+    assert.equal(afterReset.chose, false);
+    assert.equal(afterReset.version, before.version + 1);
     await fx.cleanup();
   }
 });

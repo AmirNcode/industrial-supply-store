@@ -35,10 +35,15 @@ test("the Persian version is right-to-left", () => {
   assert.match(mail.subject, /پیش‌فاکتور/);
 });
 
-test("the sign-in code is in the subject and the body", () => {
-  const mail = loginCodeEmail({ locale: "en", code: "482913", minutes: 10 });
-  assert.match(mail.subject, /482913/);
-  assert.match(mail.text, /482913/);
+// The subject is stored in email_log even when the body is withheld, and the
+// admin email log is readable with the shared admin password — a code there
+// would let staff sign in as the customer. It also shows in lock-screen previews.
+test("the sign-in code is in the body but never the subject", () => {
+  for (const locale of ["en", "fa"] as const) {
+    const mail = loginCodeEmail({ locale, code: "482913", minutes: 10 });
+    assert.doesNotMatch(mail.subject, /482913/);
+    assert.match(mail.text, /482913/);
+  }
 });
 
 test("the staff alert says which kind of order it is", () => {

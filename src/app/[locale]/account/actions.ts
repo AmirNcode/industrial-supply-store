@@ -209,7 +209,7 @@ export async function verifyLoginCodeAction(formData: FormData): Promise<void> {
   const checked = await redeemLoginCode(user.id, code);
   if (checked !== "ok") redirect(`/${locale}/account/signin/code?error=${checked}`);
 
-  await requireNewPassword(user.id);
+  await requireNewPassword(user.id, await unusablePasswordHash());
   await setSessionCookie(user.id);
   await touchLastLogin(user.id);
   await forgetSignInLogin();

@@ -245,14 +245,14 @@ export function loginCodeEmail(o: { locale: Locale; code: string; minutes: numbe
   return o.locale === "fa"
     ? render({
         locale: "fa",
-        subject: `کد ورود تیمکس: ${o.code}`,
+        subject: "کد ورود به تیمکس",
         intro: ["برای ورود به حساب کاربری خود در تیمکس، این کد را وارد کنید:"],
         rows: [["کد ورود", o.code]],
         outro: [`این کد ${o.minutes} دقیقه اعتبار دارد و فقط یک بار قابل استفاده است. اگر شما درخواست نکرده‌اید، این پیام را نادیده بگیرید.`],
       })
     : render({
         locale: "en",
-        subject: `Your TEMEX sign-in code: ${o.code}`,
+        subject: "Your TEMEX sign-in code",
         intro: ["Enter this code to sign in to your TEMEX account:"],
         rows: [["Sign-in code", o.code]],
         outro: [`The code works once and for ${o.minutes} minutes. If you did not ask for it, ignore this message.`],
