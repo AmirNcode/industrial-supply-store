@@ -1,9 +1,11 @@
 import { test, expect } from "@playwright/test";
 import { getDict, type Locale } from "../src/lib/i18n";
 import { expectNoAccessibilityViolations } from "./accessibility";
-import { adminSignIn, freshAddressHeader, signUpWithCode } from "./shop";
+import { addToCart, adminSignIn, freshAddressHeader, localSql, shelfFixtures, signUpWithCode } from "./shop";
 
 const locales: Locale[] = ["en", "fa"];
+const sql = localSql();
+test.afterAll(() => sql.end());
 
 /**
  * A customer account without ever being given or choosing a password at
@@ -54,6 +56,23 @@ for (const locale of locales) {
     await expect(customer.getByTestId("customer-id")).toHaveText(account.accountNumber);
 
     await expectNoAccessibilityViolations(customer, testInfo);
+
+    // From checkout, signing in by account number comes back to checkout with
+    // the account's details filled in.
+    await customer.getByRole("button", { name: t.signOut }).click();
+    await expect(customer).toHaveURL(new RegExp(`/${locale}$`));
+    const { onShelf } = await shelfFixtures(sql);
+    await addToCart(customer, locale, onShelf.familySlug, { partNumber: onShelf.partNumber });
+    await customer.goto(`/${locale}/quote`);
+    await customer.getByRole("link", { name: t.checkoutSignInLink }).click();
+    await customer.locator('input[name="login"]').fill(account.accountNumber);
+    await customer.getByRole("button", { name: t.signInContinue }).click();
+    await customer.locator('input[name="password"]').fill(account.password);
+    await customer.getByRole("button", { name: t.signInTitle, exact: true }).click();
+    await expect(customer).toHaveURL(new RegExp(`/${locale}/quote$`));
+    await expect(customer.locator('input[name="company"]')).toHaveValue(account.company);
+    await expect(customer.getByRole("link", { name: t.checkoutSignInLink })).toHaveCount(0);
+
     await Promise.all([adminContext.close(), customerContext.close()]);
   });
 }

@@ -73,6 +73,9 @@ export const checkoutEn = {
   payPlacedQuote: "Request received. We will email your quote within 5 days.",
   payQuoteReady: "Your quote is ready. Accept it to receive the pro forma invoice and pay.",
   acceptQuote: "ACCEPT QUOTE",
+  checkoutSignInAsk: "Already a customer?",
+  checkoutSignInLink: "Sign in with your email or customer ID",
+  checkoutSignInAfter: "and your details are filled in.",
   acceptQuoteNote:
     "Accepting issues the pro forma invoice at today's exchange rate. You then have 24 hours to pay.",
   quoteAccepted: "Quote accepted. Your pro forma invoice is ready.",
@@ -234,6 +237,9 @@ export const checkoutFa: typeof checkoutEn = {
   countdownDaysHours: "{d} روز و {h} ساعت",
   payExpired:
     "این سفارش منقضی شد: تا پایان مهلت چیزی دریافت نشد، بنابراین سفارش لغو و کالا آزاد شد. می‌توانید دوباره سفارش دهید.",
+  checkoutSignInAsk: "قبلاً از ما خرید کرده‌اید؟",
+  checkoutSignInLink: "با ایمیل یا کد مشتری وارد شوید",
+  checkoutSignInAfter: "تا اطلاعات شما خودکار پر شود.",
   statusExpired: "منقضی شد",
   viewPishFactor: "مشاهده پیش‌فاکتور",
   pishFactorTitle: "پیش‌فاکتور",

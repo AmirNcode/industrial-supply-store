@@ -17,18 +17,18 @@ export default async function SignInPage({
   searchParams,
 }: {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{ error?: string; step?: string }>;
+  searchParams: Promise<{ error?: string; step?: string; then?: string }>;
 }) {
   const { locale } = await params;
   if (!isLocale(locale)) notFound();
   const l = locale as Locale;
   const t = getDict(l);
-  const { error, step } = await searchParams;
+  const { error, step, then } = await searchParams;
 
   // currentUser, not currentUserId: a validly signed cookie whose row has
   // gone (a reseed, a deletion) would otherwise bounce the visitor here from
   // /account and straight back again, with no way to sign in, up, or out.
-  if (await currentUser()) redirect(`/${l}/account`);
+  if (await currentUser()) redirect(then === "checkout" ? `/${l}/quote` : `/${l}/account`);
 
   // No identifier remembered (cookie expired, or a bookmarked step-two URL)
   // means there is nobody to ask a password for: fall back to step one.
@@ -90,6 +90,7 @@ export default async function SignInPage({
       ) : (
         <form action={signInStartAction} className="grid gap-3">
           <input type="hidden" name="locale" value={l} />
+          {then === "checkout" && <input type="hidden" name="then" value="checkout" />}
           <label className="block text-[12px]">
             <span className="mb-0.5 block font-bold">{t.loginEmailOrId}</span>
             <input

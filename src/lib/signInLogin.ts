@@ -31,3 +31,33 @@ export async function readSignInLogin(): Promise<string | null> {
 export async function forgetSignInLogin(): Promise<void> {
   (await cookies()).delete(COOKIE);
 }
+
+/**
+ * "Sign in, then back to checkout" — set at step one when the visitor came
+ * from the checkout page, read once where sign-in finishes. A fixed flag, not
+ * a return URL: a URL taken from the request is an open redirect.
+ */
+const THEN_COOKIE = "isupply_signin_then";
+
+export async function rememberReturnToCheckout(on: boolean): Promise<void> {
+  const jar = await cookies();
+  if (!on) {
+    jar.delete(THEN_COOKIE);
+    return;
+  }
+  jar.set(THEN_COOKIE, "checkout", {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: MAX_AGE_SECONDS,
+  });
+}
+
+/** True once if sign-in should end at checkout; clears the flag either way. */
+export async function takeReturnToCheckout(): Promise<boolean> {
+  const jar = await cookies();
+  const on = jar.get(THEN_COOKIE)?.value === "checkout";
+  if (on) jar.delete(THEN_COOKIE);
+  return on;
+}

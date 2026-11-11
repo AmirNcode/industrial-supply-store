@@ -30,7 +30,13 @@ import { issueLoginCode, redeemLoginCode } from "@/db/loginCodeQueries";
 import { LOGIN_CODE_TTL_MINUTES, normalizeLoginCode } from "@/lib/loginCode";
 import { loginCodeEmail } from "@/lib/emailTemplates";
 import { sendEmail } from "@/lib/email";
-import { forgetSignInLogin, readSignInLogin, rememberSignInLogin } from "@/lib/signInLogin";
+import {
+  forgetSignInLogin,
+  readSignInLogin,
+  rememberReturnToCheckout,
+  rememberSignInLogin,
+  takeReturnToCheckout,
+} from "@/lib/signInLogin";
 import { RATE_LIMITS, consumeRateLimit } from "@/lib/rateLimit";
 import { digitsField, parseDelivery } from "@/lib/quoteContact";
 import { addAddress, deleteAddress, setDefaultAddress, updateAddress } from "@/db/addressQueries";
@@ -155,6 +161,7 @@ export async function signInStartAction(formData: FormData): Promise<void> {
   const login = raw ? parseLogin(raw) : null;
   if (!login) redirect(`/${locale}/account/signin?error=failed`);
   await rememberSignInLogin(login.kind === "code" ? login.code : login.email);
+  await rememberReturnToCheckout(formData.get("then") === "checkout");
 
   const user = await findUserForSignIn(login);
   if (user?.codeSignIn && user.needsPassword) {
@@ -244,6 +251,7 @@ export async function setFirstPasswordAction(formData: FormData): Promise<void> 
   await setPassword(user.id, await hashPassword(next), false);
   // The change ended every session, this one too; reissue this one.
   await setSessionCookie(user.id);
+  if (await takeReturnToCheckout()) redirect(`/${locale}/quote`);
   redirect(`/${locale}/account?ok=password`);
 }
 
@@ -299,7 +307,10 @@ export async function signInAction(formData: FormData): Promise<void> {
   // still reads its language from the URL, so a link someone shares opens in
   // the language they meant rather than the language the recipient prefers.
   const landing = isLocale(user.locale) ? user.locale : locale;
-  redirect(user.mustChangePassword ? `/${landing}/account/password` : `/${landing}/account`);
+  if (user.mustChangePassword) redirect(`/${landing}/account/password`);
+  // Came from checkout: back to it, in the language they were checking out in.
+  if (await takeReturnToCheckout()) redirect(`/${locale}/quote`);
+  redirect(`/${landing}/account`);
 }
 
 export async function signOutAction(formData: FormData): Promise<void> {

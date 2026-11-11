@@ -189,6 +189,12 @@ a {
 a:hover {
   text-decoration: underline;
 }
+/* A link inside a sentence must not rely on colour alone (WCAG link-in-text-
+   block). Tailwind's `underline` loses to the unlayered `a` rule above. */
+a.link-inline {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
 
 /*
  * `.tech` marks a measured value, a code, or anything a buyer matches against a

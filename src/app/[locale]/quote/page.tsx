@@ -1,4 +1,5 @@
 import { notFound, redirect } from "next/navigation";
+import Link from "next/link";
 import { getCartId, getCartLines, unitPriceAt } from "@/lib/cart";
 import { submitQuoteAction } from "@/app/actions";
 import { isLocale, getDict, type Locale } from "@/lib/i18n";
@@ -130,6 +131,14 @@ export default async function QuotePage({
       {error === "too-large" && <ErrorNote>{t.orderTooLarge}</ErrorNote>}
       {(error === "invalid" || error === "rate-limit") && (
         <ErrorNote>{error === "rate-limit" ? t.rateLimited : t.invalidInput}</ErrorNote>
+      )}
+
+      {!user && (
+        <p className="mb-3 border border-[var(--color-rule)] px-3 py-2 text-[12px]">
+          {t.checkoutSignInAsk}{" "}
+          <Link href={`/${l}/account/signin?then=checkout`} className="link-inline">{t.checkoutSignInLink}</Link>{" "}
+          {t.checkoutSignInAfter}
+        </p>
       )}
 
       <form action={submitQuoteAction} className="grid gap-4 md:grid-cols-[1fr_300px]">
