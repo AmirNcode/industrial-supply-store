@@ -100,6 +100,7 @@ export function pishFactorEmail(
         rows: [
           ["شماره سفارش", o.ref],
           ["مبلغ قابل پرداخت (با مالیات)", o.total],
+          ["هزینه ارسال", "رایگان"],
           ["مهلت پرداخت", o.deadline],
         ],
         action: { label: "مشاهده اطلاعات حساب و بارگذاری رسید", url: o.payUrl },
@@ -118,6 +119,7 @@ export function pishFactorEmail(
         rows: [
           ["Order", o.ref],
           ["Amount due (incl. VAT)", o.total],
+          ["Delivery", "Free"],
           ["Pay by", o.deadline],
         ],
         action: { label: "Bank details and receipt upload", url: o.payUrl },

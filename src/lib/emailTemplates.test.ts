@@ -19,6 +19,7 @@ test("the pish-factor email carries the amount, deadline and pay link in both fo
     assert.match(body, /1,200,000 IRR/);
     assert.match(body, /12 Nov 2026, 14:00/);
     assert.match(body, /https:\/\/temex\.ir\/en\/pay\/abc/);
+    assert.match(body, /Delivery[\s\S]*Free/);
   }
 });
 

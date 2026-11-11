@@ -233,6 +233,8 @@ export function InvoiceDocument({
               <dd className="num tech tech-num">{formatAmount(withVat.due.vat, currency, locale)}</dd>
             </>
           )}
+          <dt>{t.deliveryLabel}</dt>
+          <dd className="num">{t.deliveryFree}</dd>
           <dt className="border-t border-[var(--color-ink)] pt-1.5 font-bold">
             {cancelled ? t.invoiceVoid : t.invoiceTotal}
           </dt>

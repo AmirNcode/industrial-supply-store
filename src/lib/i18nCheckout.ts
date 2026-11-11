@@ -35,6 +35,10 @@ export const checkoutEn = {
   checkoutPayNowHeading: "Ready to pay now",
   checkoutQuoteHeading: "Waiting for a quote",
   checkoutVat: "VAT ({rate})",
+  // Delivery is free for now (decided 2026-11-11, to be revisited): shown as
+  // its own row so the customer sees it was not forgotten.
+  deliveryLabel: "Delivery",
+  deliveryFree: "Free",
   checkoutTotalDue: "Total due",
   checkoutQuoteListTotal: "List total, to be confirmed",
   checkoutUnpricedNote: "Includes items with no list price yet.",
@@ -182,6 +186,8 @@ export const checkoutFa: typeof checkoutEn = {
   checkoutPayNowHeading: "آماده پرداخت",
   checkoutQuoteHeading: "در انتظار استعلام",
   checkoutVat: "مالیات بر ارزش افزوده ({rate})",
+  deliveryLabel: "هزینه ارسال",
+  deliveryFree: "رایگان",
   checkoutTotalDue: "مبلغ قابل پرداخت",
   checkoutQuoteListTotal: "جمع بر اساس قیمت فهرست (نیاز به تأیید)",
   checkoutUnpricedNote: "شامل اقلامی که هنوز قیمت فهرست ندارند.",

@@ -257,6 +257,8 @@ export function OrderSummary({
             <dd className="tech text-end">{formatAmount(amounts.subtotal, currency, locale)}</dd>
             <dt>{t.checkoutVat.replace("{rate}", formatVatPercent(vatRateBp, locale))}</dt>
             <dd className="tech text-end">{formatAmount(amounts.vat, currency, locale)}</dd>
+            <dt>{t.deliveryLabel}</dt>
+            <dd className="text-end">{t.deliveryFree}</dd>
             <dt className="border-t border-[var(--color-ink)] pt-1 text-[13px] font-bold">{t.checkoutTotalDue}</dt>
             <dd className="tech border-t border-[var(--color-ink)] pt-1 text-end text-[13px] font-bold">
               {formatAmount(amounts.total, currency, locale)}
