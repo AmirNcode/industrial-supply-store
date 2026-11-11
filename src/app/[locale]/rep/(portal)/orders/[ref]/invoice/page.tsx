@@ -18,9 +18,9 @@ import { ConfirmSubmit } from "@/components/ConfirmSubmit";
 import { issueInvoiceForRepAction } from "../../../../actions";
 
 /**
- * A rep's draft invoice: the order at the prices it was placed at, today's
+ * A rep's draft quote: the order at the prices it was placed at, today's
  * exchange rate and VAT rate, in rial — reps never see dollar amounts.
- * Finalize posts the figures shown, and the action refuses them if anything
+ * Sending posts the figures shown, and the action refuses them if anything
  * has moved since.
  */
 export default async function RepInvoiceDraftPage({
@@ -51,7 +51,7 @@ export default async function RepInvoiceDraftPage({
   if (!found) notFound();
   const { order, items } = found;
   const orderPage = `/${l}/rep/orders/${order.ref}`;
-  // Invoiced meanwhile — by the admin, or in another tab.
+  // Quoted or invoiced meanwhile — by the admin, or in another tab.
   if (order.status !== "received") redirect(orderPage);
   if (hasUnpricedLine(items)) redirect(`${orderPage}?error=unpriced`);
 
@@ -68,6 +68,7 @@ export default async function RepInvoiceDraftPage({
       <InvoiceDraft
         locale={l}
         changed={changed === "1"}
+        backorderParts={items.filter((i) => i.backorder).map((i) => i.partNumber)}
         actions={
           <form action={issueInvoiceForRepAction}>
             <input type="hidden" name="locale" value={l} />
@@ -77,8 +78,8 @@ export default async function RepInvoiceDraftPage({
             <input type="hidden" name="vatRateBp" value={vatRateBp} />
             <input type="hidden" name="subtotalCents" value={totalCents} />
             <ConfirmSubmit
-              label={t.finalizeInvoice}
-              title={t.confirmFinalizeInvoice}
+              label={t.sendQuote}
+              title={t.confirmSendQuote}
               continueLabel={t.confirmContinue}
               discardLabel={t.confirmDiscard}
               className="btn-primary"

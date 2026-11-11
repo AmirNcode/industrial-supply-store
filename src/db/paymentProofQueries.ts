@@ -2,6 +2,7 @@ import "server-only";
 import { sql } from "./index";
 import { recordAudit } from "./audit";
 import { sellHeldStock } from "./inventoryQueries";
+import { nextInvoiceNumber } from "./invoiceQueries";
 import { acceptsPaymentProof, isOrderStatus } from "@/lib/orders";
 import { PROOF_MAX_PER_ORDER, type ProofType } from "@/lib/paymentProof";
 
@@ -48,7 +49,11 @@ export async function addPaymentProof(
     `;
     if (order.status === "invoiced") {
       await tx`
-        UPDATE orders SET status = 'payment_review', payment_submitted_at = now()
+        UPDATE orders
+        SET status = 'payment_review', payment_submitted_at = now(),
+            -- The customer has done their part within the deadline; from here
+            -- the wait is the admin's, and must not expire the order.
+            expires_at = NULL
         WHERE id = ${orderId} AND status = 'invoiced'
       `;
     }
@@ -118,15 +123,20 @@ export async function confirmPayment(
   return sql.begin(async (tx) => {
     const result = await tx`
       UPDATE orders
-      SET status = 'preparing', paid_at = now()
+      SET status = 'preparing', paid_at = now(), expires_at = NULL,
+          -- The official number is issued here and nowhere else, so an order
+          -- that is never paid never uses one and the sequence has no gaps.
+          -- COALESCE keeps the number of an invoice issued before this rule.
+          invoice_number = COALESCE(invoice_number, ${nextInvoiceNumber(tx)})
       WHERE id = ${orderId} AND status = ${from}
+      RETURNING invoice_number AS "invoiceNumber"
     `;
     if (result.count === 0) return false;
     await recordAudit(tx, {
       actor: { kind: "admin" },
       action: "payment.confirmed",
       subject: { kind: "order", id: orderId },
-      detail: { from },
+      detail: { from, invoiceNumber: result[0].invoiceNumber },
     });
     await sellHeldStock(tx, orderId);
     return true;

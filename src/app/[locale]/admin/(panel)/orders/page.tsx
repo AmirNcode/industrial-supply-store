@@ -10,6 +10,7 @@ import { draftLinePrices, priceParamName, priceParamValue } from "@/lib/invoiceD
 import { getFxRate, getPriceDisplayMode } from "@/lib/fx";
 import { OrderStatusPill, STATUS_LABEL_KEY } from "@/components/OrderStatusPill";
 import { ConfirmSubmit } from "@/components/ConfirmSubmit";
+import { formatDeadline, runExpirySweep } from "@/lib/orderFlow";
 import { PayLinkReveal } from "@/components/PayLinkReveal";
 import { commissionPercentLabel } from "@/lib/repAccount";
 import { listCommentsForOrders, type OrderComment } from "@/db/commentQueries";
@@ -18,6 +19,7 @@ import { listPaymentProofs } from "@/db/paymentProofQueries";
 import { PaymentProofSection } from "@/components/PaymentProofSection";
 import {
   setOrderStatusAction,
+  acceptQuoteForCustomerAction,
   addCommentAction,
   payLinkForOrderAction,
   replacePayLinkAction,
@@ -44,9 +46,17 @@ type OrderRow = {
   itemCount: number;
   courier: string;
   trackingNumber: string;
+  /** Null on a pish-factor: the number is assigned when payment is confirmed. */
   invoiceNumber: string | null;
   fxRateToRial: number | null;
   vatRateBp: number | null;
+  /** Set when the pish-factor is issued; "has a document" is this, not the number. */
+  invoicedAt: string | null;
+  /** The open order's deadline; what it means depends on the status. */
+  expiresAt: string | null;
+  /** Set when a deadline cancelled the order rather than staff. */
+  expiredAt: string | null;
+  quotedAt: string | null;
   /** Locked onto the order when it was placed; null when no rep is credited. */
   repName: string | null;
   placedByRep: boolean;
@@ -66,6 +76,7 @@ type OrderItemRow = {
   qty: number;
   unitPriceCents: number;
   requestedUnitPriceCents: number;
+  backorder: boolean;
   specsSnapshot: SpecBag;
 };
 
@@ -81,6 +92,9 @@ export default async function AdminPage({
   if (!isLocale(locale)) notFound();
   const l = locale as Locale;
   await requireAdmin(l);
+  // Before the first order read, so a lapsed order is already cancelled when
+  // the queue is drawn rather than shown as open until the next daily cron.
+  await runExpirySweep();
   const t = getDict(l);
   const sp = await searchParams;
   const error = typeof sp.error === "string" ? sp.error : undefined;
@@ -105,6 +119,8 @@ export default async function AdminPage({
              q.tracking_number AS "trackingNumber",
              q.invoice_number AS "invoiceNumber",
              q.fx_rate_to_rial AS "fxRateToRial", q.vat_rate_bp AS "vatRateBp",
+             q.invoiced_at AS "invoicedAt", q.expires_at AS "expiresAt",
+             q.expired_at AS "expiredAt", q.quoted_at AS "quotedAt",
              (SELECT count(*)::int FROM order_items i WHERE i.order_id = q.id) AS "itemCount",
              r.name AS "repName", q.placed_by_rep AS "placedByRep",
              q.commission_rate_bp AS "commissionRateBp",
@@ -126,7 +142,7 @@ export default async function AdminPage({
                family_name AS "familyName", qty,
                unit_price_cents AS "unitPriceCents",
                requested_unit_price_cents AS "requestedUnitPriceCents",
-               specs_snapshot AS "specsSnapshot"
+               backorder, specs_snapshot AS "specsSnapshot"
         FROM order_items WHERE order_id = ANY(${orderIds})
         ORDER BY id
       `
@@ -186,6 +202,7 @@ export default async function AdminPage({
 
       {ok === "status" && <SuccessBanner>{t.orderUpdated}</SuccessBanner>}
       {ok === "comment" && <SuccessBanner>{t.noteAdded}</SuccessBanner>}
+      {ok === "quoted" && <SuccessBanner>{t.quoteSentOk}</SuccessBanner>}
       {ok === "invoiced" && <SuccessBanner>{t.invoiceIssued}</SuccessBanner>}
       {ok === "paylink" && <SuccessBanner>{t.payLinkReplaced}</SuccessBanner>}
       {error === "prices" && <ErrorBanner>{t.pricesRequired}</ErrorBanner>}
@@ -226,6 +243,9 @@ export default async function AdminPage({
             )}
             <span className="text-[var(--color-ink-muted)]">{q.contactName}</span>
             <span className="tech text-[var(--color-ink-muted)]">{q.email}</span>
+            {deadlineLabel(q, l, t) && (
+              <span className="text-[var(--color-ink-muted)]">{deadlineLabel(q, l, t)}</span>
+            )}
             <span className="ms-auto tech text-[var(--color-ink-faint)]">
               {new Date(q.createdAt).toISOString().slice(0, 16).replace("T", " ")}
             </span>
@@ -309,12 +329,14 @@ export default async function AdminPage({
               <Row label={t.status} value={q.status} />
               {q.courier && <Row label={t.courier} value={q.courier} />}
               {q.trackingNumber && <Row label={t.trackingNumber} value={q.trackingNumber} tech />}
-              {q.invoiceNumber && (
+              {/* A document exists from the pish-factor on, and has no number
+                  until payment is confirmed. */}
+              {q.invoicedAt && q.fxRateToRial !== null && (
                 <div className="flex gap-1.5">
-                  <dt className="font-bold">{t.invoiceNumber}:</dt>
+                  <dt className="font-bold">{q.invoiceNumber ? t.invoiceNumber : t.pishFactorTitle}:</dt>
                   <dd>
                     <Link href={`/${l}/invoice/${q.ref}`} className="tech" prefetch={false}>
-                      {q.invoiceNumber}
+                      {q.invoiceNumber ?? q.ref}
                     </Link>
                   </dd>
                 </div>
@@ -343,13 +365,32 @@ export default async function AdminPage({
             {(q.status === "payment_review" || (proofsByOrder.get(q.id) ?? []).length > 0) && (
               <PaymentProofSection locale={l} proofs={proofsByOrder.get(q.id) ?? []} showUploader />
             )}
-            {/* 'invoiced' and 'payment_review' are legal next statuses, but no
-                button renders for either: an invoice is issued from its draft
-                page, reached by "Create invoice" below, and review begins when
-                a receipt is uploaded. */}
-            {nextStatuses(q.status).filter((s) => s !== "invoiced" && s !== "payment_review").length > 0 && (
+            {/* 'quoted', 'invoiced' and 'payment_review' are legal next statuses,
+                but no generic button renders for them: a quote is sent from
+                its draft page ("Send quote" below), the pish-factor is issued
+                by accepting the quote (the button after this row), and review
+                begins when a receipt is uploaded. */}
+            {nextStatuses(q.status).filter((s) => !MANUAL_ONLY.has(s)).length > 0 && (
               <div className="mb-2 flex flex-wrap items-center gap-2">
-                {nextStatuses(q.status).filter((s) => s !== "invoiced" && s !== "payment_review").map((next) => (
+                {q.status === "quoted" && (
+                  <form action={acceptQuoteForCustomerAction} className="inline-flex items-center gap-1.5">
+                    <input type="hidden" name="locale" value={l} />
+                    <input type="hidden" name="orderId" value={q.id} />
+                    <input type="hidden" name="statusFilter" value={statusFilter ?? ""} />
+                    <ConfirmSubmit
+                      label={t.acceptForCustomer}
+                      title={t.acceptForCustomer}
+                      continueLabel={t.confirmContinue}
+                      discardLabel={t.confirmDiscard}
+                      disabled={DEMO_MODE}
+                      details={[
+                        { label: t.confirmSendingTo, value: `${q.company} — ${q.email}`, tech: false },
+                        { label: t.confirmOrder, value: q.ref, tech: true },
+                      ]}
+                    />
+                  </form>
+                )}
+                {nextStatuses(q.status).filter((s) => !MANUAL_ONLY.has(s)).map((next) => (
                   <form key={next} action={setOrderStatusAction} className="inline-flex items-center gap-1.5">
                     <input type="hidden" name="locale" value={l} />
                     <input type="hidden" name="orderId" value={q.id} />
@@ -440,7 +481,10 @@ export default async function AdminPage({
                     {(byOrder.get(q.id) ?? []).map((i) => (
                       <tr key={i.id}>
                         <td className="tech font-bold">{i.partNumber}</td>
-                        <td className="whitespace-normal">{i.familyName}</td>
+                        <td className="whitespace-normal">
+                          {i.familyName}
+                          <BackorderTag show={i.backorder} label={t.backorderTag} />
+                        </td>
                         <td className="num tech tech-num">{i.qty}</td>
                         <td className="num tech tech-num text-[var(--color-ink-muted)]">
                           {(i.requestedUnitPriceCents / 100).toFixed(2)}
@@ -467,7 +511,7 @@ export default async function AdminPage({
 
                 <div className="mt-2">
                   <button type="submit" className="btn-primary">
-                    {t.createInvoice}
+                    {t.sendQuote}
                   </button>
                 </div>
               </form>
@@ -486,13 +530,17 @@ export default async function AdminPage({
                   {(byOrder.get(q.id) ?? []).map((i) => (
                     <tr key={i.id}>
                       <td className="tech font-bold">{i.partNumber}</td>
-                      <td className="whitespace-normal">{i.familyName}</td>
+                      <td className="whitespace-normal">
+                        {i.familyName}
+                        <BackorderTag show={i.backorder} label={t.backorderTag} />
+                      </td>
                       <td className="num tech tech-num">{i.qty}</td>
+                      {/* A line at 0 is one nobody priced: never print "0". */}
                       <td className="num tech tech-num">
-                        {formatOrderPrice(i.unitPriceCents, q)}
+                        {i.unitPriceCents === 0 ? t.cartRequestQuoteCell : formatOrderPrice(i.unitPriceCents, q)}
                       </td>
                       <td className="num tech tech-num">
-                        {formatOrderPrice(i.unitPriceCents * i.qty, q)}
+                        {i.unitPriceCents === 0 ? t.cartRequestQuoteCell : formatOrderPrice(i.unitPriceCents * i.qty, q)}
                       </td>
                     </tr>
                   ))}
@@ -512,6 +560,25 @@ export default async function AdminPage({
       ))}
     </>
   );
+}
+
+/** Statuses reached through their own control, never a plain "move to" button. */
+const MANUAL_ONLY: ReadonlySet<OrderStatus> = new Set<OrderStatus>(["quoted", "invoiced", "payment_review"]);
+
+/**
+ * What the order is waiting for, with its date: received = our quote is due,
+ * quoted = valid until, invoiced = pay by. An order a deadline cancelled says
+ * so instead. Null when there is nothing to say.
+ */
+function deadlineLabel(q: OrderRow, locale: Locale, t: ReturnType<typeof getDict>): string | null {
+  if (q.status === "cancelled" && q.expiredAt) return t.statusExpired;
+  if (!q.expiresAt || (q.status !== "received" && q.status !== "quoted" && q.status !== "invoiced")) return null;
+  return `${t.orderDeadline}: ${formatDeadline(q.expiresAt, locale)}`;
+}
+
+function BackorderTag({ show, label }: { show: boolean; label: string }) {
+  if (!show) return null;
+  return <span className="ms-1.5 border border-[var(--color-rule)] px-1 text-[10px]">{label}</span>;
 }
 
 /**

@@ -62,6 +62,10 @@ Set in Vercel → Settings → Environment Variables → Production.
 | `TRUSTED_PROXY_HEADER` | runtime, **self-hosted only** | every rate-limited action (sign-in, sign-up, checkout, uploads) throws. Set it to the header your reverse proxy *overwrites* with the client address — `x-real-ip` with `deploy/nginx.conf`. Leave unset on Vercel, which uses its own header |
 | `CRON_SECRET` | runtime (evening rate job) | the job is refused and the automatic rate stops moving; admin warns after 36 h |
 | `SELLER_*` | runtime | invoices print no seller address or tax ID; the name is always TEMEX, and email/phone come from Admin → Settings |
+| `RESEND_API_KEY` | runtime (all email) | **no email is sent**: pish-factors, quotes and — the one a customer cannot work around — sign-in codes are only recorded at `/admin/emails`. Accounts made at checkout or sign-up have no password until a code arrives, so they cannot sign in |
+| `EMAIL_FROM` | runtime | defaults to `TEMEX <orders@mail.temexpro.com>`; must be on `mail.temexpro.com`, the only verified sending domain |
+| `STAFF_NOTIFY_EMAIL` | runtime | new-order alerts go to the contact email in Admin → Settings |
+| `SITE_URL` | runtime | links inside emails fall back to Vercel's production domain, then `https://temex.ir`. Set it (`https://temex.ir`) so they never depend on either |
 | `SUPABASE_URL` | runtime Storage access | URL images still work; image/CSV upload reports not configured |
 | `SUPABASE_PUBLIC_URL` | runtime Storage access | falls back to `SUPABASE_URL` |
 | `SUPABASE_PUBLISHABLE_KEY` or `SUPABASE_ANON_KEY` | runtime CSV import | signed browser upload reports not configured |

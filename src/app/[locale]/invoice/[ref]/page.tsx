@@ -170,6 +170,10 @@ export default async function InvoicePage({
         rate={order.fxRateToRial}
         vatRateBp={order.vatRateBp}
         invoiceNumber={order.invoiceNumber}
+        // The document exists (this page 404s otherwise), so no number means
+        // a pro forma invoice, not a draft.
+        pishFactor={order.invoiceNumber === null}
+        expiresAt={order.expiresAt}
         date={order.invoicedAt}
         cancelled={cancelled}
         bank={bank}

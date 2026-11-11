@@ -12,7 +12,14 @@ export type RepOrderRow = {
   totalCents: number;
   fxRateToRial: number | null;
   vatRateBp: number | null;
+  /** Null on a pish-factor; assigned when payment is confirmed. */
   invoiceNumber: string | null;
+  /** Set when the pish-factor is issued: "has a document" is this, not the number. */
+  invoicedAt: string | null;
+  /** The open order's deadline; null when it has none. */
+  expiresAt: string | null;
+  /** Set when a deadline cancelled the order. */
+  expiredAt: string | null;
   /** Only on orders credited to this rep; null on a moved customer's older ones. */
   payToken: string | null;
   /** Credited to this rep when it was placed — the orders they may act on. */
@@ -53,7 +60,8 @@ function rowCols(repId: string) {
   return sql`o.id, o.ref, o.status, o.created_at AS "createdAt",
   o.total_cents AS "totalCents", o.fx_rate_to_rial AS "fxRateToRial",
   o.vat_rate_bp AS "vatRateBp",
-  o.invoice_number AS "invoiceNumber",
+  o.invoice_number AS "invoiceNumber", o.invoiced_at AS "invoicedAt",
+  o.expires_at AS "expiresAt", o.expired_at AS "expiredAt",
   CASE WHEN o.rep_id = ${repId} THEN o.pay_token END AS "payToken",
   (o.rep_id = ${repId}) IS TRUE AS "creditedToMe",
   COALESCE(u.company, o.company) AS company, o.user_id AS "customerId",
@@ -81,7 +89,7 @@ export async function getOrderForRep(
   const [order] = await sql<RepOrderDetail[]>`
     SELECT ${rowCols(repId)},
            o.courier, o.tracking_number AS "trackingNumber",
-           o.po_number AS "poNumber", o.invoiced_at AS "invoicedAt",
+           o.po_number AS "poNumber", o.quoted_at AS "quotedAt",
            o.payment_submitted_at AS "paymentSubmittedAt", o.paid_at AS "paidAt",
            o.shipped_at AS "shippedAt", o.delivered_at AS "deliveredAt",
            (SELECT count(*)::int FROM order_items i WHERE i.order_id = o.id) AS "itemCount",

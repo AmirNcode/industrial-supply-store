@@ -3,6 +3,7 @@ import { getDict, type Locale } from "@/lib/i18n";
 import { formatOrderTotal } from "@/lib/invoice";
 import { formatPersianDate } from "@/lib/persianCalendar";
 import { OrderStatusPill } from "@/components/OrderStatusPill";
+import { Deadline, deadlineNow } from "@/components/Deadline";
 import type { AccountOrderRow } from "@/db/accountQueries";
 
 /**
@@ -23,6 +24,7 @@ export function CustomerOrderList({
   orderHref?: (ref: string) => string;
 }) {
   const t = getDict(locale);
+  const now = deadlineNow();
   return (
     <section className="mb-4 border border-[var(--color-rule)] p-3">
       <h2 className="mb-2 text-[13px] font-bold">{t.customerOrders}</h2>
@@ -41,10 +43,21 @@ export function CustomerOrderList({
                   {order.ref}
                 </span>
               )}
-              <OrderStatusPill locale={locale} status={order.status} />
+              {order.status === "cancelled" && order.expiredAt !== null ? (
+                <span className="pill pill-muted">{t.statusExpired}</span>
+              ) : (
+                <OrderStatusPill locale={locale} status={order.status} />
+              )}
               <span className="text-[var(--color-ink-muted)]">
                 {formatPersianDate(order.createdAt, locale)}
               </span>
+              <Deadline
+                compact
+                locale={locale}
+                status={order.status}
+                expiresAt={order.expiresAt}
+                now={now}
+              />
               <span className="num">
                 {formatOrderTotal(
                   order.totalCents,

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireRep } from "@/lib/repSession";
 import { getOrderForRep } from "@/db/repOrderQueries";
-import { reorderAction, uploadPaymentProofForRepAction } from "../../../actions";
+import { acceptQuoteForRepAction, reorderAction, uploadPaymentProofForRepAction } from "../../../actions";
 import { acceptsPaymentProof } from "@/lib/orders";
 import { hasUnpricedLine } from "@/lib/invoice";
 import { listPaymentProofs } from "@/db/paymentProofQueries";
@@ -16,6 +16,7 @@ import { ShareButton } from "@/components/ShareButton";
 import { ErrorBanner, SuccessBanner } from "@/components/Banners";
 import { isLocale, getDict, type Locale } from "@/lib/i18n";
 import { fillMessage } from "@/lib/fillMessage";
+import { formatDeadline, runExpirySweep } from "@/lib/orderFlow";
 
 const ERROR_KEY = {
   "not-yours": "reorderNotYours",
@@ -45,6 +46,8 @@ export default async function RepOrderPage({
   const t = getDict(l);
   const { ok, error } = await searchParams;
   const rep = await requireRep(l);
+  // Before the order is read, so a lapsed order shows as cancelled.
+  await runExpirySweep();
 
   // 404 for an order this rep may not see, as for someone else's customer.
   const found = await getOrderForRep(rep.id, ref);
@@ -60,6 +63,13 @@ export default async function RepOrderPage({
   const payUrl = order.payToken ? `${origin}/${l}/pay/${order.payToken}` : null;
   const errorKey = error && error in ERROR_KEY ? ERROR_KEY[error as keyof typeof ERROR_KEY] : null;
   const rateBp = order.commissionRateBp ?? 0;
+  // received = our quote is due, quoted = valid until, invoiced = pay by.
+  const deadline =
+    order.status === "cancelled" && order.expiredAt
+      ? t.statusExpired
+      : order.expiresAt && ["received", "quoted", "invoiced"].includes(order.status)
+        ? formatDeadline(order.expiresAt, l)
+        : null;
 
   return (
     <>
@@ -86,8 +96,14 @@ export default async function RepOrderPage({
       </div>
 
       {ok === "created" && <SuccessBanner>{t.repOrderCreated}</SuccessBanner>}
+      {ok === "quoted" && <SuccessBanner>{t.quoteSentOk}</SuccessBanner>}
       {ok === "invoiced" && <SuccessBanner>{t.invoiceIssued}</SuccessBanner>}
       {errorKey && <ErrorBanner>{t[errorKey]}</ErrorBanner>}
+      {deadline && (
+        <p className="mb-3 text-[12px]">
+          <strong>{t.orderDeadline}:</strong> {deadline}
+        </p>
+      )}
       {order.creditedToMe && (
           <p className="mb-3 text-[12px]" data-testid="commission-line">
             {rateBp > 0
@@ -110,11 +126,24 @@ export default async function RepOrderPage({
           ) : (
             <>
               <Link href={`/${l}/rep/orders/${order.ref}/invoice`} className="btn-primary" prefetch={false}>
-                {t.createInvoice}
+                {t.sendQuote}
               </Link>
               <span className="text-[var(--color-ink-muted)]">{t.repInvoiceHint}</span>
             </>
           )}
+        </section>
+      )}
+
+      {order.creditedToMe && order.status === "quoted" && (
+        <section className="mb-4 flex flex-wrap items-center gap-3 border border-[var(--color-rule)] p-3 text-[12px]">
+          <form action={acceptQuoteForRepAction}>
+            <input type="hidden" name="locale" value={l} />
+            <input type="hidden" name="ref" value={order.ref} />
+            <button type="submit" className="btn-primary">
+              {t.acceptForCustomer}
+            </button>
+          </form>
+          <span className="text-[var(--color-ink-muted)]">{t.acceptQuoteNote}</span>
         </section>
       )}
 
@@ -155,7 +184,7 @@ export default async function RepOrderPage({
               {t.openPayPage}
             </Link>
             {/* The pay link's key opens the invoice, as it does for the customer. */}
-            {order.invoiceNumber && order.status !== "cancelled" && (
+            {order.invoicedAt && order.status !== "cancelled" && (
               <Link href={`/${l}/invoice/${order.ref}?key=${order.payToken}`} prefetch={false}>
                 {t.viewInvoice}
               </Link>
@@ -170,7 +199,7 @@ export default async function RepOrderPage({
         items={items}
         currency="IRR"
         rate={order.fxRateToRial ?? liveRate}
-        estimate={order.invoiceNumber === null}
+        estimate={order.invoicedAt === null}
         actions={
           order.customerIsMine ? (
             <form action={reorderAction}>

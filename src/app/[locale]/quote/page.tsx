@@ -1,10 +1,9 @@
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getCartId, getCartLines, unitPriceAt } from "@/lib/cart";
 import { submitQuoteAction } from "@/app/actions";
 import { isLocale, getDict, type Locale } from "@/lib/i18n";
 import { DEMO_MODE } from "@/lib/demo";
-import { customerCurrencyFor, formatPrice, formatInt } from "@/lib/money";
+import { customerCurrencyFor } from "@/lib/money";
 import { getFxRate, getPriceDisplayMode } from "@/lib/fx";
 import { currentUser } from "@/lib/session";
 import { currentRep } from "@/lib/repSession";
@@ -19,6 +18,10 @@ import {
   signQuoteSubmissionToken,
 } from "@/lib/quoteSubmission";
 import QuoteSubmitButton from "@/components/QuoteSubmitButton";
+import { splitCart } from "@/lib/checkoutSplit";
+import { pishFactorTerms, runExpirySweep } from "@/lib/orderFlow";
+import { listAddresses } from "@/db/addressQueries";
+import { DeliveryFields, ErrorNote, Field, NotesField, OrderSummary, TaxFields, checkoutView } from "./CheckoutParts";
 import { REQUEST_LIMITS } from "@/lib/requestLimits";
 
 export default async function QuotePage({
@@ -34,25 +37,35 @@ export default async function QuotePage({
   const t = getDict(l);
   const { error, for: forParam } = await searchParams;
 
-  const [lines, rate, priceDisplayMode, user, cartId, rep] = await Promise.all([
+  // Before the cart is read: a lapsed hold must be back on the shelf first.
+  await runExpirySweep();
+  const [lines, rate, priceDisplayMode, user, cartId, rep, terms] = await Promise.all([
     getCartLines(),
     getFxRate(),
     getPriceDisplayMode(),
     currentUser(),
     getCartId(),
     currentRep(),
+    pishFactorTerms(),
   ]);
   if (lines.length === 0) redirect(`/${l}/cart`);
   if (!cartId) redirect(`/${l}/cart`);
   const currency = customerCurrencyFor(priceDisplayMode, l);
-  const subtotal = lines.reduce((sum, x) => sum + unitPriceAt(x, x.qty) * x.qty, 0);
-  const fingerprint = quoteCartFingerprint(
-    lines.map((line) => ({
-      productId: line.productId,
-      qty: line.qty,
-      unitPriceCents: unitPriceAt(line, line.qty),
+  const split = splitCart(
+    lines.map((x) => ({
+      productId: x.productId,
+      qty: x.qty,
+      unitPriceCents: unitPriceAt(x, x.qty),
+      inStock: x.inStock,
+      available: x.available,
     })),
   );
+  const canIssue = terms !== null;
+  const view = checkoutView(split, canIssue);
+  const parts = Object.fromEntries(lines.map((x) => [x.productId, x.partNumber]));
+  // The split lines, not the bare cart lines: the server compares payNow and
+  // heldForQuote too, so a stock change since this page was drawn is caught.
+  const fingerprint = quoteCartFingerprint(split.lines);
   const submissionToken = signQuoteSubmissionToken(
     createQuoteSubmission(cartId, fingerprint),
     AUTH_SECRET,
@@ -77,21 +90,31 @@ export default async function QuotePage({
         locale={l}
         customers={customers}
         selected={selected}
-        lines={lines}
-        subtotal={subtotal}
-        rate={rate}
+        split={split}
+        parts={parts}
+        canIssue={canIssue}
+        vatRateBp={terms?.vatRateBp ?? null}
+        rate={terms?.rate ?? rate}
         submissionToken={submissionToken}
         error={error}
       />
     );
   }
 
+  const saved = user ? await listAddresses(user.id) : [];
+  const payable = view.kind !== "quote";
+  const title = payable ? t.checkoutTitle : t.requestAQuote;
+  const intro =
+    view.kind === "instant"
+      ? t.checkoutIntroInstant
+      : view.kind === "mixed"
+        ? t.checkoutIntroMixed
+        : t.checkoutIntroQuote;
+
   return (
     <main className="mx-auto max-w-[900px] px-3 pt-3">
-      <h1 className="mb-1 border-b border-[var(--color-ink)] pb-1 text-[17px] font-bold">
-        {t.requestAQuote}
-      </h1>
-      <p className="mb-4 text-[12px] text-[var(--color-ink-muted)]">{t.rfqIntro}</p>
+      <h1 className="mb-1 border-b border-[var(--color-ink)] pb-1 text-[17px] font-bold">{title}</h1>
+      <p className="mb-4 text-[12px] text-[var(--color-ink-muted)]">{intro}</p>
 
       {/* Shown before the form, not after: the point is to inform the decision
           to type real details, which is too late once they are submitted. */}
@@ -101,30 +124,12 @@ export default async function QuotePage({
         </p>
       )}
 
-      {error === "missing" && (
-        <p className="mb-3 border border-[#e0b4b0] bg-[#fdf2f1] px-3 py-2 text-[12px] text-[#a3312a]">
-          {t.required}
-        </p>
-      )}
-      {error === "expired" && (
-        <p className="mb-3 border border-[#e0b4b0] bg-[#fdf2f1] px-3 py-2 text-[12px] text-[#a3312a]">
-          {t.quoteFormExpired}
-        </p>
-      )}
-      {error === "cart-changed" && (
-        <p className="mb-3 border border-[#e0b4b0] bg-[#fdf2f1] px-3 py-2 text-[12px] text-[#a3312a]">
-          {t.quoteCartChanged}
-        </p>
-      )}
-      {error === "too-large" && (
-        <p className="mb-3 border border-[#e0b4b0] bg-[#fdf2f1] px-3 py-2 text-[12px] text-[#a3312a]">
-          {t.orderTooLarge}
-        </p>
-      )}
+      {error === "missing" && <ErrorNote>{t.deliveryRequired}</ErrorNote>}
+      {error === "expired" && <ErrorNote>{t.quoteFormExpired}</ErrorNote>}
+      {error === "cart-changed" && <ErrorNote>{t.checkoutStockChanged}</ErrorNote>}
+      {error === "too-large" && <ErrorNote>{t.orderTooLarge}</ErrorNote>}
       {(error === "invalid" || error === "rate-limit") && (
-        <p className="mb-3 border border-[#e0b4b0] bg-[#fdf2f1] px-3 py-2 text-[12px] text-[#a3312a]">
-          {error === "rate-limit" ? t.rateLimited : t.invalidInput}
-        </p>
+        <ErrorNote>{error === "rate-limit" ? t.rateLimited : t.invalidInput}</ErrorNote>
       )}
 
       <form action={submitQuoteAction} className="grid gap-4 md:grid-cols-[1fr_300px]">
@@ -134,8 +139,8 @@ export default async function QuotePage({
         <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))] self-start">
           <Field name="company" label={t.company} maxLength={REQUEST_LIMITS.companyChars} required defaultValue={user?.company} />
           <Field name="contactName" label={t.contactName} maxLength={REQUEST_LIMITS.contactNameChars} required defaultValue={user?.contactName} />
-          {/* Required only from a guest, who tracks the order by it; a
-              signed-in customer's order sits on their account. */}
+          {/* Required only from a guest, whose pish-factor and account come
+              from it; a signed-in customer's order sits on their account. */}
           <Field
             name="email"
             label={t.email}
@@ -147,107 +152,23 @@ export default async function QuotePage({
           />
           <Field name="phone" label={t.phone} type="tel" maxLength={REQUEST_LIMITS.phoneChars} required defaultValue={user?.phone} />
           <Field name="poNumber" label={t.poNumber} maxLength={REQUEST_LIMITS.poNumberChars} optional={t.optional} defaultValue={user?.defaultPoNumber} />
-          <Field name="city" label={t.city} maxLength={REQUEST_LIMITS.cityChars} optional={t.optional} />
-          <Field name="country" label={t.country} maxLength={REQUEST_LIMITS.countryChars} optional={t.optional} />
-          <label className="col-span-full block text-[12px]">
-            <span className="mb-0.5 block font-bold">
-              {t.address}{" "}
-              <span className="font-normal text-[var(--color-ink-faint)]">({t.optional})</span>
-            </span>
-            <input
-              type="text"
-              name="address"
-              maxLength={REQUEST_LIMITS.addressChars}
-              className="w-full"
-            />
-          </label>
-          <label className="col-span-full block text-[12px]">
-            <span className="mb-0.5 block font-bold">
-              {t.notes}{" "}
-              <span className="font-normal text-[var(--color-ink-faint)]">({t.optional})</span>
-            </span>
-            <textarea
-              name="notes"
-              rows={3}
-              maxLength={REQUEST_LIMITS.notesChars}
-              className="w-full"
-            />
-          </label>
+          <DeliveryFields locale={l} saved={saved} canSave={!!user} />
+          <TaxFields locale={l} defaults={{ nationalId: user?.nationalId, economicCode: user?.economicCode }} />
+          <NotesField locale={l} />
+          {!user && <p className="col-span-full text-[11px] text-[var(--color-ink-muted)]">{t.checkoutAccountNote}</p>}
         </div>
 
-        <aside className="self-start border border-[var(--color-rule)] p-3">
-          <h2 className="mb-2 border-b border-[var(--color-rule)] pb-1 text-[13px] font-bold">
-            {t.yourOrder}{" "}
-            <span className="font-normal text-[var(--color-ink-muted)]">
-              (<span className="tech">{formatInt(lines.length, l)}</span> {t.itemsInOrder})
-            </span>
-          </h2>
-          <ul className="mb-2 max-h-[260px] overflow-y-auto text-[11px]">
-            {lines.map((line) => (
-              <li key={line.productId} className="flex justify-between gap-2 py-0.5">
-                <span className="tech truncate">{line.partNumber}</span>
-                <span className="tech shrink-0 text-[var(--color-ink-muted)]">
-                  × {formatInt(line.qty, l)}
-                </span>
-              </li>
-            ))}
-          </ul>
-          <div className="flex justify-between border-t border-[var(--color-ink)] pt-1.5 text-[13px]">
-            <span>{t.subtotal}</span>
-            <strong className="tech">
-              {formatPrice(subtotal, currency, l, rate)}
-            </strong>
-          </div>
-          <QuoteSubmitButton label={t.submitRequest} />
-          <Link
-            href={`/${l}/cart`}
-            className="mt-2 block text-center text-[11px] text-[var(--color-ink-muted)]"
-          >
-            {t.continueShopping}
-          </Link>
-        </aside>
+        <OrderSummary
+          locale={l}
+          split={split}
+          canIssue={canIssue}
+          vatRateBp={terms?.vatRateBp ?? null}
+          currency={currency}
+          rate={terms?.rate ?? rate}
+          parts={parts}
+          submit={<QuoteSubmitButton label={payable ? t.placeOrder : t.submitRequest} />}
+        />
       </form>
     </main>
-  );
-}
-
-function Field({
-  name,
-  label,
-  type = "text",
-  required,
-  optional,
-  defaultValue,
-  maxLength,
-}: {
-  name: string;
-  label: string;
-  type?: string;
-  required?: boolean;
-  optional?: string;
-  defaultValue?: string;
-  maxLength: number;
-}) {
-  return (
-    <label className="block text-[12px]">
-      <span className="mb-0.5 block font-bold">
-        {label}
-        {required ? (
-          <span className="text-[#a3312a]"> *</span>
-        ) : optional ? (
-          <span className="font-normal text-[var(--color-ink-faint)]"> ({optional})</span>
-        ) : null}
-      </span>
-      <input
-        type={type}
-        name={name}
-        required={required}
-        maxLength={maxLength}
-        defaultValue={defaultValue}
-        // Email and phone are Latin-entry fields even in the Persian UI.
-        dir={type === "email" || type === "tel" ? "ltr" : undefined}
-        className="w-full"
-      />
-    </label>
   );
 }

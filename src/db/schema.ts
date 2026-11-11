@@ -484,6 +484,25 @@ export const orders = pgTable(
     payToken: text("pay_token")
       .notNull()
       .default(sql`replace(gen_random_uuid()::text, '-', '') || replace(gen_random_uuid()::text, '-', '')`),
+    /**
+     * The one deadline an open order has, whatever it is waiting for:
+     * `received` — staff have until then to quote before held stock is
+     * released; `quoted` — the customer has until then to accept; `invoiced`
+     * — the pish-factor is payable until then. Cleared when a receipt
+     * arrives. Null on orders that predate deadlines. `sweepExpiredOrders`
+     * (db/expiryQueries.ts) is the only thing that acts on it.
+     */
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    /** Set when the sweep cancelled the order, so "expired" is not confused with a staff cancel. */
+    expiredAt: timestamp("expired_at", { withTimezone: true }),
+    /** When staff sent the quote (`received → quoted`). */
+    quotedAt: timestamp("quoted_at", { withTimezone: true }),
+    /** Shared by the two orders one checkout was split into; null otherwise. */
+    groupId: uuid("group_id"),
+    postalCode: text("postal_code").notNull().default(""),
+    /** The buyer's tax identifiers as they were when the order was placed. */
+    buyerNationalId: text("buyer_national_id").notNull().default(""),
+    buyerEconomicCode: text("buyer_economic_code").notNull().default(""),
   },
   (t) => [
     uniqueIndex("orders_submission_key_key").on(t.submissionKey),
@@ -502,6 +521,8 @@ export const orders = pgTable(
     index("orders_created_idx").on(t.createdAt),
     index("orders_status_idx").on(t.status, t.createdAt),
     index("orders_user_idx").on(t.userId, t.createdAt),
+    index("orders_expires_idx").on(t.expiresAt).where(sql`${t.expiresAt} IS NOT NULL`),
+    index("orders_group_idx").on(t.groupId).where(sql`${t.groupId} IS NOT NULL`),
     // Mirrors ORDER_STATUSES in lib/orders.ts. Declared here (rather than left
     // implicit) so `db:push` cannot silently drop it — status is otherwise a
     // free-text column, and this is the only thing stopping a bad write from
@@ -509,7 +530,7 @@ export const orders = pgTable(
     // recognise.
     check(
       "orders_status_check",
-      sql`${t.status} IN ('received','invoiced','payment_review','preparing','shipped','delivered','cancelled')`,
+      sql`${t.status} IN ('received','quoted','invoiced','payment_review','preparing','shipped','delivered','cancelled')`,
     ),
     check(
       "orders_currency_check",
@@ -519,25 +540,36 @@ export const orders = pgTable(
       "orders_totals_check",
       sql`${t.requestedTotalCents} >= 0 AND ${t.totalCents} >= 0`,
     ),
+    // "Invoiced" means the pish-factor exists: issued, with its rate locked.
+    // The official number arrives only when payment is confirmed, so an
+    // unpaid order never consumes one.
     check(
       "orders_invoice_fields_check",
       sql`(
-        ${t.invoiceNumber} IS NULL
+        ${t.invoicedAt} IS NULL
         AND ${t.fxRateToRial} IS NULL
-        AND ${t.invoicedAt} IS NULL
+        AND ${t.invoiceNumber} IS NULL
       ) OR (
-        ${t.invoiceNumber} IS NOT NULL
-        AND btrim(${t.invoiceNumber}) <> ''
+        ${t.invoicedAt} IS NOT NULL
         AND ${t.fxRateToRial} > 0
-        AND ${t.invoicedAt} IS NOT NULL
+        AND (${t.invoiceNumber} IS NULL OR btrim(${t.invoiceNumber}) <> '')
       )`,
     ),
-    // Only an invoice carries a VAT rate: a rate on an unpriced order would be
-    // a number nobody locked.
+    // Only a pish-factor carries a VAT rate: a rate on an unpriced order would
+    // be a number nobody locked.
     check(
       "orders_vat_rate_check",
       sql`${t.vatRateBp} IS NULL
-        OR (${t.invoiceNumber} IS NOT NULL AND ${t.vatRateBp} BETWEEN 0 AND 10000)`,
+        OR (${t.invoicedAt} IS NOT NULL AND ${t.vatRateBp} BETWEEN 0 AND 10000)`,
+    ),
+    check(
+      "orders_paid_invoice_number_check",
+      sql`${t.paidAt} IS NULL OR ${t.invoiceNumber} IS NOT NULL`,
+    ),
+    check(
+      "orders_expiry_check",
+      sql`(${t.expiredAt} IS NULL OR ${t.status} = 'cancelled')
+        AND (${t.expiresAt} IS NULL OR ${t.status} IN ('received','quoted','invoiced'))`,
     ),
     check(
       "orders_timestamp_chain_check",
@@ -549,7 +581,8 @@ export const orders = pgTable(
     ),
     check(
       "orders_status_timestamps_check",
-      sql`(${t.status} <> 'received' OR ${t.invoicedAt} IS NULL)
+      sql`(${t.status} NOT IN ('received','quoted') OR ${t.invoicedAt} IS NULL)
+        AND (${t.status} <> 'quoted' OR ${t.quotedAt} IS NOT NULL)
         AND (${t.status} NOT IN ('invoiced','payment_review','preparing','shipped','delivered') OR ${t.invoicedAt} IS NOT NULL)
         AND (${t.status} NOT IN ('preparing','shipped','delivered') OR ${t.paidAt} IS NOT NULL)
         AND (${t.status} NOT IN ('shipped','delivered') OR ${t.shippedAt} IS NOT NULL)
@@ -585,6 +618,12 @@ export const orderItems = pgTable(
     requestedUnitPriceCents: integer("requested_unit_price_cents").notNull().default(0),
     /** What staff finally quoted. */
     unitPriceCents: integer("unit_price_cents").notNull(),
+    /**
+     * Not on the shelf when ordered: no stock is held or sold for this line,
+     * and the inventory ledger skips it. A cart line for more than the shelf
+     * holds becomes two lines, one of each kind.
+     */
+    backorder: boolean("backorder").notNull().default(false),
   },
   (t) => [
     index("order_items_order_idx").on(t.orderId),
@@ -714,7 +753,7 @@ export const users = pgTable(
     customerCode: text("customer_code").notNull(),
     repId: uuid("rep_id").references((): AnyPgColumn => salesReps.id, { onDelete: "restrict" }),
     repEarnsCommission: boolean("rep_earns_commission").notNull().default(false),
-    /** How the account began: 'self', 'rep' (created by one) or 'referral'. */
+    /** How the account began: 'self', 'rep' (created by one), 'referral', or 'checkout' (made from a guest order). */
     origin: text("origin").notNull().default("self"),
     originRepId: uuid("origin_rep_id").references((): AnyPgColumn => salesReps.id, {
       onDelete: "restrict",
@@ -732,6 +771,14 @@ export const users = pgTable(
     address: text("address").notNull().default(""),
     city: text("city").notNull().default(""),
     nextFollowUpOn: date("next_follow_up_on", { mode: "string" }),
+    /**
+     * When the owner proved the address by entering an emailed code. Null
+     * means sign-in by email goes through a code and a fresh password, never
+     * the stored one — so registering someone else's address gains nothing.
+     */
+    emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true }),
+    nationalId: text("national_id").notNull().default(""),
+    economicCode: text("economic_code").notNull().default(""),
   },
   (t) => [
     index("users_created_idx").on(t.createdAt),
@@ -743,8 +790,86 @@ export const users = pgTable(
     check("users_customer_code_check", sql`${t.customerCode} ~ '^[0-9]{7}$'`),
     check(
       "users_origin_check",
-      sql`${t.origin} IN ('self','rep','referral') AND (${t.origin} = 'self' OR ${t.originRepId} IS NOT NULL)`,
+      sql`${t.origin} IN ('self','rep','referral','checkout')
+        AND (${t.origin} IN ('self','checkout') OR ${t.originRepId} IS NOT NULL)`,
     ),
+  ],
+);
+
+/**
+ * Saved delivery addresses. An order copies the one it used, so editing or
+ * deleting a row here never changes an order or its invoice.
+ */
+export const userAddresses = pgTable(
+  "user_addresses",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** The customer's own name for it: "Karaj warehouse". */
+    label: text("label").notNull().default(""),
+    recipient: text("recipient").notNull().default(""),
+    phone: text("phone").notNull().default(""),
+    address: text("address").notNull(),
+    city: text("city").notNull(),
+    postalCode: text("postal_code").notNull().default(""),
+    isDefault: boolean("is_default").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("user_addresses_user_idx").on(t.userId, t.createdAt),
+    // One default per account, enforced here rather than by the code that sets it.
+    uniqueIndex("user_addresses_default_key").on(t.userId).where(sql`${t.isDefault}`),
+    check("user_addresses_filled_check", sql`btrim(${t.address}) <> '' AND btrim(${t.city}) <> ''`),
+  ],
+);
+
+/**
+ * One-time sign-in codes. Only an HMAC of the code is stored; a row is spent
+ * by `consumed_at` or by running out of attempts (lib/loginCode.ts).
+ */
+export const loginCodes = pgTable(
+  "login_codes",
+  {
+    id: serial("id").primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    codeHash: text("code_hash").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    attempts: integer("attempts").notNull().default(0),
+    consumedAt: timestamp("consumed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("login_codes_user_idx").on(t.userId, t.createdAt),
+    check("login_codes_attempts_check", sql`${t.attempts} >= 0`),
+  ],
+);
+
+/**
+ * Every email the site tried to send. `logged` means no provider key was
+ * configured (local development), and the body is kept so the message can be
+ * read at /admin/emails; with a provider, sign-in codes are stored redacted.
+ */
+export const emailLog = pgTable(
+  "email_log",
+  {
+    id: serial("id").primaryKey(),
+    kind: text("kind").notNull(),
+    toEmail: text("to_email").notNull(),
+    subject: text("subject").notNull(),
+    bodyText: text("body_text").notNull().default(""),
+    orderId: integer("order_id").references(() => orders.id, { onDelete: "set null" }),
+    status: text("status").notNull(),
+    providerId: text("provider_id").notNull().default(""),
+    error: text("error").notNull().default(""),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("email_log_created_idx").on(t.createdAt),
+    check("email_log_status_check", sql`${t.status} IN ('sent','logged','failed')`),
   ],
 );
 

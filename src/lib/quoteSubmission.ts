@@ -14,6 +14,9 @@ type FingerprintLine = {
   productId: number;
   qty: number;
   unitPriceCents: number;
+  /** Units payable now and units held for a quote (lib/checkoutSplit.ts). */
+  payNow?: number;
+  heldForQuote?: number;
 };
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -25,12 +28,21 @@ const MAX_TOKEN_LENGTH = 1024;
  *
  * Price is included as well as product and quantity: silently accepting a
  * catalog-price change between render and submit would create an order whose
- * requested total differs from the total beside the submit button.
+ * requested total differs from the total beside the submit button. The shelf
+ * split is included for the same reason: the page promised "3 now, 47 on back
+ * order", and stock taken since must send the buyer back to an honest page
+ * rather than issue a pish-factor for goods that are gone.
  */
 export function quoteCartFingerprint(lines: readonly FingerprintLine[]): string {
   const canonical = [...lines]
     .sort((a, b) => a.productId - b.productId)
-    .map(({ productId, qty, unitPriceCents }) => [productId, qty, unitPriceCents]);
+    .map(({ productId, qty, unitPriceCents, payNow, heldForQuote }) => [
+      productId,
+      qty,
+      unitPriceCents,
+      payNow ?? 0,
+      heldForQuote ?? 0,
+    ]);
   return createHash("sha256").update(JSON.stringify(canonical)).digest("hex");
 }
 

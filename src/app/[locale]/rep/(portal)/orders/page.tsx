@@ -11,6 +11,7 @@ import { OrderStatusPill, STATUS_LABEL_KEY } from "@/components/OrderStatusPill"
 import { ShareButton } from "@/components/ShareButton";
 import { isLocale, getDict, type Locale } from "@/lib/i18n";
 import { fillMessage } from "@/lib/fillMessage";
+import { formatDeadline, runExpirySweep } from "@/lib/orderFlow";
 import { formatInt } from "@/lib/money";
 
 /**
@@ -31,6 +32,7 @@ export default async function RepOrdersPage({
   const { status: raw } = await searchParams;
   const status = typeof raw === "string" && isOrderStatus(raw) ? raw : null;
   const rep = await requireRep(l);
+  await runExpirySweep();
   const [orders, liveRate, origin] = await Promise.all([
     listOrdersForRep(rep.id, status),
     getFxRate(),
@@ -95,6 +97,16 @@ export default async function RepOrdersPage({
                   )}
                 </span>
                 <OrderStatusPill locale={l} status={order.status} />
+                {order.status === "cancelled" && order.expiredAt ? (
+                  <span className="text-[var(--color-ink-muted)]">{t.statusExpired}</span>
+                ) : (
+                  order.expiresAt &&
+                  (order.status === "received" || order.status === "quoted" || order.status === "invoiced") && (
+                    <span className="text-[var(--color-ink-muted)]">
+                      {t.orderDeadline}: {formatDeadline(order.expiresAt, l)}
+                    </span>
+                  )
+                )}
                 <span className="text-[var(--color-ink-muted)]">
                   {formatPersianDate(order.createdAt, l)}
                 </span>

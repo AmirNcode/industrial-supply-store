@@ -11,7 +11,11 @@ import { customerCurrencyFor } from "@/lib/money";
 import { acceptsPaymentProof } from "@/lib/orders";
 import { listPaymentProofs } from "@/db/paymentProofQueries";
 import { PaymentProofSection } from "@/components/PaymentProofSection";
-import { uploadPaymentProofAction } from "../../actions";
+import { Deadline, deadlineNow } from "@/components/Deadline";
+import { ErrorBanner, SuccessBanner } from "@/components/Banners";
+import { runExpirySweep } from "@/lib/orderFlow";
+import { fillMessage } from "@/lib/fillMessage";
+import { acceptQuoteAction, reorderAction, uploadPaymentProofAction } from "../../actions";
 
 /**
  * One order, as its customer sees it.
@@ -24,18 +28,25 @@ import { uploadPaymentProofAction } from "../../actions";
  */
 export default async function AccountOrderPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ locale: string; ref: string }>;
+  searchParams: Promise<{ ok?: string; error?: string }>;
 }) {
   const { locale, ref } = await params;
+  const { ok, error } = await searchParams;
   if (!isLocale(locale)) notFound();
   const l = locale as Locale;
   const t = getDict(l);
 
   const user = await currentUser();
   if (!user) redirect(`/${l}/account/signin`);
+  // Before anything else: an account made at checkout has no password yet.
+  if (user.needsPassword) redirect(`/${l}/account/password/new`);
   if (user.mustChangePassword) redirect(`/${l}/account/password`);
 
+  // Before the order read, so a lapsed order shows as expired now.
+  await runExpirySweep();
   const found = await getOrderForUser(user.id, ref);
   // 404 rather than 403: a 403 would confirm the reference exists.
   if (!found) notFound();
@@ -52,7 +63,9 @@ export default async function AccountOrderPage({
   ]);
   const rate = order.fxRateToRial ?? liveRate;
   const currency = customerCurrencyFor(priceDisplayMode, l);
-  const invoiced = order.invoiceNumber !== null;
+  // A pro forma invoice has no number, so the number cannot say a document exists.
+  const invoiced = order.invoicedAt !== null;
+  const now = deadlineNow();
 
   return (
     <main className="mx-auto max-w-[820px] px-3 pt-3">
@@ -70,6 +83,32 @@ export default async function AccountOrderPage({
         )}
       </div>
 
+      {ok === "accepted" && <SuccessBanner>{t.quoteAccepted}</SuccessBanner>}
+      {error === "accept" && <ErrorBanner>{t.acceptFailed}</ErrorBanner>}
+      {error === "cart-full" && <ErrorBanner>{t.reorderCartFull}</ErrorBanner>}
+      {error === "rate-limit" && <ErrorBanner>{t.rateLimited}</ErrorBanner>}
+      {order.status === "cancelled" && order.expiredAt !== null && (
+        <p className="mb-3 text-[13px]">{t.payExpired}</p>
+      )}
+      <Deadline locale={l} status={order.status} expiresAt={order.expiresAt} now={now} />
+      {order.status === "quoted" && (
+        <form action={acceptQuoteAction} className="mb-4 grid gap-2">
+          <input type="hidden" name="locale" value={l} />
+          <input type="hidden" name="ref" value={order.ref} />
+          <p className="text-[12px] text-[var(--color-ink-muted)]">{t.acceptQuoteNote}</p>
+          <button type="submit" className="btn-primary w-fit">
+            {t.acceptQuote}
+          </button>
+        </form>
+      )}
+      {order.siblingRef && (
+        <p className="mb-3 text-[12px]">
+          <Link href={`/${l}/account/orders/${order.siblingRef}`}>
+            {fillMessage(t.siblingOrder, { ref: order.siblingRef })}
+          </Link>
+        </p>
+      )}
+
       <OrderView
         locale={l}
         order={order}
@@ -84,13 +123,22 @@ export default async function AccountOrderPage({
             upload={takesProof ? uploadPaymentProofAction.bind(null, order.ref) : undefined}
           />
         }
-        estimate={!invoiced}
+        estimate={order.status === "received"}
         actions={
-          invoiced && order.status !== "cancelled" ? (
-            <Link href={`/${l}/invoice/${order.ref}`} className="btn-small" prefetch={false}>
-              {t.viewInvoice}
-            </Link>
-          ) : null
+          <>
+            {invoiced && order.status !== "cancelled" && (
+              <Link href={`/${l}/invoice/${order.ref}`} className="btn-small" prefetch={false}>
+                {order.invoiceNumber === null ? t.viewPishFactor : t.viewInvoice}
+              </Link>
+            )}
+            <form action={reorderAction}>
+              <input type="hidden" name="locale" value={l} />
+              <input type="hidden" name="ref" value={order.ref} />
+              <button type="submit" className="btn-small">
+                {t.reorder}
+              </button>
+            </form>
+          </>
         }
       />
     </main>

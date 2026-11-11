@@ -2,15 +2,11 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { signUpAction } from "../actions";
 import { currentUser } from "@/lib/session";
-import { MIN_PASSWORD_LENGTH } from "@/lib/password";
 import { isLocale, getDict, type Locale } from "@/lib/i18n";
 import { REQUEST_LIMITS } from "@/lib/requestLimits";
 
 const MESSAGE = {
   incomplete: "signUpIncomplete",
-  short: "passwordTooShort",
-  mismatch: "passwordMismatch",
-  taken: "emailTaken",
   invalid: "invalidInput",
   "rate-limit": "rateLimited",
 } as const;
@@ -67,39 +63,6 @@ export default async function SignUpPage({
           />
         </label>
 
-        <div className="grid gap-3 sm:grid-cols-2">
-          <label className="block text-[12px]">
-            <span className="mb-0.5 block font-bold">
-              {t.password}
-              <span className="text-[var(--color-danger)]"> *</span>
-            </span>
-            <input
-              type="password"
-              name="password"
-              dir="ltr"
-              minLength={MIN_PASSWORD_LENGTH}
-              maxLength={REQUEST_LIMITS.passwordChars}
-              required
-              className="w-full"
-            />
-          </label>
-          <label className="block text-[12px]">
-            <span className="mb-0.5 block font-bold">
-              {t.passwordAgain}
-              <span className="text-[var(--color-danger)]"> *</span>
-            </span>
-            <input
-              type="password"
-              name="passwordConfirm"
-              dir="ltr"
-              minLength={MIN_PASSWORD_LENGTH}
-              maxLength={REQUEST_LIMITS.passwordChars}
-              required
-              className="w-full"
-            />
-          </label>
-        </div>
-
         <label className="block text-[12px]">
           <span className="mb-0.5 block font-bold">
             {t.company}
@@ -144,13 +107,31 @@ export default async function SignUpPage({
           </label>
         </div>
 
+        <fieldset className="grid gap-1 text-[12px]">
+          <legend className="mb-0.5 font-bold">{t.accountNumberChoice}</legend>
+          <label className="flex items-baseline gap-2">
+            <input type="radio" name="accountNumber" value="phone" defaultChecked />
+            <span>{t.accountNumberPhone}</span>
+          </label>
+          <label className="flex items-baseline gap-2">
+            <input type="radio" name="accountNumber" value="assigned" />
+            <span>{t.accountNumberAssigned}</span>
+          </label>
+        </fieldset>
+
+        <p className="text-[11px] text-[var(--color-ink-muted)]">{t.signUpNoPasswordNote}</p>
+
         <button type="submit" className="btn-primary mt-1 w-full">
           {t.signUp}
         </button>
       </form>
 
       <p className="mt-4 text-[12px] text-[var(--color-ink-muted)]">
-        {t.haveAccount} <Link href={`/${l}/account/signin`}>{t.signInTitle}</Link>
+        {t.haveAccount}{" "}
+        {/* Underlined: inside a sentence, colour alone does not mark a link
+            (WCAG 1.4.1). Forced with `!`: the base `a` rule in globals.css is
+            unlayered and beats a plain utility. */}
+        <Link href={`/${l}/account/signin`} className="!underline">{t.signInTitle}</Link>
       </p>
     </main>
   );

@@ -15,10 +15,10 @@ async function adminSignIn(page: Page, locale: Locale): Promise<void> {
 }
 
 for (const locale of locales) {
-  test(`${locale}: a rep creates a customer, orders for them and shares a working pay link`, async (
-    { browser, isMobile },
-    testInfo,
-  ) => {
+  test(`${locale}: a rep creates a customer, orders for them and shares a working pay link`, async ({
+    browser,
+    isMobile,
+  }, testInfo) => {
     test.skip(isMobile, "The desktop project covers the rep flow.");
     const t = getDict(locale);
     const stamp = `${locale}${testInfo.workerIndex}${Date.now()}`;
@@ -35,10 +35,14 @@ for (const locale of locales) {
     await admin.locator('input[name="username"]').fill(username);
     await admin.locator('input[name="commission"]').fill("2.5");
     await admin.getByRole("button", { name: t.createRep }).click();
-    const tempPassword = (await admin.getByTestId("shown-once-password").innerText()).trim();
+    const tempPassword = (
+      await admin.getByTestId("shown-once-password").innerText()
+    ).trim();
     // Once on screen, the plaintext leaves the browser's cookies (L-24).
     const holdsCredential = async (context: typeof adminContext) =>
-      (await context.cookies()).some((cookie) => cookie.name === "isupply_shown_once");
+      (await context.cookies()).some(
+        (cookie) => cookie.name === "isupply_shown_once",
+      );
     await expect.poll(() => holdsCredential(adminContext)).toBe(false);
 
     // The rep must replace it, and a weak password is refused.
@@ -49,11 +53,15 @@ for (const locale of locales) {
     await rep.locator('input[name="password"]').fill(tempPassword);
     await rep.getByRole("button", { name: t.signInTitle }).click();
     await expect(rep).toHaveURL(new RegExp(`/${locale}/rep/password`));
-    for (const [value, next] of [["password1", "policy"], ["Str0ng!Pass", "home"]] as const) {
+    for (const [value, next] of [
+      ["password1", "policy"],
+      ["Str0ng!Pass", "home"],
+    ] as const) {
       await rep.locator('input[name="newPassword"]').fill(value);
       await rep.locator('input[name="passwordAgain"]').fill(value);
       await rep.getByRole("button", { name: t.savePassword }).click();
-      if (next === "policy") await expect(rep.getByText(t.repPasswordPolicy)).toBeVisible();
+      if (next === "policy")
+        await expect(rep.getByText(t.repPasswordPolicy)).toBeVisible();
     }
     await expect(rep).toHaveURL(new RegExp(`/${locale}/rep(\\?|$)`));
 
@@ -64,7 +72,9 @@ for (const locale of locales) {
     await rep.locator('input[name="contactName"]').fill("E2E Buyer");
     await rep.locator('input[name="phone"]').fill(phone);
     await rep.getByRole("button", { name: t.createCustomer }).click();
-    await expect(rep.getByTestId("shown-once-login")).toHaveText(phone.slice(-7));
+    await expect(rep.getByTestId("shown-once-login")).toHaveText(
+      phone.slice(-7),
+    );
     await expect.poll(() => holdsCredential(repContext)).toBe(false);
 
     // New order → one catalog line → checkout already filled in for them.
@@ -74,12 +84,18 @@ for (const locale of locales) {
     await expect(rep).toHaveURL(new RegExp(`/${locale}/quick-order$`));
     await rep.goto(`/${locale}/f/${familySlug}`);
     await rep.locator("label.row-expand").first().click();
-    await rep.getByRole("spinbutton", { name: new RegExp(t.qty) }).first().fill("1");
+    await rep
+      .getByRole("spinbutton", { name: new RegExp(t.qty) })
+      .first()
+      .fill("1");
     const add = rep.getByRole("button", { name: t.addToOrder }).first();
     await add.click();
     await expect(add).toHaveText("✓");
     await rep.goto(`/${locale}/quote`);
     await expect(rep.locator('input[name="company"]')).toHaveValue(company);
+    // Delivery address and city are required for every order, a rep's too.
+    await rep.locator('input[name="address"]').fill("2 Rep Street");
+    await rep.locator('input[name="city"]').fill("Karaj");
     await rep.getByRole("button", { name: t.repPlaceOrder }).click();
     await expect(rep).toHaveURL(new RegExp(`/${locale}/rep/orders/ORD-`));
     const payLink = (await rep.getByTestId("pay-link").innerText()).trim();
@@ -88,7 +104,13 @@ for (const locale of locales) {
     const visitorContext = await browser.newContext();
     const visitor = await visitorContext.newPage();
     await visitor.goto(payLink);
-    await expect(visitor.getByText(t.payBeingPriced)).toBeVisible();
+    // Which path the order took depends on the shelf: a seeded catalog has no
+    // stock, so it waits for a quote; a database someone has stocked issues
+    // the pro forma at checkout. Both are right, and the walk covers either.
+    await expect(
+      visitor.getByText(t.payBeingPriced).or(visitor.getByText(t.payAmountDue)),
+    ).toBeVisible();
+    const instant = await visitor.getByText(t.payAmountDue).isVisible();
 
     await admin.goto(`/${locale}/admin/orders`);
     const order = admin.locator("details").filter({ hasText: company }).first();
@@ -100,27 +122,43 @@ for (const locale of locales) {
     await order.getByRole("button", { name: t.showPayLink }).click();
     await expect(order.getByTestId("admin-pay-link")).toHaveText(payLink);
 
-    // The rep invoices at the order's prices: a draft first, then finalize.
-    await rep.getByRole("link", { name: t.createInvoice }).click();
-    await expect(rep).toHaveURL(new RegExp(`/${locale}/rep/orders/ORD-[^/]+/invoice$`));
-    await expect(rep.getByText(t.invoiceDraftNotice)).toBeVisible();
-    await rep.getByRole("button", { name: t.finalizeInvoice }).click();
-    await rep
-      .getByRole("dialog", { name: t.confirmFinalizeInvoice })
-      .getByRole("button", { name: t.confirmContinue })
-      .click();
-    await expect(rep).toHaveURL(/ok=invoiced/);
-    await expect(rep.getByRole("link", { name: t.createInvoice })).toHaveCount(0);
+    if (!instant) {
+      // The rep quotes at the order's prices: a draft first, then send it.
+      await rep.getByRole("link", { name: t.sendQuote }).click();
+      await expect(rep).toHaveURL(
+        new RegExp(`/${locale}/rep/orders/ORD-[^/]+/invoice$`),
+      );
+      await expect(rep.getByText(t.quoteDraftNotice)).toBeVisible();
+      await rep.getByRole("button", { name: t.sendQuote }).click();
+      await rep
+        .getByRole("dialog", { name: t.confirmSendQuote })
+        .getByRole("button", { name: t.confirmContinue })
+        .click();
+      await expect(rep).toHaveURL(/ok=quoted/);
+      await expect(rep.getByRole("link", { name: t.sendQuote })).toHaveCount(0);
+
+      // The customer says yes: the pro forma is issued, and only now payable.
+      await visitor.reload();
+      await expect(
+        visitor.getByRole("button", { name: t.acceptQuote }),
+      ).toBeVisible();
+      await rep.getByRole("button", { name: t.acceptForCustomer }).click();
+      await expect(rep).toHaveURL(/ok=invoiced/);
+    }
 
     // Payable now — by bank transfer, so the page offers the invoice, no Pay button.
     await visitor.reload();
     await expect(visitor.getByText(t.payAmountDue)).toBeVisible();
-    await expect(visitor.getByRole("link", { name: t.viewInvoice })).toBeVisible();
+    await expect(
+      visitor.getByRole("link", { name: t.viewPishFactor }),
+    ).toBeVisible();
     // The receipt upload is the next step, and says so. (Uploading itself needs
     // Storage, which the CI database service does not have.)
-    await expect(visitor.getByRole("button", { name: t.proofUpload })).toBeVisible();
-    await visitor.getByRole("link", { name: t.viewInvoice }).click();
-    await expect(visitor.getByText(t.invoiceProofTitle)).toBeVisible();
+    await expect(
+      visitor.getByRole("button", { name: t.proofUpload }),
+    ).toBeVisible();
+    await visitor.getByRole("link", { name: t.viewPishFactor }).click();
+    await expect(visitor.getByText(t.pishFactorTitle).first()).toBeVisible();
     await admin.goto(`/${locale}/admin/orders`);
 
     // Paid, shipped, delivered — then the sale and its commission reach the rep.
@@ -135,7 +173,8 @@ for (const locale of locales) {
       done: () => Promise<void>,
       fill?: () => Promise<void>,
     ) => {
-      if ((await row().first().getAttribute("open")) === null) await row().first().locator("summary").click();
+      if ((await row().first().getAttribute("open")) === null)
+        await row().first().locator("summary").click();
       if (fill) await fill();
       await row().first().getByRole("button", { name: button }).click();
       await admin
@@ -147,18 +186,36 @@ for (const locale of locales) {
     const statusIs = (label: string) => () =>
       expect(row().first().locator("summary")).toContainText(label);
     await advance(t.markPaid, t.confirmMarkPaid, statusIs(t.statusPreparing));
-    await advance(t.markShipped, t.confirmMarkShipped, statusIs(t.statusShipped), async () => {
-      await row().first().locator('input[name="courier"]').fill("E2E Post");
-      await row().first().locator('input[name="trackingNumber"]').fill("TRK-E2E-1");
-    });
+    await advance(
+      t.markShipped,
+      t.confirmMarkShipped,
+      statusIs(t.statusShipped),
+      async () => {
+        await row().first().locator('input[name="courier"]').fill("E2E Post");
+        await row()
+          .first()
+          .locator('input[name="trackingNumber"]')
+          .fill("TRK-E2E-1");
+      },
+    );
     // A delivered order leaves the default queue.
-    await advance(t.markDelivered, t.confirmMarkDelivered, () => expect(row()).toHaveCount(0));
+    await advance(t.markDelivered, t.confirmMarkDelivered, () =>
+      expect(row()).toHaveCount(0),
+    );
 
     await rep.goto(`/${locale}/rep`);
     // Whole-text comparisons: "84,350 IRR" contains the substring "0 IRR".
-    await expect(rep.getByTestId("tile-sales-to-date")).not.toHaveText(formatRial(0, locale));
-    await expect(rep.getByTestId("tile-commission-owed")).not.toHaveText(formatRial(0, locale));
+    await expect(rep.getByTestId("tile-sales-to-date")).not.toHaveText(
+      formatRial(0, locale),
+    );
+    await expect(rep.getByTestId("tile-commission-owed")).not.toHaveText(
+      formatRial(0, locale),
+    );
 
-    await Promise.all([adminContext.close(), repContext.close(), visitorContext.close()]);
+    await Promise.all([
+      adminContext.close(),
+      repContext.close(),
+      visitorContext.close(),
+    ]);
   });
 }

@@ -1632,7 +1632,9 @@ html[lang="fa"] .pill {
 }
 .pill-warn {
   background: var(--color-warn-soft);
-  color: var(--color-warn);
+  /* Darker than --color-warn: at the pill's 10.5px that amber is 3.7:1 on its
+     own tint, under the 4.5:1 small text needs. This is 5.6:1. */
+  color: #8a4f08;
 }
 .pill-muted {
   background: var(--color-panel);

@@ -2,6 +2,7 @@ import type { InvoiceItem, InvoiceParty } from "@/db/invoiceQueries";
 import type { Seller } from "@/lib/seller";
 import { groupInFours, type BankDetails } from "@/lib/bankDetails";
 import { invoiceAmounts, lineTotalCents, subtotalCents } from "@/lib/invoice";
+import { formatDeadline } from "@/lib/orderFlow";
 import { formatInvoiceDate } from "@/lib/persianCalendar";
 import { formatVatPercent } from "@/lib/vat";
 import { getDict, type Locale } from "@/lib/i18n";
@@ -28,6 +29,8 @@ export function InvoiceDocument({
   rate,
   vatRateBp,
   invoiceNumber,
+  pishFactor = false,
+  expiresAt = null,
   date,
   cancelled = false,
   bank = null,
@@ -44,6 +47,14 @@ export function InvoiceDocument({
   vatRateBp: number | null;
   /** Null on a draft, which has no number until it is finalized. */
   invoiceNumber: string | null;
+  /**
+   * An issued document with no number yet: the pro forma invoice. Separate
+   * from `invoiceNumber === null` because a draft has no number either, and
+   * the draft screens must keep reading "Draft".
+   */
+  pishFactor?: boolean;
+  /** Until when a pro forma invoice is payable; printed under it when set. */
+  expiresAt?: string | null;
   date: Date | string;
   cancelled?: boolean;
   /** The account from Admin → Settings; null when none is saved. */
@@ -68,13 +79,31 @@ export function InvoiceDocument({
     <>
       <header className="mb-8 flex items-start justify-between gap-6 border-b-2 border-[var(--color-ink)] pb-4">
         <div>
-          <h1 className="text-[26px] font-bold text-[var(--color-navy)]">{t.invoice}</h1>
+          <h1 className="text-[26px] font-bold text-[var(--color-navy)]">
+            {pishFactor && !invoiceNumber ? t.pishFactorTitle : t.invoice}
+          </h1>
           {invoiceNumber ? (
             <p className="tech mt-1 text-[15px] font-bold">{invoiceNumber}</p>
+          ) : pishFactor ? (
+            // The order reference stands where the number will go, so the
+            // customer has one thing to quote until payment is confirmed.
+            <p className="tech mt-1 text-[15px] font-bold">{order.ref}</p>
           ) : (
             <p className="mt-1 text-[15px] font-bold uppercase tracking-[0.08em] text-[var(--color-danger)]">
               {t.invoiceDraft}
             </p>
+          )}
+          {pishFactor && !invoiceNumber && (
+            <>
+              <p className="mt-1 max-w-[340px] text-[11px] text-[var(--color-ink-muted)]">
+                {t.pishFactorNote}
+              </p>
+              {expiresAt && !cancelled && (
+                <p className="mt-0.5 text-[11px] font-bold">
+                  {t.pishFactorValidUntil}: {formatDeadline(expiresAt, locale)}
+                </p>
+              )}
+            </>
           )}
           {cancelled && (
             <p className="mt-1 text-[15px] font-bold text-[var(--color-danger)]">
@@ -121,6 +150,21 @@ export function InvoiceDocument({
           {(order.city || order.country) && (
             <p className="text-[12px]">{[order.city, order.country].filter(Boolean).join(", ")}</p>
           )}
+          {order.postalCode && (
+            <p className="text-[12px]">
+              {t.postalCode}: <span className="tech">{order.postalCode}</span>
+            </p>
+          )}
+          {order.buyerNationalId && (
+            <p className="text-[12px]">
+              {t.nationalId}: <span className="tech">{order.buyerNationalId}</span>
+            </p>
+          )}
+          {order.buyerEconomicCode && (
+            <p className="text-[12px]">
+              {t.economicCode}: <span className="tech">{order.buyerEconomicCode}</span>
+            </p>
+          )}
           <p className="tech text-[12px] text-[var(--color-ink-muted)]">{order.email}</p>
           {order.phone && (
             <p className="tech text-[12px] text-[var(--color-ink-muted)]">{order.phone}</p>
@@ -157,7 +201,14 @@ export function InvoiceDocument({
           {items.map((i) => (
             <tr key={i.id}>
               <td className="tech font-semibold">{i.partNumber}</td>
-              <td>{i.familyName}</td>
+              <td>
+                {i.familyName}
+                {i.backorder && (
+                  <span className="ms-2 text-[10px] font-bold text-[var(--color-ink-muted)]">
+                    {t.backorderTag}
+                  </span>
+                )}
+              </td>
               <td className="num tech tech-num">{formatInt(i.qty, locale)}</td>
               <td className="num tech tech-num">{formatMoneyExact(i.unitPriceCents, currency, locale, rate)}</td>
               <td className="num tech tech-num">

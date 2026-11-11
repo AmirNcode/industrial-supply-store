@@ -3,10 +3,13 @@ import { STATUS_LABEL_KEY } from "./OrderStatusPill";
 import type { OrderStatus } from "@/lib/orders";
 
 /** The happy path, in order. `cancelled` is not a step — it ends the trail. */
-const STEPS = ["received", "invoiced", "payment_review", "preparing", "shipped", "delivered"] as const;
+const STEPS = ["received", "quoted", "invoiced", "payment_review", "preparing", "shipped", "delivered"] as const;
+type Step = (typeof STEPS)[number];
 
 export type TimelineStamps = {
   createdAt: string;
+  /** Staff sent the quote. Absent for an order that never had one. */
+  quotedAt?: string | null;
   invoicedAt: string | null;
   /** First receipt uploaded. Null when the admin confirmed payment without one. */
   paymentSubmittedAt: string | null;
@@ -30,8 +33,9 @@ export function OrderTimeline({
   stamps: TimelineStamps;
 }) {
   const t = getDict(locale);
-  const at: Record<(typeof STEPS)[number], string | null> = {
+  const at: Record<Step, string | null> = {
     received: day(stamps.createdAt),
+    quoted: day(stamps.quotedAt ?? null),
     invoiced: day(stamps.invoicedAt),
     payment_review: day(stamps.paymentSubmittedAt),
     preparing: day(stamps.paidAt),
@@ -40,14 +44,18 @@ export function OrderTimeline({
   };
 
   const cancelled = status === "cancelled";
+  // A checkout that issued its pro forma at once never had a quote, so the
+  // step appears only for an order that is, or was, at the quoted stage —
+  // otherwise it would sit lit-up and undated in front of every instant order.
+  const steps = STEPS.filter((s) => s !== "quoted" || status === "quoted" || at.quoted !== null);
   // A cancelled order shows how far it actually got and then stops. Rendering
   // the remaining steps greyed out would suggest they are still coming. The
   // furthest dated step, not a count of dates: a payment confirmed without a
   // receipt leaves the review step undated but passed.
   const reachedCount = cancelled
-    ? Math.max(...STEPS.map((s, i) => (at[s] !== null ? i + 1 : 0)))
-    : STEPS.indexOf(status as (typeof STEPS)[number]) + 1;
-  const visible = cancelled ? STEPS.slice(0, Math.max(reachedCount, 1)) : STEPS;
+    ? Math.max(...steps.map((s, i) => (at[s] !== null ? i + 1 : 0)))
+    : steps.indexOf(status as Step) + 1;
+  const visible = cancelled ? steps.slice(0, Math.max(reachedCount, 1)) : steps;
 
   return (
     <ol className="mb-4 grid gap-2">

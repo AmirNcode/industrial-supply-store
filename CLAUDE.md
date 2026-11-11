@@ -108,6 +108,12 @@ nothing important; padding it hides the times there is.
 - **Every family-page request is a database read** (the route reads `searchParams`, so nothing is cached) — the main Supabase-egress lever. Anything that makes it crawlable per URL (new query params, unfollowed links) needs a robots.txt line.
 - **Plain `curl` to the live site gets `429 x-vercel-mitigated: challenge`** (Bot Protection is on Challenge); look at live pages in the built-in browser.
 - **Vercel Hobby firewall:** 3 custom rules (2 used), 10 IP blocks (full), traffic data only for the last 24h (`npx vercel@latest firewall traffic list|inspect`; global `vercel` is too old); rule edits are staged until `vercel firewall publish`.
+- **Stock is enforced at checkout** (`lib/checkoutSplit.ts`): payable-now = `in_stock` and within `inventory_available`; everything else is a back-order line that holds nothing. A product with no count entered is a quote, not a sale.
+- **A pish-factor is `invoiced` with `invoice_number` NULL**; the number is issued only in `confirmPayment`. "Has a document" is `invoiced_at`, never `invoice_number`.
+- **Deadlines are swept, not timed** (`runExpirySweep`, `orders.expires_at`): any new page showing stock or an open order calls it first.
+- **Email only through `lib/email.ts`** (Resend by `fetch`, from `mail.temexpro.com` only); without `RESEND_API_KEY` nothing is sent and `/admin/emails` is the inbox. Send after the transaction commits.
+- **New checkout/account wording goes in `src/lib/i18nCheckout.ts`**, both objects.
+- `npm run db:seed:checkout` (local only) sets seller contact, a fake bank account, VAT and stock on four families so every checkout path can be walked.
 - **Keep this file current.** When you discover a non-obvious convention,
   gotcha, or command, propose a CLAUDE.md update at task end. Keep entries one
   line. Don't add what's obvious from code.

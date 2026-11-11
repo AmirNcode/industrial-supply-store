@@ -28,6 +28,12 @@ export const RATE_LIMITS = {
   // owner out by failing on purpose.
   signInFailures: { limit: 10, windowSeconds: 15 * 60 },
   accountSignUp: { limit: 5, windowSeconds: 60 * 60 },
+  // Emailed sign-in codes. Sending is the scarce one: each is an email to an
+  // address the requester may not own, so it is capped per address and per
+  // account. Checking is capped per address; the per-code attempt limit
+  // (lib/loginCode.ts) is what bounds guessing against one account.
+  loginCodeSend: { limit: 5, windowSeconds: 15 * 60 },
+  loginCodeCheck: { limit: 20, windowSeconds: 15 * 60 },
   accountWrite: { limit: 30, windowSeconds: 10 * 60 },
   cartWrite: { limit: 120, windowSeconds: 60 },
   quickOrder: { limit: 12, windowSeconds: 60 },

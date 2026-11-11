@@ -11,7 +11,7 @@ import {
 } from "@/lib/cart";
 import { findByPartNumbers } from "@/db/queries";
 import { isLocale, safeLocale, type Locale } from "@/lib/i18n";
-import { currentUserId } from "@/lib/session";
+import { currentUser } from "@/lib/session";
 import { AUTH_SECRET } from "@/lib/authSecret";
 import { verifyQuoteSubmissionToken } from "@/lib/quoteSubmission";
 import { submitOrderFromCart } from "@/db/orderSubmissionQueries";
@@ -25,6 +25,13 @@ import { RATE_LIMITS, consumeRateLimit } from "@/lib/rateLimit";
 import { boundedString, parseQuickOrder } from "@/lib/requestLimits";
 import { getPriceDisplayMode } from "@/lib/fx";
 import { customerCurrencyFor } from "@/lib/money";
+import { parseCheckoutMode } from "@/lib/checkoutSplit";
+import { notifyOrdersPlaced, pishFactorTerms, runExpirySweep } from "@/lib/orderFlow";
+import { addAddress, getAddress } from "@/db/addressQueries";
+import { createUser, findUserIdByEmail } from "@/db/userQueries";
+import { unusablePasswordHash } from "@/lib/password";
+import { readReferralCode } from "@/lib/referral";
+import { getActiveRepByReferralCode } from "@/db/repQueries";
 
 /**
  * Revalidation is scoped to the cart page only.
@@ -129,15 +136,21 @@ export async function quickOrderAction(
   return { added, notFound };
 }
 
+/**
+ * Checkout. A cart that is all priced and on the shelf becomes an order with
+ * its pish-factor issued in the same transaction; anything else becomes a
+ * request staff answer, or one of each (lib/checkoutSplit.ts decides, the
+ * order transaction re-decides under row locks).
+ */
 export async function submitQuoteAction(formData: FormData) {
   const locale = safeLocale(formData);
   // A signed-in rep orders for a customer; that path owns its own limit,
   // customer check and landing page.
   const rep = await currentRep();
   if (rep) return submitForCustomer(rep, locale, formData);
-  const userId = await currentUserId();
+  const user = await currentUser();
   const limit = await consumeRateLimit("quote:submit", RATE_LIMITS.quoteSubmit, {
-    accountId: userId,
+    accountId: user?.id ?? null,
   });
   if (!limit.allowed) redirect(`/${locale}/quote?error=rate-limit`);
 
@@ -152,15 +165,58 @@ export async function submitQuoteAction(formData: FormData) {
     redirect(`/${locale}/quote?error=expired`);
   }
 
-  // Guest checkout stays supported, so userId is nullable. A guest's typed
-  // address is deliberately NOT matched against an existing account: without
-  // email verification that would let anyone attach a stranger's order to
-  // themselves by typing their address. The email is required only from a
-  // guest — a signed-in customer's order sits on their account.
-  const parsed = parseContact(formData, userId === null);
+  // A signed-in customer may deliver to a saved address: its fields replace
+  // whatever the address inputs held, before anything is validated. Read with
+  // the session's user id, so a posted id that is someone else's is ignored.
+  const choice = String(formData.get("addressChoice") ?? "");
+  const saved = user && isUuid(choice) ? await getAddress(user.id, choice) : null;
+  if (saved) {
+    formData.set("address", saved.address);
+    formData.set("city", saved.city);
+    formData.set("postalCode", saved.postalCode);
+  }
+
+  // The email is required only from a guest: it is where the pish-factor goes
+  // and what their account is made from. A signed-in customer's is on file.
+  const parsed = parseContact(formData, user === null);
   if ("error" in parsed) redirect(`/${locale}/quote?error=${parsed.error}`);
   const contact = parsed.contact;
+  if (user && contact.email === "") contact.email = user.email ?? "";
 
+  // A guest's order goes on an account: the one their email already has, or
+  // a new one made from what they just typed. Attaching to an existing
+  // account by typed email used to be refused, because nothing proved the
+  // typist owned the address. It is safe now for a different reason: the
+  // order's pish-factor is emailed only to that address, this browser is not
+  // signed in to anything, and the account itself opens only by a code sent
+  // to the same inbox. Whoever typed it learns nothing about the account.
+  let userId = user?.id ?? null;
+  let createdAccount = false;
+  if (userId === null) {
+    userId = await findUserIdByEmail(contact.email);
+    if (userId === null) {
+      const referralCode = await readReferralCode();
+      const referrer = referralCode ? await getActiveRepByReferralCode(referralCode) : null;
+      const created = await createUser({
+        email: contact.email,
+        passwordHash: await unusablePasswordHash(),
+        company: contact.company,
+        contactName: contact.contactName,
+        phone: contact.phone,
+        locale,
+        origin: referrer ? "referral" : "checkout",
+        repId: referrer?.id ?? null,
+        accountNumber: "assigned",
+      });
+      // Lost a race with the same address: the other request made it.
+      userId = created === "email-taken" ? await findUserIdByEmail(contact.email) : created.id;
+      createdAccount = created !== "email-taken";
+    }
+  }
+
+  // Deadlines first, so the shelf this order reads has had every lapsed
+  // pish-factor's stock put back.
+  await runExpirySweep({ force: true });
   const currency = customerCurrencyFor(await getPriceDisplayMode(), locale);
   const result = await submitOrderFromCart({
     cartId,
@@ -171,6 +227,8 @@ export async function submitQuoteAction(formData: FormData) {
     userId,
     placedByRepId: null,
     contact,
+    mode: parseCheckoutMode(formData.get("mode")),
+    pishFactor: await pishFactorTerms(),
   });
 
   if (result.kind === "cart-changed") {
@@ -185,8 +243,24 @@ export async function submitQuoteAction(formData: FormData) {
   if (result.kind === "too-large") redirect(`/${locale}/quote?error=too-large`);
 
   // The order, item snapshots, stock hold and cart clear have all committed at
-  // this point. A replay returns the same reference through the same redirect.
-  redirect(`/${locale}/quote/submitted?ref=${result.ref}`);
+  // this point. A replay returns the same order through the same redirect —
+  // and sends nothing twice.
+  if (result.kind === "created") {
+    // The address a new account, or a signed-in customer who asked, keeps.
+    const keep = createdAccount || (user !== null && !saved && formData.get("saveAddress") === "on");
+    if (userId && keep) {
+      await addAddress(userId, {
+        label: "",
+        recipient: contact.contactName,
+        phone: contact.phone,
+        address: contact.address,
+        city: contact.city,
+        postalCode: contact.postalCode,
+      });
+    }
+    await notifyOrdersPlaced(result.orders);
+  }
+  redirect(`/${locale}/pay/${result.payToken}?placed=1`);
 }
 
 /**
@@ -194,6 +268,8 @@ export async function submitQuoteAction(formData: FormData) {
  * (reps legitimately place many orders), the customer re-checked against the
  * session, the order in the customer's language, and the rep landing on the
  * order with its pay link rather than on the customer's confirmation page.
+ * The same split applies: what is priced and on the shelf gets its
+ * pish-factor at once, emailed to the customer if they have an address.
  */
 async function submitForCustomer(rep: RepRow, locale: Locale, formData: FormData): Promise<void> {
   if (rep.mustChangePassword) redirect(`/${locale}/rep/password`);
@@ -216,6 +292,7 @@ async function submitForCustomer(rep: RepRow, locale: Locale, formData: FormData
   const parsed = parseContact(formData, false);
   if ("error" in parsed) redirect(`${again}&error=${parsed.error}`);
 
+  await runExpirySweep({ force: true });
   const orderLocale: Locale = isLocale(customer.locale) ? customer.locale : locale;
   const result = await submitOrderFromCart({
     cartId,
@@ -226,12 +303,15 @@ async function submitForCustomer(rep: RepRow, locale: Locale, formData: FormData
     userId: customer.id,
     placedByRepId: rep.id,
     contact: parsed.contact,
+    mode: parseCheckoutMode(formData.get("mode")),
+    pishFactor: await pishFactorTerms(),
   });
   if (result.kind === "customer-moved") redirect(`/${locale}/quote?error=customer`);
   if (result.kind === "too-large") redirect(`${again}&error=too-large`);
   if (result.kind === "cart-changed") redirect(`${again}&error=cart-changed`);
   if (result.kind === "empty-cart" || result.kind === "missing-cart") redirect(`/${locale}/cart`);
 
+  if (result.kind === "created") await notifyOrdersPlaced(result.orders);
   await clearOrderingFor();
   redirect(`/${locale}/rep/orders/${result.ref}?ok=created`);
 }

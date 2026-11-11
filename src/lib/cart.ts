@@ -22,6 +22,8 @@ export type CartLine = {
   priceTiers: PriceTier[];
   packQty: number;
   inStock: boolean;
+  /** `inventory_available`; with `inStock` it decides what is payable now (lib/checkoutSplit.ts). */
+  available: number;
   specs: SpecBag;
   familySlug: string;
   familyEn: string;
@@ -74,7 +76,7 @@ export async function getCartLines(): Promise<CartLine[]> {
     SELECT ci.product_id AS "productId", ci.qty,
            p.part_number AS "partNumber", p.price_cents AS "priceCents",
            p.price_tiers AS "priceTiers", p.pack_qty AS "packQty",
-           p.in_stock AS "inStock", p.specs,
+           p.in_stock AS "inStock", p.inventory_available AS available, p.specs,
            f.slug AS "familySlug", f.name_en AS "familyEn", f.name_fa AS "familyFa"
     FROM cart_items ci
     JOIN products p ON p.id = ci.product_id

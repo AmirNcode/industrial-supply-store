@@ -31,16 +31,16 @@ connects to either hosted Supabase project.
 | --- | --- | --- |
 | `/[locale]`, `/c/…` | public | catalog, prerendered/ISR with `revalidate 3600` |
 | `/f/…`, `/l/…`, `/search` | public | request-driven catalog results; family output is bounded by default |
-| `/[locale]/cart`, `/quote` | public | order submission |
+| `/[locale]/cart`, `/quote` | public | cart and checkout (`/quote` kept its path); a submission lands on `/pay/[token]` |
 | `/[locale]/track` | public | guest tracking: reference **plus** email |
-| `/[locale]/account/**` | customer | signed cookie session; sign-in by email or 7-digit customer ID |
+| `/[locale]/account/**` | customer | signed cookie session; two-step sign-in (email or 7-digit account number, then password or emailed code) |
 | `/[locale]/invoice/[ref]` | customer, staff, or pay-link key | language in path, currency in `?cur=`, pay-link key in `?key=` |
-| `/[locale]/pay/[token]` | anyone holding the link | one order per 64-hex token; no sign-in, `noindex`, no referrer; shows the bank account once invoiced |
+| `/[locale]/pay/[token]` | anyone holding the link | one order per 64-hex token; no sign-in, `noindex`, no referrer; where checkout lands: status, deadline, bank account once a pish-factor exists, receipt upload, Accept for a quote |
 | `/[locale]/r/[code]` | public (route handler) | a rep's referral link: remembers an active rep for 30 days, lands on the catalog |
 | `/[locale]/rep/**` | sales rep | own signed cookie; `(session)` holds only the forced-password page, `(portal)` the rest |
 | `/[locale]/rep/orders/[ref]/invoice` | sales rep | draft invoice for an order the rep may see, at its own prices, in rial |
 | `/[locale]/admin/login` | public | the only password form |
-| `/[locale]/admin/(panel)/{orders,reps,customers,products,settings}` | staff | every page calls `requireAdmin()` first; the layout's check is not a gate |
+| `/[locale]/admin/(panel)/{orders,reps,customers,products,settings,emails}` | staff | every page calls `requireAdmin()` first; the layout's check is not a gate |
 | `/[locale]/admin/(panel)/orders/[ref]/invoice` | staff | draft invoice; the queue's typed prices ride in `?price_<line id>=` |
 | `/api/admin/family/[id]/{template,export}` | staff | CSV, 404 when signed out |
 | `/api/admin/family/[id]/products` | staff (and `DEMO_MODE`) | the product table's rows as JSON; the same query as the export |
@@ -76,7 +76,16 @@ They share nothing on purpose.
   rather than a person. Login and write surfaces use the shared database
   rate limiter. `assertAdminWrite()` guards every write and refuses under
   `DEMO_MODE`.
-- **Customers** — per-account scrypt passwords, signed session cookie
+- **Customers** — an account is created without a password (at sign-up, or
+  from a guest checkout's details) and proves its address with an emailed
+  six-digit code before choosing one. Any code sign-in — first time, forgotten
+  password, or an address someone else registered — ends on the page that
+  chooses a new password (`requireNewPassword`), which is what closes review
+  M-13. Codes are stored as HMACs, live ten minutes and five wrong tries
+  (`lib/loginCode.ts`, `db/loginCodeQueries.ts`). Rep-created accounts are the
+  exception: they sign in by account number and the rep's temporary password,
+  and are never emailed a code until their address is verified. Otherwise:
+  per-account scrypt passwords, signed session cookie
   (`src/lib/session.ts`, `sessionToken.ts`). No sessions table; the cookie is
   an HMAC of `userId.version.expiry`, and `currentUserId()` checks the version
   against `users.session_version`, which every password change or reset
@@ -105,7 +114,8 @@ a forgotten setting or rate is a compile error, not silently stale prices.
 **An issued invoice uses `orders.fx_rate_to_rial`, never `getFxRate()`.** The
 rate is frozen at issuance so reprinting later cannot change what is owed.
 VAT follows the same rule: the setting (`app_settings.vat_rate_bp`) is read
-only by drafts and by `issueInvoice`, which locks it onto
+only by drafts, the checkout page and the two places a pish-factor is issued
+(`insertOrder` at checkout, `issuePishFactor` on acceptance), which lock it onto
 `orders.vat_rate_bp`. NULL there means an invoice issued before VAT existed,
 and it prints no VAT line. `total_cents` stays the pre-VAT subtotal — the
 integrity check compares it with the lines, and rep sales and commission are
@@ -113,17 +123,19 @@ counted before VAT on purpose. VAT is computed in the currency printed, from
 the subtotal as printed (`invoiceAmounts` in `src/lib/invoice.ts`), because a
 cent of VAT is about 12,000 rial and would not survive conversion.
 
-**No invoice is issued with a line at 0.** A product with no list price is
-stored at 0 ("call for price"), so a zero line is one nobody priced.
-`issueInvoice` refuses it inside its transaction, for the admin and the rep
-alike; the admin's price inputs refuse 0, and a rep — who never changes a
+**No quote or pish-factor goes out with a line at 0.** A product with no list
+price is stored at 0 ("call for price"), so a zero line is one nobody priced.
+`sendQuote` and `issuePishFactor` refuse it inside their transactions, for the
+admin and the rep alike; checkout never issues one, because an unpriced unit
+is never "payable now"; the admin's price inputs refuse 0, and a rep — who never changes a
 price — is told the admin must price the order.
 
-**A draft writes nothing, and Finalize locks only what the draft showed.**
-"Create invoice" opens the draft (admin: prices in the URL, `lib/invoiceDraft.ts`;
-rep: the order's own prices). The finalize form posts the exchange rate and
-VAT rate the page was drawn at, and the action sends the person back to an
-updated draft if either has moved. Payment is by bank transfer only; the old
+**A draft writes nothing, and Send quote sends only what the draft showed.**
+"Send quote" opens the draft (admin: prices in the URL, `lib/invoiceDraft.ts`;
+rep: the order's own prices). The form posts the exchange rate and VAT rate
+the page was drawn at, and the action sends the person back to an updated
+draft if either has moved — nothing locks at this step (that is acceptance),
+but the rial figures the sender checked should be the ones that were current. Payment is by bank transfer only; the old
 `payment_url` column is kept for its data and read by nothing.
 
 **The automatic exchange rate is one market reading a day, not a live feed.**
@@ -208,12 +220,45 @@ is a test-by-inspection for this: plant a note, then confirm it appears in the
 admin queue and in none of the invoice, account order page, account list or
 tracking payload.
 
-**Inventory is advisory.** Nothing blocks an order that exceeds
-`inventory_available`; the admin queue flags it. Counts are in packs. Received
-and invoiced lines are held; a line with `paid_at` is sold. A paid order
-cannot be cancelled (`src/lib/orders.ts`): there is no refund or restock flow
-yet, so it goes forward or is settled off the platform. Orders cancelled after
-payment before this rule keep their stock as sold.
+**Stock is enforced at checkout, not advisory.** What a customer can pay for
+now is `in_stock ? max(inventory_available, 0) : 0` — `in_stock` false means
+"bought from a supplier after the sale", and a product with no count entered
+behaves the same. `lib/checkoutSplit.ts` cuts every cart line into payable-now,
+held-for-quote (on the shelf, no list price) and back-order units; the checkout
+page draws that split and signs it into the submission token, and
+`submitOrderFromCartInTransaction` recomputes it after locking the cart's
+product rows in id order. If it moved, nothing is written and the customer is
+sent back — that lock is what makes "first to finish checkout gets the stock"
+true. A back-order line (`order_items.backorder`) never touches inventory: the
+hold, sell and release statements, the import's ledger and `dataIntegrity`
+all skip it. `inventory_available` can still be negative from older orders;
+nothing new drives it there. Counts are in packs. A paid order cannot be
+cancelled (`src/lib/orders.ts`): there is no refund or restock flow yet.
+
+**A pish-factor is `invoiced` with no invoice number.** Checkout issues it in
+the statement that creates the order (rate, VAT and a 24-hour deadline locked
+at birth); for a quoted order `issuePishFactor` does the same when the quote
+is accepted. The official number comes from `invoice_seq` only inside
+`confirmPayment`, so an order that is never paid never uses one and the
+accountant's sequence has no gaps. "Is there a document" is therefore
+`invoiced_at IS NOT NULL` everywhere — never `invoice_number`.
+
+**Every open order has one deadline, and nothing fires it.** `orders.expires_at`
+means: `received` — staff have five days to quote before held stock is
+released (the request stays open, its lines become back-order lines);
+`quoted` — the customer has five days to accept; `invoiced` — 24 hours to pay.
+A receipt clears it. The hosting plan runs scheduled jobs once a day, so
+`sweepExpiredOrders` (`db/expiryQueries.ts`) runs when someone looks instead:
+forced at checkout submit and quote acceptance, throttled to once a minute per
+instance on the cart, checkout, order and queue pages, and once a day from the
+exchange-rate cron. `expired_at` marks a cancel the sweep made.
+
+**Email is one module and never throws.** `lib/email.ts` posts to Resend with
+`fetch` and records every attempt in `email_log` (`/admin/emails`). Without
+`RESEND_API_KEY` nothing is sent and the text is kept — the local inbox. With
+a key, sign-in codes are recorded without their body. `lib/orderFlow.ts` sends
+after the transaction commits, never inside it. Links in emails come from
+`SITE_URL`, not the request's Host header: they carry pay tokens.
 
 **`generateStaticParams` must stay cheap, and the category route deliberately
 returns `[]`.** Two facts collide here. A dynamic segment with *no*
@@ -543,16 +588,23 @@ matter, and refusing it would mean refusing the catalog.
 
 ## Data flow: an order
 
-1. `submitQuoteAction` (`src/app/actions.ts`) writes `orders` + `order_items`
-   and calls `holdStockForOrder` — all in one transaction.
-2. Staff price it in the queue and press Create invoice, or the order's rep
-   does at the order's prices; either checks the draft and finalizes.
-   `issueInvoice` (`src/db/invoiceQueries.ts`) freezes the FX and VAT rates,
-   assigns an invoice number from `invoice_seq`, and sets `invoiced`.
-3. A receipt upload moves it to `payment_review`; the admin confirms, and `confirmPayment` moves it to `preparing` and calls
-   `sellHeldStock`. `setOrderStatusAction` then walks `preparing → shipped →
-   delivered`. `cancelled` calls `releaseHeldStock`, but only from a held
-   status (`received`, `invoiced`, `payment_review`).
+1. `submitQuoteAction` (`src/app/actions.ts`) finds or creates the account for
+   a guest's email, sweeps deadlines, and calls `submitOrderFromCart`, which
+   writes one or two orders (`planOrders`): a cart that is all priced and on
+   the shelf becomes an `invoiced` order — the pish-factor; anything else a
+   `received` one; a mixed cart both, sharing `orders.group_id`, when the
+   customer chose to pay now for what is in stock. Stock is held for
+   non-back-order lines. Emails go out after the commit.
+2. For a `received` order staff price it in the queue and press Send quote, or
+   the order's rep does at the order's prices: `sendQuote` moves it to
+   `quoted`. The customer accepts from the pay link or their account (staff or
+   the rep can accept on their word): `issuePishFactor` freezes the FX and VAT
+   rates and sets `invoiced`.
+3. A receipt upload moves it to `payment_review`; the admin confirms, and
+   `confirmPayment` assigns the invoice number, moves it to `preparing` and
+   calls `sellHeldStock`. `setOrderStatusAction` then walks `preparing →
+   shipped → delivered`. `cancelled` calls `releaseHeldStock`, but only from a
+   held status (`received`, `quoted`, `invoiced`, `payment_review`).
 
 Statuses and legal transitions live in `src/lib/orders.ts`, which has zero
 imports so it is testable standalone.
@@ -615,7 +667,7 @@ Full detail, plus five other traps, in [`DEPLOYMENT.md`](DEPLOYMENT.md).
 
 ## Known gaps
 
-The load-bearing ones: no email anywhere (staff send invoices by hand), sessions
+The load-bearing ones: no SMS, no delivery charge on any document, sessions
 cannot be revoked individually, and `/admin` has no named staff accounts —
 which is why `order_comments` has no author column, and why `audit_log` (who
 changed money or order state, `src/db/audit.ts`) records "admin" rather than a

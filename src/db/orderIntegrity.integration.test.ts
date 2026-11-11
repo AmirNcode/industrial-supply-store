@@ -10,12 +10,13 @@ import {
   sellHeldStock,
 } from "./inventoryQueries";
 import { submitOrderFromCart, type SubmitOrderInput } from "./orderSubmissionQueries";
-import { getInvoiceByRef, issueInvoice, updateOrderItemPrices } from "./invoiceQueries";
+import { getInvoiceByRef, issuePishFactor, sendQuote, updateOrderItemPrices } from "./invoiceQueries";
 import { addPaymentProof, confirmPayment, listPaymentProofs } from "./paymentProofQueries";
 import { PROOF_MAX_PER_ORDER } from "@/lib/paymentProof";
 import { persianYearMonth } from "@/lib/persianCalendar";
 import { randomReferralCode } from "@/lib/repAccount";
 import { quoteCartFingerprint } from "@/lib/quoteSubmission";
+import { splitCart } from "@/lib/checkoutSplit";
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 type Tx = TransactionSql<{}>;
@@ -113,10 +114,14 @@ test("quote replay and reservation allocation stay correct through the order lif
 
     const input: SubmitOrderInput = {
       cartId,
-      cartFingerprint: quoteCartFingerprint([
-        { productId: setup.productId, qty: 60, unitPriceCents: 100 },
-        { productId: setup.secondProductId, qty: 20, unitPriceCents: 250 },
-      ]),
+      // Both lines sit within the shelf (100 and 50) and are priced, so with no
+      // pish-factor terms the order is a plain `received` one holding 60 + 20.
+      cartFingerprint: quoteCartFingerprint(
+        splitCart([
+          { productId: setup.productId, qty: 60, unitPriceCents: 100, inStock: true, available: 100 },
+          { productId: setup.secondProductId, qty: 20, unitPriceCents: 250, inStock: true, available: 50 },
+        ]).lines,
+      ),
       submissionKey,
       locale: "en",
       currency: "USD",
@@ -128,11 +133,16 @@ test("quote replay and reservation allocation stay correct through the order lif
         email: "test@example.invalid",
         phone: "555-0100",
         poNumber: "",
-        address: "",
-        city: "",
+        address: "1 Test Street",
+        city: "Tehran",
         country: "",
         notes: marker,
+        postalCode: "",
+        nationalId: "",
+        economicCode: "",
       },
+      mode: "split",
+      pishFactor: null,
     };
 
     // These use separate transactions and race on purpose. One request creates
@@ -234,7 +244,9 @@ test("quote replay and reservation allocation stay correct through the order lif
       await tx`
         UPDATE orders
         SET status = 'preparing', invoice_number = ${`INV-TEST-${suffix}`},
-            fx_rate_to_rial = 10000, invoiced_at = now(), paid_at = now()
+            fx_rate_to_rial = 10000, invoiced_at = now(), paid_at = now(),
+            -- Payment clears the deadline, as confirmPayment does.
+            expires_at = NULL
         WHERE id = ${created.id}
       `;
       await sellHeldStock(tx, created.id);
@@ -313,7 +325,7 @@ test("an invoice locks its prices, exchange rate and VAT rate once, and only onc
 
     const read = async () => {
       const [row] = await sql<
-        { status: string; rate: number; vatRateBp: number; totalCents: number; invoiceNumber: string }[]
+        { status: string; rate: number | null; vatRateBp: number | null; totalCents: number; invoiceNumber: string | null }[]
       >`
         SELECT status, fx_rate_to_rial AS rate, vat_rate_bp AS "vatRateBp",
                total_cents AS "totalCents", invoice_number AS "invoiceNumber"
@@ -325,12 +337,19 @@ test("an invoice locks its prices, exchange rate and VAT rate once, and only onc
       return { ...row, lineCents: item.cents };
     };
 
+    // Staff quote first: prices are set, nothing else is locked yet.
+    assert.equal(await sendQuote(order.id, { prices: [{ id: line.id, cents: 450 }] }), "issued");
+    const quoted = await read();
+    assert.equal(quoted.status, "quoted");
+    assert.equal(quoted.rate, null);
+    assert.equal(quoted.vatRateBp, null);
+    assert.equal(quoted.totalCents, 900);
+    assert.equal(quoted.lineCents, 450);
+
+    // Accepting issues the pish-factor: rate and VAT lock, and there is no
+    // official number yet (it arrives with the payment).
     assert.equal(
-      await issueInvoice(order.id, {
-        rate: 1_094_889,
-        vatRateBp: 1000,
-        prices: [{ id: line.id, cents: 450 }],
-      }),
+      await issuePishFactor(order.id, { rate: 1_094_889, vatRateBp: 1000, from: "quoted", actor: { kind: "admin" } }),
       "issued",
     );
     const issued = await read();
@@ -339,21 +358,29 @@ test("an invoice locks its prices, exchange rate and VAT rate once, and only onc
     assert.equal(issued.vatRateBp, 1000);
     assert.equal(issued.totalCents, 900);
     assert.equal(issued.lineCents, 450);
-    assert.match(issued.invoiceNumber, /^INV-\d{4}-\d{4,}$/);
-    // The year is the Persian one (L-5), e.g. 1405 rather than 2026.
-    assert.equal(
-      issued.invoiceNumber.slice(4, 8),
-      String(persianYearMonth(new Date()).year),
-    );
+    assert.equal(issued.invoiceNumber, null);
     assert.equal((await getInvoiceByRef(order.ref))?.order.vatRateBp, 1000);
+    assert.equal((await getInvoiceByRef(order.ref))?.order.invoiceNumber, null);
+
+    // Confirming payment is what assigns the number.
+    assert.equal(await confirmPayment(order.id, "invoiced"), true);
+    const [paid] = await sql<{ n: string }[]>`SELECT invoice_number AS n FROM orders WHERE id = ${order.id}`;
+    assert.match(paid.n, /^INV-\d{4}-\d{4,}$/);
+    // The year is the Persian one (L-5), e.g. 1405 rather than 2026.
+    assert.equal(paid.n.slice(4, 8), String(persianYearMonth(new Date()).year));
+    const afterPay = await read();
+    assert.equal(afterPay.rate, 1_094_889);
+    assert.equal(afterPay.vatRateBp, 1000);
+    assert.equal(afterPay.totalCents, 900);
 
     // The admin and a rep finalizing at once: the second changes nothing, and
     // its price update is rolled back with it.
+    assert.equal(await sendQuote(order.id, { prices: [{ id: line.id, cents: 1 }] }), "conflict");
     assert.equal(
-      await issueInvoice(order.id, { rate: 2_000_000, vatRateBp: 900, prices: [{ id: line.id, cents: 1 }] }),
+      await issuePishFactor(order.id, { rate: 2_000_000, vatRateBp: 900, from: "quoted", actor: { kind: "admin" } }),
       "conflict",
     );
-    assert.deepEqual(await read(), issued);
+    assert.deepEqual(await read(), afterPay);
   } finally {
     await sql`DELETE FROM orders WHERE id = ${order.id}`;
   }
@@ -383,7 +410,10 @@ test("a receipt moves an invoice to review; confirming sells the stock", async (
     // Nothing to pay for yet.
     assert.equal(await addPaymentProof(order.id, file(0), { kind: "customer" }), "closed");
 
-    await issueInvoice(order.id, { rate: 1_000_000, vatRateBp: 1000 });
+    assert.equal(
+      await issuePishFactor(order.id, { rate: 1_000_000, vatRateBp: 1000, from: "received", actor: { kind: "admin" } }),
+      "issued",
+    );
     assert.equal(await addPaymentProof(order.id, file(1), { kind: "customer" }), "added");
     assert.deepEqual(await status(), { status: "payment_review", submitted: true, paid: false });
     assert.equal(await addPaymentProof(order.id, file(2), { kind: "rep", repId: rep.id }), "added");
@@ -440,7 +470,12 @@ test("invoice numbers stay unique past 9,999, and the realignment never winds ba
         INSERT INTO order_items (order_id, product_id, part_number, family_name, qty,
                                  unit_price_cents, requested_unit_price_cents)
         VALUES (${order.id}, NULL, 'SEQ-1', 'Integration Family', 1, 100, 100)`;
-      assert.equal(await issueInvoice(order.id, { rate: 1_000_000, vatRateBp: 0 }), "issued");
+      assert.equal(
+        await issuePishFactor(order.id, { rate: 1_000_000, vatRateBp: 0, from: "received", actor: { kind: "admin" } }),
+        "issued",
+      );
+      // The number is issued on payment, not with the pish-factor.
+      assert.equal(await confirmPayment(order.id, "invoiced"), true);
       const [row] = await sql<{ n: string }[]>`SELECT invoice_number AS n FROM orders WHERE id = ${order.id}`;
       numbers.push(row.n.split("-")[2]);
     }

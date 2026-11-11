@@ -10,6 +10,8 @@ import { getFxRate, getPriceDisplayMode } from "@/lib/fx";
 import { currentRep } from "@/lib/repSession";
 import { readOrderingFor } from "@/lib/repOrderContext";
 import { getCustomerForRep } from "@/db/customerQueries";
+import { splitCart, type LineSplit } from "@/lib/checkoutSplit";
+import { runExpirySweep } from "@/lib/orderFlow";
 
 export default async function CartPage({
   params,
@@ -24,6 +26,9 @@ export default async function CartPage({
   const t = getDict(l);
   const { error, skipped } = await searchParams;
 
+  // First, so a hold that lapsed overnight is back on the shelf before the
+  // split below decides what is "in stock" for this buyer.
+  await runExpirySweep();
   const [lines, rate, priceDisplayMode, rep, orderingForId] = await Promise.all([
     getCartLines(),
     getFxRate(),
@@ -38,7 +43,35 @@ export default async function CartPage({
   // Set by Reorder: part numbers from the old order that are no longer sold.
   const skippedParts =
     typeof skipped === "string" ? skipped.split(",").filter(Boolean).slice(0, 20) : [];
+  // Unpriced lines contribute 0, so the subtotal is the priced part only.
   const subtotal = lines.reduce((sum, x) => sum + unitPriceAt(x, x.qty) * x.qty, 0);
+  const split = splitCart(
+    lines.map((x) => ({
+      productId: x.productId,
+      qty: x.qty,
+      unitPriceCents: unitPriceAt(x, x.qty),
+      inStock: x.inStock,
+      available: x.available,
+    })),
+  );
+  const splitById = new Map(split.lines.map((x) => [x.productId, x]));
+  // The highlighted line under a part: why it cannot simply be bought, in
+  // the buyer's terms. Each reason gets its own words — "back order" alone
+  // left people guessing whether the shelf, the supplier or the price was
+  // the cause, and that decides whether they lower the quantity or wait.
+  const stockNote = (s: LineSplit | undefined): string | null => {
+    if (!s) return null;
+    if (!s.inStock) return t.cartSupplierItem;
+    const onShelf = s.payNow + s.heldForQuote;
+    if (s.backorder > 0) {
+      return onShelf === 0
+        ? t.cartOutOfStock
+        : t.cartStockSplit
+            .replace("{now}", formatInt(onShelf, l))
+            .replace("{later}", formatInt(s.backorder, l));
+    }
+    return s.heldForQuote > 0 ? t.cartNoPrice : null;
+  };
 
   return (
     <main className="mx-auto max-w-[1100px] px-3 pt-3">
@@ -97,6 +130,7 @@ export default async function CartPage({
           <ul className="divide-y divide-[var(--color-rule-light)] border-y border-[var(--color-rule-light)] lg:hidden">
             {lines.map((line) => {
               const unit = unitPriceAt(line, line.qty);
+              const note = stockNote(splitById.get(line.productId));
               const summary = Object.entries(line.specs)
                 .slice(0, 3)
                 .map(([, v]) =>
@@ -120,15 +154,20 @@ export default async function CartPage({
                       <bdi className="tech mt-0.5 block text-[11px] text-[var(--color-ink-faint)]">
                         {summary}
                       </bdi>
+                      {note && (
+                        <span className="mt-1 block w-fit bg-[var(--color-warn-soft)] px-1.5 py-0.5 text-[12px] font-semibold text-[var(--color-ink)]">
+                          {note}
+                        </span>
+                      )}
                     </div>
                     <span className="tech shrink-0 text-[15px] font-bold">
-                      {formatPrice(unit * line.qty, currency, l, rate)}
+                      {unit > 0 ? formatPrice(unit * line.qty, currency, l, rate) : t.cartRequestQuoteCell}
                     </span>
                   </div>
 
                   <div className="mt-2 flex items-center gap-3">
                     <span className="tech text-[12px] text-[var(--color-ink-muted)]">
-                      {formatPrice(unit, currency, l, rate)} / {t.each}
+                      {unit > 0 ? `${formatPrice(unit, currency, l, rate)} / ${t.each}` : t.cartRequestQuoteCell}
                     </span>
                     <form
                       action={updateQtyAction}
@@ -179,6 +218,7 @@ export default async function CartPage({
               <tbody>
                 {lines.map((line) => {
                   const unit = unitPriceAt(line, line.qty);
+                  const note = stockNote(splitById.get(line.productId));
                   // Two or three specs are enough to identify the row without
                   // reprinting the whole spec table into the cart.
                   const summary = Object.entries(line.specs)
@@ -205,9 +245,12 @@ export default async function CartPage({
                         <span className="block text-[10px] text-[var(--color-ink-faint)]">
                           {summary}
                         </span>
+                        {note && (
+                          <span className="mt-0.5 block w-fit bg-[var(--color-warn-soft)] px-1.5 py-0.5 text-[11px] font-semibold text-[var(--color-ink)]">{note}</span>
+                        )}
                       </td>
                       <td className="num tech tech-num">
-                        {formatPrice(unit, currency, l, rate)}
+                        {unit > 0 ? formatPrice(unit, currency, l, rate) : t.cartRequestQuoteCell}
                       </td>
                       <td>
                         <form action={updateQtyAction} className="flex items-center gap-1">
@@ -227,7 +270,7 @@ export default async function CartPage({
                         </form>
                       </td>
                       <td className="num tech tech-num font-bold">
-                        {formatPrice(unit * line.qty, currency, l, rate)}
+                        {unit > 0 ? formatPrice(unit * line.qty, currency, l, rate) : t.cartRequestQuoteCell}
                       </td>
                       <td>
                         <form action={removeLineAction}>
@@ -259,11 +302,18 @@ export default async function CartPage({
               href={`/${l}/quote`}
               className="btn-primary py-3 text-center hover:no-underline sm:py-[7px]"
             >
-              {t.requestQuote}
+              {split.kind === "instant" ? t.checkout : t.requestQuote}
             </Link>
           </div>
           <p className="mt-2 text-[11px] text-[var(--color-ink-faint)] sm:text-end">
-            {t.rfqIntro}
+            {t.cartVatNote}
+          </p>
+          <p className="mt-1 text-[11px] text-[var(--color-ink-faint)] sm:text-end">
+            {split.kind === "instant"
+              ? t.cartCheckoutNote
+              : split.kind === "quote"
+                ? t.cartQuoteOnlyNote
+                : t.cartNeedsQuoteNote}
           </p>
         </>
       )}

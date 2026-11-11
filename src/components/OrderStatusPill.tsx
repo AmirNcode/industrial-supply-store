@@ -4,6 +4,7 @@ import type { OrderStatus } from "@/lib/orders";
 /** Exported so the admin filter links use the same words as the pills. */
 export const STATUS_LABEL_KEY = {
   received: "statusReceived",
+  quoted: "statusQuoted",
   invoiced: "statusInvoiced",
   payment_review: "statusPaymentReview",
   preparing: "statusPreparing",
@@ -15,6 +16,7 @@ export const STATUS_LABEL_KEY = {
 /** Colour carries the same information as the word, for scanning a long queue. */
 const TONE: Record<OrderStatus, string> = {
   received: "pill",
+  quoted: "pill pill-warn",
   invoiced: "pill pill-warn",
   payment_review: "pill pill-warn",
   preparing: "pill pill-warn",

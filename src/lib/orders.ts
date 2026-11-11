@@ -9,6 +9,7 @@
  */
 export const ORDER_STATUSES = [
   "received",
+  "quoted",
   "invoiced",
   "payment_review",
   "preparing",
@@ -34,7 +35,11 @@ export type OrderStatus = (typeof ORDER_STATUSES)[number];
  * without an upload. Reps never confirm (review C-2).
  */
 const TRANSITIONS: Record<OrderStatus, readonly OrderStatus[]> = {
-  received: ["invoiced", "cancelled"],
+  // `received → invoiced` is the pish-factor issued straight away: at checkout
+  // for a cart that is all priced and on the shelf, or by staff accepting on
+  // the customer's behalf. `quoted` is staff's prices waiting for the customer.
+  received: ["quoted", "invoiced", "cancelled"],
+  quoted: ["invoiced", "cancelled"],
   invoiced: ["payment_review", "preparing", "cancelled"],
   payment_review: ["preparing", "cancelled"],
   preparing: ["shipped"],
@@ -62,7 +67,7 @@ export function assertTransition(from: OrderStatus, to: OrderStatus): void {
 }
 
 /** Unpaid and not cancelled: the order's stock is held for it. */
-export const HELD_STATUSES = ["received", "invoiced", "payment_review"] as const satisfies readonly OrderStatus[];
+export const HELD_STATUSES = ["received", "quoted", "invoiced", "payment_review"] as const satisfies readonly OrderStatus[];
 /**
  * The same list as a query parameter (`status = ANY(${HELD_STATUS_LIST}::text[])`).
  * Imports, reconcile and the shortfall warning all read it from here, so a
@@ -73,4 +78,14 @@ export const HELD_STATUS_LIST: string[] = [...HELD_STATUSES];
 /** A receipt can be added while payment is owed or being checked, and not after. */
 export function acceptsPaymentProof(status: OrderStatus): boolean {
   return status === "invoiced" || status === "payment_review";
+}
+
+/** How long a pish-factor stays payable. */
+export const PISH_FACTOR_TTL_HOURS = 24;
+/** How long staff have to quote before held stock is released, and how long a quote stands. */
+export const QUOTE_TTL_DAYS = 5;
+
+/** Open and waiting on someone, so it can carry a deadline (`orders.expires_at`). */
+export function carriesDeadline(status: OrderStatus): boolean {
+  return status === "received" || status === "quoted" || status === "invoiced";
 }

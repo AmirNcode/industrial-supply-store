@@ -102,10 +102,10 @@ export async function reconcileInventoryForProducts(
     WITH expected AS (
       SELECT p.id AS product_id,
              COALESCE(sum(i.qty) FILTER (
-               WHERE o.status = ANY(${HELD_STATUS_LIST}::text[])
+               WHERE o.status = ANY(${HELD_STATUS_LIST}::text[]) AND NOT i.backorder
              ), 0)::int AS on_hold,
              COALESCE(sum(i.qty) FILTER (
-               WHERE o.paid_at IS NOT NULL
+               WHERE o.paid_at IS NOT NULL AND NOT i.backorder
              ), 0)::int AS sold
       FROM products p
       LEFT JOIN order_items i ON i.product_id = p.id
@@ -189,12 +189,12 @@ export async function inspectDatabaseIntegrity(
     ), inventory_expected AS (
       SELECT p.id AS product_id,
              COALESCE(sum(i.qty) FILTER (
-               WHERE o.status = ANY(${HELD_STATUS_LIST}::text[])
+               WHERE o.status = ANY(${HELD_STATUS_LIST}::text[]) AND NOT i.backorder
              ), 0)::int AS on_hold,
              COALESCE(sum(i.qty) FILTER (
                -- A paid order remains sold if it is cancelled before shipping;
                -- there is no refund/restock transition in this version.
-               WHERE o.paid_at IS NOT NULL
+               WHERE o.paid_at IS NOT NULL AND NOT i.backorder
              ), 0)::int AS sold
       FROM products p
       LEFT JOIN order_items i ON i.product_id = p.id
@@ -265,19 +265,23 @@ export async function inspectDatabaseIntegrity(
         SELECT count(*)::int FROM orders
         WHERE NOT (
           (
-            invoice_number IS NULL
+            invoiced_at IS NULL
             AND fx_rate_to_rial IS NULL
-            AND invoiced_at IS NULL
+            AND invoice_number IS NULL
           ) OR (
-            invoice_number IS NOT NULL
-            AND btrim(invoice_number) <> ''
+            invoiced_at IS NOT NULL
             AND fx_rate_to_rial > 0
-            AND invoiced_at IS NOT NULL
+            AND (invoice_number IS NULL OR btrim(invoice_number) <> '')
           )
         )
         OR NOT (
           vat_rate_bp IS NULL
-          OR (invoice_number IS NOT NULL AND vat_rate_bp BETWEEN 0 AND 10000)
+          OR (invoiced_at IS NOT NULL AND vat_rate_bp BETWEEN 0 AND 10000)
+        )
+        OR NOT (paid_at IS NULL OR invoice_number IS NOT NULL)
+        OR NOT (
+          (expired_at IS NULL OR status = 'cancelled')
+          AND (expires_at IS NULL OR status IN ('received','quoted','invoiced'))
         )
         OR NOT (
           (invoiced_at IS NULL OR invoiced_at >= created_at)
@@ -287,7 +291,8 @@ export async function inspectDatabaseIntegrity(
           AND (delivered_at IS NULL OR (shipped_at IS NOT NULL AND delivered_at >= shipped_at))
         )
         OR NOT (
-          (status <> 'received' OR invoiced_at IS NULL)
+          (status NOT IN ('received','quoted') OR invoiced_at IS NULL)
+          AND (status <> 'quoted' OR quoted_at IS NOT NULL)
           AND (status NOT IN ('invoiced','payment_review','preparing','shipped','delivered') OR invoiced_at IS NOT NULL)
           AND (status NOT IN ('preparing','shipped','delivered') OR paid_at IS NOT NULL)
           AND (status NOT IN ('shipped','delivered') OR shipped_at IS NOT NULL)

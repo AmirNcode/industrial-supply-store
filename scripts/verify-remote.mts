@@ -36,6 +36,7 @@ const TABLES = [
   "app_settings", "order_comments", "request_rate_limits", "part_number_registry",
   "sales_reps", "customer_notes", "rep_payouts", "rep_targets", "payment_proofs",
   "audit_log", "retired_part_numbers",
+  "user_addresses", "login_codes", "email_log",
 ] as const;
 
 /**
@@ -47,6 +48,19 @@ const TABLES = [
  * errored. Anything added by a later `ADD COLUMN` needs listing here.
  */
 const COLUMNS: readonly (readonly [string, string])[] = [
+  // Added 2026-11-11 by `20261111120000_add_instant_checkout.sql`. Checkout,
+  // every order page and sign-in read these.
+  ["orders", "expires_at"],
+  ["orders", "expired_at"],
+  ["orders", "quoted_at"],
+  ["orders", "group_id"],
+  ["orders", "postal_code"],
+  ["orders", "buyer_national_id"],
+  ["orders", "buyer_economic_code"],
+  ["order_items", "backorder"],
+  ["users", "email_verified_at"],
+  ["users", "national_id"],
+  ["users", "economic_code"],
   ["products", "inventory_available"],
   ["products", "inventory_on_hold"],
   ["products", "inventory_sold"],
@@ -193,6 +207,10 @@ const REQUIRED_CONSTRAINTS = [
   "payment_proofs_order_id_orders_id_fk",
   "payment_proofs_rep_id_sales_reps_id_fk", "payment_proofs_content_type_check",
   "payment_proofs_size_check", "payment_proofs_uploaded_by_check",
+  "orders_paid_invoice_number_check", "orders_expiry_check",
+  "user_addresses_user_id_users_id_fk", "user_addresses_filled_check",
+  "login_codes_user_id_users_id_fk", "login_codes_attempts_check",
+  "email_log_order_id_orders_id_fk", "email_log_status_check",
 ] as const;
 const constraintRows = await sql<{ conname: string; convalidated: boolean }[]>`
   SELECT c.conname, c.convalidated

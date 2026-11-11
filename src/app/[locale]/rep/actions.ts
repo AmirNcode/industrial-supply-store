@@ -17,7 +17,8 @@ import { redirectFresh } from "@/lib/redirectFresh";
 import { setOrderingFor } from "@/lib/repOrderContext";
 import { CartCapacityError, addLines } from "@/lib/cart";
 import { getReorderLines, repCanActOnOrder } from "@/db/repOrderQueries";
-import { getInvoiceDraft, issueInvoice } from "@/db/invoiceQueries";
+import { getInvoiceDraft, sendQuote } from "@/db/invoiceQueries";
+import { acceptQuote, notifyQuoteSent } from "@/lib/orderFlow";
 import { acceptsPaymentProof, isOrderStatus } from "@/lib/orders";
 import { receivePaymentProof, type ProofUploadResult } from "@/lib/paymentProofUpload";
 import { getFxRate, getFxRateSource } from "@/lib/fx";
@@ -318,8 +319,28 @@ export async function issueInvoiceForRepAction(formData: FormData): Promise<void
     redirect(`${page}/invoice?changed=1`);
   }
 
-  const issued = await issueInvoice(found.order.id, { rate, vatRateBp, actor: { kind: "rep", id: rep.id } });
+  // A quote, not yet a pish-factor: the customer accepts it (or the rep does
+  // for them, below), and the rate and VAT lock then.
+  const issued = await sendQuote(found.order.id, { actor: { kind: "rep", id: rep.id } });
   if (issued !== "issued") redirect(`${page}?error=${issued}`);
+  await notifyQuoteSent(found.order.id);
+  redirect(`${page}?ok=quoted`);
+}
+
+/**
+ * The customer said yes to the rep: the quote becomes a pish-factor at
+ * today's rate. Only for an order credited to this rep, like every rep write.
+ */
+export async function acceptQuoteForRepAction(formData: FormData): Promise<void> {
+  const { rep, locale } = await repForWrite(formData);
+  const ref = boundedString(formData.get("ref"), 20) ?? "";
+  if (!(await repCanActOnOrder(rep.id, ref))) redirect(`/${locale}/rep/orders`);
+  const found = await getInvoiceDraft(ref);
+  if (!found) redirect(`/${locale}/rep/orders`);
+  const page = `/${locale}/rep/orders/${ref}`;
+  if (found.order.status !== "quoted") redirect(`${page}?error=conflict`);
+  const outcome = await acceptQuote(found.order.id, { kind: "rep", id: rep.id });
+  if (outcome !== "issued") redirect(`${page}?error=${outcome}`);
   redirect(`${page}?ok=invoiced`);
 }
 

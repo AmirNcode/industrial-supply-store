@@ -12,6 +12,8 @@ import { formatAmount, formatInt, formatPrice, type Currency } from "@/lib/money
 export type OrderViewOrder = {
   status: OrderStatus;
   createdAt: string;
+  /** When staff sent the quote; absent for callers whose orders never carry one. */
+  quotedAt?: string | null;
   invoicedAt: string | null;
   paymentSubmittedAt: string | null;
   paidAt: string | null;
@@ -51,7 +53,10 @@ export function OrderView({
   bank?: BankDetails | null;
   /** Proof of payment: the upload and the receipts, after the bank account. */
   proof?: ReactNode;
-  /** Before invoicing these are today's catalog prices, not an offer. */
+  /**
+   * Only while `received`: those are today's catalog prices, not an offer. A
+   * quoted order's prices are staff's own, so the caller leaves this off.
+   */
   estimate?: boolean;
 }) {
   const t = getDict(locale);
@@ -68,6 +73,7 @@ export function OrderView({
         status={order.status}
         stamps={{
           createdAt: order.createdAt,
+          quotedAt: order.quotedAt,
           invoicedAt: order.invoicedAt,
           paymentSubmittedAt: order.paymentSubmittedAt,
           paidAt: order.paidAt,
@@ -107,14 +113,31 @@ export function OrderView({
           {items.map((i) => (
             <tr key={i.id}>
               <td className="tech font-bold">{i.partNumber}</td>
-              <td className="whitespace-normal">{i.familyName}</td>
+              <td className="whitespace-normal">
+                {i.familyName}
+                {i.backorder && (
+                  // Its own line, in the warning tone: this is the reason the
+                  // order needs a quote, and a grey tag beside the name was
+                  // being read past.
+                  <span className="pill pill-warn mt-1 block w-fit whitespace-normal">{t.backorderTag}</span>
+                )}
+              </td>
               <td className="num tech tech-num">{formatInt(i.qty, locale)}</td>
-              <td className="num tech tech-num">
-                {formatPrice(i.unitPriceCents, currency, locale, rate)}
-              </td>
-              <td className="num tech tech-num">
-                {formatPrice(i.unitPriceCents * i.qty, currency, locale, rate)}
-              </td>
+              {/* A price of 0 is "not priced yet", never a free item. */}
+              {i.unitPriceCents === 0 ? (
+                <td className="num whitespace-normal" colSpan={2}>
+                  {t.cartRequestQuoteCell}
+                </td>
+              ) : (
+                <>
+                  <td className="num tech tech-num">
+                    {formatPrice(i.unitPriceCents, currency, locale, rate)}
+                  </td>
+                  <td className="num tech tech-num">
+                    {formatPrice(i.unitPriceCents * i.qty, currency, locale, rate)}
+                  </td>
+                </>
+              )}
             </tr>
           ))}
         </tbody>
@@ -141,7 +164,10 @@ export function OrderView({
           </span>
         </div>
       )}
-      {estimate && (
+      {items.some((i) => i.backorder) && (
+        <p className="mt-2 text-[12px] text-[var(--color-ink-muted)]">{t.backorderExplain}</p>
+      )}
+      {estimate && order.status === "received" && (
         <p className="mt-1 text-end text-[11px] text-[var(--color-ink-muted)]">{t.priceEstimate}</p>
       )}
     </>

@@ -1,5 +1,8 @@
 "use server";
 
+import { redirect } from "next/navigation";
+import { safeLocale } from "@/lib/i18n";
+import { acceptQuote } from "@/lib/orderFlow";
 import { getOrderByPayToken } from "@/db/accountQueries";
 import { acceptsPaymentProof } from "@/lib/orders";
 import { isPayToken } from "@/lib/payToken";
@@ -23,4 +26,21 @@ export async function uploadPaymentProofWithKeyAction(
   const found = await getOrderByPayToken(token);
   if (!found || !acceptsPaymentProof(found.order.status)) return { ok: false, problem: "closed" };
   return receivePaymentProof(found.order.id, formData.get("file"), { kind: "customer" });
+}
+
+/**
+ * Accept a quote from the pay link. The link is the same authority that shows
+ * the quote, and accepting spends nothing: it issues the pish-factor and
+ * starts its 24 hours, after which an unpaid order simply lapses.
+ */
+export async function acceptQuoteWithKeyAction(token: string, formData: FormData): Promise<void> {
+  const locale = safeLocale(formData);
+  if (DEMO_MODE || typeof token !== "string" || !isPayToken(token)) redirect(`/${locale}`);
+  const page = `/${locale}/pay/${token}`;
+  const limit = await consumeRateLimit("proof:upload", RATE_LIMITS.proofUpload, { accountId: token });
+  if (!limit.allowed) redirect(`${page}?error=rate-limit`);
+  const found = await getOrderByPayToken(token);
+  if (!found || found.order.status !== "quoted") redirect(page);
+  const outcome = await acceptQuote(found.order.id, { kind: "customer", id: null });
+  redirect(outcome === "issued" ? `${page}?ok=accepted` : `${page}?error=accept`);
 }

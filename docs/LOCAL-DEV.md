@@ -235,6 +235,7 @@ node -e 'for (const f of [".env.production.local",".env.local",".env"]) { try { 
 | Run one SQL statement | `docker exec isupply-db psql -U isupply -d isupply -c "select count(*) from products;"` |
 | Wipe and rebuild the data | `npm run db:bootstrap:local` |
 | Add demo sales reps, customers and orders | `npm run db:seed:reps` |
+| Make instant checkout testable (stock, seller details, fake bank account) | `npm run db:seed:checkout` |
 
 Two of those deserve a note.
 
@@ -248,6 +249,15 @@ the only command on this page you cannot undo.
 `docker exec` means "run a command inside a container that is already running."
 `-it` makes it interactive so you get a live `psql` prompt; leave it off when you
 just want one query's output. Type `\q` to leave `psql`.
+
+### Demo data for checkout
+
+A freshly seeded catalog has nothing on the shelf, no seller contact details
+and no bank account, so checkout can only ever produce a quote request.
+`npm run db:seed:checkout` fixes that for the local database only and prints
+four family pages to try, one per path: pish-factor at once, more than the
+shelf holds, supplied to order, and no list price. Emails are not sent
+locally — read them, sign-in codes included, at `/en/admin/emails`.
 
 ### Demo data for sales reps
 

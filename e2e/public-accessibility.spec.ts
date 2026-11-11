@@ -1,9 +1,12 @@
 import { test, expect } from "@playwright/test";
 import { getDict, type Locale } from "../src/lib/i18n";
 import { expectNoAccessibilityViolations } from "./accessibility";
+import { freshAddressHeader, localSql, placeInstantOrder } from "./shop";
 
 const locales: Locale[] = ["en", "fa"];
 const familySlug = "oil-resistant-buna-n-o-rings";
+const sql = localSql();
+test.afterAll(() => sql.end());
 
 for (const locale of locales) {
   test(`${locale}: public navigation does not expose the admin route`, async ({ page }) => {
@@ -18,6 +21,26 @@ for (const locale of locales) {
 
     await page.goto(`/${locale}/f/${familySlug}`);
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    await expectNoAccessibilityViolations(page, testInfo);
+  });
+
+  // `?step=password` needs a cookie only the sign-in form sets, so it is not
+  // visited here; the account spec walks it.
+  for (const path of ["account/signin", "account/signup"]) {
+    test(`${locale}: /${path} meets the automated WCAG A/AA gate`, async ({ page }) => {
+      await page.setExtraHTTPHeaders(freshAddressHeader());
+      await page.goto(`/${locale}/${path}`);
+      await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+      await expectNoAccessibilityViolations(page, test.info());
+    });
+  }
+
+  test(`${locale}: a pay page meets the automated WCAG A/AA gate`, async ({ page }, testInfo) => {
+    await page.setExtraHTTPHeaders(freshAddressHeader());
+    // A pay page that exists only because this test placed an order for it.
+    const marker = `E2E-A11Y-${locale}-${testInfo.workerIndex}-${Date.now()}`;
+    await placeInstantOrder(page, locale, sql, marker);
+    await expect(page.getByRole("heading", { level: 1, name: marker })).toBeVisible();
     await expectNoAccessibilityViolations(page, testInfo);
   });
 

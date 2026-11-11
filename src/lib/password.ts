@@ -111,3 +111,13 @@ export function needsRehash(stored: string): boolean {
   const parts = stored.split("$");
   return parts.length === 6 && parts[0] === "scrypt" && Number(parts[1]) < N;
 }
+
+/**
+ * A real hash of 32 random bytes that are then thrown away: what an account
+ * holds before its owner has chosen a password. Unlike an empty or malformed
+ * value it goes through `verifyPassword` like any other, takes the same time,
+ * and matches nothing anyone can type.
+ */
+export async function unusablePasswordHash(): Promise<string> {
+  return hashPassword(randomBytes(32).toString("base64"));
+}

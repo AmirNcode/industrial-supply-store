@@ -13,7 +13,11 @@ import { customerCurrencyFor } from "@/lib/money";
 import { acceptsPaymentProof, type OrderStatus } from "@/lib/orders";
 import { listPaymentProofs } from "@/db/paymentProofQueries";
 import { PaymentProofSection } from "@/components/PaymentProofSection";
-import { uploadPaymentProofWithKeyAction } from "./actions";
+import { Deadline, deadlineNow } from "@/components/Deadline";
+import { ErrorBanner, SuccessBanner } from "@/components/Banners";
+import { runExpirySweep } from "@/lib/orderFlow";
+import { fillMessage } from "@/lib/fillMessage";
+import { acceptQuoteWithKeyAction, uploadPaymentProofWithKeyAction } from "./actions";
 
 /**
  * Kept out of search results, and the page sends no referrer: the URL is the
@@ -32,13 +36,23 @@ export const metadata: Metadata = {
  * page shows the account to pay into; before that there is nothing to pay and
  * no payment instructions are shown yet.
  */
-export default async function PayPage({ params }: { params: Promise<{ locale: string; token: string }> }) {
+export default async function PayPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ locale: string; token: string }>;
+  searchParams: Promise<{ placed?: string; ok?: string; error?: string }>;
+}) {
   const { locale, token } = await params;
+  const { placed, ok, error } = await searchParams;
   if (!isLocale(locale)) notFound();
   const l = locale as Locale;
   const t = getDict(l);
   if (!isPayToken(token)) notFound();
 
+  // Before the read, so a lapsed order shows as expired now rather than
+  // after the next cron run.
+  await runExpirySweep();
   const found = await getOrderByPayToken(token);
   if (!found) notFound();
   const { order, items } = found;
@@ -51,22 +65,34 @@ export default async function PayPage({ params }: { params: Promise<{ locale: st
     takesProof ? getBankDetails(l) : Promise.resolve(null),
     listPaymentProofs([order.id]),
   ]);
-  const invoiced = order.invoiceNumber !== null;
+  // A pro forma invoice has no number until payment is confirmed, so the
+  // number cannot say whether there is a document.
+  const invoiced = order.invoicedAt !== null;
   const viewInvoice =
     invoiced && order.status !== "cancelled" ? (
       <Link href={`/${l}/invoice/${order.ref}?key=${token}`} className="btn-small" prefetch={false}>
-        {t.viewInvoice}
+        {order.invoiceNumber === null ? t.viewPishFactor : t.viewInvoice}
       </Link>
     ) : null;
   const message: Record<OrderStatus, string> = {
     received: t.payBeingPriced,
+    quoted: t.payQuoteReady,
     invoiced: t.payAmountDue,
     payment_review: t.payConfirming,
     preparing: t.payPaidThanks,
     shipped: t.payPaidThanks,
     delivered: t.payPaidThanks,
-    cancelled: t.payCancelled,
+    cancelled: order.expiredAt !== null ? t.payExpired : t.payCancelled,
   };
+  const placedMessage =
+    placed === "1"
+      ? order.status === "received"
+        ? t.payPlacedQuote
+        : order.status === "invoiced" || order.status === "payment_review"
+          ? t.payPlacedPish
+          : null
+      : null;
+  const now = deadlineNow();
 
   return (
     <main className="mx-auto max-w-[820px] px-3 pt-3 pb-16">
@@ -75,7 +101,28 @@ export default async function PayPage({ params }: { params: Promise<{ locale: st
         <span className="tech text-[13px]">{order.ref}</span>
         <OrderStatusPill locale={l} status={order.status} />
       </div>
+      {placedMessage && <SuccessBanner>{placedMessage}</SuccessBanner>}
+      {ok === "accepted" && <SuccessBanner>{t.quoteAccepted}</SuccessBanner>}
+      {error === "accept" && <ErrorBanner>{t.acceptFailed}</ErrorBanner>}
+      {error === "rate-limit" && <ErrorBanner>{t.rateLimited}</ErrorBanner>}
       <p className="mb-3 text-[13px]">{message[order.status]}</p>
+      <Deadline locale={l} status={order.status} expiresAt={order.expiresAt} now={now} />
+      {order.status === "quoted" && !DEMO_MODE && (
+        <form action={acceptQuoteWithKeyAction.bind(null, token)} className="mb-4 grid gap-2">
+          <input type="hidden" name="locale" value={l} />
+          <p className="text-[12px] text-[var(--color-ink-muted)]">{t.acceptQuoteNote}</p>
+          <button type="submit" className="btn-primary w-fit">
+            {t.acceptQuote}
+          </button>
+        </form>
+      )}
+      {order.siblingPayToken && order.siblingRef && (
+        <p className="mb-3 text-[12px]">
+          <Link href={`/${l}/pay/${order.siblingPayToken}`}>
+            {fillMessage(t.siblingOrder, { ref: order.siblingRef })}
+          </Link>
+        </p>
+      )}
       <OrderView
         locale={l}
         order={order}
@@ -91,7 +138,7 @@ export default async function PayPage({ params }: { params: Promise<{ locale: st
             upload={takesProof ? uploadPaymentProofWithKeyAction.bind(null, token) : undefined}
           />
         }
-        estimate={!invoiced}
+        estimate={order.status === "received"}
         actions={viewInvoice}
       />
     </main>

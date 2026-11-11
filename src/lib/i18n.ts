@@ -1,3 +1,5 @@
+import { checkoutEn, checkoutFa } from "./i18nCheckout";
+
 export const locales = ["en", "fa"] as const;
 export type Locale = (typeof locales)[number];
 export const defaultLocale: Locale = "fa";
@@ -43,6 +45,8 @@ export function swapLocale(pathname: string, to: Locale): string {
 }
 
 const en = {
+  // Instant checkout (lib/i18nCheckout.ts); keys below win on a clash.
+  ...checkoutEn,
   brand: "TEMEX",
   tagline: "Tools, Equipment & Materials Express",
   brandPromise:
@@ -995,6 +999,7 @@ const en = {
  * match those against manufacturer catalogs, which are Latin.
  */
 const fa: typeof en = {
+  ...checkoutFa,
   brand: "TEMEX",
   tagline: "ابزار، تجهیزات و مواد اکسپرس",
   brandPromise:

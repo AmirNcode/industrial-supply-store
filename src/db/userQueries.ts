@@ -16,12 +16,32 @@ export type UserRow = {
   city: string;
   repId: string | null;
   mustChangePassword: boolean;
+  nationalId: string;
+  economicCode: string;
+  /**
+   * True for an account that has never chosen a password: one made from a
+   * guest checkout or a sign-up, which are created without one. It signs in
+   * by emailed code and is sent to choose a password before anything else.
+   * A rep-created account is never this — it has the rep's temporary password
+   * and its own forced-change page (`mustChangePassword`).
+   */
+  needsPassword: boolean;
+  /**
+   * Whether a sign-in code may be emailed to this account: it has an address,
+   * and that address is either the customer's own typing or already proved.
+   * A rep-typed address that nobody has verified is excluded — a typo there
+   * would hand the account to a stranger's inbox.
+   */
+  codeSignIn: boolean;
 };
 
 const COLS = sql`id, email, customer_code AS "customerCode", company,
                  contact_name AS "contactName", phone,
                  default_po_number AS "defaultPoNumber", locale, address, city,
-                 rep_id AS "repId", must_change_password AS "mustChangePassword"`;
+                 rep_id AS "repId", must_change_password AS "mustChangePassword",
+                 national_id AS "nationalId", economic_code AS "economicCode",
+                 (origin <> 'rep' AND NOT chose_own_password) AS "needsPassword",
+                 (email IS NOT NULL AND (origin <> 'rep' OR email_verified_at IS NOT NULL)) AS "codeSignIn"`;
 
 export async function getUserById(id: string): Promise<UserRow | null> {
   // Session token verification rejects malformed UUIDs before this query, so
@@ -70,14 +90,19 @@ export async function getSessionVersion(userId: string): Promise<number | null> 
 
 export type NewUser = {
   email: string;
+  /** A hash of random bytes nobody knows: the account's first password is chosen after a code sign-in. */
   passwordHash: string;
   company: string;
   contactName: string;
   phone: string;
   locale: string;
-  /** 'referral' only with the rep whose link brought them; that rep earns commission. */
-  origin: "self" | "referral";
+  /**
+   * 'referral' only with the rep whose link brought them; that rep earns
+   * commission. 'checkout' is an account made from a guest order.
+   */
+  origin: "self" | "referral" | "checkout";
   repId: string | null;
+  accountNumber: "phone" | "assigned";
 };
 
 /**
@@ -91,15 +116,21 @@ export type NewUser = {
  * so it quietly takes a random ID instead.
  */
 export async function createUser(input: NewUser): Promise<UserRow | "email-taken"> {
-  let code = codeFromPhone(input.phone) ?? randomCustomerCode();
+  // Sign-up lets the customer choose: their phone's digits, or an assigned
+  // number. A checkout account was never asked, so it is assigned one.
+  let code =
+    (input.accountNumber === "phone" ? codeFromPhone(input.phone) : null) ?? randomCustomerCode();
   for (let attempt = 0; attempt < 10; attempt++) {
     try {
       const rows = await sql<UserRow[]>`
         INSERT INTO users (email, password_hash, company, contact_name, phone, locale,
-                           customer_code, origin, rep_id, origin_rep_id, rep_earns_commission)
+                           customer_code, origin, rep_id, origin_rep_id, rep_earns_commission,
+                           chose_own_password)
         VALUES (${input.email}, ${input.passwordHash}, ${input.company},
                 ${input.contactName}, ${input.phone}, ${input.locale}, ${code},
-                ${input.origin}, ${input.repId}, ${input.repId}, ${input.repId !== null})
+                ${input.origin}, ${input.repId}, ${input.repId}, ${input.repId !== null},
+                -- No password has been chosen yet (see needsPassword).
+                false)
         RETURNING ${COLS}
       `;
       return rows[0];
@@ -124,15 +155,19 @@ export async function updateProfile(
     phone: string;
     defaultPoNumber: string;
     locale: string;
-    address: string;
-    city: string;
+    nationalId: string;
+    economicCode: string;
   },
 ): Promise<void> {
+  // `users.address` and `users.city` are no longer written: delivery
+  // addresses live in `user_addresses` (db/addressQueries.ts). The columns
+  // stay for the reps' customer pages, which still read them.
   await sql`
     UPDATE users
     SET company = ${input.company}, contact_name = ${input.contactName},
         phone = ${input.phone}, default_po_number = ${input.defaultPoNumber},
-        locale = ${input.locale}, address = ${input.address}, city = ${input.city}
+        locale = ${input.locale}, national_id = ${input.nationalId},
+        economic_code = ${input.economicCode}
     WHERE id = ${id}
   `;
 }
@@ -187,4 +222,22 @@ export async function getPasswordHash(userId: string): Promise<string | null> {
 
 export async function touchLastLogin(userId: string): Promise<void> {
   await sql`UPDATE users SET last_login_at = now() WHERE id = ${userId}`;
+}
+
+/** The account an email belongs to, for attaching a guest order to it. */
+export async function findUserIdByEmail(email: string): Promise<string | null> {
+  const [row] = await sql<{ id: string }[]>`
+    SELECT id FROM users WHERE lower(email) = lower(${email}) LIMIT 1
+  `;
+  return row?.id ?? null;
+}
+
+/**
+ * After a code sign-in the stored password is no longer trusted — it may be
+ * the random one an account is born with, or one the owner has forgotten, or
+ * one a stranger set before the owner proved the address. Clearing
+ * `chose_own_password` sends the account to choose one (`needsPassword`).
+ */
+export async function requireNewPassword(userId: string): Promise<void> {
+  await sql`UPDATE users SET chose_own_password = false WHERE id = ${userId} AND origin <> 'rep'`;
 }

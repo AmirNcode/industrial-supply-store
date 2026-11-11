@@ -752,9 +752,9 @@ export async function writeImport(
       >`
         SELECT p.part_number AS "partNumber",
                COALESCE(SUM(i.qty) FILTER (
-                 WHERE o.status = ANY(${HELD_STATUS_LIST}::text[])), 0)::int AS "onHold",
+                 WHERE o.status = ANY(${HELD_STATUS_LIST}::text[]) AND NOT i.backorder), 0)::int AS "onHold",
                COALESCE(SUM(i.qty) FILTER (
-                 WHERE o.paid_at IS NOT NULL), 0)::int AS "sold"
+                 WHERE o.paid_at IS NOT NULL AND NOT i.backorder), 0)::int AS "sold"
         FROM products p
         LEFT JOIN order_items i ON i.product_id = p.id
         LEFT JOIN orders o ON o.id = i.order_id

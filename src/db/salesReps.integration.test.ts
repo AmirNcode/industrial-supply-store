@@ -33,10 +33,11 @@ import {
   updateCustomerForRep,
 } from "./customerQueries";
 import { addNoteForRep, listNotes } from "./noteQueries";
-import { issueInvoice } from "./invoiceQueries";
+import { issuePishFactor, sendQuote } from "./invoiceQueries";
 import { confirmPayment } from "./paymentProofQueries";
 import { submitOrderFromCartInTransaction } from "./orderSubmissionQueries";
 import { quoteCartFingerprint } from "@/lib/quoteSubmission";
+import { splitCart } from "@/lib/checkoutSplit";
 import { getOrderByPayToken } from "./accountQueries";
 import { getOrderForRep, getReorderLines, listOrdersForRep, repCanActOnOrder } from "./repOrderQueries";
 import {
@@ -231,7 +232,7 @@ test("self sign-up gets the phone's digits as its ID, or a random one when taken
   try {
     const base = {
       passwordHash: "x", company: "C", contactName: "N", phone, locale: "fa",
-      origin: "self" as const, repId: null,
+      origin: "self" as const, repId: null, accountNumber: "phone" as const,
     };
     const first = await createUser({ ...base, email: `${randomUUID()}@example.invalid` });
     const second = await createUser({ ...base, email: `${randomUUID()}@example.invalid` });
@@ -256,6 +257,7 @@ test("self sign-up gets the phone's digits as its ID, or a random one when taken
 test("a reset password must be replaced; the replacement clears the flag", async () => {
   assertLocalDatabase();
   const created = await createUser({
+    accountNumber: "phone",
     email: `${randomUUID()}@example.invalid`,
     passwordHash: "x",
     company: "C",
@@ -371,6 +373,7 @@ test("a customer sees their rep only while the rep is active; the profile keeps 
     if (rep === "username-taken") throw new Error("username clash");
     repIds.push(rep.id);
     const created = await createUser({
+      accountNumber: "phone",
       email: `${suffix}@example.invalid`,
       passwordHash: "x",
       company: "C",
@@ -393,16 +396,26 @@ test("a customer sees their rep only while the rep is active; the profile keeps 
       phone: "021",
       defaultPoNumber: "",
       locale: "fa",
-      address: "خیابان ۱، پلاک ۲",
-      city: "تهران",
+      nationalId: "0012345678",
+      economicCode: "411122334455",
     });
     const after = await getUserById(created.id);
-    assert.equal(after?.address, "خیابان ۱، پلاک ۲");
-    assert.equal(after?.city, "تهران");
+    assert.equal(after?.nationalId, "0012345678");
+    assert.equal(after?.economicCode, "411122334455");
+    // The profile no longer writes a delivery address: those are saved addresses.
+    assert.equal(after?.address, "");
+    assert.equal(after?.city, "");
   } finally {
     await cleanupReps(repIds, userIds);
   }
 });
+
+// The page signs the shelf split, not the bare cart: 100 are on the shelf.
+function fingerprintFor(productId: number, qty: number, unitPriceCents: number): string {
+  return quoteCartFingerprint(
+    splitCart([{ productId, qty, unitPriceCents, inStock: true, available: 100 }]).lines,
+  );
+}
 
 async function cartWithOneLine(tx: Tx): Promise<{ cartId: string; fingerprint: string }> {
   const suffix = randomUUID();
@@ -420,7 +433,7 @@ async function cartWithOneLine(tx: Tx): Promise<{ cartId: string; fingerprint: s
   await tx`INSERT INTO cart_items (cart_id, product_id, qty) VALUES (${cart.id}, ${product.id}, 2)`;
   return {
     cartId: cart.id,
-    fingerprint: quoteCartFingerprint([{ productId: product.id, qty: 2, unitPriceCents: 1000 }]),
+    fingerprint: fingerprintFor(product.id, 2, 1000),
   };
 }
 
@@ -434,7 +447,9 @@ async function place(tx: Tx, userId: string | null, placedByRepId: string | null
     currency: "USD",
     userId,
     placedByRepId,
-    contact: { company: "C", contactName: "N", email: "", phone: "1", poNumber: "", address: "", city: "", country: "", notes: "" },
+    contact: { company: "C", contactName: "N", email: "", phone: "1", poNumber: "", address: "1 Test St", city: "Tehran", country: "", notes: "", postalCode: "", nationalId: "", economicCode: "" },
+      mode: "split",
+      pishFactor: null,
   });
 }
 
@@ -714,14 +729,12 @@ test("no invoice is issued while a line is priced 0, by a rep or the admin", asy
       (await sql<{ status: string; invoice: string | null }[]>`
         SELECT status, invoice_number AS invoice FROM orders WHERE id = ${order.id}`)[0];
 
-    // A rep invoices at the order's own prices, one of which is 0.
-    assert.equal(await issueInvoice(order.id, { rate: 1_000_000, vatRateBp: 0 }), "unpriced");
+    // A rep quotes at the order's own prices, one of which is 0.
+    assert.equal(await sendQuote(order.id, {}), "unpriced");
     // The admin leaving that line at 0 is refused the same way, and the price
     // written on the way in is rolled back with it.
     assert.equal(
-      await issueInvoice(order.id, {
-        rate: 1_000_000,
-        vatRateBp: 0,
+      await sendQuote(order.id, {
         prices: [{ id: priced.id, cents: 700 }, { id: free.id, cents: 0 }],
       }),
       "unpriced",
@@ -731,16 +744,31 @@ test("no invoice is issued while a line is priced 0, by a rep or the admin", asy
       SELECT unit_price_cents AS cents FROM order_items WHERE id = ${priced.id}`;
     assert.equal(line.cents, 500);
 
-    // Priced by the admin, it issues.
+    // Priced by the admin, the quote goes out.
     assert.equal(
-      await issueInvoice(order.id, {
-        rate: 1_000_000,
-        vatRateBp: 0,
+      await sendQuote(order.id, {
         prices: [{ id: priced.id, cents: 500 }, { id: free.id, cents: 250 }],
       }),
       "issued",
     );
-    assert.equal((await status()).status, "invoiced");
+    assert.equal((await status()).status, "quoted");
+    // And the pish-factor itself refuses a zero line the same way.
+    const [zeroed] = await sql<{ id: number }[]>`
+      INSERT INTO orders (ref, company, contact_name, email, total_cents, requested_total_cents)
+      VALUES (${`ORD-${randomUUID().slice(0, 6).toUpperCase()}`}, 'Zero Co', 'Tester', 'zero@example.invalid', 0, 0)
+      RETURNING id`;
+    try {
+      await sql`
+        INSERT INTO order_items (order_id, product_id, part_number, family_name, qty,
+                                 unit_price_cents, requested_unit_price_cents)
+        VALUES (${zeroed.id}, NULL, 'ZERO-3', 'Integration Family', 1, 0, 0)`;
+      assert.equal(
+        await issuePishFactor(zeroed.id, { rate: 1_000_000, vatRateBp: 0, from: "received", actor: { kind: "admin" } }),
+        "unpriced",
+      );
+    } finally {
+      await sql`DELETE FROM orders WHERE id = ${zeroed.id}`;
+    }
   } finally {
     await sql`DELETE FROM orders WHERE id = ${order.id}`;
   }
@@ -794,7 +822,7 @@ test("a rep resets only a customer they created who has never chosen a password"
     // A self sign-up assigned to rep A: never A's to reset.
     const self = await createUser({
       email: `${randomUUID()}@example.invalid`, passwordHash: "x", company: `Self ${suffix}`,
-      contactName: "N", phone: "12", locale: "en", origin: "self", repId: null,
+      contactName: "N", phone: "12", locale: "en", origin: "self", repId: null, accountNumber: "phone",
     });
     if (self === "email-taken") throw new Error("unexpected");
     userIds.push(self.id);
@@ -915,13 +943,15 @@ test("checkout orders nothing that has been hidden since it was put in the cart"
 
     const result = await submitOrderFromCartInTransaction(tx, {
       cartId,
-      cartFingerprint: quoteCartFingerprint([{ productId: visible.productId, qty: 2, unitPriceCents: 1000 }]),
+      cartFingerprint: fingerprintFor(visible.productId, 2, 1000),
       submissionKey: randomUUID(),
       locale: "en",
       currency: "USD",
       userId: null,
       placedByRepId: null,
-      contact: { company: "C", contactName: "N", email: "", phone: "1", poNumber: "", address: "", city: "", country: "", notes: "" },
+      contact: { company: "C", contactName: "N", email: "", phone: "1", poNumber: "", address: "1 Test St", city: "Tehran", country: "", notes: "", postalCode: "", nationalId: "", economicCode: "" },
+      mode: "split",
+      pishFactor: null,
     });
     const ref = created(result);
     const lines = await tx<{ productId: number }[]>`
@@ -942,13 +972,15 @@ test("totals past what the database stores are refused, not a 500", async () => 
     await tx`UPDATE cart_items SET qty = 99999 WHERE cart_id = ${cartId}`;
     const result = await submitOrderFromCartInTransaction(tx, {
       cartId,
-      cartFingerprint: quoteCartFingerprint([{ productId: line.productId, qty: 99999, unitPriceCents: 50000 }]),
+      cartFingerprint: fingerprintFor(line.productId, 99999, 50000),
       submissionKey: randomUUID(),
       locale: "en",
       currency: "USD",
       userId: null,
       placedByRepId: null,
-      contact: { company: "C", contactName: "N", email: "", phone: "1", poNumber: "", address: "", city: "", country: "", notes: "" },
+      contact: { company: "C", contactName: "N", email: "", phone: "1", poNumber: "", address: "1 Test St", city: "Tehran", country: "", notes: "", postalCode: "", nationalId: "", economicCode: "" },
+      mode: "split",
+      pishFactor: null,
     });
     assert.deepEqual(result, { kind: "too-large" });
   });
@@ -964,7 +996,7 @@ test("totals past what the database stores are refused, not a 500", async () => 
       VALUES (${order.id}, NULL, 'BIG-1', 'Integration Family', 99999, 1, 1) RETURNING id`;
     // The admin types a price that makes the invoice overflow.
     assert.equal(
-      await issueInvoice(order.id, { rate: 1_000_000, vatRateBp: 0, prices: [{ id: item.id, cents: 50_000 }] }),
+      await sendQuote(order.id, { prices: [{ id: item.id, cents: 50_000 }] }),
       "too-large",
     );
     const [row] = await sql<{ status: string }[]>`SELECT status FROM orders WHERE id = ${order.id}`;
@@ -990,7 +1022,7 @@ test("money and state changes leave an audit record in the same transaction", as
       INSERT INTO order_items (order_id, product_id, part_number, family_name, qty,
                                unit_price_cents, requested_unit_price_cents)
       VALUES (${order.id}, NULL, 'AUD-1', 'Integration Family', 1, 100, 100)`;
-    assert.equal(await issueInvoice(order.id, { rate: 1_000_000, vatRateBp: 0, actor: { kind: "rep", id: rep.id } }), "issued");
+    assert.equal(await issuePishFactor(order.id, { rate: 1_000_000, vatRateBp: 0, from: "received", actor: { kind: "rep", id: rep.id } }), "issued");
     assert.equal(await confirmPayment(order.id, "invoiced"), true);
     // A refused change leaves no record.
     assert.equal(await confirmPayment(order.id, "invoiced"), false);
@@ -998,7 +1030,7 @@ test("money and state changes leave an audit record in the same transaction", as
       SELECT action, actor_kind AS "actorKind", actor_id AS "actorId" FROM audit_log
       WHERE subject_kind = 'order' AND subject_id = ${String(order.id)} ORDER BY id`;
     assert.deepEqual([...trail], [
-      { action: "invoice.issued", actorKind: "rep", actorId: rep.id },
+      { action: "pish-factor.issued", actorKind: "rep", actorId: rep.id },
       { action: "payment.confirmed", actorKind: "admin", actorId: null },
     ]);
   } finally {

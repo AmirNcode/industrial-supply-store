@@ -58,6 +58,8 @@ export default async function AdminPanelLayout({
     { href: `/${l}/admin/reps`, label: t.salesReps },
     // Not on the public demo: see customers/page.tsx.
     ...(DEMO_MODE ? [] : [{ href: `/${l}/admin/customers`, label: t.customers }]),
+    // Not on the public demo: a message carries the customer's pay link.
+    ...(DEMO_MODE ? [] : [{ href: `/${l}/admin/emails`, label: t.adminEmails }]),
     { href: `/${l}/admin/products`, label: t.products },
     { href: `/${l}/admin/settings`, label: t.settings },
   ];

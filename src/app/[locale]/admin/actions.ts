@@ -29,7 +29,8 @@ import { releaseHeldStock } from "@/db/inventoryQueries";
 import { confirmPayment } from "@/db/paymentProofQueries";
 import { RATE_LIMITS, consumeRateLimit } from "@/lib/rateLimit";
 import { REQUEST_LIMITS, boundedString } from "@/lib/requestLimits";
-import { issueInvoice } from "@/db/invoiceQueries";
+import { sendQuote } from "@/db/invoiceQueries";
+import { acceptQuote, notifyPaymentConfirmed, notifyQuoteSent } from "@/lib/orderFlow";
 import { recordAudit } from "@/db/audit";
 import { getPayLinkParts, replacePayToken } from "@/db/payLinkQueries";
 import { siteOrigin } from "@/lib/siteOrigin";
@@ -251,6 +252,8 @@ export async function setOrderStatusAction(formData: FormData): Promise<void> {
     if (!moved) {
       redirect(withFilter(`/${locale}/admin/orders?error=conflict`, statusFilter));
     }
+    // The numbered invoice exists from this moment; tell the customer.
+    await notifyPaymentConfirmed(id);
   } else if (to === "delivered") {
     const moved = await sql.begin(async (tx) => {
       const result = await tx`
@@ -277,7 +280,7 @@ export async function setOrderStatusAction(formData: FormData): Promise<void> {
     const stillHeld = (HELD_STATUSES as readonly string[]).includes(row.status);
     const moved = await sql.begin(async (tx) => {
       const result = await tx`
-        UPDATE orders SET status = 'cancelled'
+        UPDATE orders SET status = 'cancelled', expires_at = NULL
         WHERE id = ${id} AND status = ${row.status}
       `;
       if (result.count === 0) return false;
@@ -294,9 +297,10 @@ export async function setOrderStatusAction(formData: FormData): Promise<void> {
       redirect(withFilter(`/${locale}/admin/orders?error=conflict`, statusFilter));
     }
   } else {
-    // 'received' and 'invoiced' are not reachable here: nothing transitions to
-    // 'received', and 'invoiced' belongs to issueInvoice, which prices the
-    // order and locks its exchange and VAT rates.
+    // 'received', 'quoted' and 'invoiced' are not reachable here: nothing
+    // transitions to 'received', 'quoted' belongs to `issueInvoiceAction`
+    // (which prices the order) and 'invoiced' to `acceptQuoteForCustomerAction`
+    // (which locks its exchange and VAT rates).
     redirect(withFilter(`/${locale}/admin/orders?error=bad-request`, statusFilter));
   }
 
@@ -306,14 +310,16 @@ export async function setOrderStatusAction(formData: FormData): Promise<void> {
 }
 
 /**
- * Finalize the draft the admin has just checked: price the order, number the
- * invoice, and lock the exchange rate and VAT rate (`issueInvoice`).
+ * Send the quote the admin has just checked: price the order and move it to
+ * `quoted`, where it waits for the customer to accept (`sendQuote`). The
+ * action keeps its name because the draft-invoice screen posts to it.
  *
- * The draft showed a rate and a VAT rate. If either has moved since — the
- * evening market job, or someone saving Settings in another tab — the invoice
- * would lock figures nobody looked at, so it goes back to the draft, updated,
- * instead. The prices come from the draft's own form, parsed by the same rule
- * the draft used, so what was shown is what is written.
+ * Nothing is locked here — the rate and VAT lock when the quote is accepted —
+ * but the draft showed rial at a rate, and a quote sent after the rate moved
+ * would be one the admin never looked at in rial, so it still goes back to
+ * the draft, updated, when either has changed. The prices come from the
+ * draft's own form, parsed by the same rule the draft used, so what was shown
+ * is what is written.
  */
 export async function issueInvoiceAction(formData: FormData): Promise<void> {
   await assertAdminWrite();
@@ -373,16 +379,35 @@ export async function issueInvoiceAction(formData: FormData): Promise<void> {
     redirect(`/${locale}/admin/orders/${order.ref}/invoice?${query}`);
   }
 
-  const issued = await issueInvoice(id, {
-    rate,
-    vatRateBp,
+  const issued = await sendQuote(id, {
     prices: [...prices].map(([lineId, cents]) => ({ id: lineId, cents })),
   });
   if (issued === "unpriced") redirect(withFilter(`/${locale}/admin/orders?error=prices`, statusFilter));
   if (issued === "conflict") redirect(withFilter(`/${locale}/admin/orders?error=conflict`, statusFilter));
   if (issued === "too-large") redirect(withFilter(`/${locale}/admin/orders?error=too-large`, statusFilter));
 
-  // Invoicing changes an order, and no cached page renders orders.
+  await notifyQuoteSent(id);
+  // Quoting changes an order, and no cached page renders orders.
+  redirect(withFilter(`/${locale}/admin/orders?ok=quoted`, statusFilter));
+}
+
+/**
+ * Accept a quote on the customer's word — a "yes" on the phone. The same step
+ * the customer takes from their pay link: the pish-factor is issued at
+ * today's rate, emailed, and its 24 hours start.
+ */
+export async function acceptQuoteForCustomerAction(formData: FormData): Promise<void> {
+  await assertAdminWrite();
+  const locale = safeLocale(formData);
+  const statusFilter = String(formData.get("statusFilter") ?? "");
+  const id = Number(formData.get("orderId"));
+  if (!Number.isInteger(id) || id <= 0) {
+    redirect(withFilter(`/${locale}/admin/orders?error=bad-request`, statusFilter));
+  }
+  const outcome = await acceptQuote(id, { kind: "admin" });
+  if (outcome === "no-rate") redirect(withFilter(`/${locale}/admin/orders?error=no-rate`, statusFilter));
+  if (outcome === "unpriced") redirect(withFilter(`/${locale}/admin/orders?error=prices`, statusFilter));
+  if (outcome !== "issued") redirect(withFilter(`/${locale}/admin/orders?error=conflict`, statusFilter));
   redirect(withFilter(`/${locale}/admin/orders?ok=invoiced`, statusFilter));
 }
 

@@ -59,7 +59,7 @@ export async function holdStockForOrder(tx: Tx, orderId: number): Promise<void> 
     SET inventory_available = p.inventory_available - i.qty,
         inventory_on_hold  = p.inventory_on_hold + i.qty
     FROM order_items i
-    WHERE i.order_id = ${orderId} AND i.product_id = p.id
+    WHERE i.order_id = ${orderId} AND i.product_id = p.id AND NOT i.backorder
   `;
 }
 
@@ -71,7 +71,7 @@ export async function sellHeldStock(tx: Tx, orderId: number): Promise<void> {
     SET inventory_on_hold = p.inventory_on_hold - i.qty,
         inventory_sold    = p.inventory_sold + i.qty
     FROM order_items i
-    WHERE i.order_id = ${orderId} AND i.product_id = p.id
+    WHERE i.order_id = ${orderId} AND i.product_id = p.id AND NOT i.backorder
   `;
 }
 
@@ -89,7 +89,7 @@ export async function releaseHeldStock(tx: Tx, orderId: number): Promise<void> {
     SET inventory_on_hold  = p.inventory_on_hold - i.qty,
         inventory_available = p.inventory_available + i.qty
     FROM order_items i
-    WHERE i.order_id = ${orderId} AND i.product_id = p.id
+    WHERE i.order_id = ${orderId} AND i.product_id = p.id AND NOT i.backorder
   `;
 }
 
@@ -122,7 +122,7 @@ export async function findShortfalls(
       FROM orders o
       JOIN order_items i ON i.order_id = o.id
       WHERE o.status = ANY(${HELD_STATUS_LIST}::text[])
-        AND i.product_id IS NOT NULL
+        AND i.product_id IS NOT NULL AND NOT i.backorder
       GROUP BY o.id, o.created_at, i.product_id
     ), allocated AS (
       SELECT h.order_id, h.part_number, h.qty,

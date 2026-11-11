@@ -24,10 +24,15 @@ export function BankDetailsPanel({ locale, bank }: { locale: Locale; bank: BankD
         {rows.map((row) => (
           <div key={row.label} className="flex flex-wrap items-center gap-x-3">
             <dt className="font-bold">{row.label}</dt>
-            <dd className={row.copy ? "tech" : undefined} dir={row.copy ? "ltr" : undefined}>{row.value}</dd>
-            {row.copy && (
-              <ShareButton text={row.copy} label={t.copy} copiedLabel={t.copied} copyOnly className="text-[11px] underline" />
-            )}
+            {/* The copy button lives inside the <dd>: a <dl> group may hold only
+                <dt> and <dd>, and a button beside them is a structure screen
+                readers announce wrongly. */}
+            <dd className="flex flex-wrap items-center gap-x-3">
+              <span className={row.copy ? "tech" : undefined} dir={row.copy ? "ltr" : undefined}>{row.value}</span>
+              {row.copy && (
+                <ShareButton text={row.copy} label={t.copy} copiedLabel={t.copied} copyOnly className="text-[11px] underline" />
+              )}
+            </dd>
           </div>
         ))}
       </dl>

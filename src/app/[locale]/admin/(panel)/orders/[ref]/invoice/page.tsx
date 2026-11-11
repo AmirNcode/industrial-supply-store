@@ -20,10 +20,11 @@ import { ConfirmSubmit } from "@/components/ConfirmSubmit";
 import { issueInvoiceAction } from "../../../../actions";
 
 /**
- * The invoice as it will be issued, before it is: the prices typed in the
+ * The quote as the customer will receive it, before it is sent: the prices typed in the
  * queue (carried in the URL — see `lib/invoiceDraft.ts`), today's exchange
- * rate and today's VAT rate. Finalize posts exactly these figures, and the
- * action refuses them if either rate has moved since this page was drawn.
+ * rate and today's VAT rate (shown for checking; the rial amount locks when the
+ * customer accepts). Sending posts exactly these figures, and the action
+ * refuses them if either rate has moved since this page was drawn.
  *
  * The sign-in gate is `requireAdmin()`, first thing, as on every admin page —
  * the panel layout's check does not stop a page from rendering.
@@ -59,9 +60,11 @@ export default async function AdminInvoiceDraftPage({
   ]);
   if (!found) notFound();
   const { order, items } = found;
+  // Quoted or cancelled meanwhile: a quote has no document yet (the pish-factor
+  // comes when it is accepted), so the queue is the only place to send them.
   // Invoiced meanwhile — by a rep, or in another tab: show what was issued.
   if (order.status !== "received") {
-    redirect(order.status === "cancelled" ? queue : `/${l}/invoice/${order.ref}`);
+    redirect(order.status === "cancelled" || order.status === "quoted" ? queue : `/${l}/invoice/${order.ref}`);
   }
 
   const prices = draftLinePrices(query, items);
@@ -78,6 +81,7 @@ export default async function AdminInvoiceDraftPage({
     <InvoiceDraft
       locale={l}
       changed={query.changed === "1"}
+      backorderParts={items.filter((i) => i.backorder).map((i) => i.partNumber)}
       actions={
         <>
           <form action={issueInvoiceAction}>
@@ -97,8 +101,8 @@ export default async function AdminInvoiceDraftPage({
               />
             ))}
             <ConfirmSubmit
-              label={t.finalizeInvoice}
-              title={t.confirmFinalizeInvoice}
+              label={t.sendQuote}
+              title={t.confirmSendQuote}
               continueLabel={t.confirmContinue}
               discardLabel={t.confirmDiscard}
               disabled={DEMO_MODE}
