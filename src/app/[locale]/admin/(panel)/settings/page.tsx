@@ -11,6 +11,8 @@ import {
 } from "@/lib/fx";
 import { FxRatePanel } from "@/components/FxRatePanel";
 import { getSiteContact } from "@/lib/siteContact";
+import { getStaffEmails } from "@/lib/staffEmails";
+import { STAFF_EMAIL_LIMIT } from "@/lib/staffEmailValues";
 import { getBankFields } from "@/lib/bankSettings";
 import { BankDetailsForm } from "@/components/BankDetailsForm";
 import { getVatRateBp } from "@/lib/vatSettings";
@@ -21,6 +23,8 @@ import {
   saveFxAction,
   savePriceDisplayModeAction,
   saveSiteContactAction,
+  addStaffEmailAction,
+  removeStaffEmailAction,
   saveVatRateAction,
   signOutEverywhereAction,
 } from "../../actions";
@@ -40,6 +44,7 @@ export default async function AdminSettingsPage({
     currency?: string;
     bank?: string;
     vat?: string;
+    staff?: string;
   }>;
 }) {
   const { locale } = await params;
@@ -53,9 +58,10 @@ export default async function AdminSettingsPage({
     currency: currencyStatus,
     bank: bankStatus,
     vat: vatStatus,
+    staff: staffStatus,
   } = await searchParams;
 
-  const [fxSettings, rate, autoRate, market, priceDisplayMode, contact, bankFields, vatRateBp, fxSource] =
+  const [fxSettings, rate, autoRate, market, priceDisplayMode, contact, bankFields, vatRateBp, fxSource, staffEmails] =
     await Promise.all([
       getFxSettings(),
       getFxRate(),
@@ -66,6 +72,7 @@ export default async function AdminSettingsPage({
       getBankFields(),
       getVatRateBp(),
       getFxRateSource(),
+      getStaffEmails(),
     ]);
   const BANK_PROBLEM_KEY = {
     card: "bankInvalidCard",
@@ -145,6 +152,51 @@ export default async function AdminSettingsPage({
             {t.siteContactSave}
           </button>
         </form>
+      </section>
+
+      <section id="staff-emails" className="mb-4 border border-[var(--color-rule)] p-3">
+        <h2 className="mb-1 text-[13px] font-bold">{t.staffEmailsTitle}</h2>
+        <p className="mb-3 max-w-[680px] text-[11px] text-[var(--color-ink-muted)]">{t.staffEmailsHint}</p>
+
+        {staffStatus === "added" && <SuccessBanner>{t.staffEmailAdded}</SuccessBanner>}
+        {staffStatus === "removed" && <SuccessBanner>{t.staffEmailRemoved}</SuccessBanner>}
+        {staffStatus === "invalid" && <ErrorBanner>{t.staffEmailInvalid}</ErrorBanner>}
+        {staffStatus === "exists" && <ErrorBanner>{t.staffEmailExists}</ErrorBanner>}
+        {staffStatus === "full" && (
+          <ErrorBanner>{t.staffEmailFull.replace("{max}", formatInt(STAFF_EMAIL_LIMIT, l))}</ErrorBanner>
+        )}
+
+        {staffEmails.length === 0 ? (
+          <p className="mb-3 text-[12px]">{t.staffEmailsEmpty}</p>
+        ) : (
+          <ul className="mb-3 grid max-w-[480px] gap-1 text-[12px]" data-testid="staff-emails">
+            {staffEmails.map((email) => (
+              <li key={email} className="flex items-center justify-between gap-3 border-b border-[var(--color-rule)] py-1">
+                <span className="tech" dir="ltr">{email}</span>
+                <form action={removeStaffEmailAction}>
+                  <input type="hidden" name="locale" value={l} />
+                  <input type="hidden" name="email" value={email} />
+                  <button type="submit" className="btn-small" disabled={DEMO_MODE} aria-label={`${t.staffEmailRemove} ${email}`}>
+                    {t.staffEmailRemove}
+                  </button>
+                </form>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {staffEmails.length < STAFF_EMAIL_LIMIT && (
+          <form action={addStaffEmailAction} className="flex max-w-[480px] items-end gap-2">
+            <input type="hidden" name="locale" value={l} />
+            <label className="grid flex-1 gap-0.5 text-[11px] font-semibold">
+              {t.email}
+              <input type="email" name="email" dir="ltr" autoComplete="off" disabled={DEMO_MODE} required />
+            </label>
+            <button type="submit" className="btn-small" disabled={DEMO_MODE}>
+              {t.staffEmailAdd}
+            </button>
+          </form>
+        )}
       </section>
 
       <section id="bank" className="mb-4 border border-[var(--color-rule)] p-3">

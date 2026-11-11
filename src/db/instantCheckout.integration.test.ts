@@ -19,6 +19,7 @@ import {
   type AddressInput,
 } from "./addressQueries";
 import { createUser, requireNewPassword } from "./userQueries";
+import { addStaffEmail, getStaffEmails, removeStaffEmail } from "@/lib/staffEmails";
 import { inspectDatabaseIntegrity, reconcileInventoryForProducts } from "./dataIntegrity";
 import { LOGIN_CODE_MAX_ATTEMPTS } from "@/lib/loginCode";
 import { splitCart } from "@/lib/checkoutSplit";
@@ -629,7 +630,6 @@ test("sign-in codes: right code once, wrong codes counted, a newer code replaces
     const mine = await issueLoginCode(user.id);
     await issueLoginCode(other.id);
     assert.notEqual(await redeemLoginCode(other.id, mine), "ok");
-  } finally {
 
     // After a code sign-in the old password and every old session stop working.
     const state = async () => {
@@ -645,6 +645,7 @@ test("sign-in codes: right code once, wrong codes counted, a newer code replaces
     assert.equal(afterReset.hash, "unusable");
     assert.equal(afterReset.chose, false);
     assert.equal(afterReset.version, before.version + 1);
+  } finally {
     await fx.cleanup();
   }
 });
@@ -743,5 +744,24 @@ test("ledger: back-order lines count as neither held nor sold, and a wrong count
     assert.deepEqual(await fx.stock(0), { available: 0, onHold: 0, sold: 3 });
   } finally {
     await fx.cleanup();
+  }
+});
+
+test("staff emails: add, refuse duplicates and junk, remove", async () => {
+  assertLocalDatabase();
+  const [saved] = await sql<{ value: string }[]>`SELECT value FROM app_settings WHERE key = 'staff_notify_emails'`;
+  try {
+    await sql`DELETE FROM app_settings WHERE key = 'staff_notify_emails'`;
+    assert.deepEqual(await getStaffEmails(), []);
+    assert.equal(await addStaffEmail("Sara.K@Gmail.com"), "added");
+    assert.equal(await addStaffEmail("sara.k@gmail.com"), "exists");
+    assert.equal(await addStaffEmail("not an email"), "invalid");
+    assert.equal(await addStaffEmail("ops@hotmail.com"), "added");
+    assert.deepEqual(await getStaffEmails(), ["sara.k@gmail.com", "ops@hotmail.com"]);
+    await removeStaffEmail("sara.k@gmail.com");
+    assert.deepEqual(await getStaffEmails(), ["ops@hotmail.com"]);
+  } finally {
+    await sql`DELETE FROM app_settings WHERE key = 'staff_notify_emails'`;
+    if (saved) await sql`INSERT INTO app_settings (key, value) VALUES ('staff_notify_emails', ${saved.value})`;
   }
 });

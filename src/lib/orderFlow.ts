@@ -19,6 +19,7 @@ import { invoiceAmounts } from "./invoice";
 import { formatAmount, formatPrice, type Currency } from "./money";
 import { PISH_FACTOR_TTL_HOURS, QUOTE_TTL_DAYS } from "./orders";
 import { getSiteContact } from "./siteContact";
+import { getStaffEmails } from "./staffEmails";
 import { isPlaceholderContact } from "./siteContactValues";
 import { getVatRateBp } from "./vatSettings";
 
@@ -97,11 +98,19 @@ async function links(order: MailOrder) {
   };
 }
 
-async function staffAddress(): Promise<string | null> {
+/**
+ * The list kept in Admin → Settings; without one, `STAFF_NOTIFY_EMAIL`; without
+ * that, the public contact address. One email per address rather than one
+ * with every address on it: these are people's personal inboxes, and nobody
+ * on the list needs to see the others'.
+ */
+async function staffAddresses(): Promise<string[]> {
+  const listed = await getStaffEmails();
+  if (listed.length > 0) return listed;
   const configured = process.env.STAFF_NOTIFY_EMAIL?.trim();
-  if (configured) return configured;
+  if (configured) return [configured];
   const contact = await getSiteContact();
-  return isPlaceholderContact(contact) ? null : contact.email;
+  return isPlaceholderContact(contact) ? [] : [contact.email];
 }
 
 async function sendPishFactor(order: MailOrder): Promise<void> {
@@ -131,7 +140,7 @@ async function sendPishFactor(order: MailOrder): Promise<void> {
  * missed one would quietly release its stock.
  */
 export async function notifyOrdersPlaced(placed: readonly PlacedOrder[]): Promise<void> {
-  const staff = await staffAddress();
+  const staff = await staffAddresses();
   for (const { id, issued } of placed) {
     const order = await mailOrder(id);
     if (!order) continue;
@@ -151,10 +160,10 @@ export async function notifyOrdersPlaced(placed: readonly PlacedOrder[]): Promis
         }),
       });
     }
-    if (staff) {
+    for (const to of staff) {
       await sendEmail({
         kind: issued ? "staff-new-order" : "staff-quote-request",
-        to: staff,
+        to,
         orderId: order.id,
         ...staffNewOrderEmail({
           ref: order.ref,

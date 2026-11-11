@@ -16,6 +16,7 @@ import { isFxMode, isPlausibleRate, parseRate } from "@/lib/fxRate";
 import { refreshMarketRate } from "@/lib/fxMarketUpdate";
 import { safeLocale } from "@/lib/i18n";
 import { getSiteContact, saveSiteContact } from "@/lib/siteContact";
+import { addStaffEmail, removeStaffEmail } from "@/lib/staffEmails";
 import { validateBankFields } from "@/lib/bankDetails";
 import { saveBankFields } from "@/lib/bankSettings";
 import {
@@ -166,6 +167,23 @@ export async function saveSiteContactAction(formData: FormData): Promise<void> {
   // The header on the cached catalog pages prints it.
   revalidateCatalogPages();
   redirect(`/${locale}/admin/settings?contact=saved`);
+}
+
+/** Staff alert inboxes (Admin → Settings). Personal addresses are allowed. */
+export async function addStaffEmailAction(formData: FormData): Promise<void> {
+  await assertAdminWrite();
+  const locale = safeLocale(formData);
+  const raw = boundedString(formData.get("email"), REQUEST_LIMITS.emailChars) ?? "";
+  const result = await addStaffEmail(raw);
+  redirect(`/${locale}/admin/settings?staff=${result}#staff-emails`);
+}
+
+export async function removeStaffEmailAction(formData: FormData): Promise<void> {
+  await assertAdminWrite();
+  const locale = safeLocale(formData);
+  const email = boundedString(formData.get("email"), REQUEST_LIMITS.emailChars);
+  if (email) await removeStaffEmail(email);
+  redirect(`/${locale}/admin/settings?staff=removed#staff-emails`);
 }
 
 /**

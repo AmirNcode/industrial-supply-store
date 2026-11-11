@@ -39,6 +39,19 @@ export const checkoutEn = {
   // its own row so the customer sees it was not forgotten.
   deliveryLabel: "Delivery",
   deliveryFree: "Free",
+
+  // Admin → Settings: who is told about new orders
+  staffEmailsTitle: "Staff notification emails",
+  staffEmailsHint:
+    "Every address here gets its own email for each new order and quote request. Personal addresses (Gmail, Hotmail and so on) are fine. While the list is empty, alerts go to the contact email above.",
+  staffEmailsEmpty: "No staff emails yet.",
+  staffEmailAdd: "Add",
+  staffEmailRemove: "Remove",
+  staffEmailAdded: "Email added.",
+  staffEmailRemoved: "Email removed.",
+  staffEmailInvalid: "That is not a valid email address.",
+  staffEmailExists: "That email is already on the list.",
+  staffEmailFull: "The list is full ({max} addresses). Remove one first.",
   checkoutTotalDue: "Total due",
   checkoutQuoteListTotal: "List total, to be confirmed",
   checkoutUnpricedNote: "Includes items with no list price yet.",
@@ -60,6 +73,9 @@ export const checkoutEn = {
   nationalId: "National ID",
   economicCode: "Economic code",
   placeOrder: "PLACE ORDER",
+  checkoutSignInAsk: "Already a customer?",
+  checkoutSignInLink: "Sign in with your email or customer ID",
+  checkoutSignInAfter: "and your details are filled in.",
   checkoutAccountNote:
     "We will create an account from these details so you can follow your order. No password is needed now.",
   checkoutStockChanged:
@@ -73,9 +89,6 @@ export const checkoutEn = {
   payPlacedQuote: "Request received. We will email your quote within 5 days.",
   payQuoteReady: "Your quote is ready. Accept it to receive the pro forma invoice and pay.",
   acceptQuote: "ACCEPT QUOTE",
-  checkoutSignInAsk: "Already a customer?",
-  checkoutSignInLink: "Sign in with your email or customer ID",
-  checkoutSignInAfter: "and your details are filled in.",
   acceptQuoteNote:
     "Accepting issues the pro forma invoice at today's exchange rate. You then have 24 hours to pay.",
   quoteAccepted: "Quote accepted. Your pro forma invoice is ready.",
@@ -191,6 +204,18 @@ export const checkoutFa: typeof checkoutEn = {
   checkoutVat: "مالیات بر ارزش افزوده ({rate})",
   deliveryLabel: "هزینه ارسال",
   deliveryFree: "رایگان",
+
+  staffEmailsTitle: "ایمیل‌های اطلاع‌رسانی کارکنان",
+  staffEmailsHint:
+    "برای هر سفارش و درخواست استعلام جدید، به هر نشانی این فهرست یک ایمیل جداگانه فرستاده می‌شود. ایمیل شخصی (Gmail، Hotmail و مانند آن) هم قابل قبول است. تا وقتی فهرست خالی است، اطلاع‌رسانی به ایمیل تماس بالا فرستاده می‌شود.",
+  staffEmailsEmpty: "هنوز ایمیلی اضافه نشده است.",
+  staffEmailAdd: "افزودن",
+  staffEmailRemove: "حذف",
+  staffEmailAdded: "ایمیل اضافه شد.",
+  staffEmailRemoved: "ایمیل حذف شد.",
+  staffEmailInvalid: "این نشانی ایمیل معتبر نیست.",
+  staffEmailExists: "این ایمیل از قبل در فهرست هست.",
+  staffEmailFull: "فهرست پر است (حداکثر {max} نشانی). ابتدا یکی را حذف کنید.",
   checkoutTotalDue: "مبلغ قابل پرداخت",
   checkoutQuoteListTotal: "جمع بر اساس قیمت فهرست (نیاز به تأیید)",
   checkoutUnpricedNote: "شامل اقلامی که هنوز قیمت فهرست ندارند.",
@@ -212,6 +237,9 @@ export const checkoutFa: typeof checkoutEn = {
   nationalId: "شناسه ملی",
   economicCode: "کد اقتصادی",
   placeOrder: "ثبت سفارش",
+  checkoutSignInAsk: "قبلاً از ما خرید کرده‌اید؟",
+  checkoutSignInLink: "با ایمیل یا کد مشتری وارد شوید",
+  checkoutSignInAfter: "تا اطلاعات شما خودکار پر شود.",
   checkoutAccountNote:
     "با همین اطلاعات برای شما حساب کاربری ساخته می‌شود تا بتوانید سفارش را پیگیری کنید. فعلاً نیازی به رمز عبور نیست.",
   checkoutStockChanged:
@@ -237,9 +265,6 @@ export const checkoutFa: typeof checkoutEn = {
   countdownDaysHours: "{d} روز و {h} ساعت",
   payExpired:
     "این سفارش منقضی شد: تا پایان مهلت چیزی دریافت نشد، بنابراین سفارش لغو و کالا آزاد شد. می‌توانید دوباره سفارش دهید.",
-  checkoutSignInAsk: "قبلاً از ما خرید کرده‌اید؟",
-  checkoutSignInLink: "با ایمیل یا کد مشتری وارد شوید",
-  checkoutSignInAfter: "تا اطلاعات شما خودکار پر شود.",
   statusExpired: "منقضی شد",
   viewPishFactor: "مشاهده پیش‌فاکتور",
   pishFactorTitle: "پیش‌فاکتور",
