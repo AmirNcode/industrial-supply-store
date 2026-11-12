@@ -137,14 +137,36 @@ old code reads. Review each new migration against the live code's insert and
 update shapes; `salesReps.integration.test.ts` runs the pre-rep release's
 user and order inserts against the migrated schema as an example.
 
+### Release: commission splits (`20261112120000_add_commission_splits.sql`)
+
+Each remote step needs Amir's go-ahead. The migration only adds (two tables,
+nullable columns, relaxed checks) and the old release keeps working against
+it, but it writes only the old `rep_id` columns, so the new tables miss
+anything it writes between the migration and the deploy. Hence the order, and
+the last step.
+
+1. `npm run db:backup:remote`, restore-test that backup, then
+   `MIGRATION_BACKUP_VERIFIED=<today's UTC date, YYYY-MM-DD> npm run db:migrate:remote`
+   (write the real date, for example `MIGRATION_BACKUP_VERIFIED=2026-11-12`).
+2. `npm run db:verify:remote` - every line a tick.
+3. Push `main` (that deploys). Do not assign customers in the admin between
+   steps 1 and 3: the old admin writes `users.rep_id` only.
+4. When the deploy is Ready: `npm run db:reconcile:check:remote`. If it lists
+   orders or customers from the window (orders with a legacy rep and no
+   shares, customers with a legacy rep and no list rows), run
+   `MIGRATION_BACKUP_VERIFIED=<date> RECONCILIATION_APPLY_CONFIRMED=<date> npm run db:reconcile:apply:remote`
+   with the same real date. It inserts a 100% share for each such order and a
+   blank-share list row for each such customer, and nothing else. A
+   `users.rep_id` that is not its list's lead is reported, never repaired.
+
 The storefront's bare root redirects to `/fa`; `/en/...` remains available
 through the language switch. This is a fixed application default, with no admin
 language setting.
 
 Reconciliation is deliberately separate from migration. The check is read-only
 and exits non-zero when canonical or derived data disagrees. `--apply` repairs
-only mechanically derived family/category counts, facet rows, and inventory
-ledger columns; it refuses to guess if SKU, ownership, amount, line-item, or
+only mechanically derived family/category counts, facet rows, inventory
+ledger columns, and the share rows a pre-split release leaves unwritten; it refuses to guess if SKU, ownership, amount, line-item, or
 invoice/lifecycle data is invalid. On a remote host it requires both dated
 acknowledgements above, locks the participating tables, preserves each SKU's
 total stock while reallocating available/held/sold, verifies the result, and

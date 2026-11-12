@@ -3,6 +3,14 @@
  * every origin, sixty orders across the last fourteen Persian months in every
  * status, notes, follow-ups, payouts and targets — so the dashboards have
  * something to show without walking sixty orders through the admin by hand.
+ * Two more accounts show the commission-split screens: one shared 75/25
+ * between the two reps with a delivered order, and one with no rep at all
+ * ("Demo Walk-in Trading") for a rep to find by search.
+ *
+ * Every account and order is written both ways: `customer_reps` /
+ * `order_rep_shares` (what the code reads) and the legacy `rep_id` columns
+ * (kept equal to the lead, as every real writer does). Writing only the legacy
+ * columns leaves the demo reps seeing nothing.
  *
  * Local databases only. Re-running replaces this script's own rows (customers
  * with demo.*@example.invalid emails, their orders, the demo reps' payouts and
@@ -87,6 +95,8 @@ const printed = await sql.begin(async (tx) => {
   }
 
   const customers: { id: string; code: string; company: string; rep: (typeof reps)[number]; earns: boolean }[] = [];
+  // The two accounts made for the split and search screens; kept out of `customers` so the sixty orders above never land on them.
+  const extras: { code: string; company: string; note: string }[] = [];
   for (let i = 0; i < COMPANIES.length; i++) {
     const rep = reps[i % reps.length];
     const origin = i < 8 ? "rep" : i < 12 ? "referral" : "self";
@@ -102,6 +112,9 @@ const printed = await sql.begin(async (tx) => {
               ${origin === "self" ? null : rep.id}, ${earns},
               ${followUp === null ? null : new Date(Date.now() + followUp * DAY).toISOString().slice(0, 10)})
       RETURNING id, customer_code AS code`;
+    await tx`INSERT INTO customer_reps (user_id, rep_id, share_bp) VALUES (${customer.id}, ${rep.id}, NULL)`;
+    // A rep customer who earns nothing is a 0% account rate, as the migration backfills it.
+    if (!earns) await tx`UPDATE users SET commission_rate_bp = 0 WHERE id = ${customer.id}`;
     customers.push({ id: customer.id, code: customer.code, company: COMPANIES[i], rep, earns });
     if (i < 5) {
       await tx`
@@ -148,6 +161,7 @@ const printed = await sql.begin(async (tx) => {
               ${paid ? at(3) : null}::timestamptz, ${shipped ? at(5) : null}::timestamptz,
               ${status === "delivered" ? at(9) : null}::timestamptz)
       RETURNING id`;
+    await tx`INSERT INTO order_rep_shares (order_id, rep_id, share_bp) VALUES (${order.id}, ${customer.rep.id}, 10000)`;
     for (const line of lines) {
       await tx`
         INSERT INTO order_items (order_id, product_id, part_number, family_name, qty,
@@ -157,19 +171,72 @@ const printed = await sql.begin(async (tx) => {
     }
   }
 
+  // One account shared 75/25, with a delivered order the split was copied onto;
+  // sara is added first and holds the bigger share, so she is the lead (and
+  // users.rep_id). The rate is the lead's, as the account has no override.
+  const [sara, reza] = reps;
+  const sharedPhone = "09124109001";
+  const [shared] = await tx<{ id: string; code: string }[]>`
+    INSERT INTO users (email, password_hash, company, contact_name, phone, locale, customer_code,
+                       rep_id, origin, origin_rep_id, rep_earns_commission)
+    VALUES ('demo.shared@example.invalid', ${customerHash}, 'Demo Shared Account', 'Buyer Shared',
+            ${sharedPhone}, 'fa', ${codeFromPhone(sharedPhone)!}, ${sara.id}, 'rep', ${sara.id}, true)
+    RETURNING id, customer_code AS code`;
+  await tx`
+    INSERT INTO customer_reps (user_id, rep_id, share_bp, added_at)
+    VALUES (${shared.id}, ${sara.id}, 7500, now() - interval '2 seconds'),
+           (${shared.id}, ${reza.id}, 2500, now() - interval '1 second')`;
+  const [sharedProduct] = await tx<{ id: number; partNumber: string; priceCents: number; familyName: string }[]>`
+    SELECT p.id, p.part_number AS "partNumber", p.price_cents AS "priceCents", f.name_fa AS "familyName"
+    FROM products p JOIN product_families f ON f.id = p.family_id
+    WHERE p.price_cents > 0 ORDER BY p.id LIMIT 1`;
+  const sharedQty = 40;
+  const sharedTotal = sharedProduct.priceCents * sharedQty;
+  const sharedAt = (days: number) => new Date(now - (30 - days) * DAY).toISOString();
+  const [sharedOrder] = await tx<{ id: number }[]>`
+    INSERT INTO orders (ref, company, contact_name, email, phone, locale, currency, total_cents,
+                        requested_total_cents, status, user_id, rep_id, commission_rate_bp,
+                        placed_by_rep, placed_by_rep_id, invoice_number, fx_rate_to_rial,
+                        created_at, invoiced_at, paid_at, shipped_at, delivered_at)
+    VALUES ('ORD-DEMOSHARED', 'Demo Shared Account', 'Buyer Shared', 'demo.c-order@example.invalid', '',
+            'fa', 'IRR', ${sharedTotal}, ${sharedTotal}, 'delivered', ${shared.id}, ${sara.id}, ${sara.rateBp},
+            true, ${sara.id},
+            (SELECT 'INV-' || to_char(${sharedAt(1)}::timestamptz, 'YYYY') || '-' || lpad(s.n::text, greatest(4, length(s.n::text)), '0') FROM (SELECT nextval('invoice_seq') AS n) s),
+            1050000, ${sharedAt(0)}::timestamptz, ${sharedAt(1)}::timestamptz, ${sharedAt(3)}::timestamptz,
+            ${sharedAt(5)}::timestamptz, ${sharedAt(9)}::timestamptz)
+    RETURNING id`;
+  await tx`
+    INSERT INTO order_rep_shares (order_id, rep_id, share_bp)
+    VALUES (${sharedOrder.id}, ${sara.id}, 7500), (${sharedOrder.id}, ${reza.id}, 2500)`;
+  await tx`
+    INSERT INTO order_items (order_id, product_id, part_number, family_name, qty,
+                             unit_price_cents, requested_unit_price_cents)
+    VALUES (${sharedOrder.id}, ${sharedProduct.id}, ${sharedProduct.partNumber}, ${sharedProduct.familyName},
+            ${sharedQty}, ${sharedProduct.priceCents}, ${sharedProduct.priceCents})`;
+  extras.push({ code: shared.code, company: "Demo Shared Account", note: "shared 75/25, demo.sara and demo.reza" });
+
+  // A customer nobody looks after: a rep finds them by searching for the name.
+  const walkInPhone = "09124109002";
+  const [walkIn] = await tx<{ id: string; code: string }[]>`
+    INSERT INTO users (email, password_hash, company, contact_name, phone, locale, customer_code, origin)
+    VALUES ('demo.walkin@example.invalid', ${customerHash}, 'Demo Walk-in Trading', 'Buyer Walk-in',
+            ${walkInPhone}, 'fa', ${codeFromPhone(walkInPhone)!}, 'self')
+    RETURNING id, customer_code AS code`;
+  extras.push({ code: walkIn.code, company: "Demo Walk-in Trading", note: "no rep; a rep finds it by searching walk-in" });
+
   const current = persianYearMonth(new Date(now));
   const yearAgo = persianYearMonth(new Date(now - 365 * DAY));
   // Payouts and targets follow the demo's own scale, so "owed" stays positive
   // and a target bar reads as a plausible share of a month's sales. The money
   // is computed in SQL with the same formula as db/repMoney.ts.
   const money = await tx<{ repId: string; earned: number; sales: number }[]>`
-    SELECT o.rep_id AS "repId",
-           SUM(ROUND(o.total_cents::numeric * o.fx_rate_to_rial * o.commission_rate_bp / 1000000))::float8 AS earned,
-           SUM(ROUND(o.total_cents::numeric * o.fx_rate_to_rial / 100))::float8 AS sales
-    FROM orders o
+    SELECT s.rep_id AS "repId",
+           SUM(ROUND(o.total_cents::numeric * o.fx_rate_to_rial * o.commission_rate_bp * s.share_bp / 10000000000))::float8 AS earned,
+           SUM(ROUND(o.total_cents::numeric * o.fx_rate_to_rial * s.share_bp / 1000000))::float8 AS sales
+    FROM orders o JOIN order_rep_shares s ON s.order_id = o.id
     WHERE o.status = 'delivered'
-      AND o.rep_id IN (SELECT id FROM sales_reps WHERE username LIKE 'demo.%')
-    GROUP BY o.rep_id`;
+      AND s.rep_id IN (SELECT id FROM sales_reps WHERE username LIKE 'demo.%')
+    GROUP BY s.rep_id`;
   const byRep = new Map(money.map((row) => [row.repId, row]));
   const roundTo = (value: number, step: number) => Math.max(step, Math.round(value / step) * step);
   for (const rep of reps) {
@@ -193,7 +260,7 @@ const printed = await sql.begin(async (tx) => {
     ...new Set([...touched, ...used].map((row) => row.productId)),
   ]);
 
-  return { reps, customers };
+  return { reps, customers, extras };
 });
 
 console.log("✓ Demo sales reps seeded (local database).");
@@ -201,5 +268,6 @@ for (const rep of printed.reps) console.log(`  rep ${rep.username}  password ${R
 for (const c of printed.customers) {
   console.log(`  customer ${c.code}  ${c.company}  (${c.rep.username}${c.earns ? "" : ", no commission"})`);
 }
+for (const c of printed.extras) console.log(`  customer ${c.code}  ${c.company}  (${c.note})`);
 console.log(`  customer password ${CUSTOMER_PASSWORD}`);
 await sql.end();
