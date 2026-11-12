@@ -1349,3 +1349,28 @@ test("a rep order for an unassigned customer stores no email, and its mail goes 
     }, [id]);
   });
 });
+
+test("an unassigned customer is found by company, contact name, ID and phone, never by email", async () => {
+  assertLocalDatabase();
+  await inScope(async (s) => {
+    const [cTag, eTag, kTag] = [tagOf(), tagOf(), tagOf()];
+    const me = await s.rep();
+    const code = randomCustomerCode();
+    const digits = String(Math.floor(1_000_000_000 + Math.random() * 8_000_000_000));
+    const free = await s.customer({
+      company: `Free ${cTag} Co`, contact: `Person ${kTag}`, code, phone: `0${digits.slice(0, 3)} ${digits.slice(3)}`,
+    });
+    await sql`UPDATE users SET email = ${`mail${eTag}@example.invalid`} WHERE id = ${free}`;
+    const found = async (search: string) =>
+      (await searchBeyondMine(me, search)).unassigned.some((row) => row.id === free);
+
+    // The address is not shown to the rep, so matching it would only let them probe for it.
+    assert.equal(await found(`mail${eTag}`), false, "email fragment");
+    assert.equal(await found(`${eTag}@example`), false, "email domain fragment");
+
+    assert.equal(await found(`free ${cTag}`), true, "company fragment");
+    assert.equal(await found(`person ${kTag}`), true, "contact name fragment");
+    assert.equal(await found(code), true, "exact customer ID");
+    assert.equal(await found(digits.slice(0, 6)), true, "phone digits");
+  });
+});

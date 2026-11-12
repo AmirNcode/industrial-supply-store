@@ -66,9 +66,11 @@ function escapeLike(value: string): string {
 /**
  * The ID exactly; the company, contact or email by substring; or the phone's
  * digits by substring. Persian digits in the search box or in a stored phone
- * both count.
+ * both count. `withEmail: false` is for a customer nobody holds yet: the
+ * rep sees that row's contact name and phone, but an email match would let
+ * them probe which addresses are registered.
  */
-function matches(search: string) {
+function matches(search: string, withEmail = true) {
   const text = latinDigits(search.trim());
   if (text === "") return sql`TRUE`;
   const like = `%${escapeLike(text)}%`;
@@ -78,8 +80,9 @@ function matches(search: string) {
       ? sql`OR regexp_replace(translate(u.phone, '۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩', '01234567890123456789'),
                               '[^0-9]', '', 'g') LIKE ${`%${digits}%`}`
       : sql`OR FALSE`;
+  const email = withEmail ? sql`OR u.email ILIKE ${like}` : sql``;
   return sql`(u.customer_code = ${text} OR u.company ILIKE ${like}
-              OR u.contact_name ILIKE ${like} OR u.email ILIKE ${like} ${phone})`;
+              OR u.contact_name ILIKE ${like} ${email} ${phone})`;
 }
 
 /**
@@ -165,7 +168,7 @@ export async function searchBeyondMine(
       SELECT u.id, u.customer_code AS "customerCode", COALESCE(u.company, '') AS company,
              COALESCE(u.contact_name, '') AS "contactName", COALESCE(u.phone, '') AS phone
       FROM users u
-      WHERE ${unassigned()} AND ${matches(search)}
+      WHERE ${unassigned()} AND ${matches(search, false)}
       ORDER BY u.company, u.customer_code
       LIMIT ${REP_SEARCH_UNASSIGNED_MAX}
     `,
