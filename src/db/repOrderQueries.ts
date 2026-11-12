@@ -23,12 +23,14 @@ export type RepOrderRow = {
   expiredAt: string | null;
   /** Only on orders this rep can act on; null on an order they see because the customer is on their list. */
   payToken: string | null;
-  /** I have a share in it, or I placed it — the orders I may act on. */
+  /** I have a share in it, or I placed it and the claim is still open — the orders I may act on. */
   canAct: boolean;
   /** My share of the order in basis points; null when I have no share row. */
   myShareBp: number | null;
   /** I placed it and it has no shares yet: it credits me only if its payment wins the customer. */
   pendingClaim: boolean;
+  /** I placed it, it has no shares, and the customer has since been given to other reps: no commission, no rights. */
+  lostClaim: boolean;
   company: string;
   customerId: string | null;
   customerCode: string | null;
@@ -59,10 +61,21 @@ function visibleTo(repId: string) {
   )`;
 }
 
-/** SQL fragment: I may act on `o` — I have a share in it or I placed it. */
+/** SQL fragment: the order has no share rows (it credits nobody yet). */
+const NO_SHARES = sql`NOT EXISTS (SELECT 1 FROM order_rep_shares s WHERE s.order_id = o.id)`;
+/** SQL fragment: nobody holds the order's customer. */
+const CUSTOMER_UNASSIGNED = sql`NOT EXISTS (SELECT 1 FROM customer_reps cr WHERE cr.user_id = o.user_id)`;
+
+/**
+ * SQL fragment: I may act on `o` — I have a share in it, or I placed it and
+ * the claim is still open (no shares, customer still unassigned). Once the
+ * customer is given to other reps, the placing rep has lost the claim and
+ * keeps only the read-only view: a pay link or receipt upload for a sale that
+ * now pays someone else would be acting on another rep's customer.
+ */
 function canActOn(repId: string) {
   // IS TRUE: placed_by_rep_id is NULL on most orders, and NULL OR false is NULL, not false.
-  return sql`((o.placed_by_rep_id = ${repId}) IS TRUE
+  return sql`(((o.placed_by_rep_id = ${repId}) IS TRUE AND ${NO_SHARES} AND ${CUSTOMER_UNASSIGNED})
     OR EXISTS (SELECT 1 FROM order_rep_shares s WHERE s.order_id = o.id AND s.rep_id = ${repId}))`;
 }
 
@@ -82,8 +95,8 @@ function rowCols(repId: string) {
   CASE WHEN ${canActOn(repId)} THEN o.pay_token END AS "payToken",
   ${canActOn(repId)} AS "canAct",
   (SELECT s.share_bp FROM order_rep_shares s WHERE s.order_id = o.id AND s.rep_id = ${repId}) AS "myShareBp",
-  ((o.placed_by_rep_id = ${repId}) IS TRUE
-    AND NOT EXISTS (SELECT 1 FROM order_rep_shares s WHERE s.order_id = o.id)) AS "pendingClaim",
+  ((o.placed_by_rep_id = ${repId}) IS TRUE AND ${NO_SHARES} AND ${CUSTOMER_UNASSIGNED}) AS "pendingClaim",
+  ((o.placed_by_rep_id = ${repId}) IS TRUE AND ${NO_SHARES} AND NOT ${CUSTOMER_UNASSIGNED}) AS "lostClaim",
   COALESCE(u.company, o.company) AS company, o.user_id AS "customerId",
   u.customer_code AS "customerCode", o.placed_by_rep AS "placedByRep"`;
 }

@@ -59,6 +59,8 @@ type OrderRow = {
   quotedAt: string | null;
   /** Locked onto the order when it was placed; null when no rep is credited. */
   shares: { name: string; shareBp: number }[];
+  /** Someone holds the customer now: an unclaimed order from a rep has lost it. */
+  customerHasReps: boolean;
   placingRepName: string | null; // set when a rep placed the order, whether or not it was ever credited
   commissionRateBp: number | null;
   customerCode: string | null;
@@ -127,6 +129,7 @@ export default async function AdminPage({
                        FROM order_rep_shares s JOIN sales_reps sr ON sr.id = s.rep_id
                        WHERE s.order_id = q.id), '[]'::json) AS shares,
              pr.name AS "placingRepName",
+             EXISTS (SELECT 1 FROM customer_reps cr WHERE cr.user_id = q.user_id) AS "customerHasReps",
              q.commission_rate_bp AS "commissionRateBp",
              u.customer_code AS "customerCode", q.user_id AS "userId",
              count(*) OVER ()::int AS "totalCount"
@@ -243,7 +246,9 @@ export default async function AdminPage({
               <span className="border border-[var(--color-rule)] px-1.5 text-[11px]">
                 {t.repLabel}: {repSummary(q, l)}
                 {q.placingRepName && q.shares.length > 0 && ` · ${t.placedByRep}`}
-                {q.shares.length === 0 && q.placingRepName && ` · ${t.repOrderPendingClaim}`}
+                {q.shares.length === 0 &&
+                  q.placingRepName &&
+                  ` · ${(q.customerHasReps ? t.adminOrderLostClaim : t.adminOrderPendingClaim).replace("{name}", q.placingRepName)}`}
               </span>
             )}
             <span className="text-[var(--color-ink-muted)]">{q.contactName}</span>

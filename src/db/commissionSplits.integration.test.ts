@@ -1374,3 +1374,50 @@ test("an unassigned customer is found by company, contact name, ID and phone, ne
     assert.equal(await found(digits.slice(0, 6)), true, "phone digits");
   });
 });
+
+test("a rep who lost the claim can no longer act on the order they placed", async () => {
+  assertLocalDatabase();
+  await inScope(async (s) => {
+    const [a, b] = [await s.rep(), await s.rep()];
+    const id = await s.customer();
+    await withOrders(undefined as never, async (place) => {
+      const ref = refOf(await place(id, a));
+      const mine = async () => (await listOrdersForRep(a, null)).find((r) => r.ref === ref);
+
+      const before = await mine();
+      assert.ok(before);
+      assert.equal(before.canAct, true);
+      assert.equal(before.pendingClaim, true);
+      assert.equal(before.lostClaim, false);
+      assert.ok(before.payToken, "pay link while the claim is open");
+
+      assert.equal(await setAccountReps(id, [{ repId: b, shareBp: null }], null), "ok");
+
+      const after = await mine();
+      assert.ok(after, "the order is still visible to the rep who placed it");
+      assert.equal(after.canAct, false);
+      assert.equal(after.payToken, null);
+      assert.equal(after.pendingClaim, false);
+      assert.equal(after.lostClaim, true);
+      assert.equal(await repCanActOnOrder(a, ref), false);
+      assert.equal((await getOrderForRep(a, ref))?.order.lostClaim, true);
+    }, [id]);
+  });
+});
+
+test("an order placed for a customer who already has the rep is neither pending nor lost", async () => {
+  assertLocalDatabase();
+  await inScope(async (s) => {
+    const [a, b] = [await s.rep(), await s.rep()];
+    const id = await s.customer();
+    assert.equal(await setAccountReps(id, [{ repId: a, shareBp: null }, { repId: b, shareBp: null }], null), "ok");
+    await withOrders(undefined as never, async (place) => {
+      const ref = refOf(await place(id, a));
+      const row = (await listOrdersForRep(a, null)).find((r) => r.ref === ref);
+      assert.ok(row);
+      assert.equal(row.pendingClaim, false);
+      assert.equal(row.lostClaim, false);
+      assert.equal(row.canAct, true);
+    }, [id]);
+  });
+});

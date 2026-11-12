@@ -64,15 +64,15 @@ export default async function RepOrderPage({
   const errorKey = error && error in ERROR_KEY ? ERROR_KEY[error as keyof typeof ERROR_KEY] : null;
   const rateBp = order.commissionRateBp ?? 0;
   // An order placed for an unassigned customer carries no split until its
-  // payment is confirmed. Until then it may still win the customer; once it is
-  // past payment review with no split, someone else got there first. A
-  // cancelled one claims nothing and says nothing.
-  const PAID_STATES = ["preparing", "shipped", "delivered"];
-  const commissionLine = order.pendingClaim
-    ? order.status === "cancelled"
-      ? null
-      : PAID_STATES.includes(order.status)
-        ? t.repOrderLostClaim
+  // payment is confirmed. While the customer is still unassigned it may yet
+  // win them; once the customer has reps and the order has no split, someone
+  // else got there first — at any status, since assignment alone decides it.
+  // A cancelled pending one claims nothing and says nothing.
+  const commissionLine = order.lostClaim
+    ? t.repOrderLostClaim
+    : order.pendingClaim
+      ? order.status === "cancelled"
+        ? null
         : t.repOrderPendingClaim
     : rateBp > 0 && order.myShareBp
       ? t.repShareOfCommission
