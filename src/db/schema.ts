@@ -512,6 +512,7 @@ export const orders = pgTable(
     uniqueIndex("orders_submission_key_key").on(t.submissionKey),
     uniqueIndex("orders_pay_token_key").on(t.payToken),
     index("orders_rep_delivered_idx").on(t.repId, t.deliveredAt).where(sql`${t.repId} IS NOT NULL`),
+    index("orders_placed_by_rep_idx").on(t.placedByRepId).where(sql`${t.placedByRepId} IS NOT NULL`),
     // A credited order needs its rate, but an unclaimed one (no rep yet) has
     // neither; IS NULL is spelled out because a CHECK that evaluates to NULL passes.
     check(
