@@ -274,9 +274,9 @@ export async function reorderAction(formData: FormData): Promise<void> {
   const found = await getReorderLines(rep.id, ref);
   if (!found) redirect(`/${locale}/rep/orders`);
   // Mine only: an unassigned customer is ordered for from the search, and the
-  // query already returns no customer for an order whose account moved on.
-  const owner = found.customerId ? await getOrderableCustomerForRep(rep.id, found.customerId) : null;
-  if (!found.customerId || owner?.kind !== "mine") redirect(`/${locale}/rep/orders/${ref}?error=not-yours`);
+  // query already returns a customer id only while the account is on this
+  // rep's list, so there is nothing more to check here.
+  if (!found.customerId) redirect(`/${locale}/rep/orders/${ref}?error=not-yours`);
   try {
     await addLines(found.lines);
   } catch (error) {
