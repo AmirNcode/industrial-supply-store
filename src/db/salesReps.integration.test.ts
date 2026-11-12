@@ -101,6 +101,12 @@ async function insertCustomer(
             ${options.earns ?? false}, ${repId ? "rep" : "self"}, ${repId}, '0912 000 0000')
     RETURNING id
   `;
+  // The account's rep list: submission reads customer_reps, not users.rep_id.
+  // A non-earning customer carries rate 0, as the migration backfill sets it.
+  if (repId) {
+    await tx`INSERT INTO customer_reps (user_id, rep_id) VALUES (${user.id}, ${repId})`;
+    if (!(options.earns ?? false)) await tx`UPDATE users SET commission_rate_bp = 0 WHERE id = ${user.id}`;
+  }
   return user.id;
 }
 
@@ -485,6 +491,8 @@ test("the customer's rep, rate and eligibility are locked onto an order when it 
     // Later changes cannot reach back into a placed order.
     await tx`UPDATE sales_reps SET commission_rate_bp = 900 WHERE id = ${rep}`;
     await tx`UPDATE users SET rep_id = ${other} WHERE id = ${eligible}`;
+    await tx`DELETE FROM customer_reps WHERE user_id = ${eligible}`;
+    await tx`INSERT INTO customer_reps (user_id, rep_id) VALUES (${eligible}, ${other})`;
     assert.deepEqual(await stampOf(tx, own), { repId: rep, rateBp: 250, placedByRep: false });
 
     // The first rep may no longer order for a customer who is now someone else's.

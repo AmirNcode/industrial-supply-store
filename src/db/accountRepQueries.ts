@@ -1,6 +1,7 @@
 import "server-only";
 import { sql } from "./index";
 import { recordAudit } from "./audit";
+import type { TransactionSql } from "postgres";
 import type { Db } from "./repMoney";
 import {
   leadRepId,
@@ -24,6 +25,9 @@ export type AccountRep = {
   effectiveShareBp: number; // after resolveShares
   isLead: boolean;
 };
+
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
+type Tx = TransactionSql<{}>;
 
 type StoredRow = { repId: string; name: string; active: boolean; shareBp: number | null };
 
@@ -154,5 +158,69 @@ export async function listAccountsWithInactiveRep(): Promise<
     JOIN users u ON u.id = cr.user_id
     GROUP BY u.id
     ORDER BY u.created_at DESC
+  `;
+}
+
+export type OrderSplit = {
+  rateBp: number; // users.commission_rate_bp ?? lead rep's commission_rate_bp
+  leadRepId: string; // lead of the whole list, active or not
+  shares: { repId: string; shareBp: number }[]; // active reps only; may be empty
+};
+
+/**
+ * Who is credited, and at what rate — decided once, as the order is written,
+ * and copied onto it so a later move or rate change cannot reach back into it.
+ * The customer row is locked FOR UPDATE before the list is read, the same lock
+ * `setAccountReps` takes first: a save lands wholly before or wholly after this
+ * read, never halfway, and the lock is held until the order commits. A
+ * deactivated rep is left out (not redistributed to): deactivation moves
+ * customers, so this is only the window between the two, and a locked-out rep
+ * earning from it would be wrong. The rate still follows the lead of the whole
+ * list, so an inactive lead does not change what the others are paid at.
+ * Null when the account has no reps.
+ */
+export async function splitForOrder(tx: Tx, userId: string): Promise<OrderSplit | null> {
+  const [user] = await tx<{ rate: number | null }[]>`
+    SELECT commission_rate_bp AS rate FROM users WHERE id = ${userId} FOR UPDATE
+  `;
+  if (!user) return null;
+  const rows = await storedRows(userId, tx);
+  if (rows.length === 0) return null;
+
+  const split: SplitRow[] = rows.map((row) => ({ repId: row.repId, shareBp: row.shareBp }));
+  const lead = leadRepId(split)!;
+  let rateBp = user.rate;
+  if (rateBp === null) {
+    const [leadRep] = await tx<{ rate: number }[]>`
+      SELECT commission_rate_bp AS rate FROM sales_reps WHERE id = ${lead}
+    `;
+    rateBp = leadRep?.rate ?? 0;
+  }
+  const activeIds = new Set(rows.filter((row) => row.active).map((row) => row.repId));
+  return {
+    rateBp,
+    leadRepId: lead,
+    shares: resolveShares(split).filter((share) => activeIds.has(share.repId)),
+  };
+}
+
+/**
+ * Writes the order's copy and the legacy `orders.rep_id` / rate (the biggest
+ * active share; the earliest on a tie). A no-op without active reps, which
+ * leaves the order uncredited. One UPDATE sets both legacy columns because a
+ * credited order must carry its rate.
+ */
+export async function writeOrderShares(tx: Tx, orderId: number, split: OrderSplit): Promise<void> {
+  if (split.shares.length === 0) return;
+  await tx`
+    INSERT INTO order_rep_shares (order_id, rep_id, share_bp)
+    SELECT ${orderId}, s.rep_id, s.share_bp
+    FROM unnest(${split.shares.map((share) => share.repId)}::uuid[], ${split.shares.map((share) => share.shareBp)}::int[])
+      AS s(rep_id, share_bp)
+  `;
+  let biggest = split.shares[0];
+  for (const share of split.shares) if (share.shareBp > biggest.shareBp) biggest = share;
+  await tx`
+    UPDATE orders SET rep_id = ${biggest.repId}, commission_rate_bp = ${split.rateBp} WHERE id = ${orderId}
   `;
 }

@@ -13,6 +13,7 @@ import type { Currency } from "@/lib/money";
 import { planOrders, splitCart, type CheckoutMode, type PlannedOrder } from "@/lib/checkoutSplit";
 import { PISH_FACTOR_TTL_HOURS, QUOTE_TTL_DAYS } from "@/lib/orders";
 import { recordAudit } from "./audit";
+import { splitForOrder, writeOrderShares, type OrderSplit } from "./accountRepQueries";
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 type Tx = TransactionSql<{}>;
@@ -94,32 +95,6 @@ async function cartLinesInTransaction(tx: Tx, cartId: string): Promise<CartLine[
   `;
 }
 
-/**
- * Who is credited, and at what rate — decided once, here, as the order is
- * written. The customer's rep and that rep's rate are read inside the same
- * transaction and copied onto the order, so moving the customer or changing
- * the rate later cannot reach back into it. A customer who is not
- * commission-eligible still credits their rep, at 0: the sale counts toward
- * the rep's numbers, just not their commission. An inactive rep is credited
- * with nothing — deactivation moves customers, so this is only the window
- * between the two, and a locked-out rep earning from it would be wrong.
- */
-async function creditFor(tx: Tx, userId: string): Promise<{ repId: string; rateBp: number } | null> {
-  const [row] = await tx<
-    { repId: string | null; active: boolean | null; rateBp: number | null; earns: boolean }[]
-  >`
-    SELECT u.rep_id AS "repId", r.active, r.commission_rate_bp AS "rateBp",
-           u.rep_earns_commission AS earns
-    FROM users u LEFT JOIN sales_reps r ON r.id = u.rep_id
-    WHERE u.id = ${userId}
-    -- Held until the order commits, so a move or deactivation in flight waits
-    -- rather than landing between this read and the order's credit (M-18).
-    FOR SHARE OF u
-  `;
-  if (!row || row.repId === null || !row.active) return null;
-  return { repId: row.repId, rateBp: row.earns ? (row.rateBp ?? 0) : 0 };
-}
-
 /** Everything a submission wrote, found again from its key (a replay). */
 async function placedBySubmission(tx: Tx, submissionKey: string): Promise<PlacedOrder[]> {
   return tx<PlacedOrder[]>`
@@ -192,11 +167,17 @@ export async function submitOrderFromCartInTransaction(
   const totalCents = split.lines.reduce((sum, line) => sum + line.unitPriceCents * line.qty, 0);
   if (exceedsOrderLimit(totalCents)) return { kind: "too-large" };
 
-  const credit = input.userId ? await creditFor(tx, input.userId) : null;
-  // A rep may only order for their own customer. Checked again here, inside
-  // the transaction, because the customer can be moved between the checkout
-  // page rendering and this write.
-  if (input.placedByRepId !== null && credit?.repId !== input.placedByRepId) {
+  // Lock order is cart, products, then this customer row. Nothing that holds
+  // the customer row goes on to take a cart or product lock, so it cannot cycle.
+  const credit = input.userId ? await splitForOrder(tx, input.userId) : null;
+  // A rep may order for a customer who lists them (and is active), or for one
+  // nobody looks after. Checked again here, inside the transaction, because
+  // the customer can be moved between the checkout page rendering and this write.
+  if (
+    input.placedByRepId !== null &&
+    (input.userId === null ||
+      (credit !== null && !credit.shares.some((share) => share.repId === input.placedByRepId)))
+  ) {
     return { kind: "customer-moved" };
   }
 
@@ -286,7 +267,7 @@ async function insertOrder(
   extra: {
     submissionKey: string | null;
     groupId: string | null;
-    credit: { repId: string; rateBp: number } | null;
+    credit: OrderSplit | null;
   },
 ): Promise<PlacedOrder | "replayed"> {
   const totalCents = plan.items.reduce((sum, item) => sum + item.unitPriceCents * item.qty, 0);
@@ -298,7 +279,7 @@ async function insertOrder(
                           phone, po_number, address, city, country, notes,
                           postal_code, buyer_national_id, buyer_economic_code,
                           locale, currency, total_cents, requested_total_cents,
-                          status, user_id, rep_id, commission_rate_bp, placed_by_rep,
+                          status, user_id, placed_by_rep, placed_by_rep_id,
                           group_id, invoiced_at, fx_rate_to_rial, vat_rate_bp, expires_at)
       VALUES (
         ${extra.submissionKey},
@@ -321,9 +302,8 @@ async function insertOrder(
         ${totalCents},
         ${lock ? "invoiced" : "received"},
         ${input.userId},
-        ${extra.credit?.repId ?? null},
-        ${extra.credit ? extra.credit.rateBp : null},
         ${input.placedByRepId !== null},
+        ${input.placedByRepId},
         ${extra.groupId},
         CASE WHEN ${lock !== null} THEN now() END,
         ${lock?.rate ?? null},
@@ -335,7 +315,11 @@ async function insertOrder(
       ON CONFLICT DO NOTHING
       RETURNING id, ref, pay_token AS "payToken", (invoiced_at IS NOT NULL) AS issued
     `;
-    if (order) return order;
+    if (order) {
+      // Legacy rep_id / rate are set here too, together, once the shares exist.
+      if (extra.credit) await writeOrderShares(tx, order.id, extra.credit);
+      return order;
+    }
     // A conflict on the submission key is a replay. A conflict on the short
     // human reference is merely a collision, so generate another reference.
     if (extra.submissionKey !== null) {

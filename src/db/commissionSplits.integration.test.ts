@@ -7,7 +7,16 @@ import type { TransactionSql } from "postgres";
 import { sql } from "./index";
 import { randomReferralCode } from "@/lib/repAccount";
 import { randomCustomerCode } from "@/lib/customerCode";
-import { listAccountReps, listAccountsWithInactiveRep, repAccess, setAccountReps } from "./accountRepQueries";
+import {
+  listAccountReps,
+  listAccountsWithInactiveRep,
+  repAccess,
+  setAccountReps,
+  splitForOrder,
+} from "./accountRepQueries";
+import { submitOrderFromCartInTransaction } from "./orderSubmissionQueries";
+import { quoteCartFingerprint } from "@/lib/quoteSubmission";
+import { splitCart } from "@/lib/checkoutSplit";
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 type Tx = TransactionSql<{}>;
@@ -354,5 +363,247 @@ test("every successful save writes one audit row", async () => {
     assert.equal(await count(), 2);
     assert.equal(await setAccountReps(id, [{ repId: a, shareBp: 5000 }], null), "total");
     assert.equal(await count(), 2); // a refusal writes nothing
+  });
+});
+
+// ── Orders copy the split. These place orders through the real submission
+// function; the rows are committed (setAccountReps and the lock test need
+// that), so each test removes its own orders, cart and product afterwards.
+
+type Made = Parameters<Parameters<typeof withCommitted>[0]>[0];
+
+async function withOrders(
+  made: Made,
+  body: (place: (userId: string | null, placedByRepId?: string | null) => ReturnType<typeof submitOrderFromCartInTransaction>) => Promise<void>,
+  customers: string[],
+) {
+  const categories: number[] = [];
+  try {
+    await body(async (userId, placedByRepId = null) => {
+      const suffix = randomUUID();
+      const [category] = await sql<{ id: number }[]>`
+        INSERT INTO categories (slug, path, name_en, name_fa)
+        VALUES (${`split-${suffix}`}, ${`split-${suffix}`}, 'Split test', 'آزمایش') RETURNING id`;
+      categories.push(category.id);
+      const [family] = await sql<{ id: number }[]>`
+        INSERT INTO product_families (slug, category_id, name_en, name_fa)
+        VALUES (${`split-family-${suffix}`}, ${category.id}, 'Split family', 'خانواده') RETURNING id`;
+      const [product] = await sql<{ id: number }[]>`
+        INSERT INTO products (part_number, family_id, specs, price_cents,
+                              inventory_available, inventory_on_hold, inventory_sold)
+        VALUES (${`SPL-${suffix}`}, ${family.id}, '{}'::jsonb, 1000, 100, 0, 0) RETURNING id`;
+      const [cart] = await sql<{ id: string }[]>`INSERT INTO carts DEFAULT VALUES RETURNING id`;
+      await sql`INSERT INTO cart_items (cart_id, product_id, qty) VALUES (${cart.id}, ${product.id}, 2)`;
+      return sql.begin((tx) => submitOrderFromCartInTransaction(tx, orderInput(cart.id, product.id, userId, placedByRepId)));
+    });
+  } finally {
+    if (customers.length) await sql`DELETE FROM orders WHERE user_id = ANY(${customers}::uuid[])`;
+    if (categories.length) {
+      await sql`DELETE FROM carts WHERE id IN (SELECT cart_id FROM cart_items WHERE product_id IN
+        (SELECT p.id FROM products p JOIN product_families f ON f.id = p.family_id WHERE f.category_id = ANY(${categories}::int[])))`;
+      await sql`DELETE FROM products WHERE family_id IN (SELECT id FROM product_families WHERE category_id = ANY(${categories}::int[]))`;
+      await sql`DELETE FROM product_families WHERE category_id = ANY(${categories}::int[])`;
+      await sql`DELETE FROM categories WHERE id = ANY(${categories}::int[])`;
+    }
+  }
+  void made;
+}
+
+function orderInput(cartId: string, productId: number, userId: string | null, placedByRepId: string | null) {
+  return {
+    cartId,
+    // Two units on a shelf of 100, exactly as the page would have signed them.
+    cartFingerprint: quoteCartFingerprint(
+      splitCart([{ productId, qty: 2, unitPriceCents: 1000, inStock: true, available: 100 }]).lines,
+    ),
+    submissionKey: randomUUID(),
+    locale: "en" as const,
+    currency: "USD" as const,
+    userId,
+    placedByRepId,
+    contact: { company: "C", contactName: "N", email: "", phone: "1", poNumber: "", address: "1 Test St", city: "Tehran", country: "", notes: "", postalCode: "", nationalId: "", economicCode: "" },
+    mode: "split" as const,
+    pishFactor: null,
+  };
+}
+
+type Placed = Awaited<ReturnType<typeof submitOrderFromCartInTransaction>>;
+
+function refOf(result: Placed): string {
+  if (result.kind !== "created") throw new Error(`expected an order, got ${result.kind}`);
+  return result.ref;
+}
+
+const orderRow = async (ref: string) => {
+  const [order] = await sql<{ id: number; repId: string | null; rateBp: number | null; placedByRep: boolean; placedByRepId: string | null }[]>`
+    SELECT id, rep_id AS "repId", commission_rate_bp AS "rateBp", placed_by_rep AS "placedByRep",
+           placed_by_rep_id AS "placedByRepId"
+    FROM orders WHERE ref = ${ref}`;
+  const rows = await sql<{ repId: string; shareBp: number }[]>`
+    SELECT rep_id AS "repId", share_bp AS "shareBp" FROM order_rep_shares WHERE order_id = ${order.id}
+    ORDER BY share_bp DESC, rep_id`;
+  // Plain objects: deepStrictEqual compares prototypes, and a driver row is not one.
+  return { ...order, shares: rows.map((row) => ({ repId: row.repId, shareBp: row.shareBp })) };
+};
+
+test("order copies a 75/25 split and the account rate", async () => {
+  assertLocalDatabase();
+  await withCommitted(async (made) => {
+    const [a, b] = [await made.rep(), await made.rep()];
+    const id = await made.customer();
+    assert.equal(await setAccountReps(id, [{ repId: a, shareBp: 7500 }, { repId: b, shareBp: 2500 }], 400), "ok");
+    await withOrders(made, async (place) => {
+      const order = await orderRow(refOf(await place(id)));
+      assert.deepEqual(order.shares, [{ repId: a, shareBp: 7500 }, { repId: b, shareBp: 2500 }]);
+      assert.equal(order.rateBp, 400);
+      assert.equal(order.repId, a); // legacy column: the biggest share
+    }, [id]);
+  });
+});
+
+test("blank account rate follows the lead rep's rate at placement", async () => {
+  assertLocalDatabase();
+  await withCommitted(async (made) => {
+    const lead = await made.rep();
+    const id = await made.customer();
+    await sql`UPDATE sales_reps SET commission_rate_bp = 500 WHERE id = ${lead}`;
+    assert.equal(await setAccountReps(id, [{ repId: lead, shareBp: null }], null), "ok");
+    await withOrders(made, async (place) => {
+      const first = await orderRow(refOf(await place(id)));
+      assert.equal(first.rateBp, 500);
+      await sql`UPDATE sales_reps SET commission_rate_bp = 700 WHERE id = ${lead}`;
+      const second = await orderRow(refOf(await place(id)));
+      assert.equal(second.rateBp, 700);
+      const [{ rateBp }] = await sql<{ rateBp: number }[]>`SELECT commission_rate_bp AS "rateBp" FROM orders WHERE id = ${first.id}`;
+      assert.equal(rateBp, 500); // the first order keeps what it was placed at
+    }, [id]);
+  });
+});
+
+test("later changes do not reach a placed order", async () => {
+  assertLocalDatabase();
+  await withCommitted(async (made) => {
+    const [a, b] = [await made.rep(), await made.rep()];
+    const id = await made.customer();
+    assert.equal(await setAccountReps(id, [{ repId: a, shareBp: 6000 }, { repId: b, shareBp: 4000 }], null), "ok");
+    await withOrders(made, async (place) => {
+      const ref = refOf(await place(id));
+      const before = await orderRow(ref);
+      const other = await made.rep();
+      assert.equal(await setAccountReps(id, [{ repId: other, shareBp: null }], 100), "ok");
+      assert.deepEqual(await orderRow(ref), before);
+    }, [id]);
+  });
+});
+
+test("inactive rep is left out", async () => {
+  assertLocalDatabase();
+  await withCommitted(async (made) => {
+    const [a, b] = [await made.rep(), await made.rep()];
+    const id = await made.customer();
+    assert.equal(await setAccountReps(id, [{ repId: a, shareBp: 7500 }, { repId: b, shareBp: 2500 }], null), "ok");
+    await sql`UPDATE sales_reps SET active = false WHERE id = ${b}`;
+    await withOrders(made, async (place) => {
+      const order = await orderRow(refOf(await place(id)));
+      assert.deepEqual(order.shares, [{ repId: a, shareBp: 7500 }]);
+      assert.equal(order.rateBp, 250);
+      assert.equal(order.repId, a);
+    }, [id]);
+  });
+});
+
+test("rep on the list may order; another rep may not", async () => {
+  assertLocalDatabase();
+  await withCommitted(async (made) => {
+    const [a, b, outsider] = [await made.rep(), await made.rep(), await made.rep()];
+    const id = await made.customer();
+    assert.equal(await setAccountReps(id, [{ repId: a, shareBp: null }, { repId: b, shareBp: null }], null), "ok");
+    await withOrders(made, async (place) => {
+      const order = await orderRow(refOf(await place(id, b)));
+      assert.equal(order.placedByRep, true);
+      assert.equal(order.placedByRepId, b);
+      assert.equal(order.shares.length, 2);
+
+      assert.deepEqual(await place(id, outsider), { kind: "customer-moved" });
+      const [{ n }] = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM orders WHERE user_id = ${id}`;
+      assert.equal(n, 1);
+    }, [id]);
+  });
+});
+
+test("rep removed before submit", async () => {
+  assertLocalDatabase();
+  await withCommitted(async (made) => {
+    const [a, b] = [await made.rep(), await made.rep()];
+    const id = await made.customer();
+    assert.equal(await setAccountReps(id, [{ repId: a, shareBp: null }, { repId: b, shareBp: null }], null), "ok");
+    assert.equal(await setAccountReps(id, [{ repId: b, shareBp: null }], null), "ok");
+    await withOrders(made, async (place) => {
+      assert.deepEqual(await place(id, a), { kind: "customer-moved" });
+      const [{ n }] = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM orders WHERE user_id = ${id}`;
+      assert.equal(n, 0);
+    }, [id]);
+  });
+});
+
+test("rep orders for an unassigned customer", async () => {
+  assertLocalDatabase();
+  await withCommitted(async (made) => {
+    const rep = await made.rep();
+    const id = await made.customer();
+    await withOrders(made, async (place) => {
+      const order = await orderRow(refOf(await place(id, rep)));
+      assert.equal(order.placedByRep, true);
+      assert.equal(order.placedByRepId, rep);
+      assert.equal(order.shares.length, 0);
+      assert.equal(order.repId, null);
+      assert.equal(order.rateBp, null);
+    }, [id]);
+  });
+});
+
+test("split saved mid-submission waits for the order, which keeps the old split", async () => {
+  assertLocalDatabase();
+  await withCommitted(async (made) => {
+    const [a, b, c] = [await made.rep(), await made.rep(), await made.rep()];
+    const id = await made.customer();
+    assert.equal(await setAccountReps(id, [{ repId: a, shareBp: 7000 }, { repId: b, shareBp: 3000 }], null), "ok");
+    await withOrders(made, async () => {
+      // A cart outside the helper so the order can be written inside transaction A.
+      const suffix = randomUUID();
+      const [category] = await sql<{ id: number }[]>`
+        INSERT INTO categories (slug, path, name_en, name_fa)
+        VALUES (${`split-${suffix}`}, ${`split-${suffix}`}, 'Split test', 'آزمایش') RETURNING id`;
+      const [family] = await sql<{ id: number }[]>`
+        INSERT INTO product_families (slug, category_id, name_en, name_fa)
+        VALUES (${`split-family-${suffix}`}, ${category.id}, 'Split family', 'خانواده') RETURNING id`;
+      const [product] = await sql<{ id: number }[]>`
+        INSERT INTO products (part_number, family_id, specs, price_cents,
+                              inventory_available, inventory_on_hold, inventory_sold)
+        VALUES (${`SPL-${suffix}`}, ${family.id}, '{}'::jsonb, 1000, 100, 0, 0) RETURNING id`;
+      const [cart] = await sql<{ id: string }[]>`INSERT INTO carts DEFAULT VALUES RETURNING id`;
+      await sql`INSERT INTO cart_items (cart_id, product_id, qty) VALUES (${cart.id}, ${product.id}, 2)`;
+      try {
+        let save: Promise<string> | undefined;
+        let settled = false;
+        const result = await sql.begin(async (tx) => {
+          assert.ok(await splitForOrder(tx, id)); // holds the customer-row lock
+          save = setAccountReps(id, [{ repId: c, shareBp: null }], null);
+          void save.then(() => { settled = true; });
+          await new Promise((resolve) => setTimeout(resolve, 200));
+          assert.equal(settled, false, "the save must wait for the open order");
+          return submitOrderFromCartInTransaction(tx, orderInput(cart.id, product.id, id, null));
+        });
+        assert.equal(await save, "ok");
+        const order = await orderRow(refOf(result));
+        assert.deepEqual(order.shares, [{ repId: a, shareBp: 7000 }, { repId: b, shareBp: 3000 }]);
+      } finally {
+        await sql`DELETE FROM orders WHERE user_id = ${id}`;
+        await sql`DELETE FROM carts WHERE id = ${cart.id}`;
+        await sql`DELETE FROM products WHERE id = ${product.id}`;
+        await sql`DELETE FROM product_families WHERE id = ${family.id}`;
+        await sql`DELETE FROM categories WHERE id = ${category.id}`;
+      }
+    }, [id]);
   });
 });
