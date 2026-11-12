@@ -11,6 +11,7 @@ import {
 } from "./dataIntegrity";
 import { ColumnKeyTaken, saveColumnsInTransaction } from "./columnQueries";
 import { randomCustomerCode } from "@/lib/customerCode";
+import { randomReferralCode } from "@/lib/repAccount";
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 type Tx = TransactionSql<{}>;
@@ -129,6 +130,11 @@ test("constraints, corruption detection, and derived reconciliation share one in
         categoryCountMismatches: 0,
         facetMismatches: 0,
         inventoryLedgerMismatches: 0,
+        accountShareProblems: 0,
+        orderShareProblems: 0,
+        legacyLeadMismatches: 0,
+        ordersMissingShares: 0,
+        accountsMissingRepRows: 0,
       });
 
       await expectDetected(
@@ -409,6 +415,173 @@ test("constraints, corruption detection, and derived reconciliation share one in
         RollBackSavepoint,
       );
 
+      // ── Commission splits: shares, the legacy columns and their repair.
+      const makeRep = async (sp: Tx, username: string): Promise<string> => {
+        const [rep] = await sp<{ id: string }[]>`
+          INSERT INTO sales_reps (username, password_hash, name, commission_rate_bp, referral_code)
+          VALUES (${`${username}-${suffix}`.slice(0, 32)}, 'x', ${username}, 300,
+                  ${randomReferralCode()})
+          RETURNING id`;
+        return rep.id;
+      };
+      const [spare] = await tx<{ id: string }[]>`
+        INSERT INTO users (email, password_hash, customer_code)
+        VALUES (${`integrity-spare-${suffix}@example.invalid`}, 'not-a-real-hash', ${randomCustomerCode()})
+        RETURNING id`;
+
+      // Clean shapes are silent: a blank list, a 70/30 list, and an order's shares.
+      await expectDetected(
+        tx,
+        async (sp) => {
+          const [a, b] = [await makeRep(sp, "int-a"), await makeRep(sp, "int-b")];
+          await sp`INSERT INTO customer_reps (user_id, rep_id, share_bp, added_at)
+                   VALUES (${user.id}, ${a}, 7000, now()), (${user.id}, ${b}, 3000, now() + interval '1 second')`;
+          await sp`UPDATE users SET rep_id = ${a} WHERE id = ${user.id}`;
+          await sp`UPDATE orders SET rep_id = ${a}, commission_rate_bp = 300 WHERE id = ${order.id}`;
+          await sp`INSERT INTO order_rep_shares (order_id, rep_id, share_bp)
+                   VALUES (${order.id}, ${a}, 7000), (${order.id}, ${b}, 3000)`;
+        },
+        (report) => {
+          assert.equal(report.accountShareProblems, 0);
+          assert.equal(report.orderShareProblems, 0);
+          assert.equal(report.legacyLeadMismatches, 0);
+          assert.equal(report.ordersMissingShares, 0);
+          assert.equal(report.accountsMissingRepRows, 0);
+        },
+      );
+
+      // Shares that do not total 100%, or are half filled, or more than 5 reps.
+      await expectDetected(
+        tx,
+        async (sp) => {
+          const [a, b] = [await makeRep(sp, "int-a"), await makeRep(sp, "int-b")];
+          await sp`INSERT INTO customer_reps (user_id, rep_id, share_bp)
+                   VALUES (${user.id}, ${a}, 6000), (${user.id}, ${b}, 3000)`;
+          await sp`UPDATE users SET rep_id = ${a} WHERE id = ${user.id}`;
+        },
+        (report) => assert.equal(report.accountShareProblems, 1),
+      );
+      await expectDetected(
+        tx,
+        async (sp) => {
+          const [a, b] = [await makeRep(sp, "int-a"), await makeRep(sp, "int-b")];
+          await sp`INSERT INTO customer_reps (user_id, rep_id, share_bp)
+                   VALUES (${user.id}, ${a}, 10000), (${user.id}, ${b}, NULL)`;
+          await sp`UPDATE users SET rep_id = ${a} WHERE id = ${user.id}`;
+        },
+        (report) => assert.equal(report.accountShareProblems, 1),
+      );
+      await expectDetected(
+        tx,
+        async (sp) => {
+          for (let i = 0; i < 6; i++) {
+            const rep = await makeRep(sp, `int-${i}`);
+            await sp`INSERT INTO customer_reps (user_id, rep_id, share_bp, added_at)
+                     VALUES (${user.id}, ${rep}, NULL, now() + ${`${i} seconds`}::interval)`;
+            if (i === 0) await sp`UPDATE users SET rep_id = ${rep} WHERE id = ${user.id}`;
+          }
+        },
+        (report) => assert.equal(report.accountShareProblems, 1),
+      );
+
+      // An order's shares over 100%, or shares with no commission rate.
+      await expectDetected(
+        tx,
+        async (sp) => {
+          const [a, b] = [await makeRep(sp, "int-a"), await makeRep(sp, "int-b")];
+          await sp`UPDATE orders SET commission_rate_bp = 300 WHERE id = ${order.id}`;
+          await sp`INSERT INTO order_rep_shares (order_id, rep_id, share_bp)
+                   VALUES (${order.id}, ${a}, 6000), (${order.id}, ${b}, 5000)`;
+        },
+        (report) => assert.equal(report.orderShareProblems, 1),
+      );
+      await expectDetected(
+        tx,
+        async (sp) => {
+          const a = await makeRep(sp, "int-a");
+          await sp`INSERT INTO order_rep_shares (order_id, rep_id, share_bp) VALUES (${order.id}, ${a}, 10000)`;
+        },
+        (report) => assert.equal(report.orderShareProblems, 1),
+      );
+
+      // The legacy column must equal the list's lead: biggest share, earliest on a tie.
+      await expectDetected(
+        tx,
+        async (sp) => {
+          const [a, b] = [await makeRep(sp, "int-a"), await makeRep(sp, "int-b")];
+          await sp`INSERT INTO customer_reps (user_id, rep_id, share_bp, added_at)
+                   VALUES (${user.id}, ${a}, 3000, now()), (${user.id}, ${b}, 7000, now() + interval '1 second')`;
+          await sp`UPDATE users SET rep_id = ${a} WHERE id = ${user.id}`;
+        },
+        (report) => assert.equal(report.legacyLeadMismatches, 1),
+      );
+      await expectDetected(
+        tx,
+        async (sp) => {
+          const [a, b] = [await makeRep(sp, "int-a"), await makeRep(sp, "int-b")];
+          // Equal split: the earliest row leads, so naming the later rep is wrong.
+          await sp`INSERT INTO customer_reps (user_id, rep_id, share_bp, added_at)
+                   VALUES (${user.id}, ${a}, NULL, now()), (${user.id}, ${b}, NULL, now() + interval '1 second')`;
+          await sp`UPDATE users SET rep_id = ${b} WHERE id = ${user.id}`;
+        },
+        (report) => assert.equal(report.legacyLeadMismatches, 1),
+      );
+
+      // An unclaimed rep-placed order has a placing rep but no shares and no rep_id: not a problem.
+      await expectDetected(
+        tx,
+        async (sp) => {
+          const a = await makeRep(sp, "int-a");
+          await sp`UPDATE orders SET placed_by_rep = true, placed_by_rep_id = ${a} WHERE id = ${order.id}`;
+        },
+        (report) => {
+          assert.equal(report.ordersMissingShares, 0);
+          assert.equal(report.orderShareProblems, 0);
+        },
+      );
+
+      // What the previous release writes in the deploy window is reported as derived, then repaired and nothing else.
+      await assert.rejects(
+        tx.savepoint(async (sp) => {
+          const a = await makeRep(sp, "int-a");
+          const b = await makeRep(sp, "int-b");
+          await sp`UPDATE users SET rep_id = ${a} WHERE id = ${spare.id}`;
+          await sp`UPDATE orders SET rep_id = ${b}, commission_rate_bp = 250 WHERE id = ${order.id}`;
+          // Not legacy-shaped, so it must be left exactly as it is.
+          await sp`UPDATE users SET rep_id = ${a} WHERE id = ${user.id}`;
+          await sp`INSERT INTO customer_reps (user_id, rep_id, share_bp) VALUES (${user.id}, ${a}, NULL)`;
+
+          const report = await inspectDatabaseIntegrity(sp);
+          assert.equal(report.accountsMissingRepRows, 1);
+          assert.equal(report.ordersMissingShares, 1);
+
+          const result = await reconcileDerivedData(sp);
+          assert.equal(result.changes.accountRepRows, 1);
+          assert.equal(result.changes.orderShareRows, 1);
+          assert.equal(result.after.accountsMissingRepRows, 0);
+          assert.equal(result.after.ordersMissingShares, 0);
+
+          assert.deepEqual(
+            [...(await sp`SELECT rep_id, share_bp FROM customer_reps WHERE user_id = ${spare.id}`)],
+            [{ rep_id: a, share_bp: null }],
+          );
+          assert.deepEqual(
+            [...(await sp`SELECT rep_id, share_bp FROM order_rep_shares WHERE order_id = ${order.id}`)],
+            [{ rep_id: b, share_bp: 10000 }],
+          );
+          assert.equal((await sp`SELECT 1 FROM customer_reps WHERE user_id = ${user.id}`).length, 1);
+
+          // A mismatch is never repaired: reconciliation refuses it.
+          await sp`UPDATE users SET rep_id = ${b} WHERE id = ${user.id}`;
+          await assert.rejects(
+            sp.savepoint((inner) => reconcileDerivedData(inner)),
+            /canonical data is invalid/,
+          );
+          throw new RollBackSavepoint();
+        }),
+        RollBackSavepoint,
+      );
+
       await tx`UPDATE product_families SET product_count = 5 WHERE id = ${family.id}`;
       await tx`UPDATE categories SET product_count = 5 WHERE id = ${category.id}`;
       await tx`
@@ -438,6 +611,11 @@ test("constraints, corruption detection, and derived reconciliation share one in
         categoryCountMismatches: 0,
         facetMismatches: 0,
         inventoryLedgerMismatches: 0,
+        accountShareProblems: 0,
+        orderShareProblems: 0,
+        legacyLeadMismatches: 0,
+        ordersMissingShares: 0,
+        accountsMissingRepRows: 0,
       });
       assert.deepEqual(reconciled.changes, {
         familyCounts: 1,
@@ -445,6 +623,8 @@ test("constraints, corruption detection, and derived reconciliation share one in
         facetRowsDeleted: 0,
         facetRowsUpserted: 1,
         inventoryRows: 1,
+        orderShareRows: 0,
+        accountRepRows: 0,
       });
 
       throw new RollBackFixture();

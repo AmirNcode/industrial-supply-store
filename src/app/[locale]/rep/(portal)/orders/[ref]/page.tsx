@@ -63,6 +63,22 @@ export default async function RepOrderPage({
   const payUrl = order.payToken ? `${origin}/${l}/pay/${order.payToken}` : null;
   const errorKey = error && error in ERROR_KEY ? ERROR_KEY[error as keyof typeof ERROR_KEY] : null;
   const rateBp = order.commissionRateBp ?? 0;
+  // An order placed for an unassigned customer carries no split until its
+  // payment is confirmed. While the customer is still unassigned it may yet
+  // win them; once the customer has reps and the order has no split, someone
+  // else got there first — at any status, since assignment alone decides it.
+  // A cancelled pending one claims nothing and says nothing.
+  const commissionLine = order.lostClaim
+    ? t.repOrderLostClaim
+    : order.pendingClaim
+      ? order.status === "cancelled"
+        ? null
+        : t.repOrderPendingClaim
+    : rateBp > 0 && order.myShareBp
+      ? t.repShareOfCommission
+          .replace("{share}", commissionPercentLabel(order.myShareBp, l))
+          .replace("{rate}", commissionPercentLabel(rateBp, l))
+      : t.commissionNone;
   // received = our quote is due, quoted = valid until, invoiced = pay by.
   const deadline =
     order.status === "cancelled" && order.expiredAt
@@ -104,21 +120,19 @@ export default async function RepOrderPage({
           <strong>{t.orderDeadline}:</strong> {deadline}
         </p>
       )}
-      {order.creditedToMe && (
-          <p className="mb-3 text-[12px]" data-testid="commission-line">
-            {rateBp > 0
-              ? t.commissionLocked.replace("{percent}", commissionPercentLabel(rateBp, l))
-              : t.commissionNone}
-          </p>
+      {order.canAct && commissionLine && (
+        <p className="mb-3 text-[12px]" data-testid="commission-line">
+          {commissionLine}
+        </p>
       )}
 
-      {!order.creditedToMe && (
+      {!order.canAct && (
         <p className="mb-3 text-[12px] text-[var(--color-ink-muted)]" data-testid="rep-order-read-only">
           {t.repOrderReadOnly}
         </p>
       )}
 
-      {order.creditedToMe && order.status === "received" && (
+      {order.canAct && order.status === "received" && (
         <section className="mb-4 flex flex-wrap items-center gap-3 border border-[var(--color-rule)] p-3 text-[12px]">
           {/* A rep never changes a price, so a line at 0 is the admin's to price. */}
           {hasUnpricedLine(items) ? (
@@ -134,7 +148,7 @@ export default async function RepOrderPage({
         </section>
       )}
 
-      {order.creditedToMe && order.status === "quoted" && (
+      {order.canAct && order.status === "quoted" && (
         <section className="mb-4 flex flex-wrap items-center gap-3 border border-[var(--color-rule)] p-3 text-[12px]">
           <form action={acceptQuoteForRepAction}>
             <input type="hidden" name="locale" value={l} />
@@ -147,7 +161,7 @@ export default async function RepOrderPage({
         </section>
       )}
 
-      {order.creditedToMe && (
+      {order.canAct && (
         <PaymentProofSection
           locale={l}
           proofs={orderProofs}

@@ -37,10 +37,10 @@ connects to either hosted Supabase project.
 | `/[locale]/invoice/[ref]` | customer, staff, or pay-link key | language in path, currency in `?cur=`, pay-link key in `?key=` |
 | `/[locale]/pay/[token]` | anyone holding the link | one order per 64-hex token; no sign-in, `noindex`, no referrer; where checkout lands: status, deadline, bank account once a pish-factor exists, receipt upload, Accept for a quote |
 | `/[locale]/r/[code]` | public (route handler) | a rep's referral link: remembers an active rep for 30 days, lands on the catalog |
-| `/[locale]/rep/**` | sales rep | own signed cookie; `(session)` holds only the forced-password page, `(portal)` the rest |
-| `/[locale]/rep/orders/[ref]/invoice` | sales rep | draft invoice for an order the rep may see, at its own prices, in rial |
+| `/[locale]/rep/**` | sales rep | own signed cookie; `(session)` holds only the forced-password page, `(portal)` the rest. A rep reaches the customers on their own list and unassigned ones (search, 3+ characters, then order); another rep's customer is one "assigned to" line |
+| `/[locale]/rep/orders/[ref]/invoice` | sales rep | draft invoice for an order the rep may see (one they placed, hold a share of, or whose account they are on), at its own prices, in rial |
 | `/[locale]/admin/login` | public | the only password form |
-| `/[locale]/admin/(panel)/{orders,reps,customers,products,settings,emails}` | staff | every page calls `requireAdmin()` first; the layout's check is not a gate |
+| `/[locale]/admin/(panel)/{orders,reps,customers,products,settings,emails}` | staff | every page calls `requireAdmin()` first; the layout's check is not a gate. An account's reps, shares and rate are edited on `customers/[id]`; `customers` lists accounts with a deactivated rep |
 | `/[locale]/admin/(panel)/orders/[ref]/invoice` | staff | draft invoice; the queue's typed prices ride in `?price_<line id>=` |
 | `/api/admin/family/[id]/{template,export}` | staff | CSV, 404 when signed out |
 | `/api/admin/family/[id]/products` | staff (and `DEMO_MODE`) | the product table's rows as JSON; the same query as the export |
@@ -397,24 +397,40 @@ to `catalogImport.ts`. Review/apply still share the same parsing and atomic
 database-write path. Never make the import bucket public or reuse the public
 catalog-image bucket.
 
-**Credit and rate are locked when an order is placed.**
-`submitOrderFromCartInTransaction` reads the customer's rep and that rep's rate
-inside the order's own transaction and copies them onto `orders.rep_id` and
-`orders.commission_rate_bp`; moving the customer or changing the rate later
-cannot reach back into a placed order. Eligibility is a per-customer flag
-(`users.rep_earns_commission`): an ineligible customer's orders still credit
-the rep, at 0. A rep ordering for a customer is re-checked there too, so a
-customer moved between page load and submit refuses the order. A sale — for
-every total, month and commission — is a *delivered* order.
+**Credit and rate are locked when an order is placed.** An account's reps are
+`customer_reps` (up to five rows, each with an optional share in basis points;
+all blank means equal). `submitOrderFromCartInTransaction` reads that list and
+the account's rate inside the order's own transaction (`splitForOrder`, which
+locks the customer row first, the lock `setAccountReps` takes too) and copies
+them onto the order: one `order_rep_shares` row per rep, and
+`orders.commission_rate_bp`. The rate is the account's own, or else the lead
+rep's personal rate (the lead is the biggest share, the earliest-added on a
+tie). Moving the customer or changing a rate later cannot reach back into a
+placed order. A rate of 0 is "credited, earns nothing". A deactivated rep's
+share is left out, not handed to the others. An order placed by a rep for an
+unassigned customer carries `placed_by_rep_id` and no share rows yet: the
+admin's `confirmPayment` calls `claimCustomerForOrder` in the same
+transaction, and if the customer is still nobody's the placing rep takes the
+account and 100% of that order. A receipt upload never claims; a taken or
+cancelled order claims nothing. The legacy `users.rep_id`,
+`users.rep_earns_commission` and `orders.rep_id` are still written, kept equal
+to the lead, so the release running during a deploy sees a consistent row, but
+nothing reads them; `db:reconcile:check` reports a `users.rep_id` that is not
+the list's lead. A sale, for every total, month and commission, is a
+*delivered* order.
 
 **One definition of rep money.** `src/db/repMoney.ts` is the only place sales
-and commission are computed: `ROUND(total_cents × fx_rate_to_rial / 100)` and
-`ROUND(total_cents × fx_rate_to_rial × commission_rate_bp / 1,000,000)`, in
-Postgres `numeric`, crossing to JavaScript as `float8` whole rial. JavaScript
-never multiplies them — cents × rate × basis points passes 2^53 on a large
-order. Timestamps come back from the shared client as text (drizzle swaps
-postgres-js's date parsers); `repMoney` converts them where its types promise
-a `Date`.
+and commission are computed, once per `order_rep_shares` row:
+`ROUND(total_cents × fx_rate_to_rial × share_bp / 1,000,000)` for the rep's
+share of the sale and `ROUND(total_cents × fx_rate_to_rial ×
+commission_rate_bp × share_bp / 10,000,000,000)` for their commission, in
+Postgres `numeric`, crossing to JavaScript as `float8` whole rial. Each rep is
+rounded on their own, so the parts can differ from the order's pot by a rial
+or two, and no remainder goes to anyone; that is why rep totals add up to what
+was sold. JavaScript never multiplies them: cents × rate × basis points ×
+share passes 2^53 on a large order. Timestamps come back from the shared
+client as text (drizzle swaps postgres-js's date parsers); `repMoney` converts
+them where its types promise a `Date`.
 
 **Persian months are bucketed in JavaScript.** Postgres has no Persian
 calendar, so delivered orders are read once and placed in months by
@@ -434,9 +450,16 @@ the old link opens nothing.
 
 **Rep scoping is in the WHERE clause.** Every rep read and write carries the
 rep's id, taken from the session, in its own `WHERE` (`customerQueries.ts`,
-`noteQueries.ts`, `repOrderQueries.ts`), so a posted id for someone else's
+`noteQueries.ts`, `repOrderQueries.ts`): a customer is the rep's when they are
+on its `customer_reps` list (`onMyList`), so a posted id for someone else's
 customer or order matches nothing. Pages turn that into a 404, not a 403,
-which would confirm the id exists.
+which would confirm the id exists. The one deliberate window is search: a rep
+may find an *unassigned* customer (enough to order, no history, notes or
+contact email) and sees at most five other-rep matches as a bare "assigned
+to" line, from three characters, so the client book cannot be paged through.
+An unassigned customer is never in the rep's own list, which is paged at 50;
+the search and the delivered-order list are not measured at thousands of rows
+yet (see FOLLOW-UPS).
 
 ## Catalog data and Persian display
 
@@ -610,10 +633,11 @@ Statuses and legal transitions live in `src/lib/orders.ts`, which has zero
 imports so it is testable standalone.
 
 A rep's order takes the same path. `submitQuoteAction` sees the rep's session
-and hands off to `submitForCustomer`, which checks the customer is the rep's,
+and hands off to `submitForCustomer`, which checks the customer is on the rep's list or unassigned,
 writes the order in the customer's name and language with `placed_by_rep`, and
 lands the rep on `/rep/orders/[ref]` with Create invoice and the pay link to
-send. The rep is credited, and the order counts toward their numbers once it
+send. The rep is credited (an unassigned customer's order is credited only once
+the admin confirms payment), and the order counts toward their numbers once it
 is delivered.
 
 ## Where things live
@@ -628,7 +652,8 @@ src/
   db/schema.ts           Drizzle schema (definition only)
   db/extensions.sql      everything drizzle-kit cannot express — see below
   db/*Queries.ts         all reads and writes, raw SQL
-  db/repMoney.ts         the one definition of a rep's sales and commission
+  db/repMoney.ts         the one definition of a rep's sales and commission, per share
+  db/accountRepQueries.ts an account's reps and shares, the split copied onto orders, claiming
   lib/                   i18n, money, orders, auth, limits, imports, storage
   lib/rep*, customerCode, persianCalendar, payToken, bankDetails
                          sales reps, customer IDs, Tehran months, pay links

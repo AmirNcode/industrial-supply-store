@@ -10,6 +10,7 @@ import {
   invoiceCurrencyFor,
   isCurrency,
   isPriceDisplayMode,
+  isPriceOnRequest,
   parseRialAmount,
 } from "./money";
 
@@ -60,6 +61,11 @@ test("catalog Rial amounts round to the nearest thousand", () => {
 test("a zero price formats rather than throwing", () => {
   assert.equal(formatPrice(0, "USD", "en", RATE), "$0.00");
   assert.equal(formatPrice(0, "IRR", "fa", RATE), "۰ ریال");
+});
+
+test("a zero price is a quote, not a free part", () => {
+  assert.equal(isPriceOnRequest(0), true);
+  assert.equal(isPriceOnRequest(1), false);
 });
 
 test("invoice currency and language are independent", () => {

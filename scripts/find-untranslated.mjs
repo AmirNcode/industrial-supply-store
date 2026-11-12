@@ -9,6 +9,8 @@
  * identifiers that Iranian buyers match against manufacturer literature in
  * Latin. What matters is that no descriptive *word* appears in this list.
  */
+// Same connection the other local scripts use: .env first, then the default.
+import "dotenv/config";
 import postgres from "postgres";
 import { readFileSync } from "node:fs";
 

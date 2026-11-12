@@ -480,6 +480,10 @@ export const orders = pgTable(
      */
     commissionRateBp: integer("commission_rate_bp"),
     placedByRep: boolean("placed_by_rep").notNull().default(false),
+    /** The rep who placed this order for the customer, when one did. */
+    placedByRepId: uuid("placed_by_rep_id").references((): AnyPgColumn => salesReps.id, {
+      onDelete: "restrict",
+    }),
     /** The private pay link: 64 hex characters from two random UUIDs. */
     payToken: text("pay_token")
       .notNull()
@@ -508,14 +512,18 @@ export const orders = pgTable(
     uniqueIndex("orders_submission_key_key").on(t.submissionKey),
     uniqueIndex("orders_pay_token_key").on(t.payToken),
     index("orders_rep_delivered_idx").on(t.repId, t.deliveredAt).where(sql`${t.repId} IS NOT NULL`),
-    // IS NULL on both sides: a CHECK that evaluates to NULL passes, which would
-    // let a credited order with no rate through.
+    index("orders_placed_by_rep_idx").on(t.placedByRepId).where(sql`${t.placedByRepId} IS NOT NULL`),
+    // A credited order needs its rate, but an unclaimed one (no rep yet) has
+    // neither; IS NULL is spelled out because a CHECK that evaluates to NULL passes.
     check(
       "orders_commission_check",
-      sql`(${t.repId} IS NULL) = (${t.commissionRateBp} IS NULL)
-        AND (${t.commissionRateBp} IS NULL OR ${t.commissionRateBp} BETWEEN 0 AND 10000)`,
+      sql`(${t.commissionRateBp} IS NULL OR ${t.commissionRateBp} BETWEEN 0 AND 10000)
+        AND (${t.repId} IS NULL OR ${t.commissionRateBp} IS NOT NULL)`,
     ),
-    check("orders_placed_by_rep_check", sql`NOT ${t.placedByRep} OR ${t.repId} IS NOT NULL`),
+    check(
+      "orders_placed_by_rep_check",
+      sql`NOT ${t.placedByRep} OR ${t.repId} IS NOT NULL OR ${t.placedByRepId} IS NOT NULL`,
+    ),
     check("orders_pay_token_check", sql`${t.payToken} ~ '^[0-9a-f]{64}$'`),
     uniqueIndex("orders_ref_key").on(t.ref),
     index("orders_created_idx").on(t.createdAt),
@@ -753,6 +761,8 @@ export const users = pgTable(
     customerCode: text("customer_code").notNull(),
     repId: uuid("rep_id").references((): AnyPgColumn => salesReps.id, { onDelete: "restrict" }),
     repEarnsCommission: boolean("rep_earns_commission").notNull().default(false),
+    /** Account-level commission override in basis points; null follows the lead rep's rate. */
+    commissionRateBp: integer("commission_rate_bp"),
     /** How the account began: 'self', 'rep' (created by one), 'referral', or 'checkout' (made from a guest order). */
     origin: text("origin").notNull().default("self"),
     originRepId: uuid("origin_rep_id").references((): AnyPgColumn => salesReps.id, {
@@ -788,6 +798,10 @@ export const users = pgTable(
       .on(t.repId, t.nextFollowUpOn)
       .where(sql`${t.nextFollowUpOn} IS NOT NULL`),
     check("users_customer_code_check", sql`${t.customerCode} ~ '^[0-9]{7}$'`),
+    check(
+      "users_commission_rate_check",
+      sql`${t.commissionRateBp} IS NULL OR ${t.commissionRateBp} BETWEEN 0 AND 10000`,
+    ),
     check(
       "users_origin_check",
       sql`${t.origin} IN ('self','rep','referral','checkout')
@@ -910,6 +924,48 @@ export const salesReps = pgTable(
     check("sales_reps_commission_rate_check", sql`${t.commissionRateBp} BETWEEN 0 AND 10000`),
     check("sales_reps_referral_code_check", sql`${t.referralCode} ~ '^[A-HJ-NP-Z2-9]{6}$'`),
     check("sales_reps_session_version_check", sql`${t.sessionVersion} > 0`),
+  ],
+);
+
+/**
+ * The reps on a customer account (at most five, enforced in code). A null
+ * `share_bp` means no share was chosen and the reps split equally.
+ */
+export const customerReps = pgTable(
+  "customer_reps",
+  {
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    repId: uuid("rep_id")
+      .notNull()
+      .references(() => salesReps.id, { onDelete: "restrict" }),
+    shareBp: integer("share_bp"),
+    addedAt: timestamp("added_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.userId, t.repId] }),
+    index("customer_reps_rep_idx").on(t.repId, t.userId),
+    check("customer_reps_share_check", sql`${t.shareBp} IS NULL OR ${t.shareBp} BETWEEN 1 AND 10000`),
+  ],
+);
+
+/** How an order's commission is divided, fixed when the order is claimed. */
+export const orderRepShares = pgTable(
+  "order_rep_shares",
+  {
+    orderId: integer("order_id")
+      .notNull()
+      .references(() => orders.id, { onDelete: "cascade" }),
+    repId: uuid("rep_id")
+      .notNull()
+      .references(() => salesReps.id, { onDelete: "restrict" }),
+    shareBp: integer("share_bp").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.orderId, t.repId] }),
+    index("order_rep_shares_rep_idx").on(t.repId, t.orderId),
+    check("order_rep_shares_share_check", sql`${t.shareBp} BETWEEN 1 AND 10000`),
   ],
 );
 

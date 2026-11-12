@@ -9,7 +9,7 @@ import { specValueLabel } from "@/lib/specValues";
 import { getFxRate, getPriceDisplayMode } from "@/lib/fx";
 import { currentRep } from "@/lib/repSession";
 import { readOrderingFor } from "@/lib/repOrderContext";
-import { getCustomerForRep } from "@/db/customerQueries";
+import { getOrderableCustomerForRep } from "@/db/customerQueries";
 import { splitCart, type LineSplit } from "@/lib/checkoutSplit";
 import { runExpirySweep } from "@/lib/orderFlow";
 
@@ -38,8 +38,11 @@ export default async function CartPage({
   ]);
   // Reps never see dollar amounts.
   const currency = rep ? "IRR" : customerCurrencyFor(priceDisplayMode, l);
-  const orderingFor =
-    rep && orderingForId ? await getCustomerForRep(rep.id, orderingForId) : null;
+  // "New order" on an unassigned search result puts that customer here too, so
+  // own customers alone would leave the banner saying the customer is chosen
+  // at checkout. A taken one (or none) names nobody.
+  const orderable = rep && orderingForId ? await getOrderableCustomerForRep(rep.id, orderingForId) : null;
+  const orderingFor = orderable && orderable.kind !== "taken" ? orderable.customer : null;
   // Set by Reorder: part numbers from the old order that are no longer sold.
   const skippedParts =
     typeof skipped === "string" ? skipped.split(",").filter(Boolean).slice(0, 20) : [];

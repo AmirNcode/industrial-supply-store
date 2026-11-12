@@ -22,6 +22,11 @@ export type DatabaseIntegrityReport = {
   categoryCountMismatches: number;
   facetMismatches: number;
   inventoryLedgerMismatches: number;
+  accountShareProblems: number;
+  orderShareProblems: number;
+  legacyLeadMismatches: number;
+  ordersMissingShares: number;
+  accountsMissingRepRows: number;
 };
 
 export type ReconciliationChanges = {
@@ -30,6 +35,8 @@ export type ReconciliationChanges = {
   facetRowsDeleted: number;
   facetRowsUpserted: number;
   inventoryRows: number;
+  orderShareRows: number;
+  accountRepRows: number;
 };
 
 export type ReconciliationResult = {
@@ -140,6 +147,10 @@ const BLOCKING_LABELS: ReadonlyArray<readonly [keyof DatabaseIntegrityReport, st
   ["ordersWithoutItems", "orders without line items"],
   ["orderTotalMismatches", "orders whose totals disagree with their lines"],
   ["orderLifecycleMismatches", "orders with invalid invoice or lifecycle timestamps"],
+  ["accountShareProblems", "accounts with more than 5 reps or shares that are mixed or do not total 100%"],
+  ["orderShareProblems", "orders whose rep shares exceed 100% or that have shares but no commission rate"],
+  // Not repaired: which of two reps is right is a decision, not a derivation.
+  ["legacyLeadMismatches", "accounts whose users.rep_id is not the lead of their rep list"],
 ] as const;
 
 /** Values that are mechanically derivable from canonical rows. */
@@ -148,6 +159,10 @@ const DERIVED_LABELS: ReadonlyArray<readonly [keyof DatabaseIntegrityReport, str
   ["categoryCountMismatches", "category subtree product counts"],
   ["facetMismatches", "facet rows versus product specs"],
   ["inventoryLedgerMismatches", "inventory versus the order ledger"],
+  // What the previous release writes during the deploy window: only the old
+  // columns. Their source is the old column itself, so the repair is exact.
+  ["ordersMissingShares", "orders with a legacy rep and no share rows"],
+  ["accountsMissingRepRows", "accounts with a legacy rep and no rep list rows"],
 ] as const;
 
 export function blockingIntegrityProblems(report: DatabaseIntegrityReport): string[] {
@@ -323,6 +338,47 @@ export async function inspectDatabaseIntegrity(
       ) AS "categoryCountMismatches",
       (SELECT n FROM facet_mismatches) AS "facetMismatches",
       (
+        -- At most 5 rows; all blank, or all filled and totalling 10000.
+        SELECT count(*)::int FROM (
+          SELECT user_id FROM customer_reps
+          GROUP BY user_id
+          HAVING count(*) > 5
+              OR (count(share_bp) > 0 AND count(share_bp) < count(*))
+              OR (count(share_bp) = count(*) AND sum(share_bp) <> 10000)
+        ) bad
+      ) AS "accountShareProblems",
+      (
+        SELECT count(*)::int FROM (
+          SELECT s.order_id FROM order_rep_shares s
+          JOIN orders o ON o.id = s.order_id
+          GROUP BY s.order_id, o.commission_rate_bp
+          HAVING sum(s.share_bp) > 10000 OR o.commission_rate_bp IS NULL
+        ) bad
+      ) AS "orderShareProblems",
+      (
+        -- The lead is the biggest share, earliest on a tie (leadRepId); a blank
+        -- counts as 0 so an all-blank list falls through to the earliest row.
+        -- A deactivated lead still equals users.rep_id (deactivateRep leaves it).
+        SELECT count(*)::int FROM users u
+        WHERE EXISTS (SELECT 1 FROM customer_reps cr WHERE cr.user_id = u.id)
+          AND u.rep_id IS DISTINCT FROM (
+            SELECT cr.rep_id FROM customer_reps cr WHERE cr.user_id = u.id
+            ORDER BY COALESCE(cr.share_bp, 0) DESC, cr.added_at, cr.rep_id LIMIT 1
+          )
+      ) AS "legacyLeadMismatches",
+      (
+        -- An unclaimed rep-placed order has placed_by_rep_id but a NULL rep_id
+        -- and no rows: legitimate, and not counted here.
+        SELECT count(*)::int FROM orders o
+        WHERE o.rep_id IS NOT NULL
+          AND NOT EXISTS (SELECT 1 FROM order_rep_shares s WHERE s.order_id = o.id)
+      ) AS "ordersMissingShares",
+      (
+        SELECT count(*)::int FROM users u
+        WHERE u.rep_id IS NOT NULL
+          AND NOT EXISTS (SELECT 1 FROM customer_reps cr WHERE cr.user_id = u.id)
+      ) AS "accountsMissingRepRows",
+      (
         SELECT count(*)::int
         FROM products p
         JOIN inventory_expected e ON e.product_id = p.id
@@ -351,7 +407,8 @@ export async function reconcileDerivedData(tx: Tx): Promise<ReconciliationResult
   await tx`SET LOCAL statement_timeout = '120s'`;
   await tx`
     LOCK TABLE users, categories, product_families, spec_defs, products,
-               product_spec_values, carts, cart_items, orders, order_items
+               product_spec_values, carts, cart_items, orders, order_items,
+               customer_reps, order_rep_shares
     IN SHARE ROW EXCLUSIVE MODE
   `;
 
@@ -419,12 +476,32 @@ export async function reconcileDerivedData(tx: Tx): Promise<ReconciliationResult
 
   const inventoryRows = await reconcileInventoryForProducts(tx);
 
+  // Only the two shapes the previous release can leave behind, each rebuilt
+  // from the old column that is its single source: the lone rep takes the
+  // whole order, and an account's lone rep gets a blank (equal) share.
+  const orderShareRows = await tx<{ orderId: number }[]>`
+    INSERT INTO order_rep_shares (order_id, rep_id, share_bp)
+    SELECT o.id, o.rep_id, 10000 FROM orders o
+    WHERE o.rep_id IS NOT NULL
+      AND NOT EXISTS (SELECT 1 FROM order_rep_shares s WHERE s.order_id = o.id)
+    RETURNING order_id AS "orderId"
+  `;
+  const accountRepRows = await tx<{ userId: string }[]>`
+    INSERT INTO customer_reps (user_id, rep_id, share_bp)
+    SELECT u.id, u.rep_id, NULL FROM users u
+    WHERE u.rep_id IS NOT NULL
+      AND NOT EXISTS (SELECT 1 FROM customer_reps cr WHERE cr.user_id = u.id)
+    RETURNING user_id AS "userId"
+  `;
+
   const changes: ReconciliationChanges = {
     familyCounts: familyCounts.length,
     categoryCounts: categoryCounts.length,
     facetRowsDeleted: facetRowsDeleted.length,
     facetRowsUpserted: facetRowsUpserted.length,
     inventoryRows,
+    orderShareRows: orderShareRows.length,
+    accountRepRows: accountRepRows.length,
   };
   const after = await inspectDatabaseIntegrity(tx);
   const remaining = integrityProblems(after);

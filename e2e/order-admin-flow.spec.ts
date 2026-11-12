@@ -7,12 +7,33 @@ import {
   cartContinueLink,
   checkoutSubmit,
   fillCheckout,
+  localSql,
   PAY_URL,
   useClientAddress,
 } from "./shop";
 
 const locales: Locale[] = ["en", "fa"];
 const familySlug = "oil-resistant-buna-n-o-rings";
+
+const sql = localSql();
+test.afterAll(() => sql.end());
+
+/**
+ * The first part of the family, unless it has no price: an unpriced line can
+ * only be quoted once an admin types a price, which this walk does not do,
+ * and a hand-edited local row must not be able to break it.
+ */
+async function pricedPartNumber(): Promise<string> {
+  const [row] = await sql<{ part: string }[]>`
+    SELECT p.part_number AS part
+    FROM products p JOIN product_families f ON f.id = p.family_id
+    WHERE f.slug = ${familySlug} AND p.price_cents > 0
+    ORDER BY p.id
+    LIMIT 1
+  `;
+  if (!row) throw new Error(`${familySlug} has no priced part.`);
+  return row.part;
+}
 
 /**
  * One order from the cart to "delivered", by keyboard-operable controls.
@@ -34,7 +55,7 @@ for (const locale of locales) {
     const marker = `E2E-${locale}-${testInfo.workerIndex}-${Date.now()}`;
     await useClientAddress(page, 20 + testInfo.workerIndex + (locale === "fa" ? 10 : 0));
 
-    await addToCart(page, locale, familySlug);
+    await addToCart(page, locale, familySlug, { partNumber: await pricedPartNumber() });
 
     await page.goto(`/${locale}/cart`);
     await expect(page.getByRole("heading", { name: new RegExp(t.yourOrder) })).toBeVisible();

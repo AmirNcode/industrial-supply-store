@@ -1,6 +1,7 @@
 import "server-only";
 import { sql } from "./index";
 import { codeFromPhone, randomCustomerCode, type LoginIdentifier } from "@/lib/customerCode";
+import { leadRepSql } from "./accountRepQueries";
 
 export type UserRow = {
   id: string;
@@ -122,18 +123,26 @@ export async function createUser(input: NewUser): Promise<UserRow | "email-taken
     (input.accountNumber === "phone" ? codeFromPhone(input.phone) : null) ?? randomCustomerCode();
   for (let attempt = 0; attempt < 10; attempt++) {
     try {
-      const rows = await sql<UserRow[]>`
-        INSERT INTO users (email, password_hash, company, contact_name, phone, locale,
-                           customer_code, origin, rep_id, origin_rep_id, rep_earns_commission,
-                           chose_own_password)
-        VALUES (${input.email}, ${input.passwordHash}, ${input.company},
-                ${input.contactName}, ${input.phone}, ${input.locale}, ${code},
-                ${input.origin}, ${input.repId}, ${input.repId}, ${input.repId !== null},
-                -- No password has been chosen yet (see needsPassword).
-                false)
-        RETURNING ${COLS}
-      `;
-      return rows[0];
+      // The referring rep goes on the account's list in the same transaction
+      // as the user row: the list is what gives the rep the customer. The
+      // legacy columns are still written for the release running beside this one.
+      return await sql.begin(async (tx) => {
+        const rows = await tx<UserRow[]>`
+          INSERT INTO users (email, password_hash, company, contact_name, phone, locale,
+                             customer_code, origin, rep_id, origin_rep_id, rep_earns_commission,
+                             chose_own_password)
+          VALUES (${input.email}, ${input.passwordHash}, ${input.company},
+                  ${input.contactName}, ${input.phone}, ${input.locale}, ${code},
+                  ${input.origin}, ${input.repId}, ${input.repId}, ${input.repId !== null},
+                  -- No password has been chosen yet (see needsPassword).
+                  false)
+          RETURNING ${COLS}
+        `;
+        if (input.repId !== null) {
+          await tx`INSERT INTO customer_reps (user_id, rep_id, share_bp) VALUES (${rows[0].id}, ${input.repId}, NULL)`;
+        }
+        return rows[0];
+      });
     } catch (err) {
       const e = err as { code?: string; constraint_name?: string };
       if (e?.code !== "23505") throw err;
@@ -172,14 +181,21 @@ export async function updateProfile(
   `;
 }
 
-/** The customer's rep, for "Your sales rep" — only while that rep is active. */
+/**
+ * The customer's rep, for "Your sales rep": the lead if active, else the first
+ * active rep on the list in the order they were added, else nobody.
+ */
 export async function getRepContactForUser(
   userId: string,
 ): Promise<{ name: string; phone: string } | null> {
   const [row] = await sql<{ name: string; phone: string }[]>`
     SELECT r.name, r.phone
-    FROM users u JOIN sales_reps r ON r.id = u.rep_id AND r.active
+    FROM users u
+    JOIN customer_reps cr ON cr.user_id = u.id
+    JOIN sales_reps r ON r.id = cr.rep_id AND r.active
     WHERE u.id = ${userId}
+    ORDER BY (cr.rep_id = ${leadRepSql()}) DESC, cr.added_at, cr.rep_id
+    LIMIT 1
   `;
   return row ?? null;
 }

@@ -71,3 +71,20 @@ Monitoring: `node local-tools/usage-check/check.mjs` (local only, runs every
 8. The Supabase CLI on this machine is logged in to the Vercel-integration org
    only, not Noor Corp (the live project's org). The usage check doesn't need
    it; anything using the Management API for the live project would.
+
+## Commission splits
+
+1. **Drop the old rep columns, once the release is stable.** A follow-up
+   migration drops `users.rep_id`, `users.rep_earns_commission`,
+   `orders.rep_id` and `orders.placed_by_rep`, and tightens the two checks the
+   split migration relaxed (`orders_commission_check`, `orders_placed_by_rep_check`).
+   Until then every writer keeps them equal to the lead and nothing reads them.
+   Check `db:reconcile:check:remote` is clean first, and that the deploy-window
+   repair has been run.
+2. **Taken-customer search could match contact names** if reps ask. Today it
+   matches company, customer ID or a full phone number only, so a rep cannot
+   fish for who a colleague serves.
+3. **Measure the rep search and the delivered-order list at 4,000 rows.** Run
+   `EXPLAIN ANALYZE` on the search query and on `listDeliveredForRep` with the
+   demo data scaled to about 4,000 customers and 4,000 delivered orders; they
+   have only been run against the demo data.

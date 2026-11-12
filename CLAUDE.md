@@ -109,6 +109,8 @@ nothing important; padding it hides the times there is.
 - **Plain `curl` to the live site gets `429 x-vercel-mitigated: challenge`** (Bot Protection is on Challenge); look at live pages in the built-in browser.
 - **Vercel Hobby firewall:** 3 custom rules (2 used), 10 IP blocks (full), traffic data only for the last 24h (`npx vercel@latest firewall traffic list|inspect`; global `vercel` is too old); rule edits are staged until `vercel firewall publish`.
 - **Stock is enforced at checkout** (`lib/checkoutSplit.ts`): payable-now = `in_stock` and within `inventory_available`; everything else is a back-order line that holds nothing. A product with no count entered is a quote, not a sale.
+- **An account's reps and shares are `customer_reps`; an order's are `order_rep_shares`, copied at placement** — `users.rep_id` / `orders.rep_id` are written for the old release and read by nothing.
+- **A rep's paid order wins an unassigned customer inside `confirmPayment`** (`claimCustomerForOrder`); a receipt upload never does.
 - **A pish-factor is `invoiced` with `invoice_number` NULL**; the number is issued only in `confirmPayment`. "Has a document" is `invoiced_at`, never `invoice_number`.
 - **Deadlines are swept, not timed** (`runExpirySweep`, `orders.expires_at`): any new page showing stock or an open order calls it first.
 - **Email only through `lib/email.ts`** (Resend by `fetch`, from `mail.temexpro.com` only); without `RESEND_API_KEY` nothing is sent and `/admin/emails` is the inbox. Send after the transaction commits.

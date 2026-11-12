@@ -1,7 +1,7 @@
 import "server-only";
 import { persianYearMonth } from "./persianCalendar";
 import { summarizeRepSales, type RepSummary } from "./repStats";
-import { listDeliveredForRep, listPayouts, listTargets, type Payout } from "@/db/repMoney";
+import { listDeliveredForRep, listPayouts, listTargets, type DeliveredRow, type Payout } from "@/db/repMoney";
 import { countCustomersForRep } from "@/db/customerQueries";
 
 /**
@@ -16,7 +16,7 @@ export async function loadRepSummary(
   repId: string,
   tableYear?: number,
   now: Date = new Date(),
-): Promise<{ summary: RepSummary; payouts: Payout[] }> {
+): Promise<{ summary: RepSummary; payouts: Payout[]; delivered: DeliveredRow[] }> {
   const [delivered, customerCount, payouts, targets] = await Promise.all([
     listDeliveredForRep(repId),
     countCustomersForRep(repId),
@@ -39,5 +39,6 @@ export async function loadRepSummary(
     current,
     tableYear: tableYear ?? current.year,
   });
-  return { summary, payouts };
+  // Oldest first, as read; the commission page lists newest first.
+  return { summary, payouts, delivered: delivered.slice().reverse() };
 }

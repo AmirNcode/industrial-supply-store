@@ -8,7 +8,13 @@ import { customerCurrencyFor } from "@/lib/money";
 import { getFxRate, getPriceDisplayMode } from "@/lib/fx";
 import { currentUser } from "@/lib/session";
 import { currentRep } from "@/lib/repSession";
-import { getCustomerForRep, listCustomersForRep } from "@/db/customerQueries";
+import {
+  REP_SEARCH_MIN_CHARS,
+  getOrderableCustomerForRep,
+  listCustomersForRep,
+  searchBeyondMine,
+} from "@/db/customerQueries";
+import { RATE_LIMITS, consumeRateLimit } from "@/lib/rateLimit";
 import { readOrderingFor } from "@/lib/repOrderContext";
 import { isUuid } from "@/lib/ids";
 import { RepQuoteForm } from "./RepQuoteForm";
@@ -30,13 +36,13 @@ export default async function QuotePage({
   searchParams,
 }: {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{ error?: string; for?: string | string[] }>;
+  searchParams: Promise<{ error?: string; for?: string | string[]; q?: string | string[] }>;
 }) {
   const { locale } = await params;
   if (!isLocale(locale)) notFound();
   const l = locale as Locale;
   const t = getDict(l);
-  const { error, for: forParam } = await searchParams;
+  const { error, for: forParam, q } = await searchParams;
 
   // Before the cart is read: a lapsed hold must be back on the shelf first.
   await runExpirySweep();
@@ -75,29 +81,43 @@ export default async function QuotePage({
   // A signed-in rep checks out for one of their customers, on its own form.
   if (rep) {
     if (rep.mustChangePassword) redirect(`/${l}/rep/password`);
-    const wanted =
-      (typeof forParam === "string" && isUuid(forParam) ? forParam : null) ??
-      (await readOrderingFor());
-    // The chosen customer is loaded on its own, not looked up in the picker's
-    // list: the list stops at 500, and a rep pressing "New order" on customer
-    // 550 used to land here with nobody selected (review M-15).
-    const [listed, selected] = await Promise.all([
-      listCustomersForRep(rep.id, ""),
-      wanted ? getCustomerForRep(rep.id, wanted) : Promise.resolve(null),
+    const explicit = typeof forParam === "string" && isUuid(forParam) ? forParam : null;
+    const wanted = explicit ?? (await readOrderingFor());
+    // The chosen customer is loaded on its own, not looked up in a list: the
+    // list is paged, and a rep pressing "New order" on customer 550 used to
+    // land here with nobody selected (review M-15). Own, unassigned or taken
+    // is decided in the query, with the ownership rule in its WHERE.
+    const target = wanted ? await getOrderableCustomerForRep(rep.id, wanted) : null;
+
+    const search = (typeof q === "string" ? q : "").slice(0, REQUEST_LIMITS.searchChars);
+    const wide = search.trim().length >= REP_SEARCH_MIN_CHARS;
+    // Bounded per rep: the wider search reaches customers nobody looks after.
+    const limited = wide
+      ? !(await consumeRateLimit("rep:customer-search", RATE_LIMITS.repCustomerSearch, { accountId: rep.id })).allowed
+      : false;
+    const [mine, beyond, savedAddresses] = await Promise.all([
+      search.trim() ? listCustomersForRep(rep.id, search, 1).then((r) => r.rows) : Promise.resolve([]),
+      wide && !limited ? searchBeyondMine(rep.id, search) : Promise.resolve({ unassigned: [], taken: [] }),
+      target?.kind === "unassigned" ? listAddresses(target.customer.id) : Promise.resolve([]),
     ]);
-    const customers = selected && !listed.some((c) => c.id === selected.id) ? [selected, ...listed] : listed;
     return (
       <RepQuoteForm
         locale={l}
-        customers={customers}
-        selected={selected}
+        target={target}
+        // A chosen id that resolves to nothing is the same error a refused submit shows.
+        error={error ?? (explicit && !target ? "customer" : undefined)}
+        search={search}
+        searchTooShort={search.trim().length > 0 && !wide}
+        searchLimited={limited}
+        mine={mine}
+        beyond={beyond}
+        savedAddresses={savedAddresses}
         split={split}
         parts={parts}
         canIssue={canIssue}
         vatRateBp={terms?.vatRateBp ?? null}
         rate={terms?.rate ?? rate}
         submissionToken={submissionToken}
-        error={error}
       />
     );
   }

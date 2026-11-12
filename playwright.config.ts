@@ -11,6 +11,16 @@ if (databaseHost !== "localhost" && databaseHost !== "127.0.0.1") {
   throw new Error(`Refusing to run e2e against a non-local database (${databaseHost}).`);
 }
 
+/**
+ * The test server is a production build, which refuses the example admin
+ * password from .env, and the specs sign in with E2E_ADMIN_PASSWORD. Supply
+ * the dummy value CI uses when neither is set, so a local run needs no manual
+ * export. Values already in the environment (CI sets both) win, and the
+ * variables only reach the server and tests this config starts.
+ */
+process.env.E2E_ADMIN_PASSWORD ??= process.env.ADMIN_PASSWORD ?? "ci-admin-password";
+process.env.ADMIN_PASSWORD ??= process.env.E2E_ADMIN_PASSWORD;
+
 const port = Number(process.env.PLAYWRIGHT_PORT ?? 3100);
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? `http://127.0.0.1:${port}`;
 
@@ -36,7 +46,10 @@ export default defineConfig({
     command: `npm run start -- --hostname 127.0.0.1 --port ${port}`,
     // A production server needs to be told which header carries the client
     // address (src/lib/rateLimit.ts). Locally Next fills x-forwarded-for.
-    env: { TRUSTED_PROXY_HEADER: process.env.TRUSTED_PROXY_HEADER ?? "x-forwarded-for" },
+    env: {
+      TRUSTED_PROXY_HEADER: process.env.TRUSTED_PROXY_HEADER ?? "x-forwarded-for",
+      ADMIN_PASSWORD: process.env.ADMIN_PASSWORD,
+    },
     url: `${baseURL}/en`,
     reuseExistingServer: !process.env.CI,
     timeout: 180_000,

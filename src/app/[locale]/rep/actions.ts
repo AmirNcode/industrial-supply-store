@@ -34,7 +34,7 @@ import {
 } from "@/db/repQueries";
 import {
   createCustomerForRep,
-  getCustomerForRep,
+  getOrderableCustomerForRep,
   resetCustomerPasswordForRep,
   setFollowUpForRep,
   updateCustomerForRep,
@@ -254,9 +254,10 @@ export async function setFollowUpAction(formData: FormData): Promise<void> {
 export async function startOrderAction(formData: FormData): Promise<void> {
   const { rep, locale } = await repForWrite(formData);
   const id = postedCustomerId(formData);
-  const customer = id ? await getCustomerForRep(rep.id, id) : null;
-  if (!customer) redirect(`/${locale}/rep/customers`);
-  await setOrderingFor(customer.id);
+  // Own or unassigned; someone else's customer starts nothing.
+  const found = id ? await getOrderableCustomerForRep(rep.id, id) : null;
+  if (!found || found.kind === "taken") redirect(`/${locale}/rep/customers?error=customer`);
+  await setOrderingFor(found.customer.id);
   // Quick order first: reps usually know the part numbers. The catalog is one
   // click away in the masthead, and the choice survives either route.
   redirect(`/${locale}/quick-order`);
@@ -272,6 +273,9 @@ export async function reorderAction(formData: FormData): Promise<void> {
   const ref = boundedString(formData.get("ref"), 20) ?? "";
   const found = await getReorderLines(rep.id, ref);
   if (!found) redirect(`/${locale}/rep/orders`);
+  // Mine only: an unassigned customer is ordered for from the search, and the
+  // query already returns a customer id only while the account is on this
+  // rep's list, so there is nothing more to check here.
   if (!found.customerId) redirect(`/${locale}/rep/orders/${ref}?error=not-yours`);
   try {
     await addLines(found.lines);

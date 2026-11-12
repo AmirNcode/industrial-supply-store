@@ -18,7 +18,7 @@ import { submitOrderFromCart } from "@/db/orderSubmissionQueries";
 import { parseContact } from "@/lib/quoteContact";
 import { currentRep } from "@/lib/repSession";
 import type { RepRow } from "@/db/repQueries";
-import { getCustomerForRep } from "@/db/customerQueries";
+import { getOrderableCustomerForRep } from "@/db/customerQueries";
 import { clearOrderingFor } from "@/lib/repOrderContext";
 import { isUuid } from "@/lib/ids";
 import { RATE_LIMITS, consumeRateLimit } from "@/lib/rateLimit";
@@ -285,10 +285,33 @@ async function submitForCustomer(rep: RepRow, locale: Locale, formData: FormData
   if (!token || token.cartId !== cartId) redirect(`/${locale}/quote?error=expired`);
 
   const customerId = String(formData.get("forCustomerId") ?? "");
-  const customer = isUuid(customerId) ? await getCustomerForRep(rep.id, customerId) : null;
-  if (!customer) redirect(`/${locale}/quote?error=customer`);
+  const found = isUuid(customerId) ? await getOrderableCustomerForRep(rep.id, customerId) : null;
+  // Someone else's customer is refused like an unknown id: the same error, so
+  // a posted id tells a rep nothing about who owns it.
+  if (!found || found.kind === "taken") redirect(`/${locale}/quote?error=customer`);
+  const customer = found.customer;
   const again = `/${locale}/quote?for=${customer.id}`;
 
+  // A saved delivery address replaces the address inputs, read with the
+  // customer's id (an unassigned customer's addresses are what the rep was
+  // shown), so a posted id that is someone else's matches nothing.
+  const choice = String(formData.get("addressChoice") ?? "");
+  const savedAddress = isUuid(choice) ? await getAddress(customer.id, choice) : null;
+  if (savedAddress) {
+    formData.set("address", savedAddress.address);
+    formData.set("city", savedAddress.city);
+    formData.set("postalCode", savedAddress.postalCode);
+  }
+
+  // An unassigned customer is not the rep's yet: the order is stored without
+  // their email or PO number, whatever was posted (the form never shows them,
+  // and a posted value is not trusted for a field the form omits). Their
+  // emails still reach them: the recipient is resolved from the account at
+  // send time (`getOrderForMail`), so the address never sits on a rep-readable order.
+  if (found.kind === "unassigned") {
+    formData.set("email", "");
+    formData.set("poNumber", "");
+  }
   const parsed = parseContact(formData, false);
   if ("error" in parsed) redirect(`${again}&error=${parsed.error}`);
 

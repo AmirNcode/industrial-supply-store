@@ -1,5 +1,6 @@
 import "server-only";
 import { sql } from "./index";
+import { onMyList } from "./accountRepQueries";
 
 export type CustomerNote = {
   id: number;
@@ -22,13 +23,13 @@ export async function listNotes(customerId: string): Promise<CustomerNote[]> {
 }
 
 /**
- * Scoped in the insert itself: a note for someone else's customer selects no
- * row and inserts nothing. Append-only — there is no edit or delete.
+ * Scoped in the insert itself (the customer must be on this rep's list): a note
+ * for someone else's customer selects no row and inserts nothing. Append-only — there is no edit or delete.
  */
 export async function addNoteForRep(repId: string, customerId: string, body: string): Promise<boolean> {
   const result = await sql`
     INSERT INTO customer_notes (user_id, author_rep_id, body)
-    SELECT u.id, ${repId}, ${body} FROM users u WHERE u.id = ${customerId} AND u.rep_id = ${repId}
+    SELECT u.id, ${repId}, ${body} FROM users u WHERE u.id = ${customerId} AND ${onMyList(repId)}
   `;
   return result.count === 1;
 }

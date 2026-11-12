@@ -1,32 +1,56 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireRep } from "@/lib/repSession";
-import { listCustomersForRep } from "@/db/customerQueries";
+import {
+  REP_CUSTOMER_PAGE_SIZE,
+  REP_SEARCH_MIN_CHARS,
+  listCustomersForRep,
+  searchBeyondMine,
+} from "@/db/customerQueries";
+import { startOrderAction } from "../../actions";
+import { RepSearchResults } from "@/components/RepSearchResults";
+import { ErrorBanner } from "@/components/Banners";
+import { RATE_LIMITS, consumeRateLimit } from "@/lib/rateLimit";
 import { salesByCustomerForRep } from "@/db/repMoney";
-import { formatRial } from "@/lib/money";
+import { formatInt, formatRial } from "@/lib/money";
 import { formatPersianDate, formatPersianDay, tehranToday } from "@/lib/persianCalendar";
 import { REQUEST_LIMITS } from "@/lib/requestLimits";
 import { isLocale, getDict, type Locale } from "@/lib/i18n";
-import { formatInt } from "@/lib/money";
 
 export default async function RepCustomersPage({
   params,
   searchParams,
 }: {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{ q?: string | string[] }>;
+  searchParams: Promise<{ q?: string | string[]; page?: string | string[]; error?: string }>;
 }) {
   const { locale } = await params;
   if (!isLocale(locale)) notFound();
   const l = locale as Locale;
   const t = getDict(l);
-  const { q } = await searchParams;
+  const { q, page: pageParam, error } = await searchParams;
   const search = (typeof q === "string" ? q : "").slice(0, REQUEST_LIMITS.searchChars);
+  const pageNumber = typeof pageParam === "string" ? Number(pageParam) : 1;
+  const page = Number.isInteger(pageNumber) && pageNumber >= 1 && pageNumber <= 10_000 ? pageNumber : 1;
   const rep = await requireRep(l);
-  const [customers, sales] = await Promise.all([
-    listCustomersForRep(rep.id, search),
+  const longEnough = search.trim().length >= REP_SEARCH_MIN_CHARS;
+  // Page 1 only: paging through the rep's own list must not re-run the wide
+  // search or spend a rate-limit token, or flipping pages alone trips the limit.
+  const wide = longEnough && page === 1;
+  const tooShort = search.trim().length > 0 && !longEnough;
+  // The wider search reaches customers nobody looks after, so it is bounded
+  // per rep; a rep over the limit still gets their own list.
+  const limited = wide
+    ? !(await consumeRateLimit("rep:customer-search", RATE_LIMITS.repCustomerSearch, { accountId: rep.id })).allowed
+    : false;
+  const [{ rows: customers, total }, sales, beyond] = await Promise.all([
+    listCustomersForRep(rep.id, search, page),
     salesByCustomerForRep(rep.id),
+    wide && !limited ? searchBeyondMine(rep.id, search) : Promise.resolve({ unassigned: [], taken: [] }),
   ]);
+  const lastPage = Math.max(1, Math.ceil(total / REP_CUSTOMER_PAGE_SIZE));
+  const pageHref = (n: number) =>
+    `/${l}/rep/customers?${new URLSearchParams({ ...(search ? { q: search } : {}), ...(n > 1 ? { page: String(n) } : {}) })}`;
   const today = tehranToday();
 
   return (
@@ -43,8 +67,8 @@ export default async function RepCustomersPage({
           type="search"
           name="q"
           defaultValue={search}
-          placeholder={t.customerSearchPlaceholder}
-          aria-label={t.search}
+          placeholder={t.repSearchCustomers}
+          aria-label={t.repSearchCustomers}
           maxLength={REQUEST_LIMITS.searchChars}
           className="search-field min-w-0 flex-1"
         />
@@ -53,13 +77,10 @@ export default async function RepCustomersPage({
         </button>
       </form>
 
-      {customers.length > 0 && customers[0].totalCount > customers.length && (
-        <p className="mb-2 border border-[var(--color-warn)] bg-[var(--color-warn-soft)] px-3 py-2 text-[12px]">
-          {t.listTruncated
-            .replace("{shown}", formatInt(customers.length, l))
-            .replace("{total}", formatInt(customers[0].totalCount, l))}
-        </p>
-      )}
+      {error === "customer" && <ErrorBanner>{t.customerNotYours}</ErrorBanner>}
+      {tooShort && <p className="mb-2 text-[12px] text-[var(--color-ink-muted)]">{t.repSearchTooShort}</p>}
+      {limited && <ErrorBanner>{t.rateLimited}</ErrorBanner>}
+
       {customers.length === 0 ? (
         <p className="text-[12px] text-[var(--color-ink-muted)]">{t.noCustomersYet}</p>
       ) : (
@@ -106,6 +127,33 @@ export default async function RepCustomersPage({
           </table>
         </div>
       )}
+
+      {lastPage > 1 && (
+        <nav className="mt-3 flex items-center gap-4 text-[12px]" aria-label={t.customers}>
+          {page > 1 ? <Link href={pageHref(page - 1)}>{t.pagePrevious}</Link> : <span />}
+          <span className="text-[var(--color-ink-muted)]">
+            {formatInt(page, l)} / {formatInt(lastPage, l)}
+          </span>
+          {page < lastPage ? <Link href={pageHref(page + 1)}>{t.pageNext}</Link> : <span />}
+        </nav>
+      )}
+
+      <div className="mt-4">
+        <RepSearchResults
+          locale={l}
+          unassigned={beyond.unassigned}
+          taken={beyond.taken}
+          action={(customer) => (
+            <form action={startOrderAction}>
+              <input type="hidden" name="locale" value={l} />
+              <input type="hidden" name="customerId" value={customer.id} />
+              <button type="submit" className="btn-small">
+                {t.newOrder}
+              </button>
+            </form>
+          )}
+        />
+      </div>
     </>
   );
 }

@@ -58,8 +58,10 @@ type OrderRow = {
   expiredAt: string | null;
   quotedAt: string | null;
   /** Locked onto the order when it was placed; null when no rep is credited. */
-  repName: string | null;
-  placedByRep: boolean;
+  shares: { name: string; shareBp: number }[];
+  /** Other reps hold the customer and the placing rep is not among them: an unclaimed order from that rep has lost it. */
+  claimLost: boolean;
+  placingRepName: string | null; // set when a rep placed the order, whether or not it was ever credited
   commissionRateBp: number | null;
   customerCode: string | null;
   /** The account that placed the order; null for a guest order. */
@@ -122,12 +124,19 @@ export default async function AdminPage({
              q.invoiced_at AS "invoicedAt", q.expires_at AS "expiresAt",
              q.expired_at AS "expiredAt", q.quoted_at AS "quotedAt",
              (SELECT count(*)::int FROM order_items i WHERE i.order_id = q.id) AS "itemCount",
-             r.name AS "repName", q.placed_by_rep AS "placedByRep",
+             COALESCE((SELECT json_agg(json_build_object('name', sr.name, 'shareBp', s.share_bp)
+                                       ORDER BY s.share_bp DESC, sr.name)
+                       FROM order_rep_shares s JOIN sales_reps sr ON sr.id = s.rep_id
+                       WHERE s.order_id = q.id), '[]'::json) AS shares,
+             pr.name AS "placingRepName",
+             (EXISTS (SELECT 1 FROM customer_reps cr WHERE cr.user_id = q.user_id)
+              AND NOT EXISTS (SELECT 1 FROM customer_reps cr
+                              WHERE cr.user_id = q.user_id AND cr.rep_id = q.placed_by_rep_id)) AS "claimLost",
              q.commission_rate_bp AS "commissionRateBp",
              u.customer_code AS "customerCode", q.user_id AS "userId",
              count(*) OVER ()::int AS "totalCount"
       FROM orders q
-      LEFT JOIN sales_reps r ON r.id = q.rep_id
+      LEFT JOIN sales_reps pr ON pr.id = q.placed_by_rep_id
       LEFT JOIN users u ON u.id = q.user_id
       ${statusFilter ? sql`WHERE q.status = ${statusFilter}` : sql`WHERE q.status <> 'delivered' AND q.status <> 'cancelled'`}
       ORDER BY q.created_at DESC LIMIT 200
@@ -235,14 +244,18 @@ export default async function AdminPage({
                 {q.customerCode}
               </span>
             )}
-            {q.repName && (
+            {repSummary(q, l) && (
               <span className="border border-[var(--color-rule)] px-1.5 text-[11px]">
-                {t.repLabel}: {q.repName}
-                {q.placedByRep && ` · ${t.placedByRep}`}
+                {t.repLabel}: {repSummary(q, l)}
+                {q.placingRepName && q.shares.length > 0 && ` · ${t.placedByRep}`}
+                {q.shares.length === 0 &&
+                  q.placingRepName &&
+                  ` · ${(q.claimLost ? t.adminOrderLostClaim : t.adminOrderPendingClaim).replace("{name}", q.placingRepName)}`}
               </span>
             )}
             <span className="text-[var(--color-ink-muted)]">{q.contactName}</span>
-            <span className="tech text-[var(--color-ink-muted)]">{q.email}</span>
+            {/* Empty on a rep's order for a customer nobody held yet. */}
+            {q.email && <span className="tech text-[var(--color-ink-muted)]">{q.email}</span>}
             {deadlineLabel(q, l, t) && (
               <span className="text-[var(--color-ink-muted)]">{deadlineLabel(q, l, t)}</span>
             )}
@@ -270,10 +283,10 @@ export default async function AdminPage({
           <div className="px-3 py-2">
             <dl className="mb-2 grid gap-x-6 gap-y-0.5 text-[11px] [grid-template-columns:repeat(auto-fit,minmax(180px,1fr))]">
               {q.phone && <Row label={t.phone} value={q.phone} tech />}
-              {q.repName && (
+              {q.shares.length > 0 && (
                 <Row
                   label={t.repLabel}
-                  value={`${q.repName} · ${
+                  value={`${repSummary(q, l)} · ${
                     q.commissionRateBp && q.commissionRateBp > 0
                       ? commissionPercentLabel(q.commissionRateBp, l)
                       : t.commissionNone
@@ -384,7 +397,7 @@ export default async function AdminPage({
                       discardLabel={t.confirmDiscard}
                       disabled={DEMO_MODE}
                       details={[
-                        { label: t.confirmSendingTo, value: `${q.company} — ${q.email}`, tech: false },
+                        { label: t.confirmSendingTo, value: q.email ? `${q.company} — ${q.email}` : q.company, tech: false },
                         { label: t.confirmOrder, value: q.ref, tech: true },
                       ]}
                     />
@@ -442,7 +455,7 @@ export default async function AdminPage({
                       discardLabel={t.confirmDiscard}
                       disabled={DEMO_MODE}
                       details={[
-                        { label: t.confirmSendingTo, value: `${q.company} — ${q.email}`, tech: false },
+                        { label: t.confirmSendingTo, value: q.email ? `${q.company} — ${q.email}` : q.company, tech: false },
                         { label: t.confirmOrder, value: q.ref, tech: true },
                         { label: t.confirmNewStatus, value: t[STATUS_LABEL_KEY[next]] },
                       ]}
@@ -570,6 +583,16 @@ const MANUAL_ONLY: ReadonlySet<OrderStatus> = new Set<OrderStatus>(["quoted", "i
  * quoted = valid until, invoiced = pay by. An order a deadline cancelled says
  * so instead. Null when there is nothing to say.
  */
+/** "A 75%, B 25%" from the order's own copy of the split; the placing rep's name alone while it is unclaimed. */
+function repSummary(q: OrderRow, locale: Locale): string | null {
+  if (q.shares.length > 0) {
+    return q.shares
+      .map((share) => `${share.name} ${commissionPercentLabel(share.shareBp, locale)}`)
+      .join(locale === "fa" ? "، " : ", ");
+  }
+  return q.placingRepName;
+}
+
 function deadlineLabel(q: OrderRow, locale: Locale, t: ReturnType<typeof getDict>): string | null {
   if (q.status === "cancelled" && q.expiredAt) return t.statusExpired;
   if (!q.expiresAt || (q.status !== "received" && q.status !== "quoted" && q.status !== "invoiced")) return null;
