@@ -1405,6 +1405,60 @@ test("a rep who lost the claim can no longer act on the order they placed", asyn
   });
 });
 
+// claimCustomerForOrder credits the placing rep when the customer is unassigned
+// or already lists them, so the rep's views must keep the order actionable in
+// both cases: marking it lost would hide the pay link on a sale that pays them.
+async function assertStillMineToClaim(rep: string, ref: string) {
+  const row = (await listOrdersForRep(rep, null)).find((r) => r.ref === ref);
+  assert.ok(row);
+  assert.equal(row.pendingClaim, true);
+  assert.equal(row.lostClaim, false);
+  assert.equal(row.canAct, true);
+  assert.ok(row.payToken, "pay link while the claim can still be credited");
+  assert.equal(await repCanActOnOrder(rep, ref), true);
+  const detail = (await getOrderForRep(rep, ref))?.order;
+  assert.equal(detail?.pendingClaim, true);
+  assert.equal(detail?.lostClaim, false);
+  const inProgress = (await listInProgressForRep(rep, 1_000_000)).find((r) => r.ref === ref);
+  assert.ok(inProgress, "listed as an estimate");
+  assert.equal(inProgress.pendingClaim, true);
+  assert.equal(inProgress.shareBp, 10000);
+}
+
+test("a second order from the rep who already claimed the customer stays pending, not lost", async () => {
+  assertLocalDatabase();
+  await inScope(async (s) => {
+    const rep = await s.rep();
+    const id = await s.customer();
+    await withOrders(undefined as never, async (place) => {
+      const first = await placed(place, id, rep);
+      const secondRef = refOf(await place(id, rep, true));
+      assert.equal(await confirmPayment(first, "invoiced"), true);
+      assert.deepEqual(await listAccountReps(id).then((rows) => rows.map((row) => row.repId)), [rep]);
+      await assertStillMineToClaim(rep, secondRef);
+
+      const [second] = await sql<{ id: number }[]>`SELECT id FROM orders WHERE ref = ${secondRef}`;
+      assert.equal(await confirmPayment(second.id, "invoiced"), true);
+      const [{ n }] = await sql<{ n: number }[]>`
+        SELECT count(*)::int AS n FROM order_rep_shares WHERE order_id = ${second.id} AND rep_id = ${rep} AND share_bp = 10000`;
+      assert.equal(n, 1, "paying it credits the rep 100%, as the views said it would");
+    }, [id]);
+  });
+});
+
+test("an order stays pending when the admin adds the placing rep to the account before payment", async () => {
+  assertLocalDatabase();
+  await inScope(async (s) => {
+    const [a, b] = [await s.rep(), await s.rep()];
+    const id = await s.customer();
+    await withOrders(undefined as never, async (place) => {
+      const ref = refOf(await place(id, a, true));
+      assert.equal(await setAccountReps(id, [{ repId: a, shareBp: 5000 }, { repId: b, shareBp: 5000 }], null), "ok");
+      await assertStillMineToClaim(a, ref);
+    }, [id]);
+  });
+});
+
 test("an order placed for a customer who already has the rep is neither pending nor lost", async () => {
   assertLocalDatabase();
   await inScope(async (s) => {

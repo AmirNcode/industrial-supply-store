@@ -99,9 +99,11 @@ export async function listInProgressForRep(
   liveRate: number,
   db: Db = sql,
 ): Promise<InProgressRow[]> {
-  // The second branch is an order this rep placed for a customer nobody owns
-  // yet: it has no share rows until it is paid and wins the customer, so it is
-  // shown as an estimate at the rep's current rate and counted nowhere else.
+  // The second branch is an order this rep placed that has no share rows yet
+  // and whose payment will credit them: the customer is nobody's, or already
+  // lists this rep (claimCustomerForOrder credits both). Shown as an estimate
+  // and counted nowhere else, at the rate that function will lock in: the
+  // account's own rate, else the placing rep's.
   const rows = await db<InProgressRow[]>`
     SELECT * FROM (
       SELECT o.ref, o.status, COALESCE(u.company, o.company) AS company,
@@ -116,15 +118,16 @@ export async function listInProgressForRep(
       SELECT o.ref, o.status, COALESCE(u.company, o.company) AS company,
              o.created_at AS "createdAt",
              ROUND(o.total_cents::numeric * ${rate(liveRate)} / 100)::float8 AS "salesRial",
-             ROUND(o.total_cents::numeric * ${rate(liveRate)} * r.commission_rate_bp / 1000000)::float8 AS "commissionRial",
+             ROUND(o.total_cents::numeric * ${rate(liveRate)} * COALESCE(u.commission_rate_bp, r.commission_rate_bp) / 1000000)::float8 AS "commissionRial",
              true AS estimate,
-             10000 AS "shareBp", r.commission_rate_bp AS "rateBp", true AS "pendingClaim"
+             10000 AS "shareBp", COALESCE(u.commission_rate_bp, r.commission_rate_bp) AS "rateBp", true AS "pendingClaim"
       FROM orders o JOIN sales_reps r ON r.id = o.placed_by_rep_id
       LEFT JOIN users u ON u.id = o.user_id
       WHERE o.placed_by_rep_id = ${repId} AND o.user_id IS NOT NULL
         AND o.status IN ('received', 'invoiced', 'payment_review', 'preparing', 'shipped')
         AND NOT EXISTS (SELECT 1 FROM order_rep_shares x WHERE x.order_id = o.id)
-        AND NOT EXISTS (SELECT 1 FROM customer_reps c WHERE c.user_id = o.user_id)
+        AND (NOT EXISTS (SELECT 1 FROM customer_reps c WHERE c.user_id = o.user_id)
+             OR EXISTS (SELECT 1 FROM customer_reps c WHERE c.user_id = o.user_id AND c.rep_id = ${repId}))
     ) t
     ORDER BY "createdAt" DESC
     LIMIT 200

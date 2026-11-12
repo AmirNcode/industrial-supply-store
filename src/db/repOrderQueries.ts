@@ -23,13 +23,13 @@ export type RepOrderRow = {
   expiredAt: string | null;
   /** Only on orders this rep can act on; null on an order they see because the customer is on their list. */
   payToken: string | null;
-  /** I have a share in it, or I placed it and the claim is still open — the orders I may act on. */
+  /** I have a share in it, or I placed it and the claim is still open (customer unassigned or already mine) — the orders I may act on. */
   canAct: boolean;
   /** My share of the order in basis points; null when I have no share row. */
   myShareBp: number | null;
-  /** I placed it and it has no shares yet: it credits me only if its payment wins the customer. */
+  /** I placed it and it has no shares yet: paying it credits me, because the customer is unassigned or already mine. */
   pendingClaim: boolean;
-  /** I placed it, it has no shares, and the customer has since been given to other reps: no commission, no rights. */
+  /** I placed it, it has no shares, and the customer is held by other reps without me: no commission, no rights. */
   lostClaim: boolean;
   company: string;
   customerId: string | null;
@@ -61,42 +61,61 @@ function visibleTo(repId: string) {
   )`;
 }
 
-/** SQL fragment: the order has no share rows (it credits nobody yet). */
-const NO_SHARES = sql`NOT EXISTS (SELECT 1 FROM order_rep_shares s WHERE s.order_id = o.id)`;
-/** SQL fragment: nobody holds the order's customer. */
-const CUSTOMER_UNASSIGNED = sql`NOT EXISTS (SELECT 1 FROM customer_reps cr WHERE cr.user_id = o.user_id)`;
-
 /**
  * SQL fragment: I may act on `o` — I have a share in it, or I placed it and
- * the claim is still open (no shares, customer still unassigned). Once the
- * customer is given to other reps, the placing rep has lost the claim and
- * keeps only the read-only view: a pay link or receipt upload for a sale that
- * now pays someone else would be acting on another rep's customer.
+ * the claim is still open. An order with no share rows credits nobody until
+ * its payment is confirmed, and `claimCustomerForOrder` then credits the
+ * placing rep when the customer has no reps or the placing rep is already on
+ * the customer's list; only a customer held by other reps loses it. Mirror
+ * that rule here: once the claim is lost the placing rep keeps only the
+ * read-only view, since a pay link or receipt upload for a sale that now pays
+ * someone else would be acting on another rep's customer.
  */
 function canActOn(repId: string) {
   // IS TRUE: placed_by_rep_id is NULL on most orders, and NULL OR false is NULL, not false.
-  return sql`(((o.placed_by_rep_id = ${repId}) IS TRUE AND ${NO_SHARES} AND ${CUSTOMER_UNASSIGNED})
+  return sql`(((o.placed_by_rep_id = ${repId}) IS TRUE
+      AND NOT EXISTS (SELECT 1 FROM order_rep_shares s WHERE s.order_id = o.id)
+      AND (NOT EXISTS (SELECT 1 FROM customer_reps cr WHERE cr.user_id = o.user_id)
+           OR EXISTS (SELECT 1 FROM customer_reps cr WHERE cr.user_id = o.user_id AND cr.rep_id = ${repId})))
     OR EXISTS (SELECT 1 FROM order_rep_shares s WHERE s.order_id = o.id AND s.rep_id = ${repId}))`;
 }
 
 /**
- * The columns every rep order read returns. The pay token — a bearer
- * credential for the order — only where the rep can act on the order: a
- * customer added to their list brings that customer's older orders into view,
- * but not the power to take receipts or send pay links for sales another rep
- * made (review M-17).
+ * One row per order holding the facts `rowCols` derives its claim columns
+ * from, so each correlated subquery runs once per order rather than once per
+ * column. Joined as `claim` by every query that selects `rowCols`.
  */
-function rowCols(repId: string) {
+function claimJoin(repId: string) {
+  return sql`LEFT JOIN LATERAL (
+    SELECT (SELECT s.share_bp FROM order_rep_shares s WHERE s.order_id = o.id AND s.rep_id = ${repId}) AS share_bp,
+           ((o.placed_by_rep_id = ${repId}) IS TRUE
+             AND NOT EXISTS (SELECT 1 FROM order_rep_shares x WHERE x.order_id = o.id)) AS unshared_mine,
+           EXISTS (SELECT 1 FROM customer_reps cr WHERE cr.user_id = o.user_id) AS has_reps,
+           EXISTS (SELECT 1 FROM customer_reps cr WHERE cr.user_id = o.user_id AND cr.rep_id = ${repId}) AS on_list
+  ) claim ON TRUE`;
+}
+
+/**
+ * The columns every rep order read returns; the query must also join
+ * `claimJoin`. The pay token — a bearer credential for the order — only where
+ * the rep can act on the order: a customer added to their list brings that
+ * customer's older orders into view, but not the power to take receipts or
+ * send pay links for sales another rep made (review M-17).
+ */
+function rowCols() {
+  // Same rule as canActOn, from the joined facts: the claim is open unless
+  // other reps hold the customer and I am not among them.
+  const open = sql`(claim.unshared_mine AND (NOT claim.has_reps OR claim.on_list))`;
   return sql`o.id, o.ref, o.status, o.created_at AS "createdAt",
   o.total_cents AS "totalCents", o.fx_rate_to_rial AS "fxRateToRial",
   o.vat_rate_bp AS "vatRateBp",
   o.invoice_number AS "invoiceNumber", o.invoiced_at AS "invoicedAt",
   o.expires_at AS "expiresAt", o.expired_at AS "expiredAt",
-  CASE WHEN ${canActOn(repId)} THEN o.pay_token END AS "payToken",
-  ${canActOn(repId)} AS "canAct",
-  (SELECT s.share_bp FROM order_rep_shares s WHERE s.order_id = o.id AND s.rep_id = ${repId}) AS "myShareBp",
-  ((o.placed_by_rep_id = ${repId}) IS TRUE AND ${NO_SHARES} AND ${CUSTOMER_UNASSIGNED}) AS "pendingClaim",
-  ((o.placed_by_rep_id = ${repId}) IS TRUE AND ${NO_SHARES} AND NOT ${CUSTOMER_UNASSIGNED}) AS "lostClaim",
+  CASE WHEN claim.share_bp IS NOT NULL OR ${open} THEN o.pay_token END AS "payToken",
+  (claim.share_bp IS NOT NULL OR ${open}) AS "canAct",
+  claim.share_bp AS "myShareBp",
+  ${open} AS "pendingClaim",
+  (claim.unshared_mine AND claim.has_reps AND NOT claim.on_list) AS "lostClaim",
   COALESCE(u.company, o.company) AS company, o.user_id AS "customerId",
   u.customer_code AS "customerCode", o.placed_by_rep AS "placedByRep"`;
 }
@@ -107,8 +126,9 @@ export async function listOrdersForRep(
   status: OrderStatus | null,
 ): Promise<(RepOrderRow & { totalCount: number })[]> {
   return sql<(RepOrderRow & { totalCount: number })[]>`
-    SELECT ${rowCols(repId)}, count(*) OVER ()::int AS "totalCount"
+    SELECT ${rowCols()}, count(*) OVER ()::int AS "totalCount"
     FROM orders o LEFT JOIN users u ON u.id = o.user_id
+    ${claimJoin(repId)}
     WHERE ${visibleTo(repId)} AND ${status ? sql`o.status = ${status}` : sql`TRUE`}
     ORDER BY o.created_at DESC
     LIMIT 300
@@ -120,7 +140,7 @@ export async function getOrderForRep(
   ref: string,
 ): Promise<{ order: RepOrderDetail; items: AccountOrderItem[] } | null> {
   const [order] = await sql<RepOrderDetail[]>`
-    SELECT ${rowCols(repId)},
+    SELECT ${rowCols()},
            o.courier, o.tracking_number AS "trackingNumber",
            o.po_number AS "poNumber", o.quoted_at AS "quotedAt",
            o.payment_submitted_at AS "paymentSubmittedAt", o.paid_at AS "paidAt",
@@ -129,6 +149,7 @@ export async function getOrderForRep(
            o.commission_rate_bp AS "commissionRateBp",
            EXISTS (SELECT 1 FROM customer_reps cr WHERE cr.user_id = o.user_id AND cr.rep_id = ${repId}) AS "customerIsMine"
     FROM orders o LEFT JOIN users u ON u.id = o.user_id
+    ${claimJoin(repId)}
     WHERE o.ref = ${ref} AND ${visibleTo(repId)}
     LIMIT 1
   `;
