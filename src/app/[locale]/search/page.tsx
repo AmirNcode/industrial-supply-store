@@ -4,7 +4,7 @@ import { search, type SearchResults } from "@/db/queries";
 import { CategorySidebar } from "@/components/CategorySidebar";
 import { CatalogImage } from "@/components/CatalogImage";
 import { isLocale, getDict, pick, type Locale } from "@/lib/i18n";
-import { customerCurrencyFor, formatInt, formatPrice } from "@/lib/money";
+import { customerCurrencyFor, formatInt, formatPrice, isPriceOnRequest } from "@/lib/money";
 import { getFxRate, getPriceDisplayMode } from "@/lib/fx";
 import { REQUEST_LIMITS, boundedString } from "@/lib/requestLimits";
 import { RATE_LIMITS, consumeRateLimit } from "@/lib/rateLimit";
@@ -91,7 +91,9 @@ export default async function SearchPage({
                       </td>
                       <td>{locale === "fa" ? p.familyFa : p.familyEn}</td>
                       <td className="num tech tech-num">
-                        {formatPrice(p.priceCents, currency, l, rate)}
+                        {isPriceOnRequest(p.priceCents)
+                          ? t.cartRequestQuoteCell
+                          : formatPrice(p.priceCents, currency, l, rate)}
                       </td>
                       <td>
                         <Link
