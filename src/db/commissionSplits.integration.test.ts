@@ -7,6 +7,7 @@ import type { TransactionSql } from "postgres";
 import { sql } from "./index";
 import { randomReferralCode } from "@/lib/repAccount";
 import { randomCustomerCode } from "@/lib/customerCode";
+import { listAccountReps, listAccountsWithInactiveRep, repAccess, setAccountReps } from "./accountRepQueries";
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 type Tx = TransactionSql<{}>;
@@ -178,5 +179,180 @@ test("split constraints refuse bad shares and accept unclaimed orders", async ()
       INSERT INTO orders (ref, company, contact_name, email, total_cents, requested_total_cents)
       VALUES (${`ORD-${randomUUID().slice(0, 6).toUpperCase()}`}, 'N', 'N', '', 100, 100) RETURNING id`;
     await refused((sp) => sp`INSERT INTO order_rep_shares (order_id, rep_id, share_bp) VALUES (${order.id}, ${repId}, 0)`);
+  });
+});
+
+// ── Account rep list. setAccountReps opens its own transaction, so these
+// tests commit real rows and remove them afterwards, audit rows included (the
+// log is append-only for the app, not for a local test database).
+
+async function withCommitted(body: (made: { rep: () => Promise<string>; customer: () => Promise<string> }) => Promise<void>) {
+  const reps: string[] = [];
+  const users: string[] = [];
+  try {
+    await body({
+      rep: async () => {
+        const [row] = await sql<{ id: string }[]>`
+          INSERT INTO sales_reps (username, password_hash, name, commission_rate_bp, referral_code)
+          VALUES (${`rep-${randomUUID().slice(0, 8)}`}, 'x', ${`Rep ${reps.length + 1}`}, 250, ${randomReferralCode()})
+          RETURNING id`;
+        reps.push(row.id);
+        return row.id;
+      },
+      customer: async () => {
+        const [row] = await sql<{ id: string }[]>`
+          INSERT INTO users (email, password_hash, customer_code, origin, phone, company)
+          VALUES (${`${randomUUID()}@example.invalid`}, 'x', ${randomCustomerCode()}, 'self', '0912 000 0000', 'Split Co')
+          RETURNING id`;
+        users.push(row.id);
+        return row.id;
+      },
+    });
+  } finally {
+    if (users.length) await sql`DELETE FROM audit_log WHERE subject_kind = 'customer' AND subject_id = ANY(${users}::text[])`;
+    if (users.length) await sql`DELETE FROM users WHERE id = ANY(${users}::uuid[])`;
+    if (reps.length) await sql`DELETE FROM sales_reps WHERE id = ANY(${reps}::uuid[])`;
+  }
+}
+
+const stored = (id: string) => sql<{ repId: string; shareBp: number | null }[]>`
+  SELECT rep_id AS "repId", share_bp AS "shareBp" FROM customer_reps WHERE user_id = ${id} ORDER BY added_at, rep_id`;
+
+test("setAccountReps saves 75/15/10 and reads it back", async () => {
+  assertLocalDatabase();
+  await withCommitted(async (made) => {
+    const [a, b, c] = [await made.rep(), await made.rep(), await made.rep()];
+    const id = await made.customer();
+    const result = await setAccountReps(id, [
+      { repId: a, shareBp: 7500 }, { repId: b, shareBp: 1500 }, { repId: c, shareBp: 1000 },
+    ], null);
+    assert.equal(result, "ok");
+    const list = await listAccountReps(id);
+    assert.deepEqual(list.map((r) => r.repId), [a, b, c]);
+    assert.deepEqual(list.map((r) => r.shareBp), [7500, 1500, 1000]);
+    assert.deepEqual(list.map((r) => r.effectiveShareBp), [7500, 1500, 1000]);
+    assert.deepEqual(list.map((r) => r.isLead), [true, false, false]);
+    const [user] = await sql<{ repId: string | null; earns: boolean }[]>`
+      SELECT rep_id AS "repId", rep_earns_commission AS earns FROM users WHERE id = ${id}`;
+    assert.equal(user.repId, a);
+    assert.equal(user.earns, true);
+  });
+});
+
+test("blank shares are equal, lead is the first added", async () => {
+  assertLocalDatabase();
+  await withCommitted(async (made) => {
+    const [a, b, c] = [await made.rep(), await made.rep(), await made.rep()];
+    const id = await made.customer();
+    assert.equal(await setAccountReps(id, [a, b, c].map((repId) => ({ repId, shareBp: null })), null), "ok");
+    const list = await listAccountReps(id);
+    assert.deepEqual(list.map((r) => r.repId), [a, b, c]);
+    assert.deepEqual(list.map((r) => r.effectiveShareBp), [3334, 3333, 3333]);
+    assert.deepEqual(list.map((r) => r.isLead), [true, false, false]);
+  });
+});
+
+test("an account rate of 0 clears the legacy earns flag", async () => {
+  assertLocalDatabase();
+  await withCommitted(async (made) => {
+    const a = await made.rep();
+    const id = await made.customer();
+    assert.equal(await setAccountReps(id, [{ repId: a, shareBp: null }], 0), "ok");
+    const [user] = await sql<{ rate: number | null; earns: boolean }[]>`
+      SELECT commission_rate_bp AS rate, rep_earns_commission AS earns FROM users WHERE id = ${id}`;
+    assert.equal(user.rate, 0);
+    assert.equal(user.earns, false);
+  });
+});
+
+test("setAccountReps refuses a bad list and leaves the stored one alone", async () => {
+  assertLocalDatabase();
+  await withCommitted(async (made) => {
+    const [a, b] = [await made.rep(), await made.rep()];
+    const id = await made.customer();
+    assert.equal(await setAccountReps(id, [{ repId: a, shareBp: 6000 }, { repId: b, shareBp: 4000 }], 300), "ok");
+    const keep = await stored(id);
+
+    const six: string[] = [];
+    for (let i = 0; i < 6; i++) six.push(await made.rep());
+    const inactive = await made.rep();
+    await sql`UPDATE sales_reps SET active = false WHERE id = ${inactive}`;
+
+    const cases: [string, Parameters<typeof setAccountReps>[0], Parameters<typeof setAccountReps>[1], string][] = [
+      ["total", id, [{ repId: a, shareBp: 5000 }, { repId: b, shareBp: 4000 }], "total"],
+      ["mixed", id, [{ repId: a, shareBp: 5000 }, { repId: b, shareBp: null }], "mixed"],
+      ["duplicate", id, [{ repId: a, shareBp: null }, { repId: a, shareBp: null }], "duplicate"],
+      ["too-many", id, six.map((repId) => ({ repId, shareBp: null })), "too-many"],
+      ["bad-rep", id, [{ repId: a, shareBp: null }, { repId: inactive, shareBp: null }], "bad-rep"],
+      ["not-found", randomUUID(), [{ repId: a, shareBp: null }], "not-found"],
+    ];
+    for (const [label, customerId, rows, expected] of cases) {
+      assert.equal(await setAccountReps(customerId, rows, null), expected, label);
+      assert.deepEqual(await stored(id), keep, `${label} left the list unchanged`);
+    }
+    const [user] = await sql<{ rate: number | null }[]>`SELECT commission_rate_bp AS rate FROM users WHERE id = ${id}`;
+    assert.equal(user.rate, 300);
+  });
+});
+
+test("an inactive rep already listed can stay", async () => {
+  assertLocalDatabase();
+  await withCommitted(async (made) => {
+    const [a, b] = [await made.rep(), await made.rep()];
+    const id = await made.customer();
+    const rows = [{ repId: a, shareBp: null }, { repId: b, shareBp: null }];
+    assert.equal(await setAccountReps(id, rows, null), "ok");
+    await sql`UPDATE sales_reps SET active = false WHERE id = ${b}`;
+    assert.equal(await setAccountReps(id, rows, null), "ok");
+    const flagged = (await listAccountsWithInactiveRep()).find((row) => row.customerId === id);
+    assert.deepEqual(flagged?.inactiveReps, ["Rep 2"]);
+  });
+});
+
+test("an empty list unassigns", async () => {
+  assertLocalDatabase();
+  await withCommitted(async (made) => {
+    const a = await made.rep();
+    const id = await made.customer();
+    assert.equal(await setAccountReps(id, [{ repId: a, shareBp: null }], 400), "ok");
+    assert.equal(await setAccountReps(id, [], null), "ok");
+    assert.equal((await stored(id)).length, 0);
+    const [user] = await sql<{ repId: string | null; rate: number | null; earns: boolean }[]>`
+      SELECT rep_id AS "repId", commission_rate_bp AS rate, rep_earns_commission AS earns FROM users WHERE id = ${id}`;
+    assert.deepEqual(user, { repId: null, rate: null, earns: false });
+    assert.equal(await repAccess(a, id), "unassigned");
+  });
+});
+
+test("repAccess tells mine, taken, unassigned and missing apart", async () => {
+  assertLocalDatabase();
+  await withCommitted(async (made) => {
+    const [a, b, other] = [await made.rep(), await made.rep(), await made.rep()];
+    const id = await made.customer();
+    const free = await made.customer();
+    assert.equal(await setAccountReps(id, [{ repId: a, shareBp: null }, { repId: b, shareBp: null }], null), "ok");
+    assert.equal(await repAccess(a, id), "mine");
+    assert.equal(await repAccess(b, id), "mine");
+    assert.equal(await repAccess(other, id), "taken");
+    assert.equal(await repAccess(other, free), "unassigned");
+    assert.equal(await repAccess(other, randomUUID()), "missing");
+  });
+});
+
+test("every successful save writes one audit row", async () => {
+  assertLocalDatabase();
+  await withCommitted(async (made) => {
+    const a = await made.rep();
+    const id = await made.customer();
+    const count = async () =>
+      (await sql<{ n: number }[]>`
+        SELECT count(*)::int AS n FROM audit_log
+        WHERE action = 'customer.reps-changed' AND subject_kind = 'customer' AND subject_id = ${id}`)[0].n;
+    assert.equal(await setAccountReps(id, [{ repId: a, shareBp: null }], 500), "ok");
+    assert.equal(await count(), 1);
+    assert.equal(await setAccountReps(id, [{ repId: a, shareBp: null }], 100), "ok");
+    assert.equal(await count(), 2);
+    assert.equal(await setAccountReps(id, [{ repId: a, shareBp: 5000 }], null), "total");
+    assert.equal(await count(), 2); // a refusal writes nothing
   });
 });
