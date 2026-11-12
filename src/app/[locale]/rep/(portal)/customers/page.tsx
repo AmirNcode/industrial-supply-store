@@ -33,8 +33,11 @@ export default async function RepCustomersPage({
   const pageNumber = typeof pageParam === "string" ? Number(pageParam) : 1;
   const page = Number.isInteger(pageNumber) && pageNumber >= 1 && pageNumber <= 10_000 ? pageNumber : 1;
   const rep = await requireRep(l);
-  const wide = search.trim().length >= REP_SEARCH_MIN_CHARS;
-  const tooShort = search.trim().length > 0 && !wide;
+  const longEnough = search.trim().length >= REP_SEARCH_MIN_CHARS;
+  // Page 1 only: paging through the rep's own list must not re-run the wide
+  // search or spend a rate-limit token, or flipping pages alone trips the limit.
+  const wide = longEnough && page === 1;
+  const tooShort = search.trim().length > 0 && !longEnough;
   // The wider search reaches customers nobody looks after, so it is bounded
   // per rep; a rep over the limit still gets their own list.
   const limited = wide
