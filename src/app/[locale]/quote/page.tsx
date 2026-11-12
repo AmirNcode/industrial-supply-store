@@ -79,10 +79,10 @@ export default async function QuotePage({
       (typeof forParam === "string" && isUuid(forParam) ? forParam : null) ??
       (await readOrderingFor());
     // The chosen customer is loaded on its own, not looked up in the picker's
-    // list: the list stops at 500, and a rep pressing "New order" on customer
+    // list: the list is paged, and a rep pressing "New order" on customer
     // 550 used to land here with nobody selected (review M-15).
-    const [listed, selected] = await Promise.all([
-      listCustomersForRep(rep.id, ""),
+    const [{ rows: listed }, selected] = await Promise.all([
+      listCustomersForRep(rep.id, "", 1),
       wanted ? getCustomerForRep(rep.id, wanted) : Promise.resolve(null),
     ]);
     const customers = selected && !listed.some((c) => c.id === selected.id) ? [selected, ...listed] : listed;

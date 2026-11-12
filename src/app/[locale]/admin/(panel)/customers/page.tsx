@@ -124,7 +124,7 @@ export default async function AdminCustomersPage({
                   <td className="tech" dir="ltr">
                     {customer.email ?? "—"}
                   </td>
-                  <td>{customer.repName ?? "—"}</td>
+                  <td>{customer.reps[0]?.name ?? "—"}</td>
                   <td>{customer.repEarnsCommission ? t.commissionShortOn : t.commissionShortOff}</td>
                   <td>{formatPersianDate(customer.createdAt, l)}</td>
                 </tr>

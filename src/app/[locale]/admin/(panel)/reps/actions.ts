@@ -102,9 +102,9 @@ export async function deactivateRepAction(formData: FormData): Promise<void> {
   if (destination !== null && !isUuid(destination)) {
     redirect(`/${locale}/admin/reps/${id}?error=destination`);
   }
-  // An explicit choice at move time, never the flag set for the previous rep.
-  const earn = formData.get("movedEarnCommission") === "on";
-  const result = await deactivateRep(id, destination, earn);
+  // The form still posts `movedEarnCommission` (the screen is reworked in a
+  // later task); the account's own rate now decides, so it is not read.
+  const result = await deactivateRep(id, destination);
   if (result === "bad-destination") redirect(`/${locale}/admin/reps/${id}?error=destination`);
   redirect(`/${locale}/admin/reps/${id}?ok=deactivated`);
 }

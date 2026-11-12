@@ -60,6 +60,16 @@ export function onMyList(repId: string) {
   return sql`EXISTS (SELECT 1 FROM customer_reps cr WHERE cr.user_id = u.id AND cr.rep_id = ${repId})`;
 }
 
+/**
+ * SQL fragment: the id of `u`'s lead rep (biggest share, earliest added on a
+ * tie; every share blank means the earliest), the same rule as `leadRepId`.
+ * Blank counts as 0 so an all-blank list falls through to `added_at`.
+ */
+export function leadRepSql() {
+  return sql`(SELECT lcr.rep_id FROM customer_reps lcr WHERE lcr.user_id = u.id
+              ORDER BY COALESCE(lcr.share_bp, 0) DESC, lcr.added_at, lcr.rep_id LIMIT 1)`;
+}
+
 /** SQL fragment: true when `u` has no rep at all. */
 export function unassigned() {
   return sql`NOT EXISTS (SELECT 1 FROM customer_reps cr WHERE cr.user_id = u.id)`;
@@ -251,10 +261,13 @@ export async function claimCustomerForOrder(tx: Tx, orderId: number): Promise<Cl
     SELECT commission_rate_bp AS rate FROM users WHERE id = ${order.userId} FOR UPDATE
   `;
   if (!user) return "not-applicable";
+  // FOR SHARE after the customer lock, the order `setAccountReps` and
+  // `deactivateRep` use: read unlocked, a rep deactivated mid-claim could
+  // still win the customer. No row means inactive (or gone): lost.
   const [rep] = await tx<{ active: boolean; rate: number }[]>`
-    SELECT active, commission_rate_bp AS rate FROM sales_reps WHERE id = ${order.repId}
+    SELECT active, commission_rate_bp AS rate FROM sales_reps WHERE id = ${order.repId} AND active FOR SHARE
   `;
-  if (!rep?.active) return "lost";
+  if (!rep) return "lost";
 
   const rows = await storedRows(order.userId, tx);
   const onList = rows.some((row) => row.repId === order.repId);

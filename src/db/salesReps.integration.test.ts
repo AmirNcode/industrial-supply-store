@@ -33,6 +33,7 @@ import {
   updateCustomerForRep,
 } from "./customerQueries";
 import { addNoteForRep, listNotes } from "./noteQueries";
+import { listAccountReps, setAccountReps } from "./accountRepQueries";
 import { issuePishFactor, sendQuote } from "./invoiceQueries";
 import { confirmPayment } from "./paymentProofQueries";
 import { submitOrderFromCartInTransaction } from "./orderSubmissionQueries";
@@ -206,19 +207,24 @@ test("rep accounts: unique usernames, a password change ends sessions, deactivat
       VALUES (${`${suffix}@example.invalid`}, 'x', ${randomCustomerCode()}, ${a.id}, 'rep', ${a.id})
       RETURNING id`;
     userIds.push(c.id);
+    // A customer owned the pre-split way also has its list row: access reads the list.
+    await sql`INSERT INTO customer_reps (user_id, rep_id, share_bp) VALUES (${c.id}, ${a.id}, NULL)`;
 
     await sql`UPDATE users SET rep_earns_commission = true WHERE id = ${c.id}`;
-    assert.equal(await deactivateRep(a.id, a.id, false), "bad-destination");
-    assert.equal(await deactivateRep(a.id, b.id, false), "ok");
+    assert.equal(await deactivateRep(a.id, a.id), "bad-destination");
+    assert.equal(await deactivateRep(a.id, b.id), "ok");
     const [moved] = await sql<{ repId: string; earns: boolean }[]>`
       SELECT rep_id AS "repId", rep_earns_commission AS earns FROM users WHERE id = ${c.id}`;
     assert.equal(moved.repId, b.id);
-    // The flag set for rep A does not carry over: the admin chose "no" (M-18).
-    assert.equal(moved.earns, false);
+    // The per-move "earns commission" choice (M-18) is gone with the third
+    // argument: whether the account earns follows the account's own rate, which
+    // is unset here, so the new rep earns. The row itself moved to B.
+    assert.equal(moved.earns, true);
+    assert.deepEqual((await listAccountReps(c.id)).map((r) => r.repId), [b.id]);
     const after = await getRepById(a.id);
     assert.equal(after?.active, false);
     assert.equal(after?.sessionVersion, (version ?? 0) + 1);
-    assert.equal(await deactivateRep(b.id, a.id, true), "bad-destination");
+    assert.equal(await deactivateRep(b.id, a.id), "bad-destination");
     // Assigning to a deactivated rep is refused inside the transaction.
     assert.equal(await assignCustomer(c.id, a.id, true), "bad-rep");
 
@@ -318,7 +324,7 @@ test("a rep reads and changes only their own customers", async () => {
     assert.equal(await resetCustomerPasswordForRep(b.id, created.id, "y"), null);
     assert.equal(await setFollowUpForRep(b.id, created.id, "2030-01-01"), false);
     assert.equal(await addNoteForRep(b.id, created.id, "sneaky"), false);
-    assert.equal((await listCustomersForRep(b.id, "")).some((c) => c.id === created.id), false);
+    assert.equal((await listCustomersForRep(b.id, "", 1)).rows.some((c) => c.id === created.id), false);
     assert.equal((await getCustomerForRep(a.id, created.id))?.company, `Co ${suffix}`);
     assert.equal((await listNotes(created.id)).length, 0);
 
@@ -326,8 +332,8 @@ test("a rep reads and changes only their own customers", async () => {
     assert.equal(await addNoteForRep(a.id, created.id, "Called about O-rings"), true);
     assert.equal((await listNotes(created.id))[0]?.body, "Called about O-rings");
     assert.equal(await setFollowUpForRep(a.id, created.id, "2030-01-01"), true);
-    assert.equal((await listCustomersForRep(a.id, created.customerCode))[0]?.id, created.id);
-    assert.equal((await listCustomersForRep(a.id, phone.slice(-5))).some((c) => c.id === created.id), true);
+    assert.equal((await listCustomersForRep(a.id, created.customerCode, 1)).rows[0]?.id, created.id);
+    assert.equal((await listCustomersForRep(a.id, phone.slice(-5), 1)).rows.some((c) => c.id === created.id), true);
 
     // The same phone again: its digits are taken, and the rep is told so.
     assert.deepEqual(
@@ -538,6 +544,9 @@ test("a rep sees their customers' orders and their own credit, and nothing else"
       VALUES (${`${suffix}@example.invalid`}, 'x', ${randomCustomerCode()}, ${a.id}, 'rep', ${a.id}, true)
       RETURNING id`;
     userIds.push(customer.id);
+    // Access reads the list and credit reads the share rows, so a fixture shaped
+    // the pre-split way (only `users.rep_id` / `orders.rep_id`) needs both.
+    await sql`INSERT INTO customer_reps (user_id, rep_id, share_bp) VALUES (${customer.id}, ${a.id}, NULL)`;
     const [order] = await sql<{ id: number; ref: string }[]>`
       INSERT INTO orders (ref, company, contact_name, email, total_cents, requested_total_cents,
                           user_id, rep_id, commission_rate_bp, placed_by_rep)
@@ -545,6 +554,7 @@ test("a rep sees their customers' orders and their own credit, and nothing else"
               ${customer.id}, ${a.id}, 250, true)
       RETURNING id, ref`;
     orderIds.push(order.id);
+    await sql`INSERT INTO order_rep_shares (order_id, rep_id, share_bp) VALUES (${order.id}, ${a.id}, 10000)`;
     await sql`
       INSERT INTO order_items (order_id, product_id, part_number, family_name, qty,
                                unit_price_cents, requested_unit_price_cents)
@@ -556,7 +566,7 @@ test("a rep sees their customers' orders and their own credit, and nothing else"
     assert.equal(await getReorderLines(b.id, order.ref), null);
 
     const mine = await getOrderForRep(a.id, order.ref);
-    assert.equal(mine?.order.creditedToMe, true);
+    assert.equal(mine?.order.canAct, true);
     assert.equal(mine?.order.commissionRateBp, 250);
     assert.deepEqual(await getReorderLines(a.id, order.ref), {
       customerId: customer.id,
@@ -565,11 +575,12 @@ test("a rep sees their customers' orders and their own credit, and nothing else"
     });
 
     // Moved to rep B: A keeps sight of the order it is credited with, but can
-    // no longer reorder for the customer; B sees it without the credit.
-    await sql`UPDATE users SET rep_id = ${b.id} WHERE id = ${customer.id}`;
+    // no longer reorder for the customer; B sees it without the credit. The
+    // move is a list change now, not a write to the legacy column.
+    assert.equal(await setAccountReps(customer.id, [{ repId: b.id, shareBp: null }], null), "ok");
     assert.equal((await getOrderForRep(a.id, order.ref))?.order.customerIsMine, false);
     assert.equal((await getReorderLines(a.id, order.ref))?.customerId, null);
-    assert.equal((await getOrderForRep(b.id, order.ref))?.order.creditedToMe, false);
+    assert.equal((await getOrderForRep(b.id, order.ref))?.order.canAct, false);
   } finally {
     if (orderIds.length) await sql`DELETE FROM orders WHERE id = ANY(${orderIds})`;
     await cleanupReps(repIds, userIds);
@@ -592,6 +603,7 @@ test("reorder leaves out products the admin has since hidden from the catalog", 
       VALUES (${`${suffix}-h@example.invalid`}, 'x', ${randomCustomerCode()}, ${rep.id}, 'rep', ${rep.id}, true)
       RETURNING id`;
     userIds.push(customer.id);
+    await sql`INSERT INTO customer_reps (user_id, rep_id, share_bp) VALUES (${customer.id}, ${rep.id}, NULL)`;
     const [category] = await sql<{ id: number }[]>`
       INSERT INTO categories (slug, path, name_en, name_fa)
       VALUES (${`hid-${suffix}`}, ${`hid-${suffix}`}, 'Hidden test', 'آزمایش') RETURNING id`;
@@ -1071,9 +1083,9 @@ test("rep lists report their full size, so a cut-off list can say so", async () 
       if (created.kind !== "created") throw new Error(created.kind);
       userIds.push(created.id);
     }
-    const rows = await listCustomersForRep(rep.id, "");
+    const { rows, total } = await listCustomersForRep(rep.id, "", 1);
     assert.equal(rows.length, 3);
-    assert.deepEqual(rows.map((row) => row.totalCount), [3, 3, 3]);
+    assert.equal(total, 3);
     assert.deepEqual([...(await listOrdersForRep(rep.id, null))], []);
   } finally {
     await cleanupReps(repIds, userIds);
@@ -1105,12 +1117,13 @@ test("a moved customer's older orders are visible to the new rep but not theirs 
               ${customer.id}, ${oldRep.id}, 250)
       RETURNING id, ref`;
     orderId = order.id;
+    await sql`INSERT INTO order_rep_shares (order_id, rep_id, share_bp) VALUES (${order.id}, ${oldRep.id}, 10000)`;
     assert.equal(await assignCustomer(customer.id, newRep.id, true), "ok");
 
     const seen = await getOrderForRep(newRep.id, order.ref);
     assert.ok(seen, "the new rep still sees the order");
     assert.equal(seen.order.payToken, null);
-    assert.equal(seen.order.creditedToMe, false);
+    assert.equal(seen.order.canAct, false);
     assert.equal(await repCanActOnOrder(newRep.id, order.ref), false);
     assert.equal((await listOrdersForRep(newRep.id, null)).find((o) => o.ref === order.ref)?.payToken, null);
 

@@ -4,6 +4,13 @@ import { uniqueViolation } from "./pgErrors";
 import { recordAudit } from "./audit";
 import { codeFromPhone, randomCustomerCode } from "@/lib/customerCode";
 import { latinDigits } from "@/lib/digits";
+import { resolveShares } from "@/lib/commissionSplit";
+import { leadRepSql, onMyList, repAccess, setAccountReps, unassigned } from "./accountRepQueries";
+
+export const REP_CUSTOMER_PAGE_SIZE = 50;
+export const REP_SEARCH_MIN_CHARS = 3;
+export const REP_SEARCH_TAKEN_MAX = 5;
+const REP_SEARCH_UNASSIGNED_MAX = 20;
 
 export type CustomerOrigin = "self" | "rep" | "referral";
 
@@ -42,10 +49,13 @@ export type CreateCustomerResult =
   | { kind: "email-taken" }
   | { kind: "no-phone-code" };
 
+// `repId` is the lead rep and `repEarnsCommission` whether the account earns
+// anyone commission, both derived from `customer_reps` and the account rate:
+// the legacy `users.rep_id` / `rep_earns_commission` are written, never read.
 const COLS = sql`u.id, u.customer_code AS "customerCode", u.company,
   u.contact_name AS "contactName", u.phone, u.email, u.address, u.city,
-  u.default_po_number AS "defaultPoNumber", u.locale, u.rep_id AS "repId",
-  u.rep_earns_commission AS "repEarnsCommission", u.origin,
+  u.default_po_number AS "defaultPoNumber", u.locale, ${leadRepSql()} AS "repId",
+  (${leadRepSql()} IS NOT NULL AND u.commission_rate_bp IS DISTINCT FROM 0) AS "repEarnsCommission", u.origin,
   u.origin_rep_id AS "originRepId", u.chose_own_password AS "choseOwnPassword",
   u.next_follow_up_on::text AS "nextFollowUpOn", u.created_at AS "createdAt"`;
 
@@ -72,33 +82,121 @@ function matches(search: string) {
               OR u.contact_name ILIKE ${like} OR u.email ILIKE ${like} ${phone})`;
 }
 
-// ── Rep-scoped. Every statement carries `rep_id = $rep` in its own WHERE, so
-// a customer id posted for someone else's customer matches nothing — the
-// ownership rule is in the query, not a check before it that a later edit
-// could drop.
+// ── Rep-scoped. Every statement carries "this customer is on my list"
+// (`onMyList`, the `customer_reps` row) in its own WHERE, so a customer id
+// posted for someone else's customer matches nothing — the ownership rule is
+// in the query, not a check before it that a later edit could drop.
 
 export async function listCustomersForRep(
   repId: string,
   search: string,
-): Promise<(CustomerRow & { lastOrderAt: string | null; totalCount: number })[]> {
-  // `totalCount` is every match, not just the 500 returned, so the page can
-  // say the list is cut short instead of rows silently disappearing (M-15).
-  return sql<(CustomerRow & { lastOrderAt: string | null; totalCount: number })[]>`
-    SELECT ${COLS},
-           (SELECT max(o.created_at) FROM orders o WHERE o.user_id = u.id) AS "lastOrderAt",
-           count(*) OVER ()::int AS "totalCount"
-    FROM users u
-    WHERE u.rep_id = ${repId} AND ${matches(search)}
-    ORDER BY u.company, u.customer_code
-    LIMIT 500
-  `;
+  page: number,
+): Promise<{ rows: (CustomerRow & { lastOrderAt: string | null })[]; total: number }> {
+  // `total` is every match, not just this page, so the page can say the list
+  // is longer than what it shows (M-15). Counted on its own: a window count
+  // would read 0 for a page past the end.
+  const where = sql`${onMyList(repId)} AND ${matches(search)}`;
+  const [rows, [count]] = await Promise.all([
+    sql<(CustomerRow & { lastOrderAt: string | null })[]>`
+      SELECT ${COLS},
+             (SELECT max(o.created_at) FROM orders o WHERE o.user_id = u.id) AS "lastOrderAt"
+      FROM users u
+      WHERE ${where}
+      ORDER BY u.company, u.customer_code
+      LIMIT ${REP_CUSTOMER_PAGE_SIZE} OFFSET ${(Math.max(1, page) - 1) * REP_CUSTOMER_PAGE_SIZE}
+    `,
+    sql<{ total: number }[]>`SELECT count(*)::int AS total FROM users u WHERE ${where}`,
+  ]);
+  return { rows, total: count.total };
 }
 
 export async function getCustomerForRep(repId: string, customerId: string): Promise<CustomerRow | null> {
   const [row] = await sql<CustomerRow[]>`
-    SELECT ${COLS} FROM users u WHERE u.id = ${customerId} AND u.rep_id = ${repId}
+    SELECT ${COLS} FROM users u WHERE u.id = ${customerId} AND ${onMyList(repId)}
   `;
   return row ?? null;
+}
+
+export type UnassignedCustomer = {
+  id: string;
+  customerCode: string;
+  company: string;
+  contactName: string;
+  phone: string;
+};
+/** Shown to a rep with no right to the customer: the lead rep's name and nothing that identifies or reaches the customer. */
+export type TakenCustomer = { customerCode: string; company: string; assignedTo: string };
+
+/**
+ * Other people's and nobody's customers matching the search, so a rep can tell
+ * a new lead from one already taken. Both empty under three characters. The
+ * customers on this rep's own list are excluded in the WHERE, and a taken
+ * customer is selected as exactly code, company and the lead's name: no id,
+ * phone, email or address ever leaves the query for a customer who is not
+ * this rep's (the id would let a caller try the other id-keyed actions).
+ */
+export async function searchBeyondMine(
+  repId: string,
+  search: string,
+): Promise<{ unassigned: UnassignedCustomer[]; taken: TakenCustomer[] }> {
+  if (search.trim().length < REP_SEARCH_MIN_CHARS) return { unassigned: [], taken: [] };
+  const [free, taken] = await Promise.all([
+    sql<UnassignedCustomer[]>`
+      SELECT u.id, u.customer_code AS "customerCode", COALESCE(u.company, '') AS company,
+             COALESCE(u.contact_name, '') AS "contactName", COALESCE(u.phone, '') AS phone
+      FROM users u
+      WHERE ${unassigned()} AND ${matches(search)}
+      ORDER BY u.company, u.customer_code
+      LIMIT ${REP_SEARCH_UNASSIGNED_MAX}
+    `,
+    sql<TakenCustomer[]>`
+      SELECT u.customer_code AS "customerCode", COALESCE(u.company, '') AS company,
+             (SELECT r.name FROM sales_reps r WHERE r.id = ${leadRepSql()}) AS "assignedTo"
+      FROM users u
+      WHERE NOT ${unassigned()} AND NOT ${onMyList(repId)} AND ${matches(search)}
+      ORDER BY u.company, u.customer_code
+      LIMIT ${REP_SEARCH_TAKEN_MAX}
+    `,
+  ]);
+  return { unassigned: free, taken };
+}
+
+export type OrderableCustomer =
+  | { kind: "mine"; customer: CustomerRow }
+  | { kind: "unassigned"; customer: UnassignedCustomer & { locale: string; email: string | null } }
+  | { kind: "taken"; assignedTo: string };
+
+/**
+ * What a rep may do about one customer id: order for their own, order for an
+ * unassigned one (the order wins the customer when it is paid), or nothing for
+ * someone else's. The data for each case is fetched with its own rule in the
+ * WHERE, so a customer who changed hands since `repAccess` is simply not found.
+ */
+export async function getOrderableCustomerForRep(
+  repId: string,
+  customerId: string,
+): Promise<OrderableCustomer | null> {
+  const access = await repAccess(repId, customerId);
+  if (access === "missing") return null;
+  if (access === "mine") {
+    const customer = await getCustomerForRep(repId, customerId);
+    return customer ? { kind: "mine", customer } : null;
+  }
+  if (access === "unassigned") {
+    const [row] = await sql<(UnassignedCustomer & { locale: string; email: string | null })[]>`
+      SELECT u.id, u.customer_code AS "customerCode", COALESCE(u.company, '') AS company,
+             COALESCE(u.contact_name, '') AS "contactName", COALESCE(u.phone, '') AS phone,
+             u.locale, u.email
+      FROM users u WHERE u.id = ${customerId} AND ${unassigned()}
+    `;
+    return row ? { kind: "unassigned", customer: row } : null;
+  }
+  const [row] = await sql<{ assignedTo: string }[]>`
+    SELECT r.name AS "assignedTo"
+    FROM users u JOIN sales_reps r ON r.id = ${leadRepSql()}
+    WHERE u.id = ${customerId} AND NOT ${onMyList(repId)}
+  `;
+  return row ? { kind: "taken", assignedTo: row.assignedTo } : null;
 }
 
 /**
@@ -117,16 +215,22 @@ export async function createCustomerForRep(
   let code = fromPhone ?? randomCustomerCode();
   for (let attempt = 0; attempt < 10; attempt++) {
     try {
-      const [row] = await sql<{ id: string; customerCode: string }[]>`
-        INSERT INTO users (email, password_hash, company, contact_name, phone, address, city,
-                           locale, customer_code, rep_id, origin, origin_rep_id,
-                           rep_earns_commission, must_change_password, chose_own_password)
-        VALUES (${input.email}, ${input.passwordHash}, ${input.company}, ${input.contactName},
-                ${input.phone}, ${input.address}, ${input.city}, ${input.locale}, ${code},
-                ${repId}, 'rep', ${repId}, true, true, false)
-        RETURNING id, customer_code AS "customerCode"
-      `;
-      return { kind: "created", id: row.id, customerCode: row.customerCode };
+      // One transaction per attempt: the list row is what gives the rep the
+      // customer, so a user row without it (or the reverse) must not exist.
+      // The legacy columns are still written for the release running beside this one.
+      return await sql.begin(async (tx) => {
+        const [row] = await tx<{ id: string; customerCode: string }[]>`
+          INSERT INTO users (email, password_hash, company, contact_name, phone, address, city,
+                             locale, customer_code, rep_id, origin, origin_rep_id,
+                             rep_earns_commission, must_change_password, chose_own_password)
+          VALUES (${input.email}, ${input.passwordHash}, ${input.company}, ${input.contactName},
+                  ${input.phone}, ${input.address}, ${input.city}, ${input.locale}, ${code},
+                  ${repId}, 'rep', ${repId}, true, true, false)
+          RETURNING id, customer_code AS "customerCode"
+        `;
+        await tx`INSERT INTO customer_reps (user_id, rep_id, share_bp) VALUES (${row.id}, ${repId}, NULL)`;
+        return { kind: "created" as const, id: row.id, customerCode: row.customerCode };
+      });
     } catch (err) {
       const constraint = uniqueViolation(err);
       if (constraint === null) throw err;
@@ -145,10 +249,10 @@ export async function updateCustomerForRep(
 ): Promise<"ok" | "not-found" | "email-taken"> {
   try {
     const result = await sql`
-      UPDATE users
+      UPDATE users u
       SET company = ${input.company}, contact_name = ${input.contactName}, phone = ${input.phone},
           email = ${input.email}, address = ${input.address}, city = ${input.city}
-      WHERE id = ${customerId} AND rep_id = ${repId}
+      WHERE u.id = ${customerId} AND ${onMyList(repId)}
     `;
     return result.count === 0 ? "not-found" : "ok";
   } catch (err) {
@@ -175,7 +279,7 @@ export async function resetCustomerPasswordForRep(
       UPDATE users u
       SET password_hash = ${passwordHash}, must_change_password = true,
           session_version = u.session_version + 1
-      WHERE u.id = ${customerId} AND u.rep_id = ${repId}
+      WHERE u.id = ${customerId} AND ${onMyList(repId)}
         AND u.origin = 'rep' AND u.origin_rep_id = ${repId} AND NOT u.chose_own_password
       RETURNING ${COLS}
     `;
@@ -195,8 +299,8 @@ export async function setFollowUpForRep(
   date: string | null,
 ): Promise<boolean> {
   const result = await sql`
-    UPDATE users SET next_follow_up_on = ${date}::date
-    WHERE id = ${customerId} AND rep_id = ${repId}
+    UPDATE users u SET next_follow_up_on = ${date}::date
+    WHERE u.id = ${customerId} AND ${onMyList(repId)}
   `;
   return result.count === 1;
 }
@@ -205,37 +309,66 @@ export async function setFollowUpForRep(
 export async function listFollowUpsDue(repId: string, today: string): Promise<CustomerRow[]> {
   return sql<CustomerRow[]>`
     SELECT ${COLS} FROM users u
-    WHERE u.rep_id = ${repId} AND u.next_follow_up_on <= ${today}::date
+    WHERE ${onMyList(repId)} AND u.next_follow_up_on <= ${today}::date
     ORDER BY u.next_follow_up_on, u.company
     LIMIT 50
   `;
 }
 
 export async function countCustomersForRep(repId: string): Promise<number> {
-  const [row] = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM users WHERE rep_id = ${repId}`;
+  const [row] = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM users u WHERE ${onMyList(repId)}`;
   return row.n;
 }
 
 // ── Admin. Callers have already passed assertAdminWrite() or the panel gate.
 
 export type AdminCustomerRow = CustomerRow & {
-  repName: string | null;
+  /** In the order they were added; the share is the effective one (blank shares already split equally). */
+  reps: { name: string; shareBp: number; active: boolean }[];
+  accountRateBp: number | null;
   originRepName: string | null;
   orderCount: number;
 };
 
-export type RepFilter = "all" | "none" | { repId: string };
+export type RepFilter = "all" | "none" | "inactive" | { repId: string };
 
-const ADMIN_COLS = sql`${COLS}, r.name AS "repName", origin_rep.name AS "originRepName",
-  (SELECT count(*)::int FROM orders o WHERE o.user_id = u.id) AS "orderCount"`;
-const ADMIN_FROM = sql`users u
-  LEFT JOIN sales_reps r ON r.id = u.rep_id
-  LEFT JOIN sales_reps origin_rep ON origin_rep.id = u.origin_rep_id`;
+type AdminQueryRow = CustomerRow & {
+  storedReps: { repId: string; name: string; active: boolean; shareBp: number | null }[];
+  accountRateBp: number | null;
+  originRepName: string | null;
+  orderCount: number;
+};
+
+const ADMIN_COLS = sql`${COLS}, u.commission_rate_bp AS "accountRateBp",
+  origin_rep.name AS "originRepName",
+  (SELECT count(*)::int FROM orders o WHERE o.user_id = u.id) AS "orderCount",
+  COALESCE((SELECT json_agg(json_build_object('repId', cr.rep_id, 'name', r.name, 'active', r.active,
+                                              'shareBp', cr.share_bp) ORDER BY cr.added_at, cr.rep_id)
+            FROM customer_reps cr JOIN sales_reps r ON r.id = cr.rep_id
+            WHERE cr.user_id = u.id), '[]'::json) AS "storedReps"`;
+const ADMIN_FROM = sql`users u LEFT JOIN sales_reps origin_rep ON origin_rep.id = u.origin_rep_id`;
+
+function toAdminRow({ storedReps, ...row }: AdminQueryRow): AdminCustomerRow {
+  const shares = new Map(
+    resolveShares(storedReps.map((rep) => ({ repId: rep.repId, shareBp: rep.shareBp }))).map((share) => [
+      share.repId,
+      share.shareBp,
+    ]),
+  );
+  return {
+    ...row,
+    reps: storedReps.map((rep) => ({ name: rep.name, shareBp: shares.get(rep.repId) ?? 0, active: rep.active })),
+  };
+}
 
 function repFilter(filter: RepFilter) {
   if (filter === "all") return sql`TRUE`;
-  if (filter === "none") return sql`u.rep_id IS NULL`;
-  return sql`u.rep_id = ${filter.repId}`;
+  if (filter === "none") return unassigned();
+  if (filter === "inactive") {
+    return sql`EXISTS (SELECT 1 FROM customer_reps cr JOIN sales_reps r ON r.id = cr.rep_id AND NOT r.active
+                       WHERE cr.user_id = u.id)`;
+  }
+  return onMyList(filter.repId);
 }
 
 export async function listCustomersAdmin(options: {
@@ -246,56 +379,42 @@ export async function listCustomersAdmin(options: {
 }): Promise<{ rows: AdminCustomerRow[]; total: number }> {
   const where = sql`${matches(options.search)} AND ${repFilter(options.rep)}`;
   const [rows, [count]] = await Promise.all([
-    sql<AdminCustomerRow[]>`
+    sql<AdminQueryRow[]>`
       SELECT ${ADMIN_COLS} FROM ${ADMIN_FROM} WHERE ${where}
       ORDER BY u.created_at DESC, u.id
       LIMIT ${options.pageSize} OFFSET ${(options.page - 1) * options.pageSize}
     `,
     sql<{ total: number }[]>`SELECT count(*)::int AS total FROM users u WHERE ${where}`,
   ]);
-  return { rows, total: count.total };
+  return { rows: rows.map(toAdminRow), total: count.total };
 }
 
 export async function getCustomerAdmin(customerId: string): Promise<AdminCustomerRow | null> {
-  const [row] = await sql<AdminCustomerRow[]>`
+  const [row] = await sql<AdminQueryRow[]>`
     SELECT ${ADMIN_COLS} FROM ${ADMIN_FROM} WHERE u.id = ${customerId}
   `;
-  return row ?? null;
+  return row ? toAdminRow(row) : null;
 }
 
 /**
- * Who the customer's rep is, and whether that rep earns commission on them.
- * Both apply to orders placed from now on: each order locks its own copy when
- * it is placed (orderSubmissionQueries.ts), so nothing here reaches back.
+ * One rep for the account (or none), until the admin screen moves to
+ * `setAccountReps` and its share rows. A thin wrapper so this writer, like
+ * every other, puts the rep on `customer_reps` and keeps the legacy columns
+ * in step. `earnsCommission` false is an account rate of 0: the customer is
+ * the rep's, the sale counts, no commission is paid. Applies to orders placed
+ * from now on; each order copies its own split when it is placed.
  */
 export async function assignCustomer(
   customerId: string,
   repId: string | null,
   earnsCommission: boolean,
 ): Promise<"ok" | "not-found" | "bad-rep"> {
-  return sql.begin(async (tx) => {
-    // Checked and locked inside the transaction: checked outside it, the rep
-    // could be deactivated between the check and the write (review M-18).
-    if (repId !== null) {
-      const [rep] = await tx`SELECT 1 FROM sales_reps WHERE id = ${repId} AND active FOR SHARE`;
-      if (!rep) return "bad-rep" as const;
-    }
-    const [before] = await tx<{ repId: string | null; earns: boolean }[]>`
-      SELECT rep_id AS "repId", rep_earns_commission AS earns FROM users WHERE id = ${customerId} FOR UPDATE
-    `;
-    if (!before) return "not-found" as const;
-    await tx`
-      UPDATE users SET rep_id = ${repId}, rep_earns_commission = ${earnsCommission}
-      WHERE id = ${customerId}
-    `;
-    await recordAudit(tx, {
-      actor: { kind: "admin" },
-      action: "customer.assigned",
-      subject: { kind: "customer", id: customerId },
-      detail: { fromRep: before.repId, toRep: repId, fromEarns: before.earns, toEarns: earnsCommission },
-    });
-    return "ok" as const;
-  });
+  const result =
+    repId === null
+      ? await setAccountReps(customerId, [], null)
+      : await setAccountReps(customerId, [{ repId, shareBp: null }], earnsCommission ? null : 0);
+  // One row with a blank share is never a split problem; anything else is a rep that cannot be added.
+  return result === "ok" || result === "not-found" ? result : "bad-rep";
 }
 
 export async function resetCustomerPasswordAdmin(

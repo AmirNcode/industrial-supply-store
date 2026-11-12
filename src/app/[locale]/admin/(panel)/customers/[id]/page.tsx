@@ -134,7 +134,7 @@ export default async function AdminCustomerPage({
             <option value="">{t.noRep}</option>
             {currentRepInactive && (
               <option value={customer.repId!}>
-                {customer.repName} ({t.repStatusInactive})
+                {customer.reps.find((rep) => !rep.active)?.name ?? ""} ({t.repStatusInactive})
               </option>
             )}
             {activeReps.map((rep) => (

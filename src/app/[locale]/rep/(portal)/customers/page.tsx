@@ -23,8 +23,8 @@ export default async function RepCustomersPage({
   const { q } = await searchParams;
   const search = (typeof q === "string" ? q : "").slice(0, REQUEST_LIMITS.searchChars);
   const rep = await requireRep(l);
-  const [customers, sales] = await Promise.all([
-    listCustomersForRep(rep.id, search),
+  const [{ rows: customers, total }, sales] = await Promise.all([
+    listCustomersForRep(rep.id, search, 1),
     salesByCustomerForRep(rep.id),
   ]);
   const today = tehranToday();
@@ -53,11 +53,11 @@ export default async function RepCustomersPage({
         </button>
       </form>
 
-      {customers.length > 0 && customers[0].totalCount > customers.length && (
+      {total > customers.length && (
         <p className="mb-2 border border-[var(--color-warn)] bg-[var(--color-warn-soft)] px-3 py-2 text-[12px]">
           {t.listTruncated
             .replace("{shown}", formatInt(customers.length, l))
-            .replace("{total}", formatInt(customers[0].totalCount, l))}
+            .replace("{total}", formatInt(total, l))}
         </p>
       )}
       {customers.length === 0 ? (

@@ -104,7 +104,7 @@ export default async function RepOrderPage({
           <strong>{t.orderDeadline}:</strong> {deadline}
         </p>
       )}
-      {order.creditedToMe && (
+      {order.canAct && (
           <p className="mb-3 text-[12px]" data-testid="commission-line">
             {rateBp > 0
               ? t.commissionLocked.replace("{percent}", commissionPercentLabel(rateBp, l))
@@ -112,13 +112,13 @@ export default async function RepOrderPage({
           </p>
       )}
 
-      {!order.creditedToMe && (
+      {!order.canAct && (
         <p className="mb-3 text-[12px] text-[var(--color-ink-muted)]" data-testid="rep-order-read-only">
           {t.repOrderReadOnly}
         </p>
       )}
 
-      {order.creditedToMe && order.status === "received" && (
+      {order.canAct && order.status === "received" && (
         <section className="mb-4 flex flex-wrap items-center gap-3 border border-[var(--color-rule)] p-3 text-[12px]">
           {/* A rep never changes a price, so a line at 0 is the admin's to price. */}
           {hasUnpricedLine(items) ? (
@@ -134,7 +134,7 @@ export default async function RepOrderPage({
         </section>
       )}
 
-      {order.creditedToMe && order.status === "quoted" && (
+      {order.canAct && order.status === "quoted" && (
         <section className="mb-4 flex flex-wrap items-center gap-3 border border-[var(--color-rule)] p-3 text-[12px]">
           <form action={acceptQuoteForRepAction}>
             <input type="hidden" name="locale" value={l} />
@@ -147,7 +147,7 @@ export default async function RepOrderPage({
         </section>
       )}
 
-      {order.creditedToMe && (
+      {order.canAct && (
         <PaymentProofSection
           locale={l}
           proofs={orderProofs}

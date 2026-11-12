@@ -3,6 +3,7 @@ import { sql } from "./index";
 import { uniqueViolation } from "./pgErrors";
 import { recordAudit } from "./audit";
 import { randomReferralCode } from "@/lib/repAccount";
+import { leadRepSql } from "./accountRepQueries";
 
 export type RepRow = {
   id: string;
@@ -142,7 +143,7 @@ export async function updateRep(
 export async function listReps(): Promise<(RepRow & { customerCount: number })[]> {
   return sql<(RepRow & { customerCount: number })[]>`
     SELECT ${COLS},
-           (SELECT count(*)::int FROM users u WHERE u.rep_id = sales_reps.id) AS "customerCount"
+           (SELECT count(*)::int FROM customer_reps cr WHERE cr.rep_id = sales_reps.id) AS "customerCount"
     FROM sales_reps
     ORDER BY active DESC, name
   `;
@@ -155,28 +156,39 @@ export async function listActiveReps(): Promise<{ id: string; name: string }[]> 
 }
 
 /**
- * Locking the rep out and moving their customers are one transaction: a rep
- * who is locked out but still owns customers would go on being credited with
- * their orders. Moving the session version on is what ends a session that is
- * open right now.
- */
-/**
- * Locks the rep out and moves their customers to `destination` (or to no rep).
+ * Locks the rep out and moves the accounts that list them to `destination`.
+ * One transaction: a rep who is locked out but still on accounts would go on
+ * being credited with their orders. Moving the session version on is what ends
+ * a session that is open right now.
  *
- * The destination is locked `FOR SHARE` inside the transaction, so it cannot
- * be deactivated between the check and the move (review M-18). Whether the
- * moved customers earn the new rep commission is the admin's explicit choice
- * here: it used to carry over the flag set for the previous rep, so the
- * destination inherited eligibility decisions made for someone else.
+ * With a destination, in each account listing this rep: if the destination is
+ * already listed, the rep's stored share is added to it (only when shares are
+ * filled; blank shares need nothing) and the rep's row is deleted; otherwise
+ * the row is repointed to the destination, keeping its share and position.
+ * Without one the rows stay: the admin attention list shows accounts that
+ * still list an inactive rep, and the order split skips them (spec decision
+ * 12). `users.rep_id` is kept in step for the release running beside this one.
+ *
+ * Lock order is the one `setAccountReps` and the claim use: the customer rows
+ * first (sorted by id, so two deactivations lock in the same order), then the
+ * destination rep row FOR SHARE, then this rep's row. An account added to this
+ * rep between the first lock and the rep update is not in the locked set; it
+ * keeps the inactive rep and shows on the attention list rather than being
+ * touched without its lock.
  */
 export async function deactivateRep(
   id: string,
   destination: string | null,
-  movedEarnCommission: boolean,
 ): Promise<"ok" | "not-found" | "bad-destination"> {
   return sql.begin(async (tx) => {
+    if (destination === id) return "bad-destination" as const;
+    const locked = await tx<{ id: string }[]>`
+      SELECT u.id FROM users u
+      WHERE u.id IN (SELECT cr.user_id FROM customer_reps cr WHERE cr.rep_id = ${id})
+      ORDER BY u.id FOR UPDATE
+    `;
+    const accounts = locked.map((row) => row.id);
     if (destination !== null) {
-      if (destination === id) return "bad-destination" as const;
       const [dest] = await tx`SELECT 1 FROM sales_reps WHERE id = ${destination} AND active FOR SHARE`;
       if (!dest) return "bad-destination" as const;
     }
@@ -185,16 +197,36 @@ export async function deactivateRep(
       WHERE id = ${id} AND active
     `;
     if (result.count === 0) return "not-found" as const;
-    const moved = await tx`
-      UPDATE users
-      SET rep_id = ${destination}, rep_earns_commission = ${destination !== null && movedEarnCommission}
-      WHERE rep_id = ${id}
-    `;
+
+    if (destination !== null && accounts.length > 0) {
+      // Merge first, then delete, then repoint: the rows left at the end are
+      // exactly those whose account does not list the destination yet.
+      await tx`
+        UPDATE customer_reps d SET share_bp = COALESCE(d.share_bp, 0) + s.share_bp
+        FROM customer_reps s
+        WHERE d.rep_id = ${destination} AND s.rep_id = ${id} AND s.user_id = d.user_id
+          AND d.user_id = ANY(${accounts}::uuid[]) AND s.share_bp IS NOT NULL
+      `;
+      await tx`
+        DELETE FROM customer_reps s
+        WHERE s.rep_id = ${id} AND s.user_id = ANY(${accounts}::uuid[])
+          AND EXISTS (SELECT 1 FROM customer_reps d WHERE d.user_id = s.user_id AND d.rep_id = ${destination})
+      `;
+      await tx`
+        UPDATE customer_reps SET rep_id = ${destination}
+        WHERE rep_id = ${id} AND user_id = ANY(${accounts}::uuid[])
+      `;
+      await tx`
+        UPDATE users u
+        SET rep_id = ${leadRepSql()}, rep_earns_commission = (${leadRepSql()} IS NOT NULL AND u.commission_rate_bp IS DISTINCT FROM 0)
+        WHERE u.id = ANY(${accounts}::uuid[])
+      `;
+    }
     await recordAudit(tx, {
       actor: { kind: "admin" },
       action: "rep.deactivated",
       subject: { kind: "rep", id },
-      detail: { movedTo: destination, customers: moved.count, earnCommission: destination !== null && movedEarnCommission },
+      detail: { movedTo: destination, customers: accounts.length },
     });
     return "ok" as const;
   });

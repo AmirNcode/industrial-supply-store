@@ -14,6 +14,22 @@ import {
   setAccountReps,
   splitForOrder,
 } from "./accountRepQueries";
+import {
+  assignCustomer,
+  createCustomerForRep,
+  getCustomerForRep,
+  getOrderableCustomerForRep,
+  listCustomersForRep,
+  listFollowUpsDue,
+  countCustomersForRep,
+  searchBeyondMine,
+  setFollowUpForRep,
+  updateCustomerForRep,
+} from "./customerQueries";
+import { addNoteForRep } from "./noteQueries";
+import { listOrdersForRep, getOrderForRep, repCanActOnOrder } from "./repOrderQueries";
+import { createUser, getRepContactForUser } from "./userQueries";
+import { deactivateRep, listReps } from "./repQueries";
 import { confirmPayment, addPaymentProof } from "./paymentProofQueries";
 import { sweepExpiredOrders } from "./expiryQueries";
 import { submitOrderFromCartInTransaction } from "./orderSubmissionQueries";
@@ -908,6 +924,379 @@ test("pending claim shows as an estimate", async () => {
       assert.equal(row.shareBp, 10000);
       assert.equal(row.rateBp, 250);
       assert.deepEqual(await listDeliveredForRep(rep), []);
+    }, [id]);
+  });
+});
+
+
+// ── Rep access by account list (Task 7). Every rep-scoped read and write goes
+// through `customer_reps`; the legacy `users.rep_id` is written, never read.
+
+type Scope = {
+  rep: (name?: string) => Promise<string>;
+  customer: (fields?: { company?: string; phone?: string; code?: string; contact?: string }) => Promise<string>;
+  track: (userId: string) => void;
+};
+
+async function inScope(body: (scope: Scope) => Promise<void>) {
+  const reps: string[] = [];
+  const users: string[] = [];
+  try {
+    await body({
+      rep: async (name = `Rep ${reps.length + 1}`) => {
+        const [row] = await sql<{ id: string }[]>`
+          INSERT INTO sales_reps (username, password_hash, name, commission_rate_bp, referral_code)
+          VALUES (${`rep-${randomUUID().slice(0, 8)}`}, 'x', ${name}, 250, ${randomReferralCode()})
+          RETURNING id`;
+        reps.push(row.id);
+        return row.id;
+      },
+      customer: async (fields = {}) => {
+        const [row] = await sql<{ id: string }[]>`
+          INSERT INTO users (email, password_hash, customer_code, origin, phone, company, contact_name)
+          VALUES (${`${randomUUID()}@example.invalid`}, 'x', ${fields.code ?? randomCustomerCode()}, 'self',
+                  ${fields.phone ?? "0912 000 0000"}, ${fields.company ?? "Scope Co"}, ${fields.contact ?? "Contact"})
+          RETURNING id`;
+        users.push(row.id);
+        return row.id;
+      },
+      track: (userId) => void users.push(userId),
+    });
+  } finally {
+    if (users.length) {
+      await sql`DELETE FROM orders WHERE user_id = ANY(${users}::uuid[])`;
+      await sql`DELETE FROM audit_log WHERE subject_kind = 'customer' AND subject_id = ANY(${users}::text[])`;
+      await sql`DELETE FROM users WHERE id = ANY(${users}::uuid[])`;
+    }
+    if (reps.length) {
+      await sql`DELETE FROM audit_log WHERE subject_kind = 'rep' AND subject_id = ANY(${reps}::text[])`;
+      await sql`DELETE FROM sales_reps WHERE id = ANY(${reps}::uuid[])`;
+    }
+  }
+}
+
+// Letters only: a search with three or more digits anywhere in it also matches
+// phone numbers by those digits joined together, so a hex tag could match a fixture phone.
+const tagOf = () =>
+  [...randomUUID().replace(/-/g, "").slice(0, 10)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join("");
+const legacyOf = async (id: string) =>
+  (await sql<{ repId: string | null; earns: boolean }[]>`
+    SELECT rep_id AS "repId", rep_earns_commission AS earns FROM users WHERE id = ${id}`)[0];
+
+test("a co-rep reaches the customer", async () => {
+  assertLocalDatabase();
+  await inScope(async (s) => {
+    const [a, b, c] = [await s.rep(), await s.rep(), await s.rep()];
+    const id = await s.customer();
+    assert.equal(await setAccountReps(id, [{ repId: a, shareBp: 7500 }, { repId: b, shareBp: 2500 }], null), "ok");
+    const input = { company: "New Co", contactName: "N", phone: "1", email: null, address: "", city: "" };
+
+    assert.equal((await getCustomerForRep(b, id))?.id, id);
+    assert.equal(await updateCustomerForRep(b, id, input), "ok");
+    assert.equal(await addNoteForRep(b, id, "hello"), true);
+    assert.equal(await setFollowUpForRep(b, id, "2020-01-01"), true);
+    assert.deepEqual((await listFollowUpsDue(b, "2030-01-01")).map((row) => row.id), [id]);
+    assert.equal(await countCustomersForRep(b), 1);
+
+    assert.equal(await getCustomerForRep(c, id), null);
+    assert.equal(await updateCustomerForRep(c, id, input), "not-found");
+    assert.equal(await addNoteForRep(c, id, "intruder"), false);
+    assert.equal(await setFollowUpForRep(c, id, "2020-01-01"), false);
+    assert.equal((await listFollowUpsDue(c, "2030-01-01")).length, 0);
+    assert.equal(await countCustomersForRep(c), 0);
+  });
+});
+
+test("removed rep loses the customer at once but keeps their order", async () => {
+  assertLocalDatabase();
+  await inScope(async (s) => {
+    const [a, b] = [await s.rep(), await s.rep()];
+    const id = await s.customer();
+    assert.equal(await setAccountReps(id, [{ repId: a, shareBp: 7500 }, { repId: b, shareBp: 2500 }], null), "ok");
+    await withOrders(undefined as never, async (place) => {
+      const ref = refOf(await place(id, a));
+      assert.equal(await setAccountReps(id, [{ repId: a, shareBp: 10000 }], null), "ok");
+
+      const input = { company: "X", contactName: "N", phone: "1", email: null, address: "", city: "" };
+      assert.equal(await getCustomerForRep(b, id), null);
+      assert.equal(await updateCustomerForRep(b, id, input), "not-found");
+      assert.equal(await addNoteForRep(b, id, "late"), false);
+      assert.equal(await setFollowUpForRep(b, id, "2020-01-01"), false);
+
+      const rows = await listOrdersForRep(b, null);
+      const row = rows.find((r) => r.ref === ref);
+      assert.ok(row, "the order stays visible");
+      assert.equal(row.canAct, true);
+      assert.equal(row.myShareBp, 2500);
+      assert.equal(row.pendingClaim, false);
+      assert.equal(await repCanActOnOrder(b, ref), true);
+      assert.equal((await getOrderForRep(b, ref))?.order.customerIsMine, false);
+    }, [id]);
+  });
+});
+
+test("an order a rep placed for an unassigned customer is theirs to act on, pending", async () => {
+  assertLocalDatabase();
+  await inScope(async (s) => {
+    const [a, c] = [await s.rep(), await s.rep()];
+    const id = await s.customer();
+    await withOrders(undefined as never, async (place) => {
+      const ref = refOf(await place(id, a));
+      const row = (await listOrdersForRep(a, null)).find((r) => r.ref === ref);
+      assert.ok(row);
+      assert.equal(row.canAct, true);
+      assert.equal(row.pendingClaim, true);
+      assert.equal(row.myShareBp, null);
+      assert.equal(await repCanActOnOrder(a, ref), true);
+      assert.equal((await listOrdersForRep(c, null)).some((r) => r.ref === ref), false);
+      assert.equal(await repCanActOnOrder(c, ref), false);
+      assert.equal(await getOrderForRep(c, ref), null);
+    }, [id]);
+  });
+});
+
+test("search beyond mine", async () => {
+  assertLocalDatabase();
+  await inScope(async (s) => {
+    const tag = tagOf();
+    const [me, other] = [await s.rep(), await s.rep("Other Rep")];
+    const free = await s.customer({ company: `Acme ${tag} Free`, contact: "Fay", phone: "0912 111 2222" });
+    const taken = await s.customer({ company: `Acme ${tag} Taken` });
+    const mine = await s.customer({ company: `Acme ${tag} Mine` });
+    assert.equal(await setAccountReps(taken, [{ repId: other, shareBp: null }], null), "ok");
+    assert.equal(await setAccountReps(mine, [{ repId: me, shareBp: null }], null), "ok");
+
+    assert.deepEqual(await searchBeyondMine(me, "ac"), { unassigned: [], taken: [] });
+    assert.deepEqual(await searchBeyondMine(me, "  a  "), { unassigned: [], taken: [] });
+
+    const found = await searchBeyondMine(me, `acme ${tag}`);
+    assert.deepEqual(found.unassigned.map((row) => row.id), [free]);
+    assert.deepEqual(Object.keys(found.unassigned[0]).sort(), ["company", "contactName", "customerCode", "id", "phone"]);
+    assert.equal(found.taken.length, 1);
+    assert.deepEqual(Object.keys(found.taken[0]).sort(), ["assignedTo", "company", "customerCode"]);
+    assert.equal(found.taken[0].company, `Acme ${tag} Taken`);
+    assert.equal(found.taken[0].assignedTo, "Other Rep");
+    // The rep's own customer is in neither list, for any search that matches it.
+    assert.ok(![...found.unassigned, ...found.taken].some((row) => row.company === `Acme ${tag} Mine`));
+
+    // Seven taken customers match; five come back.
+    for (let i = 0; i < 6; i++) {
+      const id = await s.customer({ company: `Bulk ${tag} ${i}` });
+      assert.equal(await setAccountReps(id, [{ repId: other, shareBp: null }], null), "ok");
+    }
+    const bulk = await s.customer({ company: `Bulk ${tag} extra` });
+    assert.equal(await setAccountReps(bulk, [{ repId: other, shareBp: null }], null), "ok");
+    assert.equal((await searchBeyondMine(me, `bulk ${tag}`)).taken.length, 5);
+
+    // A rep with the customer on a shared list sees it in neither.
+    assert.equal(await setAccountReps(taken, [{ repId: other, shareBp: 5000 }, { repId: me, shareBp: 5000 }], null), "ok");
+    assert.ok(!(await searchBeyondMine(me, `acme ${tag}`)).taken.some((row) => row.company.endsWith("Taken")));
+  });
+});
+
+test("search treats % and _ literally", async () => {
+  assertLocalDatabase();
+  await inScope(async (s) => {
+    const tag = tagOf();
+    const me = await s.rep();
+    const literal = await s.customer({ company: `Bolt 50%_${tag}` });
+    await s.customer({ company: `Bolt 50xyz${tag}` });
+    assert.deepEqual((await searchBeyondMine(me, `50%_${tag}`)).unassigned.map((row) => row.id), [literal]);
+  });
+});
+
+test("search by phone and customer ID", async () => {
+  assertLocalDatabase();
+  await inScope(async (s) => {
+    const me = await s.rep();
+    const code = randomCustomerCode();
+    const byPhone = await s.customer({ company: `Phone ${tagOf()}`, phone: "۰۹۱۲ ۳۴۵ ۹۸۷۶" });
+    const byCode = await s.customer({ company: `Code ${tagOf()}`, code });
+    // Persian digits typed into the box find a Persian-digit phone and a Latin one alike.
+    assert.ok((await searchBeyondMine(me, "۰۹۱۲۳۴۵۹۸۷")).unassigned.some((row) => row.id === byPhone));
+    assert.ok((await searchBeyondMine(me, "0912345987")).unassigned.some((row) => row.id === byPhone));
+    assert.deepEqual((await searchBeyondMine(me, code)).unassigned.map((row) => row.id), [byCode]);
+  });
+});
+
+test("orderable customer", async () => {
+  assertLocalDatabase();
+  await inScope(async (s) => {
+    const [me, small, big] = [await s.rep("Me"), await s.rep("Small"), await s.rep("Big")];
+    const mine = await s.customer({ company: "Mine Co" });
+    const free = await s.customer({ company: "Free Co", contact: "Fay", phone: "0912 555 5555" });
+    const taken = await s.customer({ company: "Taken Co" });
+    assert.equal(await setAccountReps(mine, [{ repId: me, shareBp: null }], null), "ok");
+    // The lead is the bigger share, not the first added.
+    assert.equal(await setAccountReps(taken, [{ repId: small, shareBp: 3000 }, { repId: big, shareBp: 7000 }], null), "ok");
+
+    const m = await getOrderableCustomerForRep(me, mine);
+    assert.equal(m?.kind, "mine");
+    const f = await getOrderableCustomerForRep(me, free);
+    assert.equal(f?.kind, "unassigned");
+    if (f?.kind === "unassigned") {
+      assert.equal(f.customer.id, free);
+      assert.equal(f.customer.contactName, "Fay");
+      assert.equal(typeof f.customer.locale, "string");
+      assert.equal(f.customer.email === null || typeof f.customer.email === "string", true);
+    }
+    assert.deepEqual(await getOrderableCustomerForRep(me, taken), { kind: "taken", assignedTo: "Big" });
+    assert.equal(await getOrderableCustomerForRep(me, randomUUID()), null);
+  });
+});
+
+test("rep customer list is paged at 50", async () => {
+  assertLocalDatabase();
+  await inScope(async (s) => {
+    const tag = tagOf();
+    const me = await s.rep();
+    const ids: string[] = [];
+    for (let i = 0; i < 55; i++) ids.push(await s.customer({ company: `Page ${tag} ${String(i).padStart(2, "0")}` }));
+    await sql`
+      INSERT INTO customer_reps (user_id, rep_id, share_bp)
+      SELECT unnest(${ids}::uuid[]), ${me}, NULL`;
+    const one = await listCustomersForRep(me, "", 1);
+    const two = await listCustomersForRep(me, "", 2);
+    assert.equal(one.rows.length, 50);
+    assert.equal(two.rows.length, 5);
+    assert.equal(one.total, 55);
+    assert.equal(two.total, 55);
+    assert.equal(new Set([...one.rows, ...two.rows].map((row) => row.id)).size, 55);
+    const filtered = await listCustomersForRep(me, `page ${tag} 07`, 1);
+    assert.equal(filtered.total, 1);
+  });
+});
+
+test("referral sign-up and rep-created customers get a list row", async () => {
+  assertLocalDatabase();
+  await inScope(async (s) => {
+    const rep = await s.rep();
+    const referred = await createUser({
+      email: `${randomUUID()}@example.invalid`, passwordHash: "x", company: "Ref Co", contactName: "R",
+      phone: "0912 000 1111", locale: "en", origin: "referral", repId: rep, accountNumber: "assigned",
+    });
+    assert.notEqual(referred, "email-taken");
+    if (referred === "email-taken") return;
+    s.track(referred.id);
+    assert.deepEqual((await listAccountReps(referred.id)).map((r) => [r.repId, r.shareBp]), [[rep, null]]);
+    assert.deepEqual({ ...(await legacyOf(referred.id)) }, { repId: rep, earns: true });
+    assert.equal((await getRepContactForUser(referred.id))?.name, "Rep 1");
+
+    const self = await createUser({
+      email: `${randomUUID()}@example.invalid`, passwordHash: "x", company: "Self Co", contactName: "S",
+      phone: "0912 000 2222", locale: "en", origin: "self", repId: null, accountNumber: "assigned",
+    });
+    assert.notEqual(self, "email-taken");
+    if (self === "email-taken") return;
+    s.track(self.id);
+    assert.deepEqual(await listAccountReps(self.id), []);
+
+    const created = await createCustomerForRep(rep, {
+      company: "Made Co", contactName: "M", phone: "0912 000 3333", email: `${randomUUID()}@example.invalid`,
+      address: "", city: "", codeChoice: "random", passwordHash: "x", locale: "en",
+    });
+    assert.equal(created.kind, "created");
+    if (created.kind !== "created") return;
+    s.track(created.id);
+    assert.deepEqual((await listAccountReps(created.id)).map((r) => [r.repId, r.shareBp]), [[rep, null]]);
+    assert.deepEqual({ ...(await legacyOf(created.id)) }, { repId: rep, earns: true });
+    assert.equal((await getCustomerForRep(rep, created.id))?.id, created.id);
+  });
+});
+
+test("contact for a customer is the lead if active, else the first active rep", async () => {
+  assertLocalDatabase();
+  await inScope(async (s) => {
+    const [first, lead] = [await s.rep("First"), await s.rep("Lead")];
+    const id = await s.customer();
+    assert.equal(await getRepContactForUser(id), null);
+    assert.equal(await setAccountReps(id, [{ repId: first, shareBp: 3000 }, { repId: lead, shareBp: 7000 }], null), "ok");
+    assert.equal((await getRepContactForUser(id))?.name, "Lead");
+    await sql`UPDATE sales_reps SET active = false WHERE id = ${lead}`;
+    assert.equal((await getRepContactForUser(id))?.name, "First");
+    await sql`UPDATE sales_reps SET active = false WHERE id = ${first}`;
+    assert.equal(await getRepContactForUser(id), null);
+  });
+});
+
+test("assignCustomer writes the list and keeps the legacy columns in step", async () => {
+  assertLocalDatabase();
+  await inScope(async (s) => {
+    const [a, b] = [await s.rep(), await s.rep()];
+    const id = await s.customer();
+    assert.equal(await assignCustomer(id, a, true), "ok");
+    assert.deepEqual((await listAccountReps(id)).map((r) => [r.repId, r.shareBp]), [[a, null]]);
+    assert.deepEqual({ ...(await legacyOf(id)) }, { repId: a, earns: true });
+    assert.equal(await assignCustomer(id, b, false), "ok");
+    assert.deepEqual((await listAccountReps(id)).map((r) => r.repId), [b]);
+    assert.deepEqual({ ...(await legacyOf(id)) }, { repId: b, earns: false });
+    assert.equal(await assignCustomer(id, null, false), "ok");
+    assert.deepEqual(await listAccountReps(id), []);
+    assert.deepEqual({ ...(await legacyOf(id)) }, { repId: null, earns: false });
+    await sql`UPDATE sales_reps SET active = false WHERE id = ${a}`;
+    assert.equal(await assignCustomer(id, a, true), "bad-rep");
+    assert.equal(await assignCustomer(randomUUID(), b, true), "not-found");
+    assert.deepEqual(await listAccountReps(id), []);
+  });
+});
+
+test("deactivate with a destination swaps the name and keeps the share", async () => {
+  assertLocalDatabase();
+  await inScope(async (s) => {
+    const [a, b, c] = [await s.rep(), await s.rep(), await s.rep()];
+    const id = await s.customer();
+    assert.equal(await setAccountReps(id, [{ repId: a, shareBp: 7000 }, { repId: b, shareBp: 3000 }], null), "ok");
+    assert.equal(await deactivateRep(a, c), "ok");
+    const list = await listAccountReps(id);
+    assert.deepEqual(list.map((r) => [r.repId, r.shareBp]), [[c, 7000], [b, 3000]]);
+    assert.equal(list[0].isLead, true);
+    assert.equal((await legacyOf(id)).repId, c);
+    assert.equal(await getCustomerForRep(a, id), null);
+    assert.equal((await getCustomerForRep(c, id))?.id, id);
+  });
+});
+
+test("deactivate merges into a destination already listed", async () => {
+  assertLocalDatabase();
+  await inScope(async (s) => {
+    const [a, b] = [await s.rep(), await s.rep()];
+    const filled = await s.customer();
+    const blank = await s.customer();
+    assert.equal(await setAccountReps(filled, [{ repId: a, shareBp: 7500 }, { repId: b, shareBp: 2500 }], null), "ok");
+    assert.equal(await setAccountReps(blank, [{ repId: a, shareBp: null }, { repId: b, shareBp: null }], null), "ok");
+    assert.equal(await deactivateRep(b, a), "ok");
+    assert.deepEqual((await listAccountReps(filled)).map((r) => [r.repId, r.shareBp]), [[a, 10000]]);
+    assert.deepEqual((await listAccountReps(blank)).map((r) => [r.repId, r.shareBp]), [[a, null]]);
+    assert.equal((await legacyOf(filled)).repId, a);
+  });
+});
+
+test("deactivate without a destination leaves the row", async () => {
+  assertLocalDatabase();
+  await inScope(async (s) => {
+    const [a, b] = [await s.rep(), await s.rep()];
+    const id = await s.customer();
+    assert.equal(await setAccountReps(id, [{ repId: a, shareBp: 6000 }, { repId: b, shareBp: 4000 }], null), "ok");
+    assert.equal(await deactivateRep(b, null), "ok");
+    const list = await listAccountReps(id);
+    assert.deepEqual(list.map((r) => [r.repId, r.shareBp, r.active]), [[a, 6000, true], [b, 4000, false]]);
+    assert.equal(await deactivateRep(b, null), "not-found");
+    const counts = await listReps();
+    assert.equal(counts.find((r) => r.id === b)?.customerCount, 1);
+  });
+});
+
+test("a placing rep deactivated before payment does not win the customer", async () => {
+  assertLocalDatabase();
+  await withCommitted(async (made) => {
+    const rep = await made.rep();
+    const id = await made.customer();
+    await withOrders(made, async (place) => {
+      const orderId = await placed(place, id, rep);
+      assert.equal(await deactivateRep(rep, null), "ok");
+      assert.equal(await confirmPayment(orderId, "invoiced"), true);
+      assert.deepEqual(await listOf(id), []);
+      assert.equal(await claimAudits(id), 0);
     }, [id]);
   });
 });
