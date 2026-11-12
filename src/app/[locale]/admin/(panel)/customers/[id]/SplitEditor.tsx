@@ -75,7 +75,7 @@ export function SplitEditor({
   };
   const remove = (key: number) => setRows((current) => current.filter((row) => row.key !== key));
 
-  // Rows without a rep chosen are ignored by the server too.
+  // A row with no rep chosen is refused by the server; it does not count toward the total here.
   const chosen = rows.filter((row) => row.repId !== "");
   const parsed = chosen.map((row) => parseSharePercent(row.share));
   const anyFilled = parsed.some((share) => share !== null);
@@ -113,6 +113,7 @@ export function SplitEditor({
                     value={row.repId}
                     onChange={(event) => update(row.key, { repId: event.target.value })}
                     aria-label={labels.repName}
+                    required
                     disabled={disabled}
                   >
                     <option value="">{labels.adminChooseRep}</option>

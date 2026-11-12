@@ -32,6 +32,7 @@ import { commissionPercentLabel, formatCommissionPercent } from "@/lib/repAccoun
 
 const ERROR_KEY = {
   rep: "adminSplitErrorRep",
+  "rep-missing": "adminSplitErrorRepMissing",
   invalid: "invalidInput",
   total: "adminSplitErrorTotal",
   mixed: "adminSplitErrorMixed",

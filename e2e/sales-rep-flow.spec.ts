@@ -459,6 +459,37 @@ for (const locale of locales) {
     await expect(admin.getByText(t.assignmentSaved)).toBeVisible();
     await expectSaved("", "", "5");
 
+    // A row set back to "Choose a rep" is refused with a message, never dropped
+    // quietly. The browser's own `required` check stops this first, so it is
+    // switched off to exercise the server.
+    await admin.goto(customerUrl);
+    await repSelects.nth(1).selectOption({ value: "" });
+    await admin.locator("form").filter({ has: admin.locator('input[name="rate"]') }).evaluate((form: HTMLFormElement) => {
+      form.noValidate = true;
+    });
+    await save();
+    await expect(admin.getByText(t.adminSplitErrorRepMissing)).toBeVisible();
+    await expectSaved("", "", "5");
+    await expect(repSelects.nth(1).locator("option:checked")).toHaveText(nameB);
+
+    // Removing every row is the explicit way to unassign.
+    await admin.goto(customerUrl);
+    await admin.getByRole("button", { name: t.adminRemoveRep }).first().click();
+    await admin.getByRole("button", { name: t.adminRemoveRep }).first().click();
+    await expect(admin.getByTestId("split-unassigned")).toHaveText(t.adminNoRepsState);
+    await save();
+    await expect(admin.getByText(t.assignmentSaved)).toBeVisible();
+    await admin.goto(customerUrl);
+    await expect(admin.getByTestId("split-unassigned")).toHaveText(t.adminNoRepsState);
+
+    // Reps again for the list check below.
+    await admin.getByRole("button", { name: t.adminAddRep }).click();
+    await admin.getByRole("button", { name: t.adminAddRep }).click();
+    await repSelects.nth(0).selectOption({ label: nameA });
+    await repSelects.nth(1).selectOption({ label: nameB });
+    await save();
+    await expect(admin.getByText(t.assignmentSaved)).toBeVisible();
+
     // The customers list names every rep with the effective share.
     await admin.goto(`/${locale}/admin/customers?q=${encodeURIComponent(company)}`);
     const row = admin.locator("tr", { hasText: company });

@@ -27,10 +27,12 @@ function postedCustomerId(formData: FormData): string | null {
 
 /**
  * Saves the account's reps, shares and commission rate in one write. The form
- * posts parallel `repId` / `share` fields, one pair per row; a row with no rep
- * chosen is an empty line and is dropped. An empty list is allowed: it
- * unassigns the customer. The client shows a running total, but only the
- * checks here and in `setAccountReps` count.
+ * posts parallel `repId` / `share` fields, one pair per row. A row with no rep
+ * chosen is refused, not dropped: setting a select back to "Choose a rep" must
+ * not quietly remove that rep, or unassign the whole account when it was the
+ * only row. Removing a row is the one way to drop it, and no rows posted at
+ * all is the one way to unassign. The client shows a running total, but only
+ * the checks here and in `setAccountReps` count.
  */
 export async function setAccountRepsAction(formData: FormData): Promise<void> {
   await assertAdminWrite();
@@ -45,7 +47,7 @@ export async function setAccountRepsAction(formData: FormData): Promise<void> {
   if (repIds.length > 2 * MAX_ACCOUNT_REPS || shares.length > repIds.length) redirect(`${back}?error=too-many`);
   const rows: SplitRow[] = [];
   for (const [i, repId] of repIds.entries()) {
-    if (repId === "") continue;
+    if (repId === "") redirect(`${back}?error=rep-missing`);
     if (!isUuid(repId)) redirect(`${back}?error=rep`);
     const share = parseSharePercent((shares[i] ?? "").slice(0, 12));
     if (share === "invalid") redirect(`${back}?error=invalid`);
