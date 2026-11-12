@@ -35,7 +35,7 @@ const TABLES = [
   "spec_defs", "carts", "cart_items", "orders", "order_items", "users",
   "app_settings", "order_comments", "request_rate_limits", "part_number_registry",
   "sales_reps", "customer_notes", "rep_payouts", "rep_targets", "payment_proofs",
-  "audit_log", "retired_part_numbers",
+  "audit_log", "retired_part_numbers", "customer_reps", "order_rep_shares",
   "user_addresses", "login_codes", "email_log",
 ] as const;
 
@@ -110,6 +110,9 @@ const COLUMNS: readonly (readonly [string, string])[] = [
   ["orders", "vat_rate_bp"],
   // Added by the 2026-09-29 payment proof migration. Every order page reads them.
   ["orders", "payment_submitted_at"],
+  // Added by the commission-splits migration. Rep pages and order claiming read them.
+  ["users", "commission_rate_bp"], ["orders", "placed_by_rep_id"],
+  ["customer_reps", "share_bp"], ["order_rep_shares", "share_bp"],
 ];
 
 const present = await sql<{ name: string }[]>`
@@ -211,6 +214,8 @@ const REQUIRED_CONSTRAINTS = [
   "user_addresses_user_id_users_id_fk", "user_addresses_filled_check",
   "login_codes_user_id_users_id_fk", "login_codes_attempts_check",
   "email_log_order_id_orders_id_fk", "email_log_status_check",
+  "users_commission_rate_check", "orders_placed_by_rep_id_sales_reps_id_fk",
+  "customer_reps_share_check", "order_rep_shares_share_check",
 ] as const;
 const constraintRows = await sql<{ conname: string; convalidated: boolean }[]>`
   SELECT c.conname, c.convalidated
