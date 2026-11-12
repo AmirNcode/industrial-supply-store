@@ -171,6 +171,16 @@ export async function listAccountsWithInactiveRep(): Promise<
   `;
 }
 
+/** How many accounts list a deactivated rep — the admin banner needs the number, not the rows. */
+export async function countAccountsWithInactiveRep(): Promise<number> {
+  const [row] = await sql<{ n: number }[]>`
+    SELECT count(DISTINCT cr.user_id)::int AS n
+    FROM customer_reps cr
+    JOIN sales_reps r ON r.id = cr.rep_id AND NOT r.active
+  `;
+  return row?.n ?? 0;
+}
+
 export type OrderSplit = {
   rateBp: number; // users.commission_rate_bp ?? lead rep's commission_rate_bp
   leadRepId: string; // lead of the whole list, active or not

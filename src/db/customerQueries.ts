@@ -347,7 +347,7 @@ export async function countCustomersForRep(repId: string): Promise<number> {
 
 export type AdminCustomerRow = CustomerRow & {
   /** In the order they were added; the share is the effective one (blank shares already split equally). */
-  reps: { name: string; shareBp: number; active: boolean }[];
+  reps: { repId: string; name: string; shareBp: number; active: boolean }[];
   accountRateBp: number | null;
   originRepName: string | null;
   orderCount: number;
@@ -380,7 +380,7 @@ function toAdminRow({ storedReps, ...row }: AdminQueryRow): AdminCustomerRow {
   );
   return {
     ...row,
-    reps: storedReps.map((rep) => ({ name: rep.name, shareBp: shares.get(rep.repId) ?? 0, active: rep.active })),
+    reps: storedReps.map((rep) => ({ repId: rep.repId, name: rep.name, shareBp: shares.get(rep.repId) ?? 0, active: rep.active })),
   };
 }
 

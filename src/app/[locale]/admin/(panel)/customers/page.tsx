@@ -3,7 +3,7 @@ import { requireAdmin } from "@/lib/admin";
 import { notFound } from "next/navigation";
 import { DEMO_MODE } from "@/lib/demo";
 import { listCustomersAdmin, type RepFilter } from "@/db/customerQueries";
-import { listAccountsWithInactiveRep } from "@/db/accountRepQueries";
+import { countAccountsWithInactiveRep } from "@/db/accountRepQueries";
 import { listReps } from "@/db/repQueries";
 import { formatPersianDate } from "@/lib/persianCalendar";
 import { REQUEST_LIMITS } from "@/lib/requestLimits";
@@ -47,10 +47,10 @@ export default async function AdminCustomersPage({
   const pageNumber = Number(one(query.page));
   const page = Number.isInteger(pageNumber) && pageNumber >= 1 ? pageNumber : 1;
 
-  const [{ rows, total }, reps, attention] = await Promise.all([
+  const [{ rows, total }, reps, attentionCount] = await Promise.all([
     listCustomersAdmin({ search, rep: filter, page, pageSize: PAGE_SIZE }),
     listReps(),
-    listAccountsWithInactiveRep(),
+    countAccountsWithInactiveRep(),
   ]);
   const filterValue = typeof filter === "string" ? filter : filter.repId;
 
@@ -69,10 +69,10 @@ export default async function AdminCustomersPage({
         {t.customers}
       </h1>
 
-      {attention.length > 0 && filter !== "inactive" && (
+      {attentionCount > 0 && filter !== "inactive" && (
         <p className="mb-3 border border-[var(--color-rule)] p-2 text-[12px]" data-testid="inactive-rep-count">
           <Link href={`/${l}/admin/customers?rep=inactive`}>
-            {t.adminAccountsInactiveRep}: {formatInt(attention.length, l)}
+            {t.adminAccountsInactiveRep}: {formatInt(attentionCount, l)}
           </Link>
         </p>
       )}
@@ -146,7 +146,7 @@ export default async function AdminCustomersPage({
                     {customer.reps.length === 0
                       ? "—"
                       : customer.reps.map((rep) => (
-                          <div key={rep.name}>
+                          <div key={rep.repId}>
                             {rep.name} {commissionPercentLabel(rep.shareBp, l)}
                             {!rep.active && (
                               <span className="text-[11px] text-[var(--color-ink-muted)]">
