@@ -14,6 +14,8 @@ import {
   setAccountReps,
   splitForOrder,
 } from "./accountRepQueries";
+import { confirmPayment, addPaymentProof } from "./paymentProofQueries";
+import { sweepExpiredOrders } from "./expiryQueries";
 import { submitOrderFromCartInTransaction } from "./orderSubmissionQueries";
 import { quoteCartFingerprint } from "@/lib/quoteSubmission";
 import { splitCart } from "@/lib/checkoutSplit";
@@ -374,12 +376,12 @@ type Made = Parameters<Parameters<typeof withCommitted>[0]>[0];
 
 async function withOrders(
   made: Made,
-  body: (place: (userId: string | null, placedByRepId?: string | null) => ReturnType<typeof submitOrderFromCartInTransaction>) => Promise<void>,
+  body: (place: (userId: string | null, placedByRepId?: string | null, payable?: boolean) => ReturnType<typeof submitOrderFromCartInTransaction>) => Promise<void>,
   customers: string[],
 ) {
   const categories: number[] = [];
   try {
-    await body(async (userId, placedByRepId = null) => {
+    await body(async (userId, placedByRepId = null, payable = false) => {
       const suffix = randomUUID();
       const [category] = await sql<{ id: number }[]>`
         INSERT INTO categories (slug, path, name_en, name_fa)
@@ -394,7 +396,7 @@ async function withOrders(
         VALUES (${`SPL-${suffix}`}, ${family.id}, '{}'::jsonb, 1000, 100, 0, 0) RETURNING id`;
       const [cart] = await sql<{ id: string }[]>`INSERT INTO carts DEFAULT VALUES RETURNING id`;
       await sql`INSERT INTO cart_items (cart_id, product_id, qty) VALUES (${cart.id}, ${product.id}, 2)`;
-      return sql.begin((tx) => submitOrderFromCartInTransaction(tx, orderInput(cart.id, product.id, userId, placedByRepId)));
+      return sql.begin((tx) => submitOrderFromCartInTransaction(tx, orderInput(cart.id, product.id, userId, placedByRepId, payable)));
     });
   } finally {
     if (customers.length) await sql`DELETE FROM orders WHERE user_id = ANY(${customers}::uuid[])`;
@@ -409,7 +411,7 @@ async function withOrders(
   void made;
 }
 
-function orderInput(cartId: string, productId: number, userId: string | null, placedByRepId: string | null) {
+function orderInput(cartId: string, productId: number, userId: string | null, placedByRepId: string | null, payable = false) {
   return {
     cartId,
     // Two units on a shelf of 100, exactly as the page would have signed them.
@@ -423,7 +425,9 @@ function orderInput(cartId: string, productId: number, userId: string | null, pl
     placedByRepId,
     contact: { company: "C", contactName: "N", email: "", phone: "1", poNumber: "", address: "1 Test St", city: "Tehran", country: "", notes: "", postalCode: "", nationalId: "", economicCode: "" },
     mode: "split" as const,
-    pishFactor: null,
+    // Pish-factor terms turn the order into an `invoiced` one that confirmPayment can accept;
+    // without them it is only `received`.
+    pishFactor: payable ? { rate: 1_000_000, vatRateBp: 1000 } : null,
   };
 }
 
@@ -604,6 +608,174 @@ test("split saved mid-submission waits for the order, which keeps the old split"
         await sql`DELETE FROM product_families WHERE id = ${family.id}`;
         await sql`DELETE FROM categories WHERE id = ${category.id}`;
       }
+    }, [id]);
+  });
+});
+
+// ── A paid rep order wins an unassigned customer. confirmPayment is the admin's
+// "paid"; nothing a rep does reaches it.
+
+const claimAudits = async (customerId: string) =>
+  (await sql<{ n: number }[]>`
+    SELECT count(*)::int AS n FROM audit_log
+    WHERE action = 'customer.claimed' AND subject_kind = 'customer' AND subject_id = ${customerId}`)[0].n;
+
+const listOf = async (id: string) => (await stored(id)).map((row) => ({ repId: row.repId, shareBp: row.shareBp }));
+
+async function placed(place: Parameters<Parameters<typeof withOrders>[1]>[0], userId: string | null, repId: string | null) {
+  const order = await orderRow(refOf(await place(userId, repId, true)));
+  const [{ status }] = await sql<{ status: string }[]>`SELECT status FROM orders WHERE id = ${order.id}`;
+  assert.equal(status, "invoiced", "the fixture order must be payable");
+  return order.id;
+}
+
+test("paid rep order claims the customer", async () => {
+  assertLocalDatabase();
+  await withCommitted(async (made) => {
+    const rep = await made.rep();
+    const id = await made.customer();
+    await withOrders(made, async (place) => {
+      const orderId = await placed(place, id, rep);
+      assert.equal(await confirmPayment(orderId, "invoiced"), true);
+      assert.deepEqual(await listOf(id), [{ repId: rep, shareBp: null }]);
+      const [order] = await sql<{ ref: string }[]>`SELECT ref FROM orders WHERE id = ${orderId}`;
+      const row = await orderRow(order.ref);
+      assert.deepEqual(row.shares, [{ repId: rep, shareBp: 10000 }]);
+      assert.equal(row.rateBp, 250);
+      assert.equal(row.repId, rep);
+      assert.equal(await claimAudits(id), 1);
+      const [user] = await sql<{ repId: string | null; earns: boolean }[]>`
+        SELECT rep_id AS "repId", rep_earns_commission AS earns FROM users WHERE id = ${id}`;
+      assert.deepEqual({ ...user }, { repId: rep, earns: true });
+    }, [id]);
+  });
+});
+
+test("unpaid, cancelled and expired orders claim nothing", async () => {
+  assertLocalDatabase();
+  await withCommitted(async (made) => {
+    const rep = await made.rep();
+    const id = await made.customer();
+    await withOrders(made, async (place) => {
+      const open = await placed(place, id, rep);
+      assert.deepEqual(await listOf(id), []);
+      const cancelled = await placed(place, id, rep);
+      await sql`UPDATE orders SET status = 'cancelled', expires_at = NULL WHERE id = ${cancelled}`;
+      assert.equal(await confirmPayment(cancelled, "invoiced"), false);
+      const lapsing = await placed(place, id, rep);
+      await sql`UPDATE orders SET expires_at = now() - interval '1 hour' WHERE id = ${lapsing}`;
+      await sweepExpiredOrders({ force: true });
+      assert.equal(await confirmPayment(lapsing, "invoiced"), false);
+      assert.deepEqual(await listOf(id), []);
+      const [{ n }] = await sql<{ n: number }[]>`
+        SELECT count(*)::int AS n FROM order_rep_shares WHERE order_id = ANY(${[open, cancelled, lapsing]}::bigint[])`;
+      assert.equal(n, 0);
+    }, [id]);
+  });
+});
+
+test("receipt upload does not claim", async () => {
+  assertLocalDatabase();
+  await withCommitted(async (made) => {
+    const rep = await made.rep();
+    const id = await made.customer();
+    await withOrders(made, async (place) => {
+      const orderId = await placed(place, id, rep);
+      assert.equal(
+        await addPaymentProof(orderId, { path: `test/${randomUUID()}.jpg`, type: "image/jpeg", size: 10 }, { kind: "rep", repId: rep }),
+        "added",
+      );
+      const [{ status }] = await sql<{ status: string }[]>`SELECT status FROM orders WHERE id = ${orderId}`;
+      assert.equal(status, "payment_review");
+      assert.deepEqual(await listOf(id), []);
+    }, [id]);
+  });
+});
+
+test("a customer's own paid order claims nothing", async () => {
+  assertLocalDatabase();
+  await withCommitted(async (made) => {
+    const id = await made.customer();
+    await withOrders(made, async (place) => {
+      const orderId = await placed(place, id, null);
+      assert.equal(await confirmPayment(orderId, "invoiced"), true);
+      assert.deepEqual(await listOf(id), []);
+      assert.equal(await claimAudits(id), 0);
+    }, [id]);
+  });
+});
+
+test("second order by the same rep is credited", async () => {
+  assertLocalDatabase();
+  await withCommitted(async (made) => {
+    const rep = await made.rep();
+    const id = await made.customer();
+    await withOrders(made, async (place) => {
+      const first = await placed(place, id, rep);
+      const second = await placed(place, id, rep);
+      assert.equal(await confirmPayment(first, "invoiced"), true);
+      assert.equal(await confirmPayment(second, "invoiced"), true);
+      const rows = await sql<{ orderId: number; shareBp: number }[]>`
+        SELECT order_id AS "orderId", share_bp AS "shareBp" FROM order_rep_shares
+        WHERE order_id IN (${first}, ${second}) AND rep_id = ${rep} ORDER BY order_id`;
+      assert.deepEqual(rows.map((row) => ({ ...row })), [
+        { orderId: first, shareBp: 10000 }, { orderId: second, shareBp: 10000 },
+      ]);
+      assert.deepEqual(await listOf(id), [{ repId: rep, shareBp: null }]);
+      assert.equal(await claimAudits(id), 1); // credited changes no list, so no second claim
+    }, [id]);
+  });
+});
+
+test("lost race: the first paid order wins, the second keeps no shares", async () => {
+  assertLocalDatabase();
+  await withCommitted(async (made) => {
+    const [a, b] = [await made.rep(), await made.rep()];
+    const id = await made.customer();
+    await withOrders(made, async (place) => {
+      const orderA = await placed(place, id, a);
+      const orderB = await placed(place, id, b);
+      assert.equal(await confirmPayment(orderA, "invoiced"), true);
+      assert.equal(await confirmPayment(orderB, "invoiced"), true);
+      assert.deepEqual(await listOf(id), [{ repId: a, shareBp: null }]);
+      const rows = await sql<{ orderId: number; repId: string }[]>`
+        SELECT order_id AS "orderId", rep_id AS "repId" FROM order_rep_shares WHERE order_id IN (${orderA}, ${orderB})`;
+      assert.deepEqual(rows.map((row) => ({ ...row })), [{ orderId: orderA, repId: a }]);
+    }, [id]);
+  });
+});
+
+test("concurrent claims: exactly one rep wins", async () => {
+  assertLocalDatabase();
+  await withCommitted(async (made) => {
+    const [a, b] = [await made.rep(), await made.rep()];
+    const id = await made.customer();
+    await withOrders(made, async (place) => {
+      const orderA = await placed(place, id, a);
+      const orderB = await placed(place, id, b);
+      const results = await Promise.all([confirmPayment(orderA, "invoiced"), confirmPayment(orderB, "invoiced")]);
+      assert.deepEqual(results, [true, true]);
+      assert.equal((await listOf(id)).length, 1);
+      const [{ n }] = await sql<{ n: number }[]>`
+        SELECT count(DISTINCT order_id)::int AS n FROM order_rep_shares WHERE order_id IN (${orderA}, ${orderB})`;
+      assert.equal(n, 1);
+      assert.equal(await claimAudits(id), 1);
+    }, [id]);
+  });
+});
+
+test("admin assigned someone else before payment", async () => {
+  assertLocalDatabase();
+  await withCommitted(async (made) => {
+    const [a, c] = [await made.rep(), await made.rep()];
+    const id = await made.customer();
+    await withOrders(made, async (place) => {
+      const orderId = await placed(place, id, a);
+      assert.equal(await setAccountReps(id, [{ repId: c, shareBp: null }], null), "ok");
+      assert.equal(await confirmPayment(orderId, "invoiced"), true);
+      assert.deepEqual(await listOf(id), [{ repId: c, shareBp: null }]);
+      const [{ n }] = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM order_rep_shares WHERE order_id = ${orderId}`;
+      assert.equal(n, 0);
     }, [id]);
   });
 });

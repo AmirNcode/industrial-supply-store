@@ -1,6 +1,7 @@
 import "server-only";
 import { sql } from "./index";
 import { recordAudit } from "./audit";
+import { claimCustomerForOrder } from "./accountRepQueries";
 import { sellHeldStock } from "./inventoryQueries";
 import { nextInvoiceNumber } from "./invoiceQueries";
 import { acceptsPaymentProof, isOrderStatus } from "@/lib/orders";
@@ -115,6 +116,10 @@ export async function getProofAccess(id: number): Promise<ProofAccess | null> {
  * could otherwise upload any photo as "the receipt" for their own order and
  * mark it paid, and the next step is shipping the goods. There is no rep
  * parameter, so no rep code path can reach this.
+ *
+ * It is also where a rep's order wins an unassigned customer: this is the one
+ * "paid" a rep cannot fake (a receipt upload is not it), so the claim runs
+ * here, in the same transaction, and a failure undoes the payment with it.
  */
 export async function confirmPayment(
   orderId: number,
@@ -139,6 +144,7 @@ export async function confirmPayment(
       detail: { from, invoiceNumber: result[0].invoiceNumber },
     });
     await sellHeldStock(tx, orderId);
+    await claimCustomerForOrder(tx, orderId);
     return true;
   });
 }

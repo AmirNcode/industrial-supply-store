@@ -224,3 +224,64 @@ export async function writeOrderShares(tx: Tx, orderId: number, split: OrderSpli
     UPDATE orders SET rep_id = ${biggest.repId}, commission_rate_bp = ${split.rateBp} WHERE id = ${orderId}
   `;
 }
+
+export type ClaimResult = "claimed" | "credited" | "lost" | "not-applicable";
+
+/**
+ * A rep who placed an order for a customer nobody looks after wins that
+ * customer only when the order is PAID, which is `confirmPayment` (admin) and
+ * nothing a rep can do: placing, cancelling, letting it lapse or uploading a
+ * receipt all leave the customer unassigned. Called inside confirmPayment's
+ * transaction, after the status update, so the order row is already locked.
+ * The customer row is then locked FOR UPDATE, the lock `setAccountReps` and
+ * `splitForOrder` take: two reps' orders confirmed at once serialise here, the
+ * second finds the first on the list and loses, and an admin save lands wholly
+ * before or after. A losing order keeps no shares: it is not credited to
+ * someone who did not win the customer.
+ */
+export async function claimCustomerForOrder(tx: Tx, orderId: number): Promise<ClaimResult> {
+  const [order] = await tx<{ userId: string | null; repId: string | null; credited: boolean }[]>`
+    SELECT user_id AS "userId", placed_by_rep_id AS "repId",
+           EXISTS (SELECT 1 FROM order_rep_shares s WHERE s.order_id = orders.id) AS credited
+    FROM orders WHERE id = ${orderId}
+  `;
+  if (!order || !order.userId || !order.repId || order.credited) return "not-applicable";
+
+  const [user] = await tx<{ rate: number | null }[]>`
+    SELECT commission_rate_bp AS rate FROM users WHERE id = ${order.userId} FOR UPDATE
+  `;
+  if (!user) return "not-applicable";
+  const [rep] = await tx<{ active: boolean; rate: number }[]>`
+    SELECT active, commission_rate_bp AS rate FROM sales_reps WHERE id = ${order.repId}
+  `;
+  if (!rep?.active) return "lost";
+
+  const rows = await storedRows(order.userId, tx);
+  const onList = rows.some((row) => row.repId === order.repId);
+  if (rows.length > 0 && !onList) return "lost";
+
+  // The order's own copy is 100% to the placing rep, whatever the account
+  // split becomes: only this rep earned this customer.
+  await writeOrderShares(tx, orderId, {
+    rateBp: user.rate ?? rep.rate,
+    leadRepId: order.repId,
+    shares: [{ repId: order.repId, shareBp: 10000 }],
+  });
+  if (onList) return "credited";
+
+  // clock_timestamp() for the same reason as setAccountReps.
+  await tx`
+    INSERT INTO customer_reps (user_id, rep_id, share_bp, added_at)
+    VALUES (${order.userId}, ${order.repId}, NULL, clock_timestamp())
+  `;
+  await tx`
+    UPDATE users SET rep_id = ${order.repId}, rep_earns_commission = true WHERE id = ${order.userId}
+  `;
+  await recordAudit(tx, {
+    actor: { kind: "system" },
+    action: "customer.claimed",
+    subject: { kind: "customer", id: order.userId },
+    detail: { orderId, repId: order.repId },
+  });
+  return "claimed";
+}
