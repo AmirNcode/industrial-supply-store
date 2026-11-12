@@ -3,12 +3,15 @@ import { requireAdmin } from "@/lib/admin";
 import { notFound } from "next/navigation";
 import { DEMO_MODE } from "@/lib/demo";
 import { listCustomersAdmin, type RepFilter } from "@/db/customerQueries";
+import { listAccountsWithInactiveRep } from "@/db/accountRepQueries";
 import { listReps } from "@/db/repQueries";
 import { formatPersianDate } from "@/lib/persianCalendar";
 import { REQUEST_LIMITS } from "@/lib/requestLimits";
 import { isUuid } from "@/lib/ids";
 import { isLocale, getDict, type Locale } from "@/lib/i18n";
 import { originLabel } from "./originLabel";
+import { commissionPercentLabel } from "@/lib/repAccount";
+import { formatInt } from "@/lib/money";
 
 const PAGE_SIZE = 50;
 
@@ -36,19 +39,25 @@ export default async function AdminCustomersPage({
   const search = one(query.q).slice(0, REQUEST_LIMITS.searchChars);
   const repParam = one(query.rep);
   const filter: RepFilter =
-    repParam === "none" ? "none" : isUuid(repParam) ? { repId: repParam } : "all";
+    repParam === "none" || repParam === "inactive"
+      ? repParam
+      : isUuid(repParam)
+        ? { repId: repParam }
+        : "all";
   const pageNumber = Number(one(query.page));
   const page = Number.isInteger(pageNumber) && pageNumber >= 1 ? pageNumber : 1;
 
-  const [{ rows, total }, reps] = await Promise.all([
+  const [{ rows, total }, reps, attention] = await Promise.all([
     listCustomersAdmin({ search, rep: filter, page, pageSize: PAGE_SIZE }),
     listReps(),
+    listAccountsWithInactiveRep(),
   ]);
+  const filterValue = typeof filter === "string" ? filter : filter.repId;
 
   const pageHref = (target: number) => {
     const next = new URLSearchParams();
     if (search) next.set("q", search);
-    if (filter !== "all") next.set("rep", filter === "none" ? "none" : filter.repId);
+    if (filter !== "all") next.set("rep", filterValue);
     if (target > 1) next.set("page", String(target));
     const qs = next.toString();
     return `/${l}/admin/customers${qs ? `?${qs}` : ""}`;
@@ -59,6 +68,14 @@ export default async function AdminCustomersPage({
       <h1 className="mb-3 border-b border-[var(--color-ink)] pb-1 text-[17px] font-bold">
         {t.customers}
       </h1>
+
+      {attention.length > 0 && filter !== "inactive" && (
+        <p className="mb-3 border border-[var(--color-rule)] p-2 text-[12px]" data-testid="inactive-rep-count">
+          <Link href={`/${l}/admin/customers?rep=inactive`}>
+            {t.adminAccountsInactiveRep}: {formatInt(attention.length, l)}
+          </Link>
+        </p>
+      )}
 
       <form method="get" className="mb-3 flex flex-wrap items-end gap-2">
         <input
@@ -72,11 +89,12 @@ export default async function AdminCustomersPage({
         />
         <select
           name="rep"
-          defaultValue={filter === "all" ? "all" : filter === "none" ? "none" : filter.repId}
+          defaultValue={filterValue}
           aria-label={t.assignRep}
         >
           <option value="all">{t.allReps}</option>
           <option value="none">{t.noRep}</option>
+          <option value="inactive">{t.adminAccountsInactiveRep}</option>
           {reps.map((rep) => (
             <option key={rep.id} value={rep.id}>
               {rep.active ? rep.name : `${rep.name} (${t.repStatusInactive})`}
@@ -124,8 +142,24 @@ export default async function AdminCustomersPage({
                   <td className="tech" dir="ltr">
                     {customer.email ?? "—"}
                   </td>
-                  <td>{customer.reps[0]?.name ?? "—"}</td>
-                  <td>{customer.repEarnsCommission ? t.commissionShortOn : t.commissionShortOff}</td>
+                  <td>
+                    {customer.reps.length === 0
+                      ? "—"
+                      : customer.reps.map((rep) => (
+                          <div key={rep.name}>
+                            {rep.name} {commissionPercentLabel(rep.shareBp, l)}
+                            {!rep.active && (
+                              <span className="text-[11px] text-[var(--color-ink-muted)]">
+                                {" "}
+                                ({t.repStatusInactive})
+                              </span>
+                            )}
+                          </div>
+                        ))}
+                  </td>
+                  <td>
+                    {customer.accountRateBp === null ? "—" : commissionPercentLabel(customer.accountRateBp, l)}
+                  </td>
                   <td>{formatPersianDate(customer.createdAt, l)}</td>
                 </tr>
               ))}

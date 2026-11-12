@@ -7,15 +7,13 @@ import { boundedString } from "@/lib/requestLimits";
 import { hashPassword } from "@/lib/password";
 import { generateTempPassword } from "@/lib/tempPassword";
 import { isUuid, postedUuid } from "@/lib/ids";
-import { FOLLOW_UP_DAYS } from "@/lib/repAccount";
+import { FOLLOW_UP_DAYS, parseCommissionPercent } from "@/lib/repAccount";
+import { MAX_ACCOUNT_REPS, parseSharePercent, type SplitRow } from "@/lib/commissionSplit";
 import { tehranDatePlusDays } from "@/lib/persianCalendar";
 import { setShownOnce } from "@/lib/shownOnce";
 import { redirectFresh } from "@/lib/redirectFresh";
-import {
-  assignCustomer,
-  resetCustomerPasswordAdmin,
-  setFollowUpAdmin,
-} from "@/db/customerQueries";
+import { setAccountReps } from "@/db/accountRepQueries";
+import { resetCustomerPasswordAdmin, setFollowUpAdmin } from "@/db/customerQueries";
 import { addNoteAdmin } from "@/db/noteQueries";
 
 function postedCustomerId(formData: FormData): string | null {
@@ -28,22 +26,43 @@ function postedCustomerId(formData: FormData): string | null {
  */
 
 /**
- * Changing a customer's rep, and whether that rep earns commission on them.
- * The checkbox arrives as "on" or not at all, so its absence is a deliberate
- * "off" — the form always renders it with the current value.
+ * Saves the account's reps, shares and commission rate in one write. The form
+ * posts parallel `repId` / `share` fields, one pair per row; a row with no rep
+ * chosen is an empty line and is dropped. An empty list is allowed: it
+ * unassigns the customer. The client shows a running total, but only the
+ * checks here and in `setAccountReps` count.
  */
-export async function assignCustomerAction(formData: FormData): Promise<void> {
+export async function setAccountRepsAction(formData: FormData): Promise<void> {
   await assertAdminWrite();
   const locale = safeLocale(formData);
   const id = postedCustomerId(formData);
   if (!id) redirect(`/${locale}/admin/customers`);
-  const raw = String(formData.get("repId") ?? "");
-  const repId = raw === "" ? null : raw;
-  if (repId !== null && !isUuid(repId)) redirect(`/${locale}/admin/customers/${id}?error=rep`);
-  const earns = formData.get("earnsCommission") === "on";
-  const result = await assignCustomer(id, repId, earns);
+  const back = `/${locale}/admin/customers/${id}`;
+
+  const repIds = formData.getAll("repId").map(String);
+  const shares = formData.getAll("share").map(String);
+  // Bounded before looping: a hand-built post could carry any number of rows.
+  if (repIds.length > 2 * MAX_ACCOUNT_REPS || shares.length > repIds.length) redirect(`${back}?error=too-many`);
+  const rows: SplitRow[] = [];
+  for (const [i, repId] of repIds.entries()) {
+    if (repId === "") continue;
+    if (!isUuid(repId)) redirect(`${back}?error=rep`);
+    const share = parseSharePercent((shares[i] ?? "").slice(0, 12));
+    if (share === "invalid") redirect(`${back}?error=invalid`);
+    rows.push({ repId, shareBp: share });
+  }
+
+  // The rate is range-checked here: the database CHECK would otherwise turn a
+  // bad value into a thrown error. Blank follows the lead rep's rate.
+  const rateText = String(formData.get("rate") ?? "").slice(0, 20).trim();
+  const rate = rateText === "" ? null : parseCommissionPercent(rateText);
+  if (rateText !== "" && rate === null) redirect(`${back}?error=invalid`);
+
+  const result = await setAccountReps(id, rows, rate);
   if (result === "not-found") redirect(`/${locale}/admin/customers`);
-  redirect(`/${locale}/admin/customers/${id}?${result === "bad-rep" ? "error=rep" : "ok=assigned"}`);
+  if (result === "ok") redirect(`${back}?ok=assigned`);
+  const error = { empty: "invalid", "bad-rep": "rep", "too-many": "too-many", duplicate: "duplicate", mixed: "mixed", total: "total" }[result];
+  redirect(`${back}?error=${error}`);
 }
 
 export async function resetCustomerPasswordAdminAction(formData: FormData): Promise<void> {

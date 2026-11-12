@@ -24,7 +24,6 @@ import {
   updateProfile,
 } from "./userQueries";
 import {
-  assignCustomer,
   createCustomerForRep,
   getCustomerForRep,
   listCustomersForRep,
@@ -51,6 +50,15 @@ import {
   listTargets,
   setTarget,
 } from "./repMoney";
+
+// The old one-rep call shape these tests were written against, over the real writer.
+async function assignCustomer(customerId: string, repId: string | null, earnsCommission: boolean) {
+  const result =
+    repId === null
+      ? await setAccountReps(customerId, [], null)
+      : await setAccountReps(customerId, [{ repId, shareBp: null }], earnsCommission ? null : 0);
+  return result === "ok" || result === "not-found" ? result : "bad-rep";
+}
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 type Tx = TransactionSql<{}>;

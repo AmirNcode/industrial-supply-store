@@ -5,7 +5,7 @@ import { recordAudit } from "./audit";
 import { codeFromPhone, randomCustomerCode } from "@/lib/customerCode";
 import { latinDigits } from "@/lib/digits";
 import { resolveShares } from "@/lib/commissionSplit";
-import { leadRepSql, onMyList, repAccess, setAccountReps, unassigned } from "./accountRepQueries";
+import { leadRepSql, onMyList, repAccess, unassigned } from "./accountRepQueries";
 
 export const REP_CUSTOMER_PAGE_SIZE = 50;
 export const REP_SEARCH_MIN_CHARS = 3;
@@ -414,27 +414,6 @@ export async function getCustomerAdmin(customerId: string): Promise<AdminCustome
     SELECT ${ADMIN_COLS} FROM ${ADMIN_FROM} WHERE u.id = ${customerId}
   `;
   return row ? toAdminRow(row) : null;
-}
-
-/**
- * One rep for the account (or none), until the admin screen moves to
- * `setAccountReps` and its share rows. A thin wrapper so this writer, like
- * every other, puts the rep on `customer_reps` and keeps the legacy columns
- * in step. `earnsCommission` false is an account rate of 0: the customer is
- * the rep's, the sale counts, no commission is paid. Applies to orders placed
- * from now on; each order copies its own split when it is placed.
- */
-export async function assignCustomer(
-  customerId: string,
-  repId: string | null,
-  earnsCommission: boolean,
-): Promise<"ok" | "not-found" | "bad-rep"> {
-  const result =
-    repId === null
-      ? await setAccountReps(customerId, [], null)
-      : await setAccountReps(customerId, [{ repId, shareBp: null }], earnsCommission ? null : 0);
-  // One row with a blank share is never a split problem; anything else is a rep that cannot be added.
-  return result === "ok" || result === "not-found" ? result : "bad-rep";
 }
 
 export async function resetCustomerPasswordAdmin(

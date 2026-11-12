@@ -85,9 +85,9 @@ export default async function RepCustomerPage({
             {customer.customerCode}
           </span>
         </span>
-        <span className="text-[11px] text-[var(--color-ink-muted)]">
-          {customer.repEarnsCommission ? t.commissionOn : t.commissionOff}
-        </span>
+        {!customer.repEarnsCommission && (
+          <span className="text-[11px] text-[var(--color-ink-muted)]">{t.commissionNone}</span>
+        )}
         <form action={startOrderAction} className="ms-auto">
           <input type="hidden" name="locale" value={l} />
           <input type="hidden" name="customerId" value={id} />

@@ -15,7 +15,6 @@ import {
   splitForOrder,
 } from "./accountRepQueries";
 import {
-  assignCustomer,
   createCustomerForRep,
   getCustomerForRep,
   getOrderableCustomerForRep,
@@ -1220,23 +1219,23 @@ test("contact for a customer is the lead if active, else the first active rep", 
   });
 });
 
-test("assignCustomer writes the list and keeps the legacy columns in step", async () => {
+test("an admin save writes the list and keeps the legacy columns in step", async () => {
   assertLocalDatabase();
   await inScope(async (s) => {
     const [a, b] = [await s.rep(), await s.rep()];
     const id = await s.customer();
-    assert.equal(await assignCustomer(id, a, true), "ok");
+    assert.equal(await setAccountReps(id, [{ repId: a, shareBp: null }], null), "ok");
     assert.deepEqual((await listAccountReps(id)).map((r) => [r.repId, r.shareBp]), [[a, null]]);
     assert.deepEqual({ ...(await legacyOf(id)) }, { repId: a, earns: true });
-    assert.equal(await assignCustomer(id, b, false), "ok");
+    assert.equal(await setAccountReps(id, [{ repId: b, shareBp: null }], 0), "ok");
     assert.deepEqual((await listAccountReps(id)).map((r) => r.repId), [b]);
     assert.deepEqual({ ...(await legacyOf(id)) }, { repId: b, earns: false });
-    assert.equal(await assignCustomer(id, null, false), "ok");
+    assert.equal(await setAccountReps(id, [], null), "ok");
     assert.deepEqual(await listAccountReps(id), []);
     assert.deepEqual({ ...(await legacyOf(id)) }, { repId: null, earns: false });
     await sql`UPDATE sales_reps SET active = false WHERE id = ${a}`;
-    assert.equal(await assignCustomer(id, a, true), "bad-rep");
-    assert.equal(await assignCustomer(randomUUID(), b, true), "not-found");
+    assert.equal(await setAccountReps(id, [{ repId: a, shareBp: null }], null), "bad-rep");
+    assert.equal(await setAccountReps(randomUUID(), [{ repId: b, shareBp: null }], null), "not-found");
     assert.deepEqual(await listAccountReps(id), []);
   });
 });

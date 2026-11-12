@@ -394,4 +394,85 @@ for (const locale of locales) {
 
     await Promise.all([adminContext.close(), contextA.close(), contextB.close()]);
   });
+
+  test(`${locale}: admin sets an account's reps, shares and rate; a bad total changes nothing`, async ({
+    browser,
+    isMobile,
+  }, testInfo) => {
+    test.skip(isMobile, "The desktop project covers the admin editor.");
+    const t = getDict(locale);
+    const stamp = `${locale}${testInfo.workerIndex}${Date.now()}`;
+    const nameA = `E2E Split A ${stamp}`;
+    const nameB = `E2E Split B ${stamp}`;
+    await makeRep(nameA, `e2e.sa.${stamp}`.slice(0, 32));
+    await makeRep(nameB, `e2e.sb.${stamp}`.slice(0, 32));
+    const company = `E2E Split Co ${stamp}`;
+    const phone = `0913${String(Date.now()).slice(-7)}`;
+    const [customer] = await sql<{ id: string }[]>`
+      INSERT INTO users (email, password_hash, company, contact_name, phone, locale, customer_code, origin)
+      VALUES (${`split${stamp}@example.invalid`}, '!', ${company}, 'E2E Split', ${phone}, ${locale},
+              ${codeFromPhone(phone)!}, 'self')
+      RETURNING id`;
+
+    const context = await browser.newContext({ extraHTTPHeaders: freshAddressHeader() });
+    const admin = await context.newPage();
+    await adminSignIn(admin, locale);
+    const customerUrl = `/${locale}/admin/customers/${customer.id}`;
+    const shareBoxes = admin.locator('input[name="share"]');
+    const repSelects = admin.locator('select[name="repId"]');
+    // Persian digits typed into the boxes are accepted, so the fa run types them.
+    const typed = (n: number) => (locale === "fa" ? String(n).replace(/\d/g, (d) => "۰۱۲۳۴۵۶۷۸۹"[Number(d)]) : String(n));
+
+    const save = async () => {
+      await admin
+        .locator("form")
+        .filter({ has: admin.locator('input[name="rate"]') })
+        .getByRole("button", { name: t.save })
+        .click();
+    };
+
+    await admin.goto(customerUrl);
+    await expect(admin.getByTestId("split-unassigned")).toHaveText(t.adminNoRepsState);
+    await admin.getByRole("button", { name: t.adminAddRep }).click();
+    await admin.getByRole("button", { name: t.adminAddRep }).click();
+    await repSelects.nth(0).selectOption({ label: nameA });
+    await repSelects.nth(1).selectOption({ label: nameB });
+    await shareBoxes.nth(0).fill(typed(75));
+    await shareBoxes.nth(1).fill(typed(25));
+    await admin.locator('input[name="rate"]').fill(locale === "fa" ? "۵" : "5");
+    await expect(admin.getByTestId("split-rate-hint")).toContainText(nameA);
+    await save();
+    await expect(admin.getByText(t.assignmentSaved)).toBeVisible();
+
+    const expectSaved = async (a: string, b: string, rate: string) => {
+      await admin.goto(customerUrl);
+      await expect(shareBoxes.nth(0)).toHaveValue(a);
+      await expect(shareBoxes.nth(1)).toHaveValue(b);
+      await expect(admin.locator('input[name="rate"]')).toHaveValue(rate);
+      await expect(repSelects.nth(0).locator("option:checked")).toHaveText(nameA);
+    };
+    await expectSaved("75", "25", "5");
+    await expectNoAccessibilityViolations(admin, testInfo);
+
+    // 75 + 15 is refused with the plain message and nothing is written.
+    await shareBoxes.nth(1).fill(typed(15));
+    await save();
+    await expect(admin.getByText(t.adminSplitErrorTotal)).toBeVisible();
+    await expectSaved("75", "25", "5");
+
+    // Every share cleared saves as an equal split, shown back as blanks.
+    await shareBoxes.nth(0).fill("");
+    await shareBoxes.nth(1).fill("");
+    await save();
+    await expect(admin.getByText(t.assignmentSaved)).toBeVisible();
+    await expectSaved("", "", "5");
+
+    // The customers list names every rep with the effective share.
+    await admin.goto(`/${locale}/admin/customers?q=${encodeURIComponent(company)}`);
+    const row = admin.locator("tr", { hasText: company });
+    await expect(row).toContainText(nameA);
+    await expect(row).toContainText(nameB);
+
+    await context.close();
+  });
 }
