@@ -252,7 +252,8 @@ export default async function AdminPage({
               </span>
             )}
             <span className="text-[var(--color-ink-muted)]">{q.contactName}</span>
-            <span className="tech text-[var(--color-ink-muted)]">{q.email}</span>
+            {/* Empty on a rep's order for a customer nobody held yet. */}
+            {q.email && <span className="tech text-[var(--color-ink-muted)]">{q.email}</span>}
             {deadlineLabel(q, l, t) && (
               <span className="text-[var(--color-ink-muted)]">{deadlineLabel(q, l, t)}</span>
             )}
@@ -394,7 +395,7 @@ export default async function AdminPage({
                       discardLabel={t.confirmDiscard}
                       disabled={DEMO_MODE}
                       details={[
-                        { label: t.confirmSendingTo, value: `${q.company} — ${q.email}`, tech: false },
+                        { label: t.confirmSendingTo, value: q.email ? `${q.company} — ${q.email}` : q.company, tech: false },
                         { label: t.confirmOrder, value: q.ref, tech: true },
                       ]}
                     />
@@ -452,7 +453,7 @@ export default async function AdminPage({
                       discardLabel={t.confirmDiscard}
                       disabled={DEMO_MODE}
                       details={[
-                        { label: t.confirmSendingTo, value: `${q.company} — ${q.email}`, tech: false },
+                        { label: t.confirmSendingTo, value: q.email ? `${q.company} — ${q.email}` : q.company, tech: false },
                         { label: t.confirmOrder, value: q.ref, tech: true },
                         { label: t.confirmNewStatus, value: t[STATUS_LABEL_KEY[next]] },
                       ]}

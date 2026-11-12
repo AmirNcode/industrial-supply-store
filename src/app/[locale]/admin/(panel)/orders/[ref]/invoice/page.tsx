@@ -109,7 +109,7 @@ export default async function AdminInvoiceDraftPage({
               className="btn-primary"
               details={[
                 { label: t.confirmSendingTo, value: `${order.company} — ${order.contactName}` },
-                { label: t.email, value: order.email, tech: true },
+                ...(order.email ? [{ label: t.email, value: order.email, tech: true }] : []),
                 { label: t.confirmOrder, value: order.ref, tech: true },
                 { label: t.confirmInvoiceTotal, value: formatAmount(due, currency, l), tech: true },
               ]}

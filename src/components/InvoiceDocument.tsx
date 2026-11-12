@@ -165,7 +165,7 @@ export function InvoiceDocument({
               {t.economicCode}: <span className="tech">{order.buyerEconomicCode}</span>
             </p>
           )}
-          <p className="tech text-[12px] text-[var(--color-ink-muted)]">{order.email}</p>
+          {order.email && <p className="tech text-[12px] text-[var(--color-ink-muted)]">{order.email}</p>}
           {order.phone && (
             <p className="tech text-[12px] text-[var(--color-ink-muted)]">{order.phone}</p>
           )}
