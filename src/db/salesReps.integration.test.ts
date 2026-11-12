@@ -649,7 +649,7 @@ async function insertDelivered(
   rateBp: number,
   deliveredAt: string,
 ): Promise<void> {
-  await tx`
+  const [order] = await tx<{ id: number }[]>`
     INSERT INTO orders (ref, company, contact_name, email, total_cents, requested_total_cents,
                         status, rep_id, commission_rate_bp, invoice_number, fx_rate_to_rial,
                         created_at, invoiced_at, paid_at, shipped_at, delivered_at)
@@ -658,7 +658,10 @@ async function insertDelivered(
             ${`INV-TEST-${randomUUID().slice(0, 8)}`}, ${fxRateToRial},
             ${deliveredAt}::timestamptz - interval '9 days', ${deliveredAt}::timestamptz - interval '8 days',
             ${deliveredAt}::timestamptz - interval '6 days', ${deliveredAt}::timestamptz - interval '4 days',
-            ${deliveredAt}::timestamptz)`;
+            ${deliveredAt}::timestamptz)
+    RETURNING id`;
+  // Money is counted per share row; submission writes one, a direct insert must too.
+  await tx`INSERT INTO order_rep_shares (order_id, rep_id, share_bp) VALUES (${order.id}, ${repId}, 10000)`;
 }
 
 test("one exact definition of sales and commission, and owed after payouts", async () => {
@@ -705,11 +708,13 @@ test("an order not yet invoiced is estimated at today's rate", async () => {
   assertLocalDatabase();
   await rolledBack(async (tx) => {
     const rep = await insertRep(tx, { rateBp: 500 });
-    await tx`
+    const [open] = await tx<{ id: number }[]>`
       INSERT INTO orders (ref, company, contact_name, email, total_cents, requested_total_cents,
                           status, rep_id, commission_rate_bp)
       VALUES (${`ORD-${randomUUID().slice(0, 6).toUpperCase()}`}, 'Open Co', 'N', '', 10000, 10000,
-              'received', ${rep}, 500)`;
+              'received', ${rep}, 500)
+      RETURNING id`;
+    await tx`INSERT INTO order_rep_shares (order_id, rep_id, share_bp) VALUES (${open.id}, ${rep}, 10000)`;
     const [row] = await listInProgressForRep(rep, 1_000_000, tx);
     assert.equal(row.estimate, true);
     assert.equal(row.salesRial, 100_000_000);

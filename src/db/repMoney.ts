@@ -10,15 +10,19 @@ import type { TargetRow } from "@/lib/repStats";
 export type Db = Sql<{}> | TransactionSql<{}>;
 
 /**
- * The one definition of a rep's money.
+ * The one definition of a rep's money, counted per share row.
  *
- * Sales is the invoiced total converted at the rate frozen on that invoice —
- * the whole-rial total the invoice itself prints. Commission applies the rate
- * locked when the order was placed. Both are exact `numeric` arithmetic in
+ * An order has a pot (`orders.commission_rate_bp` of the sale) and one
+ * `order_rep_shares` row per rep with that rep's share in basis points. A
+ * rep's sales is the invoiced total converted at the rate frozen on that
+ * invoice, times the rep's share; the commission is the same, times the
+ * order's rate. Each rep's amount is rounded on its own — the whole-rial
+ * figures can differ from the order's by a rial or two, never more — and no
+ * remainder is handed to anyone. All of it is exact `numeric` arithmetic in
  * Postgres: JavaScript never multiplies these, because cents × rate × basis
- * points passes 2^53 on a large order. Results cross to JavaScript as float8:
- * postgres-js returns bigint as a string, and every rial amount here is an
- * integer far below 2^53, where a double is exact.
+ * points × share passes 2^53 on a large order. Results cross to JavaScript as
+ * float8: postgres-js returns bigint as a string, and every rial amount here
+ * is an integer far below 2^53, where a double is exact.
  *
  * `live` is today's rate, used only for orders not yet invoiced — an estimate,
  * and always labelled as one.
@@ -36,11 +40,12 @@ function toDate(value: Date | string): Date {
 function rate(live: number | null) {
   return live === null ? sql`o.fx_rate_to_rial` : sql`COALESCE(o.fx_rate_to_rial, ${live})`;
 }
+// `s` is the order_rep_shares row being counted. Every query below joins it.
 function salesRial(live: number | null = null) {
-  return sql`ROUND(o.total_cents::numeric * ${rate(live)} / 100)::float8`;
+  return sql`ROUND(o.total_cents::numeric * ${rate(live)} * s.share_bp / 1000000)::float8`;
 }
 function commissionRial(live: number | null = null) {
-  return sql`ROUND(o.total_cents::numeric * ${rate(live)} * o.commission_rate_bp / 1000000)::float8`;
+  return sql`ROUND(o.total_cents::numeric * ${rate(live)} * o.commission_rate_bp * s.share_bp / 10000000000)::float8`;
 }
 
 export type DeliveredRow = {
@@ -50,6 +55,10 @@ export type DeliveredRow = {
   company: string;
   salesRial: number;
   commissionRial: number;
+  /** This rep's share of the order, in basis points. */
+  shareBp: number;
+  /** The order's commission rate (the pot), in basis points. */
+  rateBp: number;
 };
 
 /** Every sale credited to the rep, oldest first. The dashboard's only large read. */
@@ -58,10 +67,12 @@ export async function listDeliveredForRep(repId: string, db: Db = sql): Promise<
     SELECT o.delivered_at AS "deliveredAt",
            COALESCE(o.user_id::text, 'order:' || o.company) AS "customerKey",
            COALESCE(u.company, o.company) AS company,
-           ${salesRial()} AS "salesRial", ${commissionRial()} AS "commissionRial"
-    FROM orders o LEFT JOIN users u ON u.id = o.user_id
-    WHERE o.rep_id = ${repId} AND o.status = 'delivered'
-    ORDER BY o.delivered_at
+           ${salesRial()} AS "salesRial", ${commissionRial()} AS "commissionRial",
+           s.share_bp AS "shareBp", o.commission_rate_bp AS "rateBp"
+    FROM orders o JOIN order_rep_shares s ON s.order_id = o.id
+    LEFT JOIN users u ON u.id = o.user_id
+    WHERE s.rep_id = ${repId} AND o.status = 'delivered'
+    ORDER BY o.delivered_at, o.id
   `;
   return Array.from(rows, (row) => ({ ...row, deliveredAt: toDate(row.deliveredAt) }));
 }
@@ -75,6 +86,12 @@ export type InProgressRow = {
   commissionRial: number;
   /** True until the order is invoiced and its rate frozen. */
   estimate: boolean;
+  /** This rep's share of the order, in basis points. */
+  shareBp: number;
+  /** The commission rate (the pot) in basis points; for a pending claim, the rep's current rate. */
+  rateBp: number;
+  /** Placed by this rep for an unassigned customer; earns only if it is paid and wins the customer. */
+  pendingClaim: boolean;
 };
 
 export async function listInProgressForRep(
@@ -82,14 +99,34 @@ export async function listInProgressForRep(
   liveRate: number,
   db: Db = sql,
 ): Promise<InProgressRow[]> {
+  // The second branch is an order this rep placed for a customer nobody owns
+  // yet: it has no share rows until it is paid and wins the customer, so it is
+  // shown as an estimate at the rep's current rate and counted nowhere else.
   const rows = await db<InProgressRow[]>`
-    SELECT o.ref, o.status, COALESCE(u.company, o.company) AS company,
-           o.created_at AS "createdAt",
-           ${salesRial(liveRate)} AS "salesRial", ${commissionRial(liveRate)} AS "commissionRial",
-           (o.fx_rate_to_rial IS NULL) AS estimate
-    FROM orders o LEFT JOIN users u ON u.id = o.user_id
-    WHERE o.rep_id = ${repId} AND o.status IN ('received', 'invoiced', 'payment_review', 'preparing', 'shipped')
-    ORDER BY o.created_at DESC
+    SELECT * FROM (
+      SELECT o.ref, o.status, COALESCE(u.company, o.company) AS company,
+             o.created_at AS "createdAt",
+             ${salesRial(liveRate)} AS "salesRial", ${commissionRial(liveRate)} AS "commissionRial",
+             (o.fx_rate_to_rial IS NULL) AS estimate,
+             s.share_bp AS "shareBp", o.commission_rate_bp AS "rateBp", false AS "pendingClaim"
+      FROM orders o JOIN order_rep_shares s ON s.order_id = o.id
+      LEFT JOIN users u ON u.id = o.user_id
+      WHERE s.rep_id = ${repId} AND o.status IN ('received', 'invoiced', 'payment_review', 'preparing', 'shipped')
+      UNION ALL
+      SELECT o.ref, o.status, COALESCE(u.company, o.company) AS company,
+             o.created_at AS "createdAt",
+             ROUND(o.total_cents::numeric * ${rate(liveRate)} / 100)::float8 AS "salesRial",
+             ROUND(o.total_cents::numeric * ${rate(liveRate)} * r.commission_rate_bp / 1000000)::float8 AS "commissionRial",
+             true AS estimate,
+             10000 AS "shareBp", r.commission_rate_bp AS "rateBp", true AS "pendingClaim"
+      FROM orders o JOIN sales_reps r ON r.id = o.placed_by_rep_id
+      LEFT JOIN users u ON u.id = o.user_id
+      WHERE o.placed_by_rep_id = ${repId} AND o.user_id IS NOT NULL
+        AND o.status IN ('received', 'invoiced', 'payment_review', 'preparing', 'shipped')
+        AND NOT EXISTS (SELECT 1 FROM order_rep_shares x WHERE x.order_id = o.id)
+        AND NOT EXISTS (SELECT 1 FROM customer_reps c WHERE c.user_id = o.user_id)
+    ) t
+    ORDER BY "createdAt" DESC
     LIMIT 200
   `;
   return Array.from(rows, (row) => ({ ...row, createdAt: toDate(row.createdAt) }));
@@ -98,8 +135,8 @@ export async function listInProgressForRep(
 export async function salesByCustomerForRep(repId: string, db: Db = sql): Promise<Map<string, number>> {
   const rows = await db<{ customerId: string; salesRial: number }[]>`
     SELECT o.user_id AS "customerId", SUM(${salesRial()})::float8 AS "salesRial"
-    FROM orders o
-    WHERE o.rep_id = ${repId} AND o.status = 'delivered' AND o.user_id IS NOT NULL
+    FROM orders o JOIN order_rep_shares s ON s.order_id = o.id
+    WHERE s.rep_id = ${repId} AND o.status = 'delivered' AND o.user_id IS NOT NULL
     GROUP BY o.user_id
   `;
   return new Map(rows.map((row) => [row.customerId, row.salesRial]));
@@ -112,7 +149,8 @@ export async function listRepTotals(db: Db = sql): Promise<Map<string, RepTotals
   const rows = await db<RepTotals[]>`
     SELECT r.id AS "repId",
            COALESCE((SELECT SUM(${commissionRial()}) FROM orders o
-                     WHERE o.rep_id = r.id AND o.status = 'delivered'), 0)::float8 AS "earnedRial",
+                     JOIN order_rep_shares s ON s.order_id = o.id
+                     WHERE s.rep_id = r.id AND o.status = 'delivered'), 0)::float8 AS "earnedRial",
            COALESCE((SELECT SUM(p.amount_rial) FROM rep_payouts p
                      WHERE p.rep_id = r.id AND p.voided_at IS NULL), 0)::float8 AS "paidRial"
     FROM sales_reps r
@@ -120,15 +158,15 @@ export async function listRepTotals(db: Db = sql): Promise<Map<string, RepTotals
   return new Map(rows.map((row) => [row.repId, row]));
 }
 
-/** Deliveries in the last `days`, for "this month" per rep — bucketed by the caller. */
+/** One row per (rep, delivered order) in the last `days`, for "this month" per rep — bucketed by the caller. */
 export async function listRecentDeliveries(
   days: number,
   db: Db = sql,
 ): Promise<{ repId: string; deliveredAt: Date; salesRial: number }[]> {
   const rows = await db<{ repId: string; deliveredAt: Date; salesRial: number }[]>`
-    SELECT o.rep_id AS "repId", o.delivered_at AS "deliveredAt", ${salesRial()} AS "salesRial"
-    FROM orders o
-    WHERE o.rep_id IS NOT NULL AND o.status = 'delivered'
+    SELECT s.rep_id AS "repId", o.delivered_at AS "deliveredAt", ${salesRial()} AS "salesRial"
+    FROM orders o JOIN order_rep_shares s ON s.order_id = o.id
+    WHERE o.status = 'delivered'
       AND o.delivered_at >= now() - make_interval(days => ${days})
   `;
   return Array.from(rows, (row) => ({ ...row, deliveredAt: toDate(row.deliveredAt) }));

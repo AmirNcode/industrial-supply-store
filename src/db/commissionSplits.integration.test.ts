@@ -19,6 +19,7 @@ import { sweepExpiredOrders } from "./expiryQueries";
 import { submitOrderFromCartInTransaction } from "./orderSubmissionQueries";
 import { quoteCartFingerprint } from "@/lib/quoteSubmission";
 import { splitCart } from "@/lib/checkoutSplit";
+import { listDeliveredForRep, listInProgressForRep, listRecentDeliveries, listRepTotals } from "./repMoney";
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 type Tx = TransactionSql<{}>;
@@ -776,6 +777,137 @@ test("admin assigned someone else before payment", async () => {
       assert.deepEqual(await listOf(id), [{ repId: c, shareBp: null }]);
       const [{ n }] = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM order_rep_shares WHERE order_id = ${orderId}`;
       assert.equal(n, 0);
+    }, [id]);
+  });
+});
+
+// ── Rep money by share. Delivered orders are built in a rolled-back
+// transaction with exactly the share rows submission would have written.
+
+async function deliveredWithShares(
+  tx: Tx,
+  fields: { totalCents: number; fx: number; rateBp: number; shares: { repId: string; shareBp: number }[] },
+): Promise<number> {
+  const [order] = await tx<{ id: number }[]>`
+    INSERT INTO orders (ref, company, contact_name, email, total_cents, requested_total_cents,
+                        status, commission_rate_bp, invoice_number, fx_rate_to_rial,
+                        created_at, invoiced_at, paid_at, shipped_at, delivered_at)
+    VALUES (${`ORD-${randomUUID().slice(0, 6).toUpperCase()}`}, 'Money Co', 'N', '',
+            ${fields.totalCents}, ${fields.totalCents}, 'delivered', ${fields.rateBp},
+            ${`INV-TEST-${randomUUID().slice(0, 8)}`}, ${fields.fx},
+            now() - interval '9 days', now() - interval '8 days', now() - interval '6 days',
+            now() - interval '4 days', now() - interval '2 days')
+    RETURNING id`;
+  for (const share of fields.shares) {
+    await tx`INSERT INTO order_rep_shares (order_id, rep_id, share_bp)
+             VALUES (${order.id}, ${share.repId}, ${share.shareBp})`;
+  }
+  return order.id;
+}
+
+// 10,000 cents at 1,000,000 rial per dollar: a sale of exactly 100,000,000 rial.
+const HUNDRED_MILLION = { totalCents: 10000, fx: 1_000_000 };
+
+test("one pot, then split", async () => {
+  assertLocalDatabase();
+  await rolledBack(async (tx) => {
+    const [a, b] = [await insertRep(tx), await insertRep(tx)];
+    await deliveredWithShares(tx, { ...HUNDRED_MILLION, rateBp: 500, shares: [
+      { repId: a, shareBp: 7500 }, { repId: b, shareBp: 2500 },
+    ] });
+    const [rowA] = await listDeliveredForRep(a, tx);
+    const [rowB] = await listDeliveredForRep(b, tx);
+    assert.deepEqual([rowA.salesRial, rowA.commissionRial, rowA.shareBp, rowA.rateBp], [75_000_000, 3_750_000, 7500, 500]);
+    assert.deepEqual([rowB.salesRial, rowB.commissionRial, rowB.shareBp, rowB.rateBp], [25_000_000, 1_250_000, 2500, 500]);
+  });
+});
+
+test("rep totals add up to the sale", async () => {
+  assertLocalDatabase();
+  await rolledBack(async (tx) => {
+    const [a, b] = [await insertRep(tx), await insertRep(tx)];
+    await deliveredWithShares(tx, { ...HUNDRED_MILLION, rateBp: 500, shares: [
+      { repId: a, shareBp: 7500 }, { repId: b, shareBp: 2500 },
+    ] });
+    const recent = (await listRecentDeliveries(30, tx)).filter((row) => row.repId === a || row.repId === b);
+    assert.equal(recent.length, 2);
+    assert.equal(recent.reduce((sum, row) => sum + row.salesRial, 0), 100_000_000);
+    const totals = await listRepTotals(tx);
+    assert.equal(totals.get(a)?.earnedRial, 3_750_000);
+    assert.equal(totals.get(b)?.earnedRial, 1_250_000);
+  });
+});
+
+test("uneven thirds", async () => {
+  assertLocalDatabase();
+  await rolledBack(async (tx) => {
+    const reps = [await insertRep(tx), await insertRep(tx), await insertRep(tx)];
+    await deliveredWithShares(tx, { totalCents: 100_000_001, fx: 100, rateBp: 333, shares: [
+      { repId: reps[0], shareBp: 3334 }, { repId: reps[1], shareBp: 3333 }, { repId: reps[2], shareBp: 3333 },
+    ] });
+    const rows = (await Promise.all(reps.map((rep) => listDeliveredForRep(rep, tx)))).map((r) => r[0]);
+    for (const row of rows) {
+      assert.ok(Number.isInteger(row.salesRial) && Number.isInteger(row.commissionRial));
+    }
+    const pot = Math.round(100_000_001 * 333 / 10000);
+    const sum = rows.reduce((total, row) => total + row.commissionRial, 0);
+    assert.ok(Math.abs(sum - pot) <= 2, `shares ${sum} vs pot ${pot}`);
+  });
+});
+
+test("inactive rep's share is paid to nobody", async () => {
+  assertLocalDatabase();
+  await rolledBack(async (tx) => {
+    const [a, b] = [await insertRep(tx), await insertRep(tx)];
+    // B was inactive at placement, so submission wrote no row for B (75/25 stays 75).
+    await deliveredWithShares(tx, { ...HUNDRED_MILLION, rateBp: 500, shares: [{ repId: a, shareBp: 7500 }] });
+    const totals = await listRepTotals(tx);
+    assert.equal(totals.get(a)?.earnedRial, 3_750_000);
+    assert.equal(totals.get(b)?.earnedRial, 0);
+    assert.deepEqual(await listDeliveredForRep(b, tx), []);
+  });
+});
+
+test("rate 0 credits the sale and no commission", async () => {
+  assertLocalDatabase();
+  await rolledBack(async (tx) => {
+    const a = await insertRep(tx);
+    await deliveredWithShares(tx, { ...HUNDRED_MILLION, rateBp: 0, shares: [{ repId: a, shareBp: 10000 }] });
+    const [row] = await listDeliveredForRep(a, tx);
+    assert.equal(row.salesRial, 100_000_000);
+    assert.equal(row.commissionRial, 0);
+  });
+});
+
+test("backfilled single-rep order is unchanged", async () => {
+  assertLocalDatabase();
+  await rolledBack(async (tx) => {
+    const repId = await insertRep(tx, { rateBp: 500 });
+    const userId = await insertCustomer(tx, { repId, earns: true });
+    await insertDeliveredOrder(tx, { userId, repId, rateBp: 500 }); // 10000 cents × 1,050,000
+    await runBackfill(tx);
+    const [row] = await listDeliveredForRep(repId, tx);
+    assert.equal(row.salesRial, Math.round(10000 * 1_050_000 / 100));
+    assert.equal(row.commissionRial, Math.round(10000 * 1_050_000 * 500 / 1_000_000));
+    assert.equal(row.shareBp, 10000);
+  });
+});
+
+test("pending claim shows as an estimate", async () => {
+  assertLocalDatabase();
+  await withCommitted(async (made) => {
+    const rep = await made.rep();
+    const id = await made.customer();
+    await withOrders(made, async (place) => {
+      const ref = refOf(await place(id, rep));
+      const rows = await listInProgressForRep(rep, 1_000_000);
+      const row = rows.find((r) => r.ref === ref);
+      assert.ok(row, "the pending order is listed");
+      assert.equal(row.pendingClaim, true);
+      assert.equal(row.estimate, true);
+      assert.equal(row.shareBp, 10000);
+      assert.equal(row.rateBp, 250);
+      assert.deepEqual(await listDeliveredForRep(rep), []);
     }, [id]);
   });
 });
