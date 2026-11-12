@@ -2,6 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireRep } from "@/lib/repSession";
 import { getCustomerForRep } from "@/db/customerQueries";
+import { listAccountReps } from "@/db/accountRepQueries";
+import { commissionPercentLabel } from "@/lib/repAccount";
 import { listNotes } from "@/db/noteQueries";
 import { listOrdersForUser } from "@/db/accountQueries";
 import {
@@ -57,12 +59,13 @@ export default async function RepCustomerPage({
   // id belongs to a customer.
   const customer = await getCustomerForRep(rep.id, id);
   if (!customer) notFound();
-  const [notes, orders, origin, liveRate, credential] = await Promise.all([
+  const [notes, orders, origin, liveRate, credential, accountReps] = await Promise.all([
     listNotes(id),
     listOrdersForUser(id),
     siteOrigin(),
     getFxRate(),
     ok === "created" || ok === "password" ? readShownOnce("customer", id) : Promise.resolve(null),
+    listAccountReps(id),
   ]);
   const errorKey = error && error in ERROR_KEY ? ERROR_KEY[error as keyof typeof ERROR_KEY] : null;
   const okKey = ok && ok in OK_KEY ? OK_KEY[ok as keyof typeof OK_KEY] : null;
@@ -93,6 +96,18 @@ export default async function RepCustomerPage({
           </button>
         </form>
       </div>
+
+      {/* Co-reps see each other's names and shares, never each other's money. */}
+      {accountReps.length > 1 && (
+        <p className="mb-3 text-[12px]" data-testid="rep-shared-account">
+          {t.repSharedAccount.replace(
+            "{list}",
+            accountReps
+              .map((r) => `${r.name} ${commissionPercentLabel(r.effectiveShareBp, l)}`)
+              .join(l === "fa" ? "، " : ", "),
+          )}
+        </p>
+      )}
 
       {credential && (
         <ShownOnceCredential

@@ -63,6 +63,22 @@ export default async function RepOrderPage({
   const payUrl = order.payToken ? `${origin}/${l}/pay/${order.payToken}` : null;
   const errorKey = error && error in ERROR_KEY ? ERROR_KEY[error as keyof typeof ERROR_KEY] : null;
   const rateBp = order.commissionRateBp ?? 0;
+  // An order placed for an unassigned customer carries no split until its
+  // payment is confirmed. Until then it may still win the customer; once it is
+  // past payment review with no split, someone else got there first. A
+  // cancelled one claims nothing and says nothing.
+  const PAID_STATES = ["preparing", "shipped", "delivered"];
+  const commissionLine = order.pendingClaim
+    ? order.status === "cancelled"
+      ? null
+      : PAID_STATES.includes(order.status)
+        ? t.repOrderLostClaim
+        : t.repOrderPendingClaim
+    : rateBp > 0 && order.myShareBp
+      ? t.repShareOfCommission
+          .replace("{share}", commissionPercentLabel(order.myShareBp, l))
+          .replace("{rate}", commissionPercentLabel(rateBp, l))
+      : t.commissionNone;
   // received = our quote is due, quoted = valid until, invoiced = pay by.
   const deadline =
     order.status === "cancelled" && order.expiredAt
@@ -104,12 +120,10 @@ export default async function RepOrderPage({
           <strong>{t.orderDeadline}:</strong> {deadline}
         </p>
       )}
-      {order.canAct && (
-          <p className="mb-3 text-[12px]" data-testid="commission-line">
-            {rateBp > 0
-              ? t.commissionLocked.replace("{percent}", commissionPercentLabel(rateBp, l))
-              : t.commissionNone}
-          </p>
+      {order.canAct && commissionLine && (
+        <p className="mb-3 text-[12px]" data-testid="commission-line">
+          {commissionLine}
+        </p>
       )}
 
       {!order.canAct && (

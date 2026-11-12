@@ -17,7 +17,7 @@ export default async function RepCommissionPage({
   const t = getDict(l);
   const rep = await requireRep(l);
   // One round of reads: the rate is needed only by the in-progress list.
-  const [{ summary, payouts }, inProgress] = await Promise.all([
+  const [{ summary, payouts, delivered }, inProgress] = await Promise.all([
     loadRepSummary(rep.id),
     getFxRate().then((liveRate) => listInProgressForRep(rep.id, liveRate)),
   ]);
@@ -27,7 +27,13 @@ export default async function RepCommissionPage({
       <h1 className="mb-3 border-b border-[var(--color-ink)] pb-1 text-[17px] font-bold">
         {t.commission}
       </h1>
-      <CommissionReport locale={l} summary={summary} payouts={payouts} inProgress={inProgress} />
+      <CommissionReport
+        locale={l}
+        summary={summary}
+        payouts={payouts}
+        inProgress={inProgress}
+        delivered={delivered}
+      />
     </>
   );
 }

@@ -1,6 +1,12 @@
 import { test, expect, type Page } from "@playwright/test";
 import { getDict, type Locale } from "../src/lib/i18n";
 import { formatRial } from "../src/lib/money";
+import { hashPassword } from "../src/lib/password";
+import { normalizeRepPassword } from "../src/lib/repPassword";
+import { randomReferralCode } from "../src/lib/repAccount";
+import { codeFromPhone } from "../src/lib/customerCode";
+import { expectNoAccessibilityViolations } from "./accessibility";
+import { addToCart, freshAddressHeader, localSql } from "./shop";
 
 const locales: Locale[] = ["en", "fa"];
 const familySlug = "oil-resistant-buna-n-o-rings";
@@ -217,5 +223,170 @@ for (const locale of locales) {
       repContext.close(),
       visitorContext.close(),
     ]);
+  });
+}
+
+// ── Project B: reps find unassigned customers, order for them, and win them
+// when the order is paid; another rep sees only who the customer belongs to.
+
+const sql = localSql();
+test.afterAll(() => sql.end());
+const REP_PASSWORD = "E2e-Rep-Pass-1405!";
+
+async function pricedPartNumber(): Promise<string> {
+  const [row] = await sql<{ part: string }[]>`
+    SELECT p.part_number AS part
+    FROM products p JOIN product_families f ON f.id = p.family_id
+    WHERE f.slug = ${familySlug} AND p.price_cents > 0
+    ORDER BY p.id
+    LIMIT 1
+  `;
+  if (!row) throw new Error(`${familySlug} has no priced part.`);
+  return row.part;
+}
+
+/** The seed script still writes only the legacy columns, so this spec makes its own reps and customer. */
+async function makeRep(name: string, username: string): Promise<string> {
+  const [rep] = await sql<{ id: string }[]>`
+    INSERT INTO sales_reps (username, password_hash, name, phone, commission_rate_bp, referral_code, must_change_password)
+    VALUES (${username}, ${await hashPassword(normalizeRepPassword(REP_PASSWORD))}, ${name}, '09120000000', 300,
+            ${randomReferralCode()}, false)
+    RETURNING id`;
+  return rep.id;
+}
+
+async function repSignIn(page: Page, locale: Locale, username: string): Promise<void> {
+  const t = getDict(locale);
+  await page.goto(`/${locale}/rep/signin`);
+  await page.locator('input[name="username"]').fill(username);
+  await page.locator('input[name="password"]').fill(REP_PASSWORD);
+  await page.getByRole("button", { name: t.signInTitle }).click();
+  await expect(page).toHaveURL(new RegExp(`/${locale}/rep(\\?|$)`));
+}
+
+for (const locale of locales) {
+  test(`${locale}: a rep wins an unassigned customer by a paid order; another rep sees only who has them`, async (
+    { browser, isMobile },
+    testInfo,
+  ) => {
+    test.skip(isMobile, "The desktop project covers the rep flow.");
+    const t = getDict(locale);
+    const stamp = `${locale}${testInfo.workerIndex}${Date.now()}`;
+    const fragment = `zq${stamp}`;
+    const company = `E2E Unassigned ${fragment}`;
+    const nameA = `E2E Rep A ${stamp}`;
+    const nameB = `E2E Rep B ${stamp}`;
+    await makeRep(nameA, `e2e.a.${stamp}`.slice(0, 32));
+    await makeRep(nameB, `e2e.b.${stamp}`.slice(0, 32));
+    const phone = `0912${String(Date.now()).slice(-7)}`;
+    const [customer] = await sql<{ id: string }[]>`
+      INSERT INTO users (email, password_hash, company, contact_name, phone, locale, customer_code, origin)
+      VALUES (${`${fragment}@example.invalid`}, '!', ${company}, 'E2E Lead', ${phone}, ${locale},
+              ${codeFromPhone(phone)!}, 'self')
+      RETURNING id`;
+    const part = await pricedPartNumber();
+
+    const ctx = () => browser.newContext({ extraHTTPHeaders: freshAddressHeader() });
+    const [adminContext, contextA, contextB] = await Promise.all([ctx(), ctx(), ctx()]);
+    const [admin, repA, repB] = await Promise.all([
+      adminContext.newPage(),
+      contextA.newPage(),
+      contextB.newPage(),
+    ]);
+
+    // Rep A: a short fragment is refused, a long one finds the unassigned customer.
+    await repSignIn(repA, locale, `e2e.a.${stamp}`.slice(0, 32));
+    await repA.goto(`/${locale}/rep/customers?q=zq`);
+    await expect(repA.getByText(t.repSearchTooShort)).toBeVisible();
+    await repA.goto(`/${locale}/rep/customers?q=${fragment}`);
+    const found = repA.getByTestId("rep-search-unassigned");
+    await expect(found).toHaveCount(1);
+    await expect(found).toContainText(company);
+    await expect(found).toContainText(t.repUnassigned);
+    await expect(found).toContainText(phone);
+    await expectNoAccessibilityViolations(repA, testInfo);
+
+    // "New order" from the result, then one priced line, then the form.
+    await found.getByRole("button", { name: t.newOrder }).click();
+    await expect(repA).toHaveURL(new RegExp(`/${locale}/quick-order$`));
+    await addToCart(repA, locale, familySlug, { partNumber: part });
+    await repA.goto(`/${locale}/quote`);
+    await expect(repA.getByTestId("rep-order-unassigned")).toHaveText(t.repOrderUnassignedNote);
+    await expect(repA.locator('input[name="company"]')).toHaveValue(company);
+    // Only what is needed to order: no email, no PO number field.
+    await expect(repA.locator('input[name="email"]')).toHaveCount(0);
+    await expect(repA.locator("body")).not.toContainText(`${fragment}@example.invalid`);
+    await repA.locator('input[name="address"]').fill("3 Claim Street");
+    await repA.locator('input[name="city"]').fill("Karaj");
+    await expectNoAccessibilityViolations(repA, testInfo);
+    await repA.getByRole("button", { name: t.repPlaceOrder }).click();
+    await expect(repA).toHaveURL(new RegExp(`/${locale}/rep/orders/ORD-`));
+    const orderUrl = repA.url().split("?")[0];
+    await expect(repA.getByTestId("commission-line")).toHaveText(t.repOrderPendingClaim);
+    await expectNoAccessibilityViolations(repA, testInfo);
+
+    // Not a customer of A's yet, and its commission is tagged, not counted.
+    await repA.goto(`/${locale}/rep/customers`);
+    await expect(repA.getByText(company)).toHaveCount(0);
+    await repA.goto(`/${locale}/rep/commission`);
+    await expect(repA.getByTestId("pending-claim")).toBeVisible();
+    await expect(repA.getByTestId("commission-expected-total")).toHaveText(formatRial(0, locale));
+    await expectNoAccessibilityViolations(repA, testInfo);
+
+    // Depending on stock the order is quoted first or already a pro forma.
+    await repA.goto(orderUrl);
+    if (await repA.getByRole("link", { name: t.sendQuote }).isVisible()) {
+      await repA.getByRole("link", { name: t.sendQuote }).click();
+      await repA.getByRole("button", { name: t.sendQuote }).click();
+      await repA
+        .getByRole("dialog", { name: t.confirmSendQuote })
+        .getByRole("button", { name: t.confirmContinue })
+        .click();
+      await expect(repA).toHaveURL(/ok=quoted/);
+      await repA.getByRole("button", { name: t.acceptForCustomer }).click();
+      await expect(repA).toHaveURL(/ok=invoiced/);
+    }
+
+    // The admin confirms payment: that is what makes the customer A's.
+    await adminSignIn(admin, locale);
+    await admin.goto(`/${locale}/admin/orders`);
+    const row = admin.locator("details").filter({ hasText: company }).first();
+    if ((await row.getAttribute("open")) === null) await row.locator("summary").click();
+    await row.getByRole("button", { name: t.markPaid }).click();
+    await admin
+      .getByRole("dialog", { name: t.confirmMarkPaid })
+      .getByRole("button", { name: t.confirmContinue })
+      .click();
+    await expect(row.locator("summary")).toContainText(t.statusPreparing);
+
+    await repA.goto(orderUrl);
+    await expect(repA.getByTestId("commission-line")).not.toHaveText(t.repOrderPendingClaim);
+    await expect(repA.getByTestId("commission-line")).not.toHaveText(t.repOrderLostClaim);
+    await repA.goto(`/${locale}/rep/customers?q=${fragment}`);
+    await expect(repA.getByRole("link", { name: company })).toBeVisible();
+    await expect(repA.getByTestId("rep-search-unassigned")).toHaveCount(0);
+
+    // Rep B: the same search shows one plain line, no link, no id anywhere.
+    await repSignIn(repB, locale, `e2e.b.${stamp}`.slice(0, 32));
+    await repB.goto(`/${locale}/rep/customers?q=${fragment}`);
+    const taken = repB.getByTestId("rep-search-taken");
+    await expect(taken).toHaveCount(1);
+    await expect(taken).toContainText(t.repAssignedTo.replace("{name}", nameA));
+    await expect(taken.locator("a, button")).toHaveCount(0);
+    await expect(repB.getByTestId("rep-search-unassigned")).toHaveCount(0);
+    expect(await repB.content()).not.toContain(customer.id);
+    await expectNoAccessibilityViolations(repB, testInfo);
+
+    // Typing the id into the order link is refused the same way, with no form.
+    await addToCart(repB, locale, familySlug, { partNumber: part });
+    await repB.goto(`/${locale}/quote?for=${customer.id}`);
+    await expect(repB.getByTestId("rep-order-taken")).toHaveText(t.repOrderTaken.replace("{name}", nameA));
+    await expect(repB.locator('input[name="company"]')).toHaveCount(0);
+    await expectNoAccessibilityViolations(repB, testInfo);
+    // The customer's own page is a 404 for B.
+    const response = await repB.goto(`/${locale}/rep/customers/${customer.id}`);
+    expect(response?.status()).toBe(404);
+
+    await Promise.all([adminContext.close(), contextA.close(), contextB.close()]);
   });
 }
