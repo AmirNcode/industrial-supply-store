@@ -1,7 +1,7 @@
 import "server-only";
-import { sql } from "@/db";
 import type { AuditActor } from "@/db/audit";
 import { sweepExpiredOrders, type SweepResult } from "@/db/expiryQueries";
+import { getOrderForMail } from "@/db/orderMailQueries";
 import { issuePishFactor, type IssueOutcome } from "@/db/invoiceQueries";
 import type { PlacedOrder } from "@/db/orderSubmissionQueries";
 import { emailOrigin, sendEmail } from "./email";
@@ -62,13 +62,7 @@ type MailOrder = {
 };
 
 async function mailOrder(id: number): Promise<MailOrder | null> {
-  const [row] = await sql<(Omit<MailOrder, "locale" | "currency"> & { locale: string; currency: string })[]>`
-    SELECT id, ref, company, contact_name AS "contactName", phone, email, locale, currency,
-           total_cents AS "totalCents", fx_rate_to_rial AS "fxRateToRial",
-           vat_rate_bp AS "vatRateBp", expires_at AS "expiresAt",
-           invoice_number AS "invoiceNumber", pay_token AS "payToken"
-    FROM orders WHERE id = ${id}
-  `;
+  const row = await getOrderForMail(id);
   if (!row) return null;
   return { ...row, locale: row.locale === "fa" ? "fa" : "en", currency: row.currency === "USD" ? "USD" : "IRR" };
 }

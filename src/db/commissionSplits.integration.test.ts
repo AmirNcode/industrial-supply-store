@@ -31,6 +31,7 @@ import { listOrdersForRep, getOrderForRep, repCanActOnOrder } from "./repOrderQu
 import { createUser, getRepContactForUser } from "./userQueries";
 import { deactivateRep, listReps } from "./repQueries";
 import { confirmPayment, addPaymentProof } from "./paymentProofQueries";
+import { getOrderForMail } from "./orderMailQueries";
 import { sweepExpiredOrders } from "./expiryQueries";
 import { submitOrderFromCartInTransaction } from "./orderSubmissionQueries";
 import { quoteCartFingerprint } from "@/lib/quoteSubmission";
@@ -1329,5 +1330,23 @@ test("taken customers match on company, exact ID or a full phone only", async ()
     assert.equal(await found(digits), true, "full phone");
     const persian = `0${digits}`.replace(/\d/g, (d) => "۰۱۲۳۴۵۶۷۸۹"[Number(d)]);
     assert.equal(await found(persian), true, "Persian-digit phone");
+  });
+});
+
+test("a rep order for an unassigned customer stores no email, and its mail goes to the account", async () => {
+  assertLocalDatabase();
+  await withCommitted(async (made) => {
+    const rep = await made.rep();
+    const id = await made.customer();
+    const [account] = await sql<{ email: string }[]>`SELECT email FROM users WHERE id = ${id}`;
+    await withOrders(made, async (place) => {
+      const ref = refOf(await place(id, rep));
+      const [stored] = await sql<{ id: number; email: string }[]>`SELECT id, email FROM orders WHERE ref = ${ref}`;
+      assert.equal(stored.email, "");
+      assert.equal((await getOrderForMail(stored.id))?.email, account.email);
+      // An order that carries its own email keeps it.
+      await sql`UPDATE orders SET email = 'own@example.invalid' WHERE id = ${stored.id}`;
+      assert.equal((await getOrderForMail(stored.id))?.email, "own@example.invalid");
+    }, [id]);
   });
 });

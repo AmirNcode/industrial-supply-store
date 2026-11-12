@@ -7,6 +7,8 @@ import { commissionPercentLabel } from "@/lib/repAccount";
 import { OrderStatusPill } from "./OrderStatusPill";
 import { ConfirmSubmit } from "./ConfirmSubmit";
 
+const DELIVERED_SHOWN = 100;
+
 /**
  * What a rep has earned, been paid and is owed — the same report on the rep's
  * commission page and the admin's rep page, where each payout can also be
@@ -40,7 +42,6 @@ export function CommissionReport({
   const rial = (value: number) => formatRial(value, locale);
   const section = "mb-4 border border-[var(--color-rule)] p-3";
   const expectedTotal = inProgress.reduce((sum, order) => sum + (order.pendingClaim ? 0 : order.commissionRial), 0);
-  const DELIVERED_SHOWN = 100;
 
   return (
     <>

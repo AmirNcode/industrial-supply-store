@@ -303,11 +303,15 @@ async function submitForCustomer(rep: RepRow, locale: Locale, formData: FormData
     formData.set("postalCode", savedAddress.postalCode);
   }
 
-  // The form for an unassigned customer carries neither their email nor a PO
-  // number, so the fields are missing rather than empty. The pish-factor still
-  // goes to the address on file, which stays on the server.
-  if (!formData.has("email")) formData.set("email", customer.email ?? "");
-  if (!formData.has("poNumber")) formData.set("poNumber", "");
+  // An unassigned customer is not the rep's yet: the order is stored without
+  // their email or PO number, whatever was posted (the form never shows them,
+  // and a posted value is not trusted for a field the form omits). Their
+  // emails still reach them: the recipient is resolved from the account at
+  // send time (`getOrderForMail`), so the address never sits on a rep-readable order.
+  if (found.kind === "unassigned") {
+    formData.set("email", "");
+    formData.set("poNumber", "");
+  }
   const parsed = parseContact(formData, false);
   if ("error" in parsed) redirect(`${again}&error=${parsed.error}`);
 

@@ -322,6 +322,11 @@ for (const locale of locales) {
     await repA.getByRole("button", { name: t.repPlaceOrder }).click();
     await expect(repA).toHaveURL(new RegExp(`/${locale}/rep/orders/ORD-`));
     const orderUrl = repA.url().split("?")[0];
+    // The order carries no email at all: the rep cannot read the customer's
+    // address off it, whatever the form posted; mail still goes to the account.
+    const [stored] = await sql<{ email: string }[]>`SELECT email FROM orders WHERE ref = ${orderUrl.split("/").pop()!}`;
+    expect(stored.email).toBe("");
+    await expect(repA.locator("body")).not.toContainText(`${fragment}@example.invalid`);
     await expect(repA.getByTestId("commission-line")).toHaveText(t.repOrderPendingClaim);
     await expectNoAccessibilityViolations(repA, testInfo);
 

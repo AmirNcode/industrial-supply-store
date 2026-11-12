@@ -12,9 +12,8 @@ import { RepSearchResults } from "@/components/RepSearchResults";
 import { ErrorBanner } from "@/components/Banners";
 import { RATE_LIMITS, consumeRateLimit } from "@/lib/rateLimit";
 import { salesByCustomerForRep } from "@/db/repMoney";
-import { formatRial } from "@/lib/money";
+import { formatInt, formatRial } from "@/lib/money";
 import { formatPersianDate, formatPersianDay, tehranToday } from "@/lib/persianCalendar";
-import { formatInt } from "@/lib/money";
 import { REQUEST_LIMITS } from "@/lib/requestLimits";
 import { isLocale, getDict, type Locale } from "@/lib/i18n";
 
