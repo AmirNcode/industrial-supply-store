@@ -1300,3 +1300,34 @@ test("a placing rep deactivated before payment does not win the customer", async
     }, [id]);
   });
 });
+
+test("taken customers match on company, exact ID or a full phone only", async () => {
+  assertLocalDatabase();
+  await inScope(async (s) => {
+    const [cTag, eTag, kTag] = [tagOf(), tagOf(), tagOf()];
+    const [me, other] = [await s.rep(), await s.rep("Other Rep")];
+    const code = randomCustomerCode();
+    const digits = String(Math.floor(1_000_000_000 + Math.random() * 8_000_000_000)); // 10 digits, no leading 0
+    const taken = await s.customer({
+      company: `Held ${cTag} Co`, contact: `Person ${kTag}`, code, phone: `0${digits.slice(0, 3)} ${digits.slice(3)}`,
+    });
+    await sql`UPDATE users SET email = ${`mail${eTag}@example.invalid`} WHERE id = ${taken}`;
+    assert.equal(await setAccountReps(taken, [{ repId: other, shareBp: null }], null), "ok");
+    const found = async (search: string) =>
+      (await searchBeyondMine(me, search)).taken.some((row) => row.company === `Held ${cTag} Co`);
+
+    // Attributes of someone else's customer must not be confirmable.
+    assert.equal(await found(`mail${eTag}`), false, "email fragment");
+    assert.equal(await found(`person ${kTag}`), false, "contact name fragment");
+    assert.equal(await found(kTag), false, "contact name fragment");
+    assert.equal(await found(digits.slice(0, 3)), false, "3-digit phone fragment");
+    assert.equal(await found(digits.slice(0, 6)), false, "6-digit phone fragment");
+
+    assert.equal(await found(`held ${cTag}`), true, "company fragment");
+    assert.equal(await found(code), true, "exact customer ID");
+    assert.equal(await found(`0${digits.slice(0, 6)}`), true, "7-digit phone run");
+    assert.equal(await found(digits), true, "full phone");
+    const persian = `0${digits}`.replace(/\d/g, (d) => "۰۱۲۳۴۵۶۷۸۹"[Number(d)]);
+    assert.equal(await found(persian), true, "Persian-digit phone");
+  });
+});

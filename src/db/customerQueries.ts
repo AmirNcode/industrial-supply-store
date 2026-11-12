@@ -82,6 +82,26 @@ function matches(search: string) {
               OR u.contact_name ILIKE ${like} OR u.email ILIKE ${like} ${phone})`;
 }
 
+/**
+ * What a rep may match against a customer who is not theirs: the company by
+ * substring, the customer ID exactly, and the phone only from a full number
+ * (seven or more digits, as a caller would give it). Never the email or
+ * contact name, and no short digit run: any match confirms that attribute of a
+ * customer the rep has no right to, even though only the company is returned.
+ */
+const TAKEN_PHONE_MIN_DIGITS = 7;
+function matchesTaken(search: string) {
+  const text = latinDigits(search.trim());
+  const like = `%${escapeLike(text)}%`;
+  const digits = text.replace(/\D/g, "");
+  const phone =
+    digits.length >= TAKEN_PHONE_MIN_DIGITS
+      ? sql`OR regexp_replace(translate(u.phone, '۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩', '01234567890123456789'),
+                              '[^0-9]', '', 'g') LIKE ${`%${digits}%`}`
+      : sql`OR FALSE`;
+  return sql`(u.customer_code = ${text} OR u.company ILIKE ${like} ${phone})`;
+}
+
 // ── Rep-scoped. Every statement carries "this customer is on my list"
 // (`onMyList`, the `customer_reps` row) in its own WHERE, so a customer id
 // posted for someone else's customer matches nothing — the ownership rule is
@@ -153,7 +173,7 @@ export async function searchBeyondMine(
       SELECT u.customer_code AS "customerCode", COALESCE(u.company, '') AS company,
              (SELECT r.name FROM sales_reps r WHERE r.id = ${leadRepSql()}) AS "assignedTo"
       FROM users u
-      WHERE NOT ${unassigned()} AND NOT ${onMyList(repId)} AND ${matches(search)}
+      WHERE NOT ${unassigned()} AND NOT ${onMyList(repId)} AND ${matchesTaken(search)}
       ORDER BY u.company, u.customer_code
       LIMIT ${REP_SEARCH_TAKEN_MAX}
     `,
