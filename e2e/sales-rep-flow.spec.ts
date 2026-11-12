@@ -88,15 +88,7 @@ for (const locale of locales) {
     // request that remembers which customer this order is for.
     await rep.getByRole("button", { name: t.newOrder }).click();
     await expect(rep).toHaveURL(new RegExp(`/${locale}/quick-order$`));
-    await rep.goto(`/${locale}/f/${familySlug}`);
-    await rep.locator("label.row-expand").first().click();
-    await rep
-      .getByRole("spinbutton", { name: new RegExp(t.qty) })
-      .first()
-      .fill("1");
-    const add = rep.getByRole("button", { name: t.addToOrder }).first();
-    await add.click();
-    await expect(add).toHaveText("✓");
+    await addToCart(rep, locale, familySlug, { partNumber: await pricedPartNumber() });
     await rep.goto(`/${locale}/quote`);
     await expect(rep.locator('input[name="company"]')).toHaveValue(company);
     // Delivery address and city are required for every order, a rep's too.
