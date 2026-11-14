@@ -2,7 +2,8 @@
 
 import { Suspense, useEffect, useId, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { getDict, type Locale } from "@/lib/i18n";
+import type { Locale } from "@/lib/locale";
+import type { SEARCH_BAR_TEXT, TextFor } from "@/lib/clientText";
 import type { Suggestion } from "@/db/queries";
 import { REQUEST_LIMITS } from "@/lib/requestLimits";
 
@@ -33,16 +34,17 @@ function Magnifier() {
  * route. Before hydration the search still works as a plain GET, and the markup
  * React swaps in is identical, so nothing moves when it arrives.
  */
-export function SearchBar({ locale }: { locale: Locale }) {
+type SearchBarProps = { locale: Locale; t: TextFor<typeof SEARCH_BAR_TEXT> };
+
+export function SearchBar({ locale, t }: SearchBarProps) {
   return (
-    <Suspense fallback={<SearchField locale={locale} />}>
-      <LiveSearchBar locale={locale} />
+    <Suspense fallback={<SearchField locale={locale} t={t} />}>
+      <LiveSearchBar locale={locale} t={t} />
     </Suspense>
   );
 }
 
-function SearchField({ locale }: { locale: Locale }) {
-  const t = getDict(locale);
+function SearchField({ locale, t }: SearchBarProps) {
   return (
     <div className="relative">
       <form action={`/${locale}/search`} className={FORM_CLASS}>
@@ -68,8 +70,7 @@ function SearchField({ locale }: { locale: Locale }) {
  * route handler rather than a server action so the request can be aborted when
  * the buyer keeps typing — abandoned keystrokes should not queue up work.
  */
-function LiveSearchBar({ locale }: { locale: Locale }) {
-  const t = getDict(locale);
+function LiveSearchBar({ locale, t }: SearchBarProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const submittedQuery = searchParams.get("q") ?? "";

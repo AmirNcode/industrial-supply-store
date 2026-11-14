@@ -3,7 +3,8 @@
 import { useEffect, useId, useRef } from "react";
 import Link from "next/link";
 import type { Facet, SpecDefRow, Filters } from "@/db/queries";
-import { getDict, pick, type Locale } from "@/lib/i18n";
+import { pick, type Locale } from "@/lib/locale";
+import type { MOBILE_FILTER_TEXT, TextFor } from "@/lib/clientText";
 import { specValueLabel } from "@/lib/specValues";
 import { formatSpecNumber, formatInt } from "@/lib/money";
 import {
@@ -27,6 +28,7 @@ import { useModalFocus } from "@/lib/useModalFocus";
  */
 export function MobileFilterBar({
   locale,
+  t,
   base,
   searchParams,
   facets,
@@ -35,6 +37,7 @@ export function MobileFilterBar({
   total,
 }: {
   locale: Locale;
+  t: TextFor<typeof MOBILE_FILTER_TEXT>;
   base: string;
   searchParams: RawSearchParams;
   facets: Facet[];
@@ -42,7 +45,6 @@ export function MobileFilterBar({
   filters: Filters;
   total: number;
 }) {
-  const t = getDict(locale);
   const [open, setOpen] = useRouteDisclosure();
   const active = countActiveFilters(filters);
   const openerRef = useRef<HTMLButtonElement>(null);

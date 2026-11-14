@@ -33,7 +33,7 @@ export default async function RepNewCustomerPage({
   return (
     <>
       <p className="mb-2 text-[12px]">
-        <Link href={`/${l}/rep/customers`}>← {t.customers}</Link>
+        <Link href={`/${l}/rep/customers`}><span aria-hidden="true" className="inline-block rtl:rotate-180">←</span> {t.customers}</Link>
       </p>
       <h1 className="mb-3 border-b border-[var(--color-ink)] pb-1 text-[17px] font-bold">
         {t.newCustomer}

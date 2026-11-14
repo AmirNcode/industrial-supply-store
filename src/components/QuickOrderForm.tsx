@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useActionState } from "react";
 import { quickOrderAction, type QuickOrderResult } from "@/app/actions";
-import { getDict, type Locale } from "@/lib/i18n";
+import type { Locale } from "@/lib/locale";
+import type { QUICK_ORDER_TEXT, TextFor } from "@/lib/clientText";
 import { formatInt } from "@/lib/money";
 import { REQUEST_LIMITS } from "@/lib/requestLimits";
 
@@ -13,8 +14,13 @@ import { REQUEST_LIMITS } from "@/lib/requestLimits";
  * match. Silently dropping unmatched lines would be the worst possible failure
  * mode for a buyer working from a bill of materials.
  */
-export function QuickOrderForm({ locale }: { locale: Locale }) {
-  const t = getDict(locale);
+export function QuickOrderForm({
+  locale,
+  t,
+}: {
+  locale: Locale;
+  t: TextFor<typeof QUICK_ORDER_TEXT>;
+}) {
   const [state, formAction, pending] = useActionState<QuickOrderResult | null, FormData>(
     quickOrderAction,
     null,
@@ -27,6 +33,7 @@ export function QuickOrderForm({ locale }: { locale: Locale }) {
           name="lines"
           rows={10}
           placeholder={t.quickOrderPlaceholder}
+          aria-label={t.quickOrder}
           maxLength={REQUEST_LIMITS.quickOrderBytes}
           spellCheck={false}
           dir="ltr"
@@ -45,7 +52,7 @@ export function QuickOrderForm({ locale }: { locale: Locale }) {
       {state && (
         <div className="mt-4 border-t border-[var(--color-rule)] pt-3">
           {state.error && (
-            <p className="mb-3 border border-[#e0b4b0] bg-[#fdf2f1] px-3 py-2 text-[12px] text-[var(--color-danger)]">
+            <p role="alert" className="mb-3 border border-[#e0b4b0] bg-[#fdf2f1] px-3 py-2 text-[12px] text-[var(--color-danger)]">
               {state.error === "too-large"
                 ? t.requestTooLarge
                 : state.error === "cart-full"

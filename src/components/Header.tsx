@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getDict, type Locale } from "@/lib/i18n";
+import { MOBILE_HEADER_TEXT, SEARCH_BAR_TEXT, textFor } from "@/lib/clientText";
 import { SearchBar } from "./SearchBar";
 import { LocaleSwitch } from "./LocaleSwitch";
 import { CartLink } from "./CartLink";
@@ -37,7 +38,7 @@ export async function Header({ locale }: { locale: Locale }) {
       <MastheadReveal />
 
       <div className="bg-[var(--color-navy)]">
-        <MobileHeader locale={locale} contact={contact} />
+        <MobileHeader locale={locale} contact={contact} t={textFor(t, MOBILE_HEADER_TEXT)} />
 
         {/* The tagline keeps the top line but gives up the wordmark that used to
             sit beside it, so this is now a thin strip rather than a branding
@@ -84,7 +85,7 @@ export async function Header({ locale }: { locale: Locale }) {
           {/* Capped rather than filling the bar: a search field the width of a
               desktop window is harder to aim at, not easier. */}
           <div className="min-w-0 max-w-[560px] flex-1">
-            <SearchBar locale={locale} />
+            <SearchBar locale={locale} t={textFor(t, SEARCH_BAR_TEXT)} />
           </div>
 
           <div className="ms-auto shrink-0 text-end">

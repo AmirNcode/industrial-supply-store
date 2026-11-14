@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   commissionPercentLabel,
+  repMayEditEmail,
   repMayResetPassword,
   formatCommissionPercent,
   isReferralCode,
@@ -69,4 +70,13 @@ test("a rep may reset only a customer they created who has never chosen a passwo
   assert.equal(repMayResetPassword(own, "rep-b"), false);
   assert.equal(repMayResetPassword({ origin: "self", originRepId: null, choseOwnPassword: false }, "rep-a"), false);
   assert.equal(repMayResetPassword({ ...own, origin: "referral" }, "rep-a"), false);
+});
+
+test("a rep may change the email only of an unverified customer they created", () => {
+  const own = { origin: "rep", originRepId: "rep-a", choseOwnPassword: false, emailVerified: false };
+  assert.equal(repMayEditEmail(own, "rep-a"), true);
+  assert.equal(repMayEditEmail({ ...own, emailVerified: true }, "rep-a"), false);
+  assert.equal(repMayEditEmail({ ...own, choseOwnPassword: true }, "rep-a"), false);
+  assert.equal(repMayEditEmail(own, "rep-b"), false);
+  assert.equal(repMayEditEmail({ ...own, origin: "self", originRepId: null }, "rep-a"), false);
 });

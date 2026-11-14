@@ -14,7 +14,7 @@ import {
   listCustomersForRep,
   searchBeyondMine,
 } from "@/db/customerQueries";
-import { RATE_LIMITS, consumeRateLimit } from "@/lib/rateLimit";
+import { repCustomerSearchAllowed } from "@/lib/rateLimit";
 import { readOrderingFor } from "@/lib/repOrderContext";
 import { isUuid } from "@/lib/ids";
 import { RepQuoteForm } from "./RepQuoteForm";
@@ -28,6 +28,7 @@ import QuoteSubmitButton from "@/components/QuoteSubmitButton";
 import { splitCart } from "@/lib/checkoutSplit";
 import { pishFactorTerms, runExpirySweep } from "@/lib/orderFlow";
 import { listAddresses } from "@/db/addressQueries";
+import { FormDraft } from "@/components/FormDraft";
 import { DeliveryFields, ErrorNote, Field, NotesField, OrderSummary, TaxFields, checkoutView } from "./CheckoutParts";
 import { REQUEST_LIMITS } from "@/lib/requestLimits";
 
@@ -93,7 +94,7 @@ export default async function QuotePage({
     const wide = search.trim().length >= REP_SEARCH_MIN_CHARS;
     // Bounded per rep: the wider search reaches customers nobody looks after.
     const limited = wide
-      ? !(await consumeRateLimit("rep:customer-search", RATE_LIMITS.repCustomerSearch, { accountId: rep.id })).allowed
+      ? !(await repCustomerSearchAllowed(rep.id))
       : false;
     const [mine, beyond, savedAddresses] = await Promise.all([
       search.trim() ? listCustomersForRep(rep.id, search, 1).then((r) => r.rows) : Promise.resolve([]),
@@ -164,6 +165,7 @@ export default async function QuotePage({
       <form action={submitQuoteAction} className="grid gap-4 md:grid-cols-[1fr_300px]">
         <input type="hidden" name="locale" value={l} />
         <input type="hidden" name="submissionToken" value={submissionToken} />
+        <FormDraft storageKey="checkout" restore={Boolean(error)} />
 
         <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))] self-start">
           <Field name="company" label={t.company} maxLength={REQUEST_LIMITS.companyChars} required defaultValue={user?.company} />

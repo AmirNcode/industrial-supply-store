@@ -1,6 +1,7 @@
 import "server-only";
 
 import { cache } from "react";
+import { getSmallSettings } from "./appSettings";
 import { sql } from "@/db";
 import { MAX_VAT_RATE_BP } from "./vat";
 
@@ -13,10 +14,7 @@ const KEY_VAT_RATE = "vat_rate_bp";
  * `orders.vat_rate_bp`, never this.
  */
 export const getVatRateBp = cache(async (): Promise<number> => {
-  const [row] = await sql<{ value: string }[]>`
-    SELECT value FROM app_settings WHERE key = ${KEY_VAT_RATE}
-  `;
-  const bp = Number(row?.value);
+  const bp = Number((await getSmallSettings()).get(KEY_VAT_RATE));
   return Number.isInteger(bp) && bp >= 0 && bp <= MAX_VAT_RATE_BP ? bp : 0;
 });
 

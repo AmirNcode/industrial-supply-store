@@ -209,7 +209,7 @@ export default async function AccountPage({
         <div className="px-3 pb-3 pt-3">
           {ok === "address" && <Ok>{t.addressSaved}</Ok>}
           {addressErrorKey && (
-            <p className="mb-3 border border-[#e0b4b0] bg-[#fdf2f1] px-3 py-2 text-[12px] text-[var(--color-danger)]">
+            <p role="alert" className="mb-3 border border-[#e0b4b0] bg-[#fdf2f1] px-3 py-2 text-[12px] text-[var(--color-danger)]">
               {t[addressErrorKey]}
             </p>
           )}
@@ -298,7 +298,7 @@ export default async function AccountPage({
           {ok === "profile" && <Ok>{t.profileSaved}</Ok>}
           {ok === "password" && <Ok>{t.passwordChanged}</Ok>}
           {errorKey && (
-            <p className="mb-3 border border-[#e0b4b0] bg-[#fdf2f1] px-3 py-2 text-[12px] text-[var(--color-danger)]">
+            <p role="alert" className="mb-3 border border-[#e0b4b0] bg-[#fdf2f1] px-3 py-2 text-[12px] text-[var(--color-danger)]">
               {t[errorKey]}
             </p>
           )}
@@ -310,6 +310,7 @@ export default async function AccountPage({
               <input
                 type="text"
                 name="company"
+                autoComplete="organization"
                 maxLength={REQUEST_LIMITS.companyChars}
                 defaultValue={user.company}
                 className="w-full"
@@ -321,6 +322,7 @@ export default async function AccountPage({
                 <input
                   type="text"
                   name="contactName"
+                  autoComplete="name"
                   maxLength={REQUEST_LIMITS.contactNameChars}
                   defaultValue={user.contactName}
                   className="w-full"
@@ -331,6 +333,7 @@ export default async function AccountPage({
                 <input
                   type="tel"
                   name="phone"
+                  autoComplete="tel"
                   maxLength={REQUEST_LIMITS.phoneChars}
                   dir="ltr"
                   defaultValue={user.phone}
@@ -499,6 +502,7 @@ function AddressForm({
           <input
             type="text"
             name="recipient"
+            autoComplete="name"
             maxLength={REQUEST_LIMITS.contactNameChars}
             defaultValue={address?.recipient}
             className="w-full"
@@ -523,6 +527,7 @@ function AddressForm({
         </span>
         <textarea
           name="address"
+          autoComplete="street-address"
           rows={2}
           maxLength={REQUEST_LIMITS.addressChars}
           required
@@ -539,6 +544,7 @@ function AddressForm({
           <input
             type="text"
             name="city"
+            autoComplete="address-level2"
             maxLength={REQUEST_LIMITS.cityChars}
             required
             defaultValue={address?.city}
@@ -550,6 +556,7 @@ function AddressForm({
           <input
             type="text"
             name="postalCode"
+            autoComplete="postal-code"
             dir="ltr"
             inputMode="numeric"
             maxLength={20}

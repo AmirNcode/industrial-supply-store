@@ -4,7 +4,9 @@ import {
   addLine,
   removeLine,
   getCartCount,
+  getCartId,
   getCartQuantities,
+  markCartPresent,
 } from "@/lib/cart";
 import { RATE_LIMITS, consumeRateLimit } from "@/lib/rateLimit";
 import {
@@ -23,6 +25,9 @@ const NO_STORE = { "cache-control": "no-store" };
  * in one request per navigation rather than one per row.
  */
 export async function GET() {
+  // A cart older than the marker cookie gets it here; without it the browser
+  // stops asking (CartSync), and the badge would stay empty.
+  if (await getCartId()) await markCartPresent();
   const [count, qtys] = await Promise.all([getCartCount(), getCartQuantities()]);
   return NextResponse.json({ count, qtys }, { headers: NO_STORE });
 }

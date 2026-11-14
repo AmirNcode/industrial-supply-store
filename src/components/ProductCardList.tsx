@@ -6,6 +6,7 @@ import { InCartQty } from "./InCartQty";
 import { CatalogImage } from "./CatalogImage";
 import { ProductDetails } from "./ProductDetails";
 import { getDict, pick, type Locale } from "@/lib/i18n";
+import { ADD_TO_CART_TEXT, IN_CART_TEXT, textFor } from "@/lib/clientText";
 import {
   formatPrice,
   formatSpecNumber,
@@ -61,6 +62,9 @@ export function ProductCardList({
   rate: number;
 }) {
   const t = getDict(locale);
+  // One small object for every card, not the dictionary per card (clientText.ts).
+  const addText = textFor(t, ADD_TO_CART_TEXT);
+  const inCartText = textFor(t, IN_CART_TEXT);
   const inFamily = Boolean(familyName);
 
   /**
@@ -257,10 +261,10 @@ export function ProductCardList({
                 <span className="whitespace-nowrap text-[10px] text-[var(--color-ink-faint)]">
                   {p.packQty > 1 ? `${t.pkg} ${formatInt(p.packQty, locale)}` : t.each}
                 </span>
-                <AddToCartRow productId={p.id} locale={locale} packQty={p.packQty} />
+                <AddToCartRow productId={p.id} t={addText} packQty={p.packQty} />
                 {/* The card has no column headers, so the quantity carries its
                     own "In Cart" label. */}
-                <InCartQty productId={p.id} locale={locale} showLabel />
+                <InCartQty productId={p.id} locale={locale} t={inCartText} showLabel />
               </div>
             </div>
 

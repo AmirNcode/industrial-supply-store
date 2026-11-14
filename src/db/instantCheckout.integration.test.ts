@@ -6,6 +6,7 @@ import { submitOrderFromCart, type QuoteContact, type SubmitOrderResult } from "
 import { issuePishFactor, sendQuote } from "./invoiceQueries";
 import { addPaymentProof, confirmPayment } from "./paymentProofQueries";
 import { sweepExpiredOrders } from "./expiryQueries";
+import { pruneStaleRows } from "./pruneQueries";
 import { cancelOrderByCustomer } from "./customerCancelQueries";
 import { findShortfalls } from "./inventoryQueries";
 import { issueLoginCode, redeemLoginCode } from "./loginCodeQueries";
@@ -464,6 +465,51 @@ test("expiry sweep: invoiced and quoted cancel, a receipt protects, received let
   }
 });
 
+test("a receipt holds stock for five days; after that the order stays open and the stock is released", async () => {
+  assertLocalDatabase();
+  const fx = await fixture([{ priceCents: 100, available: 10 }]);
+  try {
+    const placed = created(await fx.submit([{ product: 0, qty: 4 }]));
+    const id = placed.orders[0].id;
+    assert.equal(
+      await addPaymentProof(id, { path: `test/${fx.marker}/1.jpg`, type: "image/jpeg", size: 10 }, { kind: "customer" }),
+      "added",
+    );
+    const age = (days: number) => sql`
+      UPDATE orders
+      SET created_at = now() - make_interval(days => ${days}, hours => 2),
+          invoiced_at = now() - make_interval(days => ${days}, hours => 1),
+          payment_submitted_at = now() - make_interval(days => ${days})
+      WHERE id = ${id}
+    `;
+
+    // Four days in: still held.
+    await age(4);
+    await sweepExpiredOrders({ force: true });
+    assert.deepEqual(await fx.stock(0), { available: 6, onHold: 4, sold: 0 });
+
+    // Past five: the stock is back on sale, the order is still staff's to confirm.
+    await age(6);
+    await sweepExpiredOrders({ force: true });
+    const order = await fx.order(placed.ref);
+    assert.equal(order.status, "payment_review");
+    assert.equal(order.expiredAt, null);
+    assert.deepEqual((await fx.lines(id)).map((l) => [l.qty, l.backorder]), [[4, true]]);
+    assert.deepEqual(await fx.stock(0), { available: 10, onHold: 0, sold: 0 });
+
+    // Sweeping again does nothing, and a late confirmation still goes through
+    // without touching a shelf the order no longer holds.
+    await sweepExpiredOrders({ force: true });
+    assert.deepEqual(await fx.stock(0), { available: 10, onHold: 0, sold: 0 });
+    assert.equal(await confirmPayment(id, "payment_review"), true);
+    assert.equal((await fx.order(placed.ref)).status, "preparing");
+    assert.deepEqual(await fx.stock(0), { available: 10, onHold: 0, sold: 0 });
+    await fx.assertLedger();
+  } finally {
+    await fx.cleanup();
+  }
+});
+
 test("the invoice number is issued on payment, so an order that expires unpaid uses none", async () => {
   assertLocalDatabase();
   const fx = await fixture([{ priceCents: 100, available: 20 }]);
@@ -583,6 +629,15 @@ async function userWith(fx: { marker: string; userIds: string[] }, tag: string) 
 
 const wrongOf = (code: string) => (code === "000000" ? "111111" : "000000");
 
+/** A code that must exist: the account does, and no address is being checked. */
+async function issue(userId: string): Promise<string> {
+  // Past the two minutes in which a fresh code is kept rather than replaced.
+  await sql`UPDATE login_codes SET created_at = now() - interval '5 minutes' WHERE user_id = ${userId} AND consumed_at IS NULL`;
+  const code = await issueLoginCode(userId);
+  if (code === null) throw new Error("no code issued");
+  return code;
+}
+
 test("sign-in codes: right code once, wrong codes counted, a newer code replaces the older", async () => {
   assertLocalDatabase();
   const fx = await fixture([]);
@@ -600,14 +655,14 @@ test("sign-in codes: right code once, wrong codes counted, a newer code replaces
     // No code issued yet.
     assert.equal(await redeemLoginCode(user.id, "123456"), "expired");
 
-    const code = await issueLoginCode(user.id);
+    const code = await issue(user.id);
     assert.match(code, /^\d{6}$/);
     assert.equal(await redeemLoginCode(user.id, code), "ok");
     assert.ok(await verified());
     assert.equal(await redeemLoginCode(user.id, code), "expired", "a code works once");
 
     // Wrong guesses are counted; at the limit the code is spent, even for the right one.
-    const second = await issueLoginCode(user.id);
+    const second = await issue(user.id);
     for (let n = 1; n < LOGIN_CODE_MAX_ATTEMPTS; n++) {
       assert.equal(await redeemLoginCode(user.id, wrongOf(second)), "wrong", `attempt ${n}`);
     }
@@ -615,21 +670,30 @@ test("sign-in codes: right code once, wrong codes counted, a newer code replaces
     assert.equal(await redeemLoginCode(user.id, second), "expired");
 
     // A newer code invalidates the older one.
-    let older = await issueLoginCode(user.id);
-    let newer = await issueLoginCode(user.id);
-    while (newer === older) newer = await issueLoginCode(user.id);
+    let older = await issue(user.id);
+    let newer = await issue(user.id);
+    while (newer === older) newer = await issue(user.id);
     assert.equal(await redeemLoginCode(user.id, older), "wrong");
     assert.equal(await redeemLoginCode(user.id, newer), "ok");
 
     // A lapsed code is expired.
-    older = await issueLoginCode(user.id);
+    older = await issue(user.id);
     await sql`UPDATE login_codes SET expires_at = now() - interval '1 minute' WHERE user_id = ${user.id} AND consumed_at IS NULL`;
     assert.equal(await redeemLoginCode(user.id, older), "expired");
 
+    // A code sent moments ago is kept: asking again neither replaces it nor
+    // issues another, so a stranger cannot cancel the one in the inbox.
+    const kept = await issue(user.id);
+    assert.equal(await issueLoginCode(user.id), null);
+    assert.equal(await redeemLoginCode(user.id, kept), "ok");
+
+    // No code is issued for an address the account no longer has.
+    assert.equal(await issueLoginCode(user.id, "someone-else@example.invalid"), null);
+
     // One account's code never opens another's.
     const other = await userWith(fx, "other");
-    const mine = await issueLoginCode(user.id);
-    await issueLoginCode(other.id);
+    const mine = await issue(user.id);
+    await issue(other.id);
     assert.notEqual(await redeemLoginCode(other.id, mine), "ok");
 
     // After a code sign-in the old password and every old session stop working.
@@ -744,6 +808,42 @@ test("ledger: back-order lines count as neither held nor sold, and a wrong count
     assert.equal(await sql.begin((tx) => reconcileInventoryForProducts(tx, [fx.products[0].id])), 1);
     assert.deepEqual(await fx.stock(0), { available: 0, onHold: 0, sold: 3 });
   } finally {
+    await fx.cleanup();
+  }
+});
+
+test("the daily tidy-up deletes long-empty carts and year-old email text, nothing else", async () => {
+  assertLocalDatabase();
+  const fx = await fixture([{ priceCents: 100, available: 10 }]);
+  const cartIds: string[] = [];
+  const marker = `prune-${randomUUID()}`;
+  try {
+    const cart = async (age: string, withItem: boolean) => {
+      const [row] = await sql<{ id: string }[]>`
+        INSERT INTO carts (created_at, updated_at) VALUES (now() - ${age}::interval, now() - ${age}::interval) RETURNING id`;
+      cartIds.push(row.id);
+      if (withItem) await sql`INSERT INTO cart_items (cart_id, product_id, qty) VALUES (${row.id}, ${fx.products[0].id}, 1)`;
+      return row.id;
+    };
+    const oldEmpty = await cart("40 days", false);
+    const oldFull = await cart("40 days", true);
+    const newEmpty = await cart("2 days", false);
+    const email = (age: string) => sql`
+      INSERT INTO email_log (kind, to_email, subject, body_text, status, created_at)
+      VALUES ('test', ${marker}, 's', 'b', 'logged', now() - ${age}::interval)`;
+    await email("400 days");
+    await email("300 days");
+
+    const pruned = await pruneStaleRows();
+    assert.ok(pruned.carts >= 1 && pruned.emails >= 1);
+    const left = await sql<{ id: string }[]>`SELECT id FROM carts WHERE id = ANY(${cartIds}::uuid[])`;
+    assert.deepEqual(left.map((r) => r.id).sort(), [oldFull, newEmpty].sort());
+    assert.ok(!left.some((r) => r.id === oldEmpty));
+    const [{ n }] = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM email_log WHERE to_email = ${marker}`;
+    assert.equal(n, 1);
+  } finally {
+    await sql`DELETE FROM carts WHERE id = ANY(${cartIds}::uuid[])`;
+    await sql`DELETE FROM email_log WHERE to_email = ${marker}`;
     await fx.cleanup();
   }
 });

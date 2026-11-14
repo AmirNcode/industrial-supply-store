@@ -27,6 +27,10 @@ Disallow: /en/quote
 Disallow: /fa/quote
 Disallow: /en/search
 Disallow: /fa/search
+# Rep referral links: each is a redirect that costs a database read, and no
+# page links to one, so only a crawler guessing codes would fetch them.
+Disallow: /en/r/
+Disallow: /fa/r/
 # Filtered family views, for the same reason as search: each filter link opens
 # a URL carrying more filter links, so the combinations never run out, and the
 # family route reads its query string, so every one is rendered from the
@@ -35,6 +39,12 @@ Disallow: /fa/search
 # transfer quota. The bare family page (no `?`) stays open.
 Disallow: /en/f/*?
 Disallow: /fa/f/*?
+# Category list views past the first page (`?page=N`): the list route reads
+# its query string too, so every page is rendered from the database, and the
+# pager links from each to the next — about 340 pages per language, the deepest
+# sorting ~12,900 rows per request (review R-3). The bare list page stays open.
+Disallow: /en/l/*?
+Disallow: /fa/l/*?
 
 # Baidu: no buyers in this market, and ~29k requests a day in October 2026 —
 # ~13k on one family page and ~12k from its page-rendering crawler on the cart

@@ -13,7 +13,8 @@ import { tehranDatePlusDays } from "@/lib/persianCalendar";
 import { setShownOnce } from "@/lib/shownOnce";
 import { redirectFresh } from "@/lib/redirectFresh";
 import { setAccountReps } from "@/db/accountRepQueries";
-import { resetCustomerPasswordAdmin, setFollowUpAdmin } from "@/db/customerQueries";
+import { resetCustomerPasswordAdmin, setCustomerEmailAdmin, setFollowUpAdmin } from "@/db/customerQueries";
+import { normalizeContactEmail } from "@/lib/siteContactValues";
 import { addNoteAdmin } from "@/db/noteQueries";
 
 function postedCustomerId(formData: FormData): string | null {
@@ -77,6 +78,19 @@ export async function resetCustomerPasswordAdminAction(formData: FormData): Prom
   if (!customer) redirect(`/${locale}/admin/customers`);
   await setShownOnce({ kind: "customer", subjectId: customer.id, login: customer.customerCode, password });
   redirect(`/${locale}/admin/customers/${customer.id}?ok=password`);
+}
+
+export async function setCustomerEmailAdminAction(formData: FormData): Promise<void> {
+  await assertAdminWrite();
+  const locale = safeLocale(formData);
+  const id = postedCustomerId(formData);
+  if (!id) redirect(`/${locale}/admin/customers`);
+  const back = `/${locale}/admin/customers/${id}`;
+  const email = normalizeContactEmail(String(formData.get("email") ?? ""));
+  if (!email) redirect(`${back}?error=email`);
+  const result = await setCustomerEmailAdmin(id, email);
+  if (result === "not-found") redirect(`/${locale}/admin/customers`);
+  redirect(result === "email-taken" ? `${back}?error=email-taken` : `${back}?ok=email`);
 }
 
 export async function addCustomerNoteAdminAction(formData: FormData): Promise<void> {

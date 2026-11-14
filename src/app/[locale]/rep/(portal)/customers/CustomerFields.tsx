@@ -11,10 +11,13 @@ export function CustomerFields({
   t,
   values,
   disabled,
+  emailLocked,
 }: {
   t: Dict;
   values?: CustomerInput;
   disabled?: boolean;
+  /** The rep may not change this customer's email (`repMayEditEmail`). */
+  emailLocked?: boolean;
 }) {
   const field = "grid gap-0.5 text-[11px] font-semibold";
   const optional = (
@@ -67,7 +70,17 @@ export function CustomerFields({
           maxLength={REQUEST_LIMITS.emailChars}
           defaultValue={values?.email ?? ""}
           disabled={disabled}
+          // Read-only, not disabled: a disabled field is left out of the post
+          // and the action would read the form as malformed. The server keeps
+          // the stored address whatever arrives.
+          readOnly={emailLocked}
+          aria-describedby={emailLocked ? "customer-email-locked" : undefined}
         />
+        {emailLocked && (
+          <span id="customer-email-locked" className="font-normal text-[var(--color-ink-muted)]">
+            {t.repEmailAdminOnly}
+          </span>
+        )}
       </label>
       <label className={field}>
         <span>

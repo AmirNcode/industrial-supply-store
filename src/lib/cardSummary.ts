@@ -1,6 +1,6 @@
 import type { SpecDefRow } from "@/db/queries";
 import type { SpecBag } from "@/db/schema";
-import { pick, type Locale } from "@/lib/i18n";
+import { pick, type Locale } from "@/lib/locale";
 import { formatSpecNumber } from "@/lib/money";
 import { specValueLabel } from "@/lib/specValues";
 

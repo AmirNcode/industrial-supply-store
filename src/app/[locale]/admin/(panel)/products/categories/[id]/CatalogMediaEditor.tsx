@@ -221,7 +221,7 @@ export function CatalogMediaEditor({
         </p>
       )}
       {state?.kind === "error" && state.failures.length > 0 && (
-        <p className="mb-4 border border-[#e0b4b0] bg-[#fdf2f1] px-2.5 py-1.5 text-[12px] text-[var(--color-danger)]">
+        <p role="alert" className="mb-4 border border-[#e0b4b0] bg-[#fdf2f1] px-2.5 py-1.5 text-[12px] text-[var(--color-danger)]">
           {t.catalogEditNothingSaved}
         </p>
       )}

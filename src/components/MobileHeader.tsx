@@ -2,7 +2,8 @@
 
 import { useEffect, useId, useRef } from "react";
 import Link from "next/link";
-import { getDict, type Locale } from "@/lib/i18n";
+import type { Locale } from "@/lib/locale";
+import type { MOBILE_HEADER_TEXT, TextFor } from "@/lib/clientText";
 import { SearchBar } from "./SearchBar";
 import { LocaleSwitch } from "./LocaleSwitch";
 import { CartBadge } from "./CartBadge";
@@ -31,11 +32,13 @@ import { useModalFocus } from "@/lib/useModalFocus";
 export function MobileHeader({
   locale,
   contact,
+  t,
 }: {
   locale: Locale;
   contact: SiteContact;
+  /** Picked by the server header; the dictionary itself never reaches the browser. */
+  t: TextFor<typeof MOBILE_HEADER_TEXT>;
 }) {
-  const t = getDict(locale);
   const [menuOpen, setMenuOpen] = useRouteDisclosure();
   const rootRef = useRef<HTMLDivElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
@@ -141,7 +144,7 @@ export function MobileHeader({
       */}
       <div className="relative z-10 flex items-center gap-2 bg-[var(--color-navy)] px-3 pb-2">
         <div className="min-w-0 flex-1">
-          <SearchBar locale={locale} />
+          <SearchBar locale={locale} t={t} />
         </div>
 
         <Link
@@ -163,7 +166,7 @@ export function MobileHeader({
           aria-expanded={menuOpen}
           aria-controls={menuOpen ? menuId : undefined}
           aria-label={t.browseCatalog}
-          className="tap flex h-[35px] w-[35px] shrink-0 items-center justify-center text-white"
+          className="tap hit-44 flex h-[35px] w-[35px] shrink-0 items-center justify-center text-white"
         >
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             {menuOpen ? (

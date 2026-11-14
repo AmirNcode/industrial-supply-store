@@ -36,7 +36,7 @@ export default async function FamilyColumnsPage({
     <>
       {/* Back to this family, open, as it was left — not the tree's default. */}
       <Link href={`/${l}/admin/products?cat=${familyNodeKey(familyId)}`} className="text-[11px]">
-        ← {t.columnsBack}
+        <span aria-hidden="true" className="inline-block rtl:rotate-180">←</span> {t.columnsBack}
       </Link>
       <h1 className="mt-1 mb-1 border-b border-[var(--color-ink)] pb-1 text-[17px] font-bold">
         {t.columnsTitle.replace("{family}", pick(family, "name", l))}

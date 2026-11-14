@@ -5,6 +5,9 @@ import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { DemoBanner } from "@/components/DemoBanner";
 import { CartSync } from "@/components/CartSync";
+import { CartNotice } from "@/components/CartNotice";
+import { REQUEST_LIMITS } from "@/lib/requestLimits";
+import { formatInt } from "@/lib/money";
 import { Analytics } from "@vercel/analytics/next";
 import { isLocale, dir, locales, getDict, type Locale } from "@/lib/i18n";
 
@@ -14,11 +17,17 @@ import { isLocale, dir, locales, getDict, type Locale } from "@/lib/i18n";
  * L-3): the title number showed in every browser tab and search result. The
  * seal itself is in the footer and needs none of them.
  */
-export const metadata: Metadata = {
-  title: "TEMEX — Tools, Equipment & Materials Express",
-  description:
-    "Industrial parts catalog: fasteners, sealing, bearings, pipe fittings and more.",
-};
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}): Promise<Metadata> {
+  // In the page's language: the tab title and the search-result snippet were
+  // English on the Persian pages (review R-30).
+  const { locale } = await params;
+  const t = getDict(isLocale(locale) ? locale : "en");
+  return { title: `${t.brand} — ${t.tagline}`, description: t.metaDescription };
+}
 
 /**
  * Hard ceiling on every page and Server Action under this layout. The platform
@@ -59,6 +68,14 @@ export default async function LocaleLayout({
           {t.products}
         </a>
         <CartSync />
+        <CartNotice
+          messages={{
+            full: t.cartFailFull.replace("{max}", formatInt(REQUEST_LIMITS.cartLines, l)),
+            busy: t.cartFailBusy,
+            failed: t.cartFailGeneric,
+          }}
+          dismissLabel={t.cartFailDismiss}
+        />
         <DemoBanner locale={l} />
         <Header locale={l} />
         <div id="main">{children}</div>

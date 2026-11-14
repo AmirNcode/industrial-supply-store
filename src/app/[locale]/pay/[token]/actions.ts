@@ -26,6 +26,10 @@ export async function uploadPaymentProofWithKeyAction(
   if (!limit.allowed) return { ok: false, problem: "rate-limited" };
   const found = await getOrderByPayToken(token);
   if (!found || !acceptsPaymentProof(found.order.status)) return { ok: false, problem: "closed" };
+  // Counted only once the link is known to take a receipt, so opening a
+  // closed link over and over cannot spend the visitor's day.
+  const daily = await consumeRateLimit("proof:upload-day", RATE_LIMITS.proofUploadDaily);
+  if (!daily.allowed) return { ok: false, problem: "rate-limited" };
   return receivePaymentProof(found.order.id, formData.get("file"), { kind: "customer" });
 }
 

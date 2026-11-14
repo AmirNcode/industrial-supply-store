@@ -18,7 +18,7 @@ import { refreshCart } from "@/lib/cartClient";
  */
 export function CartPageSync({ revision }: { revision: string }) {
   useEffect(() => {
-    void refreshCart();
+    void refreshCart({ force: true });
   }, [revision]);
 
   return null;

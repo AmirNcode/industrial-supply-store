@@ -91,6 +91,15 @@ export function customerCanCancel(status: OrderStatus, receiptCount: number): bo
   return receiptCount === 0 && (CUSTOMER_CANCELLABLE_STATUSES as readonly string[]).includes(status);
 }
 
+/**
+ * How long a receipt holds stock while nobody has confirmed the payment. After
+ * this the order stays open for staff but its stock goes back on sale: a
+ * receipt is any image a guest cares to upload, so without a limit one visitor
+ * could empty the shelf for free and for good (review R-2; five days decided
+ * by the owner, 2026-11-14).
+ */
+export const RECEIPT_HOLD_DAYS = 5;
+
 /** How long a pish-factor stays payable. */
 export const PISH_FACTOR_TTL_HOURS = 24;
 /** How long staff have to quote before held stock is released, and how long a quote stands. */

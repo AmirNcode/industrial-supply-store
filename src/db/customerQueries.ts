@@ -30,6 +30,8 @@ export type CustomerRow = {
   origin: CustomerOrigin;
   originRepId: string | null;
   choseOwnPassword: boolean;
+  /** The address has been proved by an emailed code, so it can open the account. */
+  emailVerified: boolean;
   nextFollowUpOn: string | null;
   createdAt: string;
 };
@@ -57,6 +59,7 @@ const COLS = sql`u.id, u.customer_code AS "customerCode", u.company,
   u.default_po_number AS "defaultPoNumber", u.locale, ${leadRepSql()} AS "repId",
   (${leadRepSql()} IS NOT NULL AND u.commission_rate_bp IS DISTINCT FROM 0) AS "repEarnsCommission", u.origin,
   u.origin_rep_id AS "originRepId", u.chose_own_password AS "choseOwnPassword",
+  (u.email_verified_at IS NOT NULL) AS "emailVerified",
   u.next_follow_up_on::text AS "nextFollowUpOn", u.created_at AS "createdAt"`;
 
 function escapeLike(value: string): string {
@@ -265,19 +268,49 @@ export async function createCustomerForRep(
   throw new Error("Could not allocate a unique customer ID");
 }
 
+/**
+ * A rep's edit of a customer on their list. The email is the exception: it is
+ * written only for an account this rep created that has neither chosen its own
+ * password nor proved an address (review R-1). Anywhere else the address is
+ * the key to the account — "email me a code" signs in whoever reads that
+ * inbox and has them choose a new password — so a rep who could change it
+ * could sign in as the customer and lock them out, which is exactly what
+ * `resetCustomerPasswordForRep` refuses. The rule is in the statement, so no
+ * caller can skip it; `repMayEditEmail` is the same rule for the form.
+ */
 export async function updateCustomerForRep(
   repId: string,
   customerId: string,
   input: CustomerInput,
 ): Promise<"ok" | "not-found" | "email-taken"> {
   try {
-    const result = await sql`
-      UPDATE users u
-      SET company = ${input.company}, contact_name = ${input.contactName}, phone = ${input.phone},
-          email = ${input.email}, address = ${input.address}, city = ${input.city}
-      WHERE u.id = ${customerId} AND ${onMyList(repId)}
-    `;
-    return result.count === 0 ? "not-found" : "ok";
+    return await sql.begin(async (tx) => {
+      const [before] = await tx<{ email: string | null }[]>`
+        SELECT u.email FROM users u WHERE u.id = ${customerId} AND ${onMyList(repId)} FOR UPDATE OF u
+      `;
+      if (!before) return "not-found";
+      const [after] = await tx<{ email: string | null }[]>`
+        UPDATE users u
+        SET company = ${input.company}, contact_name = ${input.contactName}, phone = ${input.phone},
+            email = CASE
+              WHEN u.origin = 'rep' AND u.origin_rep_id = ${repId}
+                   AND NOT u.chose_own_password AND u.email_verified_at IS NULL
+                THEN ${input.email}
+              ELSE u.email
+            END,
+            address = ${input.address}, city = ${input.city}
+        WHERE u.id = ${customerId}
+        RETURNING u.email
+      `;
+      // The same housekeeping as the admin's correction (`setCustomerEmailAdmin`):
+      // a code already sent to the old address must not open the account or
+      // prove the new one, and browsers signed in through it are signed out.
+      if (after.email !== before.email) {
+        await tx`UPDATE login_codes SET consumed_at = now() WHERE user_id = ${customerId} AND consumed_at IS NULL`;
+        await tx`UPDATE users SET session_version = session_version + 1 WHERE id = ${customerId}`;
+      }
+      return "ok";
+    });
   } catch (err) {
     if (uniqueViolation(err) === "users_email_lower_key") return "email-taken";
     throw err;
@@ -439,6 +472,47 @@ export async function resetCustomerPasswordAdmin(
     });
     return row;
   });
+}
+
+/**
+ * The admin corrects a customer's email — the one way a self-registered
+ * customer's wrong or changed address can be fixed, since a rep may only edit
+ * the email of an account they created that has never signed in (review R-1,
+ * R-32). The address is what code sign-in trusts, so a new one starts
+ * unverified and any code already sent to the old one stops working. The admin
+ * can already issue any customer a temporary password, so this gives the
+ * shared admin sign-in no power over an account it did not have.
+ */
+export async function setCustomerEmailAdmin(
+  customerId: string,
+  email: string,
+): Promise<"ok" | "not-found" | "email-taken"> {
+  try {
+    return await sql.begin(async (tx) => {
+      const [before] = await tx<{ email: string | null }[]>`
+        SELECT email FROM users WHERE id = ${customerId} FOR UPDATE
+      `;
+      if (!before) return "not-found";
+      if (before.email === email) return "ok";
+      // Every signed-in browser is signed out too: whoever reached the account
+      // through the old address should not stay in it after the correction.
+      await tx`
+        UPDATE users
+        SET email = ${email}, email_verified_at = NULL, session_version = session_version + 1
+        WHERE id = ${customerId}
+      `;
+      await tx`UPDATE login_codes SET consumed_at = now() WHERE user_id = ${customerId} AND consumed_at IS NULL`;
+      await recordAudit(tx, {
+        actor: { kind: "admin" },
+        action: "customer.email-changed",
+        subject: { kind: "customer", id: customerId },
+      });
+      return "ok";
+    });
+  } catch (err) {
+    if (uniqueViolation(err) === "users_email_lower_key") return "email-taken";
+    throw err;
+  }
 }
 
 export async function setFollowUpAdmin(customerId: string, date: string | null): Promise<boolean> {

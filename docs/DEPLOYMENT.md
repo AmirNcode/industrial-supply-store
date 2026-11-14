@@ -137,6 +137,25 @@ old code reads. Review each new migration against the live code's insert and
 update shapes; `salesReps.integration.test.ts` runs the pre-rep release's
 user and order inserts against the migrated schema as an example.
 
+### Release: November 2026 review (`20261114120000_add_product_id_indexes.sql`)
+
+One migration, and it only adds two indexes (`cart_items(product_id)`,
+`order_items(product_id)`, both `IF NOT EXISTS`). The old and the new release
+both run against the database with or without them, so the order relative to
+the deploy does not matter; nothing needs reconciling afterwards. Each remote
+step still needs Amir's go-ahead.
+
+1. `npm run db:backup:remote`, restore-test that backup (see "3a. Backups are
+   a release gate" below), then `npm run db:migrate:check:remote` — it must
+   list exactly that one file — then
+   `MIGRATION_BACKUP_VERIFIED=2026-11-14 npm run db:migrate:remote`, with the
+   UTC date of the restore test in place of `2026-11-14`.
+2. `npm run db:verify:remote` - every line a tick.
+3. Merge to `main` (that deploys).
+
+From this release on the evening job also deletes data: carts that have been
+empty for 30 days and email-log rows older than a year.
+
 ### Release: commission splits (`20261112120000_add_commission_splits.sql`, `20261112130000_add_placed_by_rep_index.sql`)
 
 Each remote step needs Amir's go-ahead. The first migration only adds (two

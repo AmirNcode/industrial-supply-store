@@ -413,6 +413,8 @@ export const cartItems = pgTable(
   },
   (t) => [
     primaryKey({ columns: [t.cartId, t.productId] }),
+    // For the cascade when a product is deleted; the key above starts with cart_id.
+    index("cart_items_product_idx").on(t.productId),
     check("cart_items_qty_check", sql`${t.qty} > 0`),
   ],
 );
@@ -641,6 +643,8 @@ export const orderItems = pgTable(
   },
   (t) => [
     index("order_items_order_idx").on(t.orderId),
+    // For the SET NULL when a product is deleted.
+    index("order_items_product_idx").on(t.productId),
     check("order_items_qty_check", sql`${t.qty} > 0`),
     check(
       "order_items_prices_check",

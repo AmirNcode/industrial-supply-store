@@ -72,6 +72,17 @@ Monitoring: `node local-tools/usage-check/check.mjs` (local only, runs every
    only, not Noor Corp (the live project's org). The usage check doesn't need
    it; anything using the Management API for the live project would.
 
+9. `npm run lint` on this machine also lints leftover agent checkouts under
+   `.claude/worktrees/` (1,281 errors on 2026-11-14, none in the project
+   itself; CI is unaffected because the folder is not in git). Either delete
+   the stale worktree or add `.claude/**` to the ignores in `eslint.config.mjs`.
+   Until then: `npx eslint . --ignore-pattern ".claude/**"`.
+
+## Review, November 2026
+
+Open findings from the 2026-11-14 review are in
+[`REVIEW-2026-11.md`](REVIEW-2026-11.md), with a "Resume here" section at the top.
+
 ## Commission splits
 
 1. **Drop the old rep columns, once the release is stable.** A follow-up

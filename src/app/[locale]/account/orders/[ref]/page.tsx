@@ -71,7 +71,7 @@ export default async function AccountOrderPage({
   return (
     <main className="mx-auto max-w-[820px] px-3 pt-3">
       <p className="mb-2 text-[12px]">
-        <Link href={`/${l}/account`}>← {t.myOrders}</Link>
+        <Link href={`/${l}/account`}><span aria-hidden="true" className="inline-block rtl:rotate-180">←</span> {t.myOrders}</Link>
       </p>
 
       <div className="mb-3 flex flex-wrap items-center gap-3 border-b border-[var(--color-ink)] pb-1">

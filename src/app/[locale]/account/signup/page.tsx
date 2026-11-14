@@ -1,3 +1,4 @@
+import { FormDraft } from "@/components/FormDraft";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { signUpAction } from "../actions";
@@ -39,13 +40,14 @@ export default async function SignUpPage({
       <p className="mb-4 text-[12px] text-[var(--color-ink-muted)]">{t.signUpPrompt}</p>
 
       {messageKey && (
-        <p className="mb-3 border border-[#e0b4b0] bg-[#fdf2f1] px-3 py-2 text-[12px] text-[var(--color-danger)]">
+        <p role="alert" className="mb-3 border border-[#e0b4b0] bg-[#fdf2f1] px-3 py-2 text-[12px] text-[var(--color-danger)]">
           {t[messageKey]}
         </p>
       )}
 
       <form action={signUpAction} className="grid gap-3">
         <input type="hidden" name="locale" value={l} />
+        <FormDraft storageKey="signup" restore={Boolean(error)} />
 
         <label className="block text-[12px]">
           <span className="mb-0.5 block font-bold">
@@ -55,6 +57,7 @@ export default async function SignUpPage({
           <input
             type="email"
             name="email"
+            autoComplete="email"
             dir="ltr"
             maxLength={REQUEST_LIMITS.emailChars}
             required
@@ -71,6 +74,7 @@ export default async function SignUpPage({
           <input
             type="text"
             name="company"
+            autoComplete="organization"
             maxLength={REQUEST_LIMITS.companyChars}
             required
             className="w-full"
@@ -86,6 +90,7 @@ export default async function SignUpPage({
             <input
               type="text"
               name="contactName"
+              autoComplete="name"
               maxLength={REQUEST_LIMITS.contactNameChars}
               required
               className="w-full"
@@ -99,6 +104,7 @@ export default async function SignUpPage({
             <input
               type="tel"
               name="phone"
+              autoComplete="tel"
               dir="ltr"
               maxLength={REQUEST_LIMITS.phoneChars}
               required

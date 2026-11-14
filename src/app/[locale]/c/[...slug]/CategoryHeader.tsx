@@ -4,6 +4,7 @@ import { ViewAsToggle } from "@/components/ViewAsToggle";
 import { CatalogCallout } from "@/components/CatalogCallout";
 import { getDict, pick, type Locale } from "@/lib/i18n";
 import { formatInt } from "@/lib/money";
+import { VIEW_AS_TEXT, textFor } from "@/lib/clientText";
 import type { CategoryDetailRow, CategoryRow } from "@/db/queries";
 
 /**
@@ -54,7 +55,7 @@ export function CategoryHeader({
         </span>
         {category.productCount > 0 && (
           <ViewAsToggle
-            locale={locale}
+            t={textFor(t, VIEW_AS_TEXT)}
             categoriesHref={`/${locale}/c/${category.path}`}
             listHref={`/${locale}/l/${category.path}`}
             current={view}

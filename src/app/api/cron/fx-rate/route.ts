@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { isAuthorizedCron } from "@/lib/cronAuth";
 import { refreshMarketRate, type RefreshResult } from "@/lib/fxMarketUpdate";
 import { runExpirySweep } from "@/lib/orderFlow";
+import { pruneStaleRows } from "@/db/pruneQueries";
 
 const NO_STORE = { "cache-control": "no-store" };
 
@@ -17,6 +18,9 @@ const NO_STORE = { "cache-control": "no-store" };
  * cancelled and their stock released on days nobody opens the site. The sweep
  * runs whatever the rate part did, and a sweep failure is reported in the
  * JSON without turning a good rate update into an error.
+ *
+ * Last, it deletes what nobody can miss (`pruneStaleRows`): long-empty carts
+ * and year-old email text. Same rule: its failure is reported, not fatal.
  *
  * A refused reading answers 502 so the scheduler's own log marks the run as
  * failed; the site meanwhile keeps its last good rate.
@@ -40,7 +44,14 @@ export async function GET(request: Request) {
     console.error("[cron] expiry sweep failed", error);
     expiry = { error: true };
   }
-  return NextResponse.json({ ...result, expiry }, { status: result.ok ? 200 : 502, headers: NO_STORE });
+  let pruned: { carts: number; emails: number } | { error: true };
+  try {
+    pruned = await pruneStaleRows();
+  } catch (error) {
+    console.error("[cron] prune failed", error);
+    pruned = { error: true };
+  }
+  return NextResponse.json({ ...result, expiry, pruned }, { status: result.ok ? 200 : 502, headers: NO_STORE });
 }
 
 /** Route handlers do not inherit the layout ceiling; same reasoning as there. */

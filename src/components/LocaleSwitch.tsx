@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { swapLocale, type Locale } from "@/lib/i18n";
+import { swapLocale, type Locale } from "@/lib/locale";
 
 /**
  * Switch language without losing the page.

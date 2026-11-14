@@ -30,6 +30,7 @@ import {
   resetCustomerPasswordForRep,
   setFollowUpForRep,
   updateCustomerForRep,
+  setCustomerEmailAdmin,
 } from "./customerQueries";
 import { addNoteForRep, listNotes } from "./noteQueries";
 import { listAccountReps, setAccountReps } from "./accountRepQueries";
@@ -870,6 +871,56 @@ test("a rep resets only a customer they created who has never chosen a password"
     userIds.push(moved.id);
     assert.equal(await assignCustomer(moved.id, a.id, false), "ok");
     assert.equal(await resetCustomerPasswordForRep(a.id, moved.id, "temp-4"), null);
+
+    // The email follows the same rule (review R-1): it is what "email me a
+    // code" signs in with, so a rep who could change it could take the
+    // account. Every edit below succeeds and saves the company; only an
+    // account the rep created, still without its own password or a proved
+    // address, takes the new email.
+    const emailOf = async (id: string) =>
+      (await sql<{ email: string | null }[]>`SELECT email FROM users WHERE id = ${id}`)[0].email;
+    const edit = (id: string, email: string) =>
+      updateCustomerForRep(a.id, id, { ...input, company: `Edited ${suffix}`, phone: "1", email });
+    const selfEmail = await emailOf(self.id);
+    const repInbox = `${randomUUID()}@example.invalid`;
+    assert.equal(await edit(own.id, repInbox), "ok"); // chose their own password above
+    assert.equal(await emailOf(own.id), null);
+    assert.equal(await edit(self.id, repInbox), "ok");
+    assert.equal(await emailOf(self.id), selfEmail);
+    assert.equal(await edit(moved.id, repInbox), "ok");
+    assert.equal(await emailOf(moved.id), null);
+    const fresh = await createCustomerForRep(a.id, {
+      ...input, company: `Fresh ${suffix}`, phone: randomPhone(), codeChoice: "random", passwordHash: "x", locale: "fa",
+    });
+    if (fresh.kind !== "created") throw new Error(fresh.kind);
+    userIds.push(fresh.id);
+    // A code sent to the address the rep is about to replace dies with it.
+    await sql`UPDATE users SET email = ${`${randomUUID()}@example.invalid`} WHERE id = ${fresh.id}`;
+    await sql`INSERT INTO login_codes (user_id, code_hash, expires_at) VALUES (${fresh.id}, 'x', now() + interval '10 minutes')`;
+    const [{ v: versionBefore }] = await sql<{ v: number }[]>`SELECT session_version AS v FROM users WHERE id = ${fresh.id}`;
+    assert.equal(await edit(fresh.id, repInbox), "ok");
+    assert.equal(await emailOf(fresh.id), repInbox);
+    const [{ live }] = await sql<{ live: number }[]>`
+      SELECT count(*)::int AS live FROM login_codes WHERE user_id = ${fresh.id} AND consumed_at IS NULL`;
+    assert.equal(live, 0);
+    const [{ v: versionAfter }] = await sql<{ v: number }[]>`SELECT session_version AS v FROM users WHERE id = ${fresh.id}`;
+    assert.equal(versionAfter, versionBefore + 1);
+    // Once that address is proved by a code, it is the customer's.
+    await sql`UPDATE users SET email_verified_at = now() WHERE id = ${fresh.id}`;
+    assert.equal(await edit(fresh.id, `${randomUUID()}@example.invalid`), "ok");
+    assert.equal(await emailOf(fresh.id), repInbox);
+
+    // The admin is the one who can correct it (review R-32): the address is
+    // replaced, starts unproved, and cannot take another account's email.
+    const corrected = `${randomUUID()}@example.invalid`;
+    assert.equal(await setCustomerEmailAdmin(fresh.id, corrected), "ok");
+    assert.equal(await emailOf(fresh.id), corrected);
+    const [{ verified }] = await sql<{ verified: string | null }[]>`
+      SELECT email_verified_at AS verified FROM users WHERE id = ${fresh.id}`;
+    assert.equal(verified, null);
+    assert.equal(await setCustomerEmailAdmin(self.id, corrected), "email-taken");
+    assert.equal(await emailOf(self.id), selfEmail);
+    assert.equal(await setCustomerEmailAdmin(randomUUID(), corrected), "not-found");
 
     // Nothing refused changed a password.
     const hashes = await sql<{ id: string; hash: string }[]>`

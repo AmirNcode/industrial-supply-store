@@ -1,54 +1,19 @@
 import { checkoutEn, checkoutFa } from "./i18nCheckout";
 
-export const locales = ["en", "fa"] as const;
-export type Locale = (typeof locales)[number];
-export const defaultLocale: Locale = "fa";
-
-export function isLocale(v: string): v is Locale {
-  return (locales as readonly string[]).includes(v);
-}
-
 /**
- * Used by every action that redirects to a locale-prefixed path: the posted
- * `locale` value reaches `redirect()` unchanged, so a `locale` of `/evil.com`
- * would make that `//evil.com/admin` — a protocol-relative URL, and an open
- * redirect. Anything unrecognised falls back to the default language.
+ * The language helpers live in `locale.ts` so browser components can use them
+ * without importing this file — and with it both dictionaries (review R-8).
+ * Re-exported here, so server code keeps importing everything from one place.
  */
-export function safeLocale(formData: FormData): Locale {
-  const raw = String(formData.get("locale") ?? "");
-  return isLocale(raw) ? raw : defaultLocale;
-}
-
-export function dir(locale: Locale): "ltr" | "rtl" {
-  return locale === "fa" ? "rtl" : "ltr";
-}
-
-/**
- * The same page in the other language.
- *
- * Every route is `/[locale]/…`, so switching language is swapping one segment.
- * The header used to link at `/fa` outright, which threw away whatever the
- * reader was looking at and dropped them back on the catalog — worst on the
- * pages where the switch is most useful, like a filtered family listing or an
- * invoice.
- *
- * A path with no recognised locale segment has nowhere better to go than that
- * language's home.
- */
-export function swapLocale(pathname: string, to: Locale): string {
-  const segments = pathname.split("/");
-  if (segments.length > 1 && isLocale(segments[1])) {
-    segments[1] = to;
-    return segments.join("/");
-  }
-  return `/${to}`;
-}
+export * from "./locale";
+import type { Locale } from "./locale";
 
 const en = {
   // Instant checkout (lib/i18nCheckout.ts); keys below win on a clash.
   ...checkoutEn,
   brand: "TEMEX",
   tagline: "Tools, Equipment & Materials Express",
+  metaDescription: "Industrial parts catalog: fasteners, sealing, bearings, pipe fittings and more.",
   brandPromise:
     "Quality tools, equipment and materials, delivered fast — with a money-back guarantee on everything we sell.",
   browseCatalog: "BROWSE CATALOG",
@@ -64,6 +29,8 @@ const en = {
   addToOrder: "ADD TO ORDER",
   add: "Add",
   qty: "Qty",
+  qtyDecrease: "Decrease quantity",
+  qtyIncrease: "Increase quantity",
   inCart: "In Cart",
   each: "Each",
   cart: "Order",
@@ -298,6 +265,7 @@ const en = {
     "We have your receipt and are confirming the payment. We start preparing your order as soon as it is confirmed.",
   confirmPayment: "Confirm payment received",
   confirmConfirmPayment: "Confirm the money has arrived?",
+  repEmailAdminOnly: "Only the admin can change this customer's email.",
   repResetAdminOnly: "Only the admin can reset this customer's password: you can reset only customers you created, until they choose their own.",
   repAwaitingConfirmation: "Receipt received. The admin checks it against the bank account and confirms the payment.",
   repInvoiceUnpriced: "A line on this order has no price yet. The admin prices it and issues the invoice.",
@@ -844,6 +812,7 @@ const en = {
   createCustomer: "Create customer",
   customerSearchPlaceholder: "ID, company or phone",
   noCustomersYet: "No customers yet.",
+  repNoCustomerMatch: "No customer matches this search.",
   lastOrder: "Last order",
   nextFollowUp: "Next follow-up",
   customerCodeChoice: "Customer ID",
@@ -936,6 +905,10 @@ const en = {
   adminSplitErrorMixed: "Fill every share or leave them all blank.",
   adminSplitErrorDuplicate: "A rep can be listed once.",
   adminSplitErrorTooMany: "At most 5 reps per account.",
+  adminCustomerEmailChange: "Change email",
+  adminCustomerEmailHint:
+    "Sign-in codes and order emails go to this address. The customer confirms a new address the next time they sign in with a code.",
+  adminCustomerEmailSaved: "Email saved.",
   adminSplitErrorRep: "That rep is inactive and cannot be added.",
   adminSplitErrorRepMissing: "Choose a rep in every row, or remove the row.",
   adminAddRep: "Add rep",
@@ -1038,6 +1011,7 @@ const fa: typeof en = {
   ...checkoutFa,
   brand: "TEMEX",
   tagline: "ابزار، تجهیزات و مواد اکسپرس",
+  metaDescription: "کاتالوگ قطعات صنعتی: پیچ و مهره، آب‌بندی، بلبرینگ، اتصالات لوله و موارد دیگر.",
   brandPromise:
     "ابزار، تجهیزات و مواد باکیفیت، با ارسال سریع — و ضمانت بازگشت وجه روی تمام کالاها.",
   browseCatalog: "مرور کاتالوگ",
@@ -1053,6 +1027,8 @@ const fa: typeof en = {
   addToOrder: "افزودن به سفارش",
   add: "افزودن",
   qty: "تعداد",
+  qtyDecrease: "کاهش تعداد",
+  qtyIncrease: "افزایش تعداد",
   inCart: "در سفارش",
   each: "هر عدد",
   cart: "سفارش",
@@ -1275,6 +1251,7 @@ const fa: typeof en = {
     "رسید شما دریافت شد و در حال تأیید پرداخت هستیم. به محض تأیید، آماده‌سازی سفارش آغاز می‌شود.",
   confirmPayment: "تأیید دریافت وجه",
   confirmConfirmPayment: "دریافت وجه تأیید شود؟",
+  repEmailAdminOnly: "ایمیل این مشتری را فقط مدیر می‌تواند تغییر دهد.",
   repResetAdminOnly: "فقط مدیر می‌تواند رمز این مشتری را بازنشانی کند: شما فقط رمز مشتریانی را که خودتان ساخته‌اید، تا پیش از آن‌که رمز خود را انتخاب کنند، بازنشانی می‌کنید.",
   repAwaitingConfirmation: "رسید دریافت شد. مدیر آن را با حساب بانکی مقایسه و پرداخت را تأیید می‌کند.",
   repInvoiceUnpriced: "یکی از ردیف‌های این سفارش هنوز قیمت ندارد. مدیر آن را قیمت‌گذاری و صورتحساب را صادر می‌کند.",
@@ -1812,6 +1789,7 @@ const fa: typeof en = {
   createCustomer: "ایجاد مشتری",
   customerSearchPlaceholder: "کد، نام شرکت یا تلفن",
   noCustomersYet: "هنوز مشتری‌ای ندارید.",
+  repNoCustomerMatch: "مشتری‌ای با این جستجو پیدا نشد.",
   lastOrder: "آخرین سفارش",
   nextFollowUp: "پیگیری بعدی",
   customerCodeChoice: "کد مشتری",
@@ -1904,6 +1882,10 @@ const fa: typeof en = {
   adminSplitErrorMixed: "همهٔ سهم‌ها را پر کنید یا همه را خالی بگذارید.",
   adminSplitErrorDuplicate: "هر نماینده فقط یک بار.",
   adminSplitErrorTooMany: "حداکثر ۵ نماینده برای هر حساب.",
+  adminCustomerEmailChange: "تغییر ایمیل",
+  adminCustomerEmailHint:
+    "کد ورود و ایمیل‌های سفارش به این نشانی فرستاده می‌شود. مشتری نشانی جدید را در ورود بعدی با کد تأیید می‌کند.",
+  adminCustomerEmailSaved: "ایمیل ذخیره شد.",
   adminSplitErrorRep: "این نماینده غیرفعال است و قابل افزودن نیست.",
   adminSplitErrorRepMissing: "در هر ردیف یک نماینده انتخاب کنید یا ردیف را حذف کنید.",
   adminAddRep: "افزودن نماینده",
@@ -2003,17 +1985,4 @@ const dictionaries: Record<Locale, Dict> = { en, fa };
 
 export function getDict(locale: Locale): Dict {
   return dictionaries[locale] ?? dictionaries.en;
-}
-
-/** Picks the locale-appropriate field off a row carrying `<field>En` / `<field>Fa`. */
-export function pick<T extends Record<string, unknown>>(
-  row: T,
-  base: string,
-  locale: Locale,
-): string {
-  const key = locale === "fa" ? `${base}Fa` : `${base}En`;
-  const val = row[key];
-  if (typeof val === "string" && val.length > 0) return val;
-  const fallback = row[`${base}En`];
-  return typeof fallback === "string" ? fallback : "";
 }

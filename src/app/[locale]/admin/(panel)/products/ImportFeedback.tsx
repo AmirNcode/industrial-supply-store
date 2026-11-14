@@ -159,7 +159,7 @@ export function ImportFeedback({
 
 function ImportProblem({ children }: { children: React.ReactNode }) {
   return (
-    <p className="mt-1.5 border border-[#e0b4b0] bg-[#fdf2f1] px-2.5 py-1.5 text-[12px] text-[var(--color-danger)]">
+    <p role="alert" className="mt-1.5 border border-[#e0b4b0] bg-[#fdf2f1] px-2.5 py-1.5 text-[12px] text-[var(--color-danger)]">
       {children}
     </p>
   );

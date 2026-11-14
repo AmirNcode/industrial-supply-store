@@ -116,6 +116,23 @@ nothing important; padding it hides the times there is.
 - **Email only through `lib/email.ts`** (Resend by `fetch`, from `mail.temexpro.com` only); without `RESEND_API_KEY` nothing is sent and `/admin/emails` is the inbox. Send after the transaction commits.
 - **New checkout/account wording goes in `src/lib/i18nCheckout.ts`**, both objects.
 - `npm run db:seed:checkout` (local only) sets seller contact, a fake bank account, VAT and stock on four families so every checkout path can be walked.
+- **Phone inputs are 16px by one `!important` rule at the end of `globals.css`** (iOS zooms below that); never fix zoom with `maximum-scale`/`user-scalable`. `e2e/phone-input-size.spec.ts` fails on any smaller field.
+- **Per-address rate limits count an IPv6 visitor by /64** (`rateLimitAddressKey`); a per-email limit keys on `mailboxKey()`, not the typed text.
+- **A rep may change a customer's email only under the reset rule** (`repMayEditEmail`, enforced in `updateCustomerForRep`'s UPDATE): the email is what code sign-in trusts.
+- **Browser components outside admin never import `i18n.ts`** — the server parent passes words with `textFor` (`lib/clientText.ts`); language helpers come from `lib/locale.ts`. `clientText.test.ts` fails otherwise.
+- **`CartSync` asks for the cart only when the `isupply_has_cart` cookie is present** (`lib/cartMarker.ts`); anything that creates a cart must go through `ensureCart`.
+- **No `loading.tsx` above pages that call `notFound()`** — it starts the response early and turns every 404 into a 200.
+- **Before a local e2e run, stop any old server on port 3100** — Playwright reuses it, and a server from an older build rewrites cached pages with script names that no longer exist.
+- **A receipt holds stock for `RECEIPT_HOLD_DAYS` (5)**, counted from `payment_submitted_at`, not `expires_at` (every order page shows `expires_at` as the customer's deadline); after that the sweep releases the stock and the order stays in `payment_review`.
+- **`issueLoginCode` returns null and nothing is sent** when a code under two minutes old exists or the account's email no longer matches; tests age the live code first.
+- **Small settings are one read per request** (`lib/appSettings.ts`); a new large `app_settings` value must be excluded there like `fx_market_state`.
+- **Error messages carry `role="alert"`**; a browser test that looks for an alert must filter by text.
+- **The daily job deletes data** (`db/pruneQueries.ts`): carts empty for 30 days, email-log rows older than a year.
+- **Any change to a customer's email** (`setCustomerEmailAdmin`, `updateCustomerForRep`) ends the account's sessions and kills live sign-in codes; the admin's also unverifies the address. A new path that writes `users.email` must do the same.
+- **Every customer receipt upload counts against `proofUploadDaily`** (pay link per address; signed-in per address and account); a new upload path must too.
+- **Cheap public reads are limited in memory** (`lib/memoryRateLimit.ts`, search suggestions); sign-in, checkout and uploads stay on the database limiter.
+- **A rep's wider customer search goes through `repCustomerSearchAllowed`** (per rep, per minute and per day), never a bare `consumeRateLimit`.
+- **Open review findings live in [`docs/REVIEW-2026-11.md`](docs/REVIEW-2026-11.md)** — start at "Resume here".
 - **Keep this file current.** When you discover a non-obvious convention,
   gotcha, or command, propose a CLAUDE.md update at task end. Keep entries one
   line. Don't add what's obvious from code.

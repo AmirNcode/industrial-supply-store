@@ -67,3 +67,17 @@ export function repMayResetPassword(
 ): boolean {
   return customer.origin === "rep" && customer.originRepId === repId && !customer.choseOwnPassword;
 }
+
+/**
+ * Whether a rep may change this customer's email: the reset rule, and only
+ * until the address has been proved. An email is what "email me a code" signs
+ * in with, so changing it on any other account would hand that account to
+ * whoever reads the new inbox. `updateCustomerForRep` enforces the same rule
+ * in its statement; this only decides whether the field is editable.
+ */
+export function repMayEditEmail(
+  customer: { origin: string; originRepId: string | null; choseOwnPassword: boolean; emailVerified: boolean },
+  repId: string,
+): boolean {
+  return repMayResetPassword(customer, repId) && !customer.emailVerified;
+}

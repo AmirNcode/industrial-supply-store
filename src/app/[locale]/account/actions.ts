@@ -71,7 +71,8 @@ import { receivePaymentProof, type ProofUploadResult } from "@/lib/paymentProofU
 /** Emails the account a fresh code. The caller has already rate-limited. */
 async function sendLoginCode(user: { id: string; email: string | null }, locale: Locale): Promise<void> {
   if (!user.email) return;
-  const code = await issueLoginCode(user.id);
+  const code = await issueLoginCode(user.id, user.email);
+  if (code === null) return;
   const mail = loginCodeEmail({ locale, code, minutes: LOGIN_CODE_TTL_MINUTES });
   await sendEmail({ kind: "login-code", to: user.email, secret: true, ...mail });
 }
@@ -480,6 +481,13 @@ export async function uploadPaymentProofAction(
   if (!limit.allowed) return { ok: false, problem: "rate-limited" };
   const found = typeof ref === "string" ? await getOrderForUser(user.id, ref.slice(0, 20)) : null;
   if (!found || !acceptsPaymentProof(found.order.status)) return { ok: false, problem: "closed" };
+  // The same daily ceiling as a pay link (review R-6), per address and per
+  // account: an account is free to make, so signing in must not be the way
+  // round the cap on how much one person can put in file storage.
+  const daily = await consumeRateLimit("proof:upload-day", RATE_LIMITS.proofUploadDaily, {
+    accountId: user.id,
+  });
+  if (!daily.allowed) return { ok: false, problem: "rate-limited" };
   return receivePaymentProof(found.order.id, formData.get("file"), { kind: "customer" });
 }
 

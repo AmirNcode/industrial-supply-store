@@ -2,6 +2,7 @@ import "server-only";
 import { sql } from "./index";
 import { recordAudit } from "./audit";
 import { releaseHeldStock } from "./inventoryQueries";
+import { RECEIPT_HOLD_DAYS } from "@/lib/orders";
 
 /**
  * Deadlines, enforced when someone looks rather than by a timer.
@@ -21,7 +22,17 @@ import { releaseHeldStock } from "./inventoryQueries";
  *             time to quote; the request is still theirs to answer)
  *
  * A receipt clears the deadline (`addPaymentProof`), so an order whose
- * customer has paid is never swept while the admin checks the bank.
+ * customer has paid is never cancelled while the admin checks the bank. Its
+ * stock is another matter: a receipt is only an uploaded image, so the hold it
+ * buys ends `RECEIPT_HOLD_DAYS` after the first one (review R-2):
+ *
+ *   payment_review, first receipt older than that → stays open for staff to
+ *             confirm, but its lines become back-order lines and their stock
+ *             is released, exactly as for `received`
+ *
+ * That clock is `payment_submitted_at`, not `expires_at`: every order page,
+ * list and pish-factor shows `expires_at` as the customer's own deadline, and
+ * this one is not theirs.
  */
 
 export type ExpiredOrder = { id: number; ref: string; was: "invoiced" | "quoted" };
@@ -41,10 +52,19 @@ export async function sweepExpiredOrders(options: { force?: boolean } = {}): Pro
 
   // One indexed read; almost always empty, and then this is the whole cost.
   const due = await sql<{ id: number }[]>`
-    SELECT id FROM orders
-    WHERE expires_at IS NOT NULL AND expires_at < now()
-    ORDER BY expires_at
-    LIMIT ${BATCH}
+    (SELECT id FROM orders
+     WHERE expires_at IS NOT NULL AND expires_at < now()
+     ORDER BY expires_at
+     LIMIT ${BATCH})
+    UNION ALL
+    -- Receipts nobody confirmed in time and that still hold stock. Read
+    -- through the status index; the few orders in review are the whole scan.
+    (SELECT o.id FROM orders o
+     WHERE o.status = 'payment_review'
+       AND o.payment_submitted_at < now() - make_interval(days => ${RECEIPT_HOLD_DAYS})
+       AND EXISTS (SELECT 1 FROM order_items i WHERE i.order_id = o.id AND NOT i.backorder)
+     ORDER BY o.payment_submitted_at
+     LIMIT ${BATCH})
   `;
   const result: SweepResult = { cancelled: [], released: 0 };
   for (const { id } of due) {
@@ -55,7 +75,10 @@ export async function sweepExpiredOrders(options: { force?: boolean } = {}): Pro
       // landed since the list above was read.
       const [order] = await tx<{ ref: string; status: string }[]>`
         SELECT ref, status FROM orders
-        WHERE id = ${id} AND expires_at IS NOT NULL AND expires_at < now()
+        WHERE id = ${id}
+          AND ((expires_at IS NOT NULL AND expires_at < now())
+            OR (status = 'payment_review'
+                AND payment_submitted_at < now() - make_interval(days => ${RECEIPT_HOLD_DAYS})))
         FOR UPDATE
       `;
       if (!order) return null;
@@ -73,7 +96,7 @@ export async function sweepExpiredOrders(options: { force?: boolean } = {}): Pro
         });
         return { kind: "cancelled" as const, ref: order.ref, was: order.status as "invoiced" | "quoted" };
       }
-      if (order.status === "received") {
+      if (order.status === "received" || order.status === "payment_review") {
         await releaseHeldStock(tx, id);
         // After the release, so the release still saw the lines as held.
         await tx`UPDATE order_items SET backorder = true WHERE order_id = ${id} AND NOT backorder`;
@@ -82,6 +105,7 @@ export async function sweepExpiredOrders(options: { force?: boolean } = {}): Pro
           actor: { kind: "system" },
           action: "order.hold-released",
           subject: { kind: "order", id },
+          detail: { from: order.status },
         });
         return { kind: "released" as const };
       }

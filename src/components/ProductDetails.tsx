@@ -279,14 +279,18 @@ function OrderPanel({
       )}
 
       <div className="flex items-end gap-2">
-        <label className="qty-label">
+        {/* A plain block, not a <label>: a label hands a tap on its text to
+            its first control, which here is the minus button, so tapping the
+            word "Qty" lowered the quantity (review R-16). The field is named
+            by its own aria-label. */}
+        <div className="qty-label">
           <span>{t.qty}</span>
           <span className="qty-step">
             <button
               type="button"
               data-cart-action="step"
               data-cart-step="-1"
-              aria-label={t.remove}
+              aria-label={t.qtyDecrease}
               tabIndex={-1}
             >
               −
@@ -302,13 +306,13 @@ function OrderPanel({
               type="button"
               data-cart-action="step"
               data-cart-step="1"
-              aria-label={t.add}
+              aria-label={t.qtyIncrease}
               tabIndex={-1}
             >
               +
             </button>
           </span>
-        </label>
+        </div>
         {packQty > 1 && (
           <span className="pb-2 text-[11px] text-[var(--color-ink-muted)]">
             {t.pkg}

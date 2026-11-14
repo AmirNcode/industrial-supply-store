@@ -2,7 +2,8 @@
 
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { getDict, type Locale } from "@/lib/i18n";
+import type { Locale } from "@/lib/locale";
+import type { PROOF_UPLOAD_TEXT, TextFor } from "@/lib/clientText";
 import { PROOF_IMAGE_MAX_SIDE, PROOF_MAX_BYTES, isProofType } from "@/lib/paymentProof";
 import type { ProofUploadProblem, ProofUploadResult } from "@/lib/paymentProofUpload";
 
@@ -17,16 +18,17 @@ import type { ProofUploadProblem, ProofUploadResult } from "@/lib/paymentProofUp
  */
 export function PaymentProofUpload({
   locale,
+  t,
   upload,
   hasProofs,
   hint,
 }: {
   locale: Locale;
+  t: TextFor<typeof PROOF_UPLOAD_TEXT>;
   upload: (formData: FormData) => Promise<ProofUploadResult>;
   hasProofs: boolean;
   hint: string;
 }) {
-  const t = getDict(locale);
   const router = useRouter();
   const input = useRef<HTMLInputElement>(null);
   const [pending, startTransition] = useTransition();
