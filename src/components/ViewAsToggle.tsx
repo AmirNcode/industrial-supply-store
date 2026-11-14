@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import Link from "next/link";
-import { getDict, type Locale } from "@/lib/i18n";
+import type { TextFor, VIEW_AS_TEXT } from "@/lib/clientText";
 import { useRouteDisclosure } from "@/lib/useRouteDisclosure";
 
 /**
@@ -11,17 +11,16 @@ import { useRouteDisclosure } from "@/lib/useRouteDisclosure";
  * or a back button, rather than living in component state.
  */
 export function ViewAsToggle({
-  locale,
+  t,
   categoriesHref,
   listHref,
   current,
 }: {
-  locale: Locale;
+  t: TextFor<typeof VIEW_AS_TEXT>;
   categoriesHref: string;
   listHref: string;
   current: "categories" | "list";
 }) {
-  const t = getDict(locale);
   const [open, setOpen] = useRouteDisclosure();
   const ref = useRef<HTMLDivElement>(null);
 

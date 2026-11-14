@@ -2,7 +2,8 @@
 
 import { useTransition } from "react";
 import { useCartQty, removeFromCart } from "@/lib/cartClient";
-import { getDict, type Locale } from "@/lib/i18n";
+import type { Locale } from "@/lib/locale";
+import type { IN_CART_TEXT, TextFor } from "@/lib/clientText";
 import { formatInt } from "@/lib/money";
 
 /**
@@ -17,14 +18,15 @@ import { formatInt } from "@/lib/money";
 export function InCartQty({
   productId,
   locale,
+  t,
   /** Cards put the label inline; the table has a column header instead. */
   showLabel = false,
 }: {
   productId: number;
   locale: Locale;
+  t: TextFor<typeof IN_CART_TEXT>;
   showLabel?: boolean;
 }) {
-  const t = getDict(locale);
   const qty = useCartQty(productId);
   const [pending, start] = useTransition();
 

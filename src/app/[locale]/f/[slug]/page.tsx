@@ -22,6 +22,7 @@ import { ProductDetails } from "@/components/ProductDetails";
 import { CatalogHeadReveal } from "@/components/CatalogHeadReveal";
 import { calloutArt, paragraphs } from "@/lib/catalogCallout";
 import { isLocale, getDict, pick, type Locale } from "@/lib/i18n";
+import { MOBILE_FILTER_TEXT, textFor } from "@/lib/clientText";
 import {
   formatInt,
   formatPriceBare,
@@ -346,6 +347,7 @@ export default async function FamilyPage({
 
         <MobileFilterBar
           locale={l}
+          t={textFor(t, MOBILE_FILTER_TEXT)}
           base={base}
           searchParams={sp}
           facets={facets}

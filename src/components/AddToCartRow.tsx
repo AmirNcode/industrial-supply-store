@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { getDict, type Locale } from "@/lib/i18n";
+import type { ADD_TO_CART_TEXT, TextFor } from "@/lib/clientText";
 import { addToCart } from "@/lib/cartClient";
 
 /**
@@ -13,14 +13,13 @@ import { addToCart } from "@/lib/cartClient";
  */
 export function AddToCartRow({
   productId,
-  locale,
+  t,
   packQty,
 }: {
   productId: number;
-  locale: Locale;
+  t: TextFor<typeof ADD_TO_CART_TEXT>;
   packQty: number;
 }) {
-  const t = getDict(locale);
   const [qty, setQty] = useState("");
   const [done, setDone] = useState(false);
   const [pending, start] = useTransition();

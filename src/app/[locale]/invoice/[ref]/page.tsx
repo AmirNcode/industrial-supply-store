@@ -13,6 +13,7 @@ import { isPayToken, payTokensEqual } from "@/lib/payToken";
 import { PrintButton } from "@/components/PrintButton";
 import { InvoiceDocument } from "@/components/InvoiceDocument";
 import { isLocale, getDict, type Locale } from "@/lib/i18n";
+import { PRINT_BUTTON_TEXT, textFor } from "@/lib/clientText";
 import { getPriceDisplayMode } from "@/lib/fx";
 import { currencyLabel, invoiceCurrencyFor, type Currency } from "@/lib/money";
 
@@ -189,7 +190,7 @@ export default async function InvoicePage({
       />
 
       <div className="mt-6 flex justify-end no-print">
-        <PrintButton locale={l} />
+        <PrintButton t={textFor(t, PRINT_BUTTON_TEXT)} />
       </div>
     </main>
   );

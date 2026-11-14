@@ -4,6 +4,7 @@ import type { ProofUploadResult } from "@/lib/paymentProofUpload";
 import { getDict, type Locale } from "@/lib/i18n";
 import { PaymentProofList } from "./PaymentProofList";
 import { PaymentProofUpload } from "./PaymentProofUpload";
+import { PROOF_UPLOAD_TEXT, textFor } from "@/lib/clientText";
 
 /**
  * Proof of payment on an order page: the upload while payment is owed or
@@ -47,6 +48,7 @@ export function PaymentProofSection({
       {upload && (
         <PaymentProofUpload
           locale={locale}
+          t={textFor(t, PROOF_UPLOAD_TEXT)}
           upload={upload}
           hasProofs={proofs.length > 0}
           hint={hint ?? t.proofHint}

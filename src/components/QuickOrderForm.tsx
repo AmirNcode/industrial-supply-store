@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useActionState } from "react";
 import { quickOrderAction, type QuickOrderResult } from "@/app/actions";
-import { getDict, type Locale } from "@/lib/i18n";
+import type { Locale } from "@/lib/locale";
+import type { QUICK_ORDER_TEXT, TextFor } from "@/lib/clientText";
 import { formatInt } from "@/lib/money";
 import { REQUEST_LIMITS } from "@/lib/requestLimits";
 
@@ -13,8 +14,13 @@ import { REQUEST_LIMITS } from "@/lib/requestLimits";
  * match. Silently dropping unmatched lines would be the worst possible failure
  * mode for a buyer working from a bill of materials.
  */
-export function QuickOrderForm({ locale }: { locale: Locale }) {
-  const t = getDict(locale);
+export function QuickOrderForm({
+  locale,
+  t,
+}: {
+  locale: Locale;
+  t: TextFor<typeof QUICK_ORDER_TEXT>;
+}) {
   const [state, formAction, pending] = useActionState<QuickOrderResult | null, FormData>(
     quickOrderAction,
     null,

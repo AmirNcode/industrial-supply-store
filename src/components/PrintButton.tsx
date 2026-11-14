@@ -1,6 +1,6 @@
 "use client";
 
-import { getDict, type Locale } from "@/lib/i18n";
+import type { PRINT_BUTTON_TEXT, TextFor } from "@/lib/clientText";
 
 /**
  * The whole PDF pipeline.
@@ -11,8 +11,7 @@ import { getDict, type Locale } from "@/lib/i18n";
  * cost is that the customer gets a print dialog rather than a download — which
  * is fine, because in this version staff are the ones producing the PDF.
  */
-export function PrintButton({ locale }: { locale: Locale }) {
-  const t = getDict(locale);
+export function PrintButton({ t }: { t: TextFor<typeof PRINT_BUTTON_TEXT> }) {
   return (
     <button type="button" onClick={() => window.print()} className="btn-primary no-print">
       {t.invoiceDownload}

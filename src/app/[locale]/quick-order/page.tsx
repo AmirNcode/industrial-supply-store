@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { isLocale, getDict, type Locale } from "@/lib/i18n";
+import { QUICK_ORDER_TEXT, textFor } from "@/lib/clientText";
 import { QuickOrderForm } from "@/components/QuickOrderForm";
 
 export default async function QuickOrderPage({
@@ -18,7 +19,7 @@ export default async function QuickOrderPage({
         {t.quickOrder}
       </h1>
       <p className="mb-3 text-[12px] text-[var(--color-ink-muted)]">{t.quickOrderHelp}</p>
-      <QuickOrderForm locale={l} />
+      <QuickOrderForm locale={l} t={textFor(t, QUICK_ORDER_TEXT)} />
     </main>
   );
 }
