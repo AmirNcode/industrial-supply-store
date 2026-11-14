@@ -11,6 +11,8 @@
  * autocomplete and fuzzy part-number search quietly unindexed.
  */
 import "dotenv/config";
+import { readdirSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import postgres from "postgres";
 import { inspectDatabaseIntegrity, integrityProblems } from "@/db/dataIntegrity";
 
@@ -188,6 +190,17 @@ console.log(
   }`,
 );
 
+// Without these, deleting a product scans every cart line and order line in
+// full (`20261114120000_add_product_id_indexes.sql`, review R-11): fine at
+// demo size, past the statement timeout once those tables are large.
+const PRODUCT_DELETE_INDEXES = ["cart_items_product_idx", "order_items_product_idx"] as const;
+const missingProductDeleteIndexes = PRODUCT_DELETE_INDEXES.filter((name) => !haveObjs.has(name));
+console.log(
+  `product delete indexes ${PRODUCT_DELETE_INDEXES.length - missingProductDeleteIndexes.length}/${PRODUCT_DELETE_INDEXES.length} ${
+    missingProductDeleteIndexes.length === 0 ? "✓" : `✗ MISSING ${missingProductDeleteIndexes.join(", ")}`
+  }`,
+);
+
 const REQUIRED_CONSTRAINTS = [
   "categories_depth_check", "categories_product_count_check",
   "product_families_product_count_check",
@@ -270,22 +283,25 @@ const [{ hasMigrationLedger }] = await sql<{ hasMigrationLedger: boolean }[]>`
   SELECT to_regclass('supabase_migrations.schema_migrations') IS NOT NULL
     AS "hasMigrationLedger"
 `;
-const REQUIRED_MIGRATIONS = [
-  "20260817010000",
-  "20260817020000",
-  "20260818025101",
-  "20260820093000",
-  "20260820154500",
-  "20260828212651",
-  "20260920120000",
-  "20260927120000",
-  "20260928120000",
-  "20260929120000",
-  "20260930120000",
-  "20260930130000",
-  "20260930140000",
-  "20261004120000",
-] as const;
+/**
+ * Every file in `supabase/migrations`, read from the folder rather than listed.
+ *
+ * This used to be a hand-written list, and nobody added to it after
+ * 2026-10-04: five later migrations went live while this line kept printing a
+ * tick, so a database missing any of them would still have "looked correct"
+ * right before a deploy. Reading the folder means a new migration is checked
+ * the moment its file exists.
+ */
+const MIGRATIONS_DIR = fileURLToPath(new URL("../supabase/migrations/", import.meta.url));
+const REQUIRED_MIGRATIONS = readdirSync(MIGRATIONS_DIR)
+  .filter((name) => name.endsWith(".sql"))
+  .map((name) => /^(\d{14})_/.exec(name)?.[1])
+  .filter((version): version is string => version !== undefined)
+  .sort();
+if (REQUIRED_MIGRATIONS.length === 0) {
+  console.error(`✗ No migration files found in ${MIGRATIONS_DIR}`);
+  process.exit(1);
+}
 let recordedMigrations = new Set<string>();
 if (hasMigrationLedger) {
   const rows = await sql<{ version: string }[]>`
@@ -300,7 +316,7 @@ const missingMigrations = REQUIRED_MIGRATIONS.filter(
 console.log(
   `migration ledger ${
     missingMigrations.length === 0
-      ? `${REQUIRED_MIGRATIONS.join(", ")} ✓`
+      ? `${REQUIRED_MIGRATIONS.length}/${REQUIRED_MIGRATIONS.length} ✓ (latest ${REQUIRED_MIGRATIONS.at(-1)})`
       : hasMigrationLedger
         ? `✗ not recorded: ${missingMigrations.join(", ")}`
         : "✗ MISSING"
@@ -507,6 +523,7 @@ const ok =
   unvalidatedConstraints.length === 0 &&
   hasSubmissionIndex &&
   missingIndexes.length === 0 &&
+  missingProductDeleteIndexes.length === 0 &&
   hasRateLimitPrimaryKey &&
   hasRateLimitExpiryIndex &&
   missingMigrations.length === 0 &&

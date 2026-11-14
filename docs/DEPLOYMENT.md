@@ -207,8 +207,9 @@ A healthy result has a ✓ on every line and ends with:
 ✓ database looks correct
 ```
 
-The `migration ledger` line lists every file in `supabase/migrations`; a version
-missing from it is a migration not yet applied.
+The `migration ledger` line counts every file in `supabase/migrations`, read
+from the folder, against the database's ledger; a version it names as not
+recorded is a migration not yet applied.
 
 ## The evening exchange-rate job
 
