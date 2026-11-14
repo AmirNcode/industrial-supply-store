@@ -119,6 +119,10 @@ nothing important; padding it hides the times there is.
 - **Phone inputs are 16px by one `!important` rule at the end of `globals.css`** (iOS zooms below that); never fix zoom with `maximum-scale`/`user-scalable`. `e2e/phone-input-size.spec.ts` fails on any smaller field.
 - **Per-address rate limits count an IPv6 visitor by /64** (`rateLimitAddressKey`); a per-email limit keys on `mailboxKey()`, not the typed text.
 - **A rep may change a customer's email only under the reset rule** (`repMayEditEmail`, enforced in `updateCustomerForRep`'s UPDATE): the email is what code sign-in trusts.
+- **Browser components outside admin never import `i18n.ts`** — the server parent passes words with `textFor` (`lib/clientText.ts`); language helpers come from `lib/locale.ts`. `clientText.test.ts` fails otherwise.
+- **`CartSync` asks for the cart only when the `isupply_has_cart` cookie is present** (`lib/cartMarker.ts`); anything that creates a cart must go through `ensureCart`.
+- **No `loading.tsx` above pages that call `notFound()`** — it starts the response early and turns every 404 into a 200.
+- **Before a local e2e run, stop any old server on port 3100** — Playwright reuses it, and a server from an older build rewrites cached pages with script names that no longer exist.
 - **Open review findings live in [`docs/REVIEW-2026-11.md`](docs/REVIEW-2026-11.md)** — start at "Resume here".
 - **Keep this file current.** When you discover a non-obvious convention,
   gotcha, or command, propose a CLAUDE.md update at task end. Keep entries one
