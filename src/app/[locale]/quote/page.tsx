@@ -14,7 +14,7 @@ import {
   listCustomersForRep,
   searchBeyondMine,
 } from "@/db/customerQueries";
-import { RATE_LIMITS, consumeRateLimit } from "@/lib/rateLimit";
+import { repCustomerSearchAllowed } from "@/lib/rateLimit";
 import { readOrderingFor } from "@/lib/repOrderContext";
 import { isUuid } from "@/lib/ids";
 import { RepQuoteForm } from "./RepQuoteForm";
@@ -94,7 +94,7 @@ export default async function QuotePage({
     const wide = search.trim().length >= REP_SEARCH_MIN_CHARS;
     // Bounded per rep: the wider search reaches customers nobody looks after.
     const limited = wide
-      ? !(await consumeRateLimit("rep:customer-search", RATE_LIMITS.repCustomerSearch, { accountId: rep.id })).allowed
+      ? !(await repCustomerSearchAllowed(rep.id))
       : false;
     const [mine, beyond, savedAddresses] = await Promise.all([
       search.trim() ? listCustomersForRep(rep.id, search, 1).then((r) => r.rows) : Promise.resolve([]),

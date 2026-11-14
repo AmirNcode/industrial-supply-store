@@ -10,7 +10,7 @@ import {
 import { startOrderAction } from "../../actions";
 import { RepSearchResults } from "@/components/RepSearchResults";
 import { ErrorBanner } from "@/components/Banners";
-import { RATE_LIMITS, consumeRateLimit } from "@/lib/rateLimit";
+import { repCustomerSearchAllowed } from "@/lib/rateLimit";
 import { salesByCustomerForRep } from "@/db/repMoney";
 import { formatInt, formatRial } from "@/lib/money";
 import { formatPersianDate, formatPersianDay, tehranToday } from "@/lib/persianCalendar";
@@ -41,7 +41,7 @@ export default async function RepCustomersPage({
   // The wider search reaches customers nobody looks after, so it is bounded
   // per rep; a rep over the limit still gets their own list.
   const limited = wide
-    ? !(await consumeRateLimit("rep:customer-search", RATE_LIMITS.repCustomerSearch, { accountId: rep.id })).allowed
+    ? !(await repCustomerSearchAllowed(rep.id))
     : false;
   const [{ rows: customers, total }, sales, beyond] = await Promise.all([
     listCustomersForRep(rep.id, search, page),

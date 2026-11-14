@@ -57,9 +57,12 @@ export const RATE_LIMITS = {
   repSignIn: { limit: 10, windowSeconds: 15 * 60 },
   repWrite: { limit: 60, windowSeconds: 10 * 60 },
   repOrderSubmit: { limit: 30, windowSeconds: 10 * 60 },
-  // Per rep account: the search shows names and phones of customers nobody
-  // looks after, so it is bounded against someone harvesting them.
-  repCustomerSearch: { limit: 60, windowSeconds: 60 },
+  // A rep's search beyond their own list shows unassigned customers' names
+  // and phones, twenty at a time. 60 a minute with no ceiling let a departing rep
+  // copy the whole unassigned book in minutes (review R-19); a working day of
+  // real lookups fits well inside both of these.
+  repCustomerSearch: { limit: 20, windowSeconds: 60 },
+  repCustomerSearchDaily: { limit: 300, windowSeconds: 24 * 60 * 60 },
   // Per pay link and per address: the link alone authorises an upload, so it
   // is what bounds how much anyone holding one can store.
   proofUpload: { limit: 20, windowSeconds: 60 * 60 },
@@ -222,6 +225,19 @@ export async function consumeAccountCounter(
 ): Promise<number> {
   const row = await consumeCounter(scope, rateLimitIdentityHash("account", accountKey), policy);
   return row.count;
+}
+
+/**
+ * May this rep run one more search beyond their own list? Both limits are
+ * counted per rep, not per address: reps in one office share an address, and
+ * the daily ceiling is one person's allowance.
+ */
+export async function repCustomerSearchAllowed(repId: string): Promise<boolean> {
+  const [minute, day] = await Promise.all([
+    consumeAccountCounter("rep:customer-search", RATE_LIMITS.repCustomerSearch, repId),
+    consumeAccountCounter("rep:customer-search-day", RATE_LIMITS.repCustomerSearchDaily, repId),
+  ]);
+  return minute <= RATE_LIMITS.repCustomerSearch.limit && day <= RATE_LIMITS.repCustomerSearchDaily.limit;
 }
 
 /** How many events an account has in its current window, without adding one. */
