@@ -21,7 +21,7 @@ import type { RepRow } from "@/db/repQueries";
 import { getOrderableCustomerForRep } from "@/db/customerQueries";
 import { clearOrderingFor } from "@/lib/repOrderContext";
 import { isUuid } from "@/lib/ids";
-import { RATE_LIMITS, consumeRateLimit } from "@/lib/rateLimit";
+import { RATE_LIMITS, consumeAccountCounter, consumeRateLimit } from "@/lib/rateLimit";
 import { boundedString, parseQuickOrder } from "@/lib/requestLimits";
 import { getPriceDisplayMode } from "@/lib/fx";
 import { customerCurrencyFor } from "@/lib/money";
@@ -182,6 +182,15 @@ export async function submitQuoteAction(formData: FormData) {
   if ("error" in parsed) redirect(`/${locale}/quote?error=${parsed.error}`);
   const contact = parsed.contact;
   if (user && contact.email === "") contact.email = user.email ?? "";
+  if (user === null) {
+    // Counted before anything is written or sent; see the policy's note.
+    const perEmail = await consumeAccountCounter(
+      "quote:guest-email",
+      RATE_LIMITS.guestOrdersPerEmail,
+      contact.email.toLowerCase(),
+    );
+    if (perEmail > RATE_LIMITS.guestOrdersPerEmail.limit) redirect(`/${locale}/quote?error=rate-limit`);
+  }
 
   // A guest's order goes on an account: the one their email already has, or
   // a new one made from what they just typed. Attaching to an existing

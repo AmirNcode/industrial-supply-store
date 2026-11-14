@@ -38,6 +38,13 @@ export const RATE_LIMITS = {
   cartWrite: { limit: 120, windowSeconds: 60 },
   quickOrder: { limit: 12, windowSeconds: 60 },
   quoteSubmit: { limit: 5, windowSeconds: 10 * 60 },
+  // Guest checkouts naming one email, from any address (review R-5). A guest
+  // types the address, and each order emails it a pish-factor, emails every
+  // staff address and lands on that address's account — so without a count
+  // per email, a stranger spread over many addresses could flood one inbox
+  // and spend the day's sending allowance. Signed-in checkout is not counted:
+  // the owner of a flooded address can still order by signing in.
+  guestOrdersPerEmail: { limit: 6, windowSeconds: 60 * 60 },
   suggest: { limit: 180, windowSeconds: 60 },
   // Full search runs a relevance pass over every family plus three passes
   // over the products; "all products" renders up to 1,000 uncached rows.
