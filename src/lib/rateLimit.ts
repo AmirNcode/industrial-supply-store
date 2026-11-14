@@ -63,6 +63,12 @@ export const RATE_LIMITS = {
   // Per pay link and per address: the link alone authorises an upload, so it
   // is what bounds how much anyone holding one can store.
   proofUpload: { limit: 20, windowSeconds: 60 * 60 },
+  // Per address, across every pay link, per day (review R-6). The hourly
+  // limit above still let one visitor with guest orders of their own store
+  // about 80 MB an hour — the free plan's whole 1 GB of file storage in half a
+  // day, after which real receipts fail. 30 files is at most 120 MB a day,
+  // and far more than a customer paying a few orders sends.
+  proofUploadDaily: { limit: 30, windowSeconds: 24 * 60 * 60 },
 } as const satisfies Record<string, RateLimitPolicy>;
 
 type HeaderSource = Pick<Headers, "get">;
