@@ -15,9 +15,10 @@ test("allows up to the limit per key, then refuses until the window ends", () =>
 });
 
 test("a full table makes room without forgetting the visitors over their limit", () => {
-  const allow = createMemoryRateLimit({ limit: 1, windowSeconds: 60 });
+  const allow = createMemoryRateLimit({ limit: 2, windowSeconds: 60 });
+  // Exactly at the limit, not yet refused: must survive the eviction too.
   assert.equal(allow("heavy", 0).allowed, true);
-  assert.equal(allow("heavy", 0).allowed, false);
+  assert.equal(allow("heavy", 0).allowed, true);
   for (let i = 0; i < 4_999; i++) assert.equal(allow(`k${i}`, 0).allowed, true);
   // Full of visitors under their limit: a newcomer still gets in, and the
   // flood did not hand the heavy one a fresh count.

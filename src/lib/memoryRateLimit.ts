@@ -27,7 +27,11 @@ export function createMemoryRateLimit(policy: { limit: number; windowSeconds: nu
       if (windows.size >= MAX_KEYS) {
         for (const [k, w] of windows) if (w.resetAt <= nowMs) windows.delete(k);
         if (windows.size >= MAX_KEYS) {
-          for (const [k, w] of windows) if (w.count <= policy.limit) windows.delete(k);
+          // Strictly under: a visitor who has used the whole allowance keeps
+          // their window. One part-way through does get a fresh count if they
+          // return, which only matters to someone who can already fill this
+          // table — thousands of networks, each with its own full allowance.
+          for (const [k, w] of windows) if (w.count < policy.limit) windows.delete(k);
         }
         if (windows.size >= MAX_KEYS) return { allowed: false, retryAfter: policy.windowSeconds };
       }
