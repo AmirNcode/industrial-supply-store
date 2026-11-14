@@ -50,6 +50,7 @@ import {
 } from "@/lib/familyWindow";
 import { RATE_LIMITS, consumeRateLimit } from "@/lib/rateLimit";
 import { boundedString } from "@/lib/requestLimits";
+import { displayPackQty, type SoldBy } from "@/lib/soldBy";
 
 /**
  * A bounded family table with an explicit whole-document escape hatch.
@@ -324,6 +325,7 @@ export default async function FamilyPage({
                   currency={currency}
                   rate={rate}
                   icon={family.icon}
+                  soldBy={family.soldBy}
                 />
                 {/* Inside the controller so the running order total can be
                     written by the same delegation that fills the "In cart"
@@ -482,6 +484,7 @@ function SpecTable({
   currency,
   rate,
   icon,
+  soldBy,
 }: {
   locale: Locale;
   defs: SpecDefRow[];
@@ -490,8 +493,11 @@ function SpecTable({
   currency: Currency;
   rate: number;
   icon: string;
+  soldBy: SoldBy;
 }) {
   const t = getDict(locale);
+  // A unit family has no pack column, and its price is for one item.
+  const byUnit = soldBy === "unit";
 
   /*
    * A family owns as many columns as its supplier keeps, which for the first
@@ -508,7 +514,7 @@ function SpecTable({
    * and the box only matters to one who has chosen — both are in the expanded
    * row's order panel now, where the choice is actually made.
    */
-  const columnCount = tableDefs.length + 5;
+  const columnCount = tableDefs.length + (byUnit ? 4 : 5);
 
   /*
    * What the phone cards lead with. Computed here, once, from the same rows
@@ -535,16 +541,17 @@ function SpecTable({
               {pick(d, "label", locale)}
             </th>
           ))}
-          <th className="num">{t.pkgQty}</th>
+          {!byUnit && <th className="num">{t.pkgQty}</th>}
           {/* The currency is named once, here, rather than on every row. */}
           <th className="num price-head">
-            {t.price} / {t.pkg} — {currencyLabel(currency, locale)}
+            {t.price} / {byUnit ? t.each : t.pkg} — {currencyLabel(currency, locale)}
           </th>
           <th>{t.inCart}</th>
         </tr>
       </thead>
       <tbody>
-        {products.map((p) => {
+        {products.map((row) => {
+          const p = { ...row, packQty: displayPackQty(soldBy, row.packQty) };
           const isHit = highlighted && p.partNumber.toUpperCase() === highlighted;
           const base = p.priceCents;
           const onRequest = isPriceOnRequest(base);
@@ -642,9 +649,11 @@ function SpecTable({
                     </td>
                   );
                 })}
-                <td className="num tech tech-num" data-cell="pack">
-                  {p.packQty}
-                </td>
+                {!byUnit && (
+                  <td className="num tech tech-num" data-cell="pack">
+                    {p.packQty}
+                  </td>
+                )}
                 {/* Bare amounts — the currency is named once in the group header.
                     Repeating "ریال" on 200 rows costs table width and
                     tells the buyer nothing they don't already know. */}

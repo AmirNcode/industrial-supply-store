@@ -113,6 +113,8 @@ const COLUMNS: readonly (readonly [string, string])[] = [
   // Added by the commission-splits migration. Rep pages and order claiming read them.
   ["users", "commission_rate_bp"], ["orders", "placed_by_rep_id"],
   ["customer_reps", "share_bp"], ["order_rep_shares", "share_bp"],
+  // Added by the 2026-11-13 sold-by migration. Every family page reads it.
+  ["product_families", "sold_by"],
 ];
 
 const present = await sql<{ name: string }[]>`
@@ -199,6 +201,7 @@ const REQUIRED_CONSTRAINTS = [
   "orders_status_timestamps_check", "order_items_qty_check", "order_items_prices_check",
   "request_rate_limits_count_check",
   "product_families_family_number_check", "product_families_next_variant_check",
+  "product_families_sold_by_check",
   "part_number_registry_slot_check",
   "sales_reps_username_check", "sales_reps_name_check", "sales_reps_commission_rate_check",
   "sales_reps_referral_code_check", "sales_reps_session_version_check",

@@ -5,6 +5,7 @@
  * numeric `?cat=12` is ambiguous as soon as both tables contain id 12. The
  * short namespaced key is the page's stable identity in URLs and client state.
  */
+import type { SoldBy } from "./soldBy";
 export type TaxonomyNodeKey = `c:${number}` | `f:${number}`;
 export type TaxonomyNodeKind = "category" | "family";
 export type TaxonomyVisibilityDraft = Partial<Record<TaxonomyNodeKey, boolean>>;
@@ -36,6 +37,8 @@ export type AdminTaxonomyNode = {
   inventorySold: number;
   /** Products referenced by a past order; used by the existing delete guard. */
   orderedProducts: number;
+  /** Family-only: sold in packages or by single units. Categories read 'package'. */
+  soldBy: SoldBy;
 };
 
 /**

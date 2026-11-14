@@ -26,6 +26,7 @@ import {
   type TaxonomySaveResult,
 } from "./actions";
 import { DeleteControl } from "./DeleteControl";
+import { SoldByControl } from "./SoldByControl";
 import { FamilyImportControl } from "./FamilyImportControl";
 import { FamilyProductTable, type ProductTableHandle } from "./FamilyProductTable";
 import { UnsavedOrderGuard } from "./UnsavedOrderGuard";
@@ -1398,6 +1399,7 @@ function SelectedFamilyPane({
         onPendingChange={onProductPending}
         toolbar={
           <>
+            <SoldByControl key={node.id} familyId={node.id} initial={node.soldBy} locale={locale} demo={demo} />
             <FamilyImportControl familyId={node.id} locale={locale} demo={demo} prominent />
             <a href={`/api/admin/family/${node.id}/template`} download>{t.downloadTemplate}</a>
             <a href={`/api/admin/family/${node.id}/export`} download>{t.exportProducts}</a>

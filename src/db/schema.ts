@@ -159,6 +159,11 @@ export const productFamilies = pgTable(
      * quoted must never come to mean a different product.
      */
     nextVariantOrdinal: integer("next_variant_ordinal").notNull().default(1),
+    /**
+     * 'package' or 'unit'. A unit family hides the pack column and prices
+     * each item; `products.pack_qty` is kept but not shown or applied.
+     */
+    soldBy: text("sold_by").notNull().default("package"),
   },
   (t) => [
     uniqueIndex("families_slug_key").on(t.slug),
@@ -173,6 +178,7 @@ export const productFamilies = pgTable(
       "product_families_next_variant_check",
       sql`${t.nextVariantOrdinal} BETWEEN 1 AND 23977`,
     ),
+    check("product_families_sold_by_check", sql`${t.soldBy} IN ('package', 'unit')`),
   ],
 );
 

@@ -1,4 +1,5 @@
 import "server-only";
+import type { SoldBy } from "@/lib/soldBy";
 import { sql } from "./index";
 import { lockPartNumberWrites } from "./partNumberQueries";
 import {
@@ -100,7 +101,8 @@ export async function getAdminTaxonomyNodes(): Promise<AdminTaxonomyNode[]> {
            COALESCE(fr.family_count, 0)::int AS "familyCount",
            0::int AS "inventoryAvailable", 0::int AS "inventoryOnHold",
            0::int AS "inventorySold",
-           COALESCE(fr.ordered_products, 0)::int AS "orderedProducts"
+           COALESCE(fr.ordered_products, 0)::int AS "orderedProducts",
+           'package'::text AS "soldBy"
     FROM categories c
     LEFT JOIN family_rollup fr ON fr.category_id = c.id
 
@@ -116,7 +118,8 @@ export async function getAdminTaxonomyNodes(): Promise<AdminTaxonomyNode[]> {
            COALESCE(i.available, 0)::int AS "inventoryAvailable",
            COALESCE(i.on_hold, 0)::int AS "inventoryOnHold",
            COALESCE(i.sold, 0)::int AS "inventorySold",
-           COALESCE(o.product_count, 0)::int AS "orderedProducts"
+           COALESCE(o.product_count, 0)::int AS "orderedProducts",
+           f.sold_by AS "soldBy"
     FROM product_families f
     JOIN categories c ON c.id = f.category_id
     LEFT JOIN inventory i ON i.family_id = f.id
@@ -652,4 +655,10 @@ export async function createFamily(
 
     return { ok: true as const, id: row.id, slug: row.slug };
   });
+}
+
+/** Package or unit, for one family. False when the family no longer exists. */
+export async function setFamilySoldBy(familyId: number, soldBy: SoldBy): Promise<boolean> {
+  const result = await sql`UPDATE product_families SET sold_by = ${soldBy} WHERE id = ${familyId}`;
+  return result.count > 0;
 }

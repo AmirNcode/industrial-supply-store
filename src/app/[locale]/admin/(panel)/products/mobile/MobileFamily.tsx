@@ -13,6 +13,7 @@ import {
   type ProductRecord,
 } from "@/lib/productTable";
 import { FamilyImportControl } from "../FamilyImportControl";
+import { SoldByControl } from "../SoldByControl";
 import { cellKey } from "../productDrafts";
 import { nodeName } from "../taxonomyText";
 import { EditDetails } from "./EditDetails";
@@ -135,6 +136,9 @@ function FamilyPage(
         >
           {t.taxonomyCatalogImport}
         </SectionHeading>
+        <div className="mb-2">
+          <SoldByControl key={node.id} familyId={node.id} initial={node.soldBy} locale={locale} demo={demo} />
+        </div>
         <FamilyImportControl
           familyId={node.id}
           familyName={nodeName(node, locale)}

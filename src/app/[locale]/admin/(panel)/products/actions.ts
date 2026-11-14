@@ -8,12 +8,14 @@ import { CatalogStorageError, uploadCatalogImage } from "@/lib/catalogStorage";
 import { categoryNodeKey, familyNodeKey, type TaxonomyNodeKey } from "@/lib/adminTaxonomy";
 import { isLocale, safeLocale, type Locale } from "@/lib/i18n";
 import { REQUEST_LIMITS, boundedString, utf8ByteLength } from "@/lib/requestLimits";
+import { isSoldBy } from "@/lib/soldBy";
 import {
   createCategory,
   createFamily,
   deleteCategory,
   deleteFamily,
   saveAdminTaxonomyChanges,
+  setFamilySoldBy,
   type TaxonomyContentChange,
   type TaxonomyOrderChange,
   type TaxonomyVisibilityChange,
@@ -365,4 +367,21 @@ export async function deleteCatalogAction(
 
   revalidateCatalogPages();
   return { kind: "deleted", what, name, products };
+}
+
+/**
+ * Package or unit, saved at once rather than through the sticky Save: it is
+ * one switch with no draft to review. No catalog purge — the pages that show
+ * a pack size (family, search, list, quick order) are rendered per request.
+ */
+export async function setFamilySoldByAction(
+  familyId: number,
+  soldBy: string,
+  locale: string,
+): Promise<{ ok: boolean }> {
+  await assertAdminWrite();
+  if (!Number.isInteger(familyId) || familyId <= 0 || !isSoldBy(soldBy)) return { ok: false };
+  const ok = await setFamilySoldBy(familyId, soldBy);
+  if (ok && isLocale(locale)) revalidatePath(`/${locale}/admin/products`);
+  return { ok };
 }

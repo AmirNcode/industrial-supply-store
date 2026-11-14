@@ -1,6 +1,7 @@
 import "server-only";
 import { sql } from "./index";
 import type { SpecBag, PriceTier, ProductDocument } from "./schema";
+import type { SoldBy } from "@/lib/soldBy";
 
 export type CategoryRow = {
   id: number;
@@ -48,6 +49,7 @@ export type FamilyRow = {
   diagramUrl: string;
   isVisible: boolean;
   productCount: number;
+  soldBy: SoldBy;
 };
 
 /** Family-page metadata that is already available from the owning category join. */
@@ -192,6 +194,14 @@ export async function getAncestors(path: string): Promise<CategoryRow[]> {
 // Families
 // ---------------------------------------------------------------------------
 
+/**
+ * A unit family sells single items, so its products read as packs of one
+ * wherever a buyer sees them — whatever `pack_qty` the import carried. Only
+ * for queries that join the family as `f`; the family page, which has the
+ * family already, applies the same rule itself (`displayPackQty`).
+ */
+const DISPLAY_PACK_QTY = sql`CASE WHEN f.sold_by = 'unit' THEN 1 ELSE p.pack_qty END AS "packQty"`;
+
 const FAMILY_COLS = sql`
   f.id, f.slug, f.category_id AS "categoryId",
   f.name_en AS "nameEn", f.name_fa AS "nameFa",
@@ -200,7 +210,8 @@ const FAMILY_COLS = sql`
   f.group_en AS "groupEn", f.group_fa AS "groupFa",
   f.icon, f.image_url AS "imageUrl", f.diagram_url AS "diagramUrl",
   f.is_visible AS "isVisible",
-  f.product_count AS "productCount"
+  f.product_count AS "productCount",
+  f.sold_by AS "soldBy"
 `;
 
 /** Families anywhere at or below a category, so mid-tree pages are never empty. */
@@ -556,7 +567,7 @@ export async function search(q: string): Promise<SearchResults> {
       )
       SELECT p.id, p.part_number AS "partNumber", p.specs,
              p.price_tiers AS "priceTiers", p.price_cents AS "priceCents",
-             p.pack_qty AS "packQty", p.lead_days AS "leadDays",
+             ${DISPLAY_PACK_QTY}, p.lead_days AS "leadDays",
              p.in_stock AS "inStock", f.slug AS "familySlug",
              f.name_en AS "familyEn", f.name_fa AS "familyFa"
       FROM ranked r
@@ -624,7 +635,7 @@ export async function getProductsInSubtree(
   return sql<SubtreeProduct[]>`
     SELECT p.id, p.part_number AS "partNumber", p.specs,
            p.price_tiers AS "priceTiers", p.price_cents AS "priceCents",
-           p.pack_qty AS "packQty", p.lead_days AS "leadDays",
+           ${DISPLAY_PACK_QTY}, p.lead_days AS "leadDays",
            p.in_stock AS "inStock",
            f.id AS "familyId", f.slug AS "familySlug", f.name_en AS "familyEn",
            f.name_fa AS "familyFa", f.icon, f.image_url AS "familyImageUrl"
@@ -647,7 +658,7 @@ export async function findByPartNumbers(
   return sql<(ProductRow & { familyEn: string; familyFa: string })[]>`
     SELECT p.id, p.part_number AS "partNumber", p.specs,
            p.price_tiers AS "priceTiers", p.price_cents AS "priceCents",
-           p.pack_qty AS "packQty", p.lead_days AS "leadDays",
+           ${DISPLAY_PACK_QTY}, p.lead_days AS "leadDays",
            p.in_stock AS "inStock",
            f.name_en AS "familyEn", f.name_fa AS "familyFa"
     FROM products p
