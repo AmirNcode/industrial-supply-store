@@ -123,6 +123,11 @@ nothing important; padding it hides the times there is.
 - **`CartSync` asks for the cart only when the `isupply_has_cart` cookie is present** (`lib/cartMarker.ts`); anything that creates a cart must go through `ensureCart`.
 - **No `loading.tsx` above pages that call `notFound()`** — it starts the response early and turns every 404 into a 200.
 - **Before a local e2e run, stop any old server on port 3100** — Playwright reuses it, and a server from an older build rewrites cached pages with script names that no longer exist.
+- **A receipt holds stock for `RECEIPT_HOLD_DAYS` (5)**, counted from `payment_submitted_at`, not `expires_at` (every order page shows `expires_at` as the customer's deadline); after that the sweep releases the stock and the order stays in `payment_review`.
+- **`issueLoginCode` returns null and nothing is sent** when a code under two minutes old exists or the account's email no longer matches; tests age the live code first.
+- **Small settings are one read per request** (`lib/appSettings.ts`); a new large `app_settings` value must be excluded there like `fx_market_state`.
+- **Error messages carry `role="alert"`**; a browser test that looks for an alert must filter by text.
+- **The daily job deletes data** (`db/pruneQueries.ts`): carts empty for 30 days, email-log rows older than a year.
 - **Open review findings live in [`docs/REVIEW-2026-11.md`](docs/REVIEW-2026-11.md)** — start at "Resume here".
 - **Keep this file current.** When you discover a non-obvious convention,
   gotcha, or command, propose a CLAUDE.md update at task end. Keep entries one
