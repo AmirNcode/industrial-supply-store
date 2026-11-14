@@ -894,8 +894,17 @@ test("a rep resets only a customer they created who has never chosen a password"
     });
     if (fresh.kind !== "created") throw new Error(fresh.kind);
     userIds.push(fresh.id);
+    // A code sent to the address the rep is about to replace dies with it.
+    await sql`UPDATE users SET email = ${`${randomUUID()}@example.invalid`} WHERE id = ${fresh.id}`;
+    await sql`INSERT INTO login_codes (user_id, code_hash, expires_at) VALUES (${fresh.id}, 'x', now() + interval '10 minutes')`;
+    const [{ v: versionBefore }] = await sql<{ v: number }[]>`SELECT session_version AS v FROM users WHERE id = ${fresh.id}`;
     assert.equal(await edit(fresh.id, repInbox), "ok");
     assert.equal(await emailOf(fresh.id), repInbox);
+    const [{ live }] = await sql<{ live: number }[]>`
+      SELECT count(*)::int AS live FROM login_codes WHERE user_id = ${fresh.id} AND consumed_at IS NULL`;
+    assert.equal(live, 0);
+    const [{ v: versionAfter }] = await sql<{ v: number }[]>`SELECT session_version AS v FROM users WHERE id = ${fresh.id}`;
+    assert.equal(versionAfter, versionBefore + 1);
     // Once that address is proved by a code, it is the customer's.
     await sql`UPDATE users SET email_verified_at = now() WHERE id = ${fresh.id}`;
     assert.equal(await edit(fresh.id, `${randomUUID()}@example.invalid`), "ok");

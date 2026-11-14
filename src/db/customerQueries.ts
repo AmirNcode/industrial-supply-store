@@ -284,19 +284,33 @@ export async function updateCustomerForRep(
   input: CustomerInput,
 ): Promise<"ok" | "not-found" | "email-taken"> {
   try {
-    const result = await sql`
-      UPDATE users u
-      SET company = ${input.company}, contact_name = ${input.contactName}, phone = ${input.phone},
-          email = CASE
-            WHEN u.origin = 'rep' AND u.origin_rep_id = ${repId}
-                 AND NOT u.chose_own_password AND u.email_verified_at IS NULL
-              THEN ${input.email}
-            ELSE u.email
-          END,
-          address = ${input.address}, city = ${input.city}
-      WHERE u.id = ${customerId} AND ${onMyList(repId)}
-    `;
-    return result.count === 0 ? "not-found" : "ok";
+    return await sql.begin(async (tx) => {
+      const [before] = await tx<{ email: string | null }[]>`
+        SELECT u.email FROM users u WHERE u.id = ${customerId} AND ${onMyList(repId)} FOR UPDATE OF u
+      `;
+      if (!before) return "not-found";
+      const [after] = await tx<{ email: string | null }[]>`
+        UPDATE users u
+        SET company = ${input.company}, contact_name = ${input.contactName}, phone = ${input.phone},
+            email = CASE
+              WHEN u.origin = 'rep' AND u.origin_rep_id = ${repId}
+                   AND NOT u.chose_own_password AND u.email_verified_at IS NULL
+                THEN ${input.email}
+              ELSE u.email
+            END,
+            address = ${input.address}, city = ${input.city}
+        WHERE u.id = ${customerId}
+        RETURNING u.email
+      `;
+      // The same housekeeping as the admin's correction (`setCustomerEmailAdmin`):
+      // a code already sent to the old address must not open the account or
+      // prove the new one, and browsers signed in through it are signed out.
+      if (after.email !== before.email) {
+        await tx`UPDATE login_codes SET consumed_at = now() WHERE user_id = ${customerId} AND consumed_at IS NULL`;
+        await tx`UPDATE users SET session_version = session_version + 1 WHERE id = ${customerId}`;
+      }
+      return "ok";
+    });
   } catch (err) {
     if (uniqueViolation(err) === "users_email_lower_key") return "email-taken";
     throw err;
