@@ -11,6 +11,14 @@ import { latinDigits } from "./digits";
 
 export const LOGIN_CODE_TTL_MINUTES = 10;
 export const LOGIN_CODE_MAX_ATTEMPTS = 5;
+/**
+ * A code this fresh is not replaced when another is asked for. Each request
+ * used to kill the code before it, so anyone who knew a customer's email could
+ * ask every few minutes and the customer's own code never worked (review
+ * R-20). Two minutes is time to open the email and type six digits; the code
+ * already in the inbox is still the one that counts, so nothing new is sent.
+ */
+export const LOGIN_CODE_KEEP_SECONDS = 120;
 
 /** Uniform over 000000–999999, leading zeros kept. */
 export function newLoginCode(): string {

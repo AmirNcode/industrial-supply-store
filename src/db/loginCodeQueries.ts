@@ -7,6 +7,7 @@ import {
   hashLoginCode,
   loginCodeMatches,
   newLoginCode,
+  LOGIN_CODE_KEEP_SECONDS,
 } from "@/lib/loginCode";
 
 /**
@@ -30,6 +31,15 @@ export async function issueLoginCode(userId: string, forEmail?: string): Promise
     `;
     if (!account) return null;
     if (forEmail !== undefined && account.email?.toLowerCase() !== forEmail.toLowerCase()) return null;
+    // A code sent moments ago stands (LOGIN_CODE_KEEP_SECONDS): no new one,
+    // and nothing for the caller to send.
+    const [fresh] = await tx`
+      SELECT 1 FROM login_codes
+      WHERE user_id = ${userId} AND consumed_at IS NULL AND expires_at > now()
+        AND created_at > now() - make_interval(secs => ${LOGIN_CODE_KEEP_SECONDS})
+      LIMIT 1
+    `;
+    if (fresh) return null;
     await tx`UPDATE login_codes SET consumed_at = now() WHERE user_id = ${userId} AND consumed_at IS NULL`;
     await tx`
       INSERT INTO login_codes (user_id, code_hash, expires_at)

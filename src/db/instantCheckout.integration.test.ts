@@ -630,6 +630,8 @@ const wrongOf = (code: string) => (code === "000000" ? "111111" : "000000");
 
 /** A code that must exist: the account does, and no address is being checked. */
 async function issue(userId: string): Promise<string> {
+  // Past the two minutes in which a fresh code is kept rather than replaced.
+  await sql`UPDATE login_codes SET created_at = now() - interval '5 minutes' WHERE user_id = ${userId} AND consumed_at IS NULL`;
   const code = await issueLoginCode(userId);
   if (code === null) throw new Error("no code issued");
   return code;
@@ -677,6 +679,12 @@ test("sign-in codes: right code once, wrong codes counted, a newer code replaces
     older = await issue(user.id);
     await sql`UPDATE login_codes SET expires_at = now() - interval '1 minute' WHERE user_id = ${user.id} AND consumed_at IS NULL`;
     assert.equal(await redeemLoginCode(user.id, older), "expired");
+
+    // A code sent moments ago is kept: asking again neither replaces it nor
+    // issues another, so a stranger cannot cancel the one in the inbox.
+    const kept = await issue(user.id);
+    assert.equal(await issueLoginCode(user.id), null);
+    assert.equal(await redeemLoginCode(user.id, kept), "ok");
 
     // No code is issued for an address the account no longer has.
     assert.equal(await issueLoginCode(user.id, "someone-else@example.invalid"), null);
