@@ -45,8 +45,8 @@ connects to either hosted Supabase project.
 | `/api/admin/family/[id]/{template,export}` | staff | CSV, 404 when signed out |
 | `/api/admin/family/[id]/products` | staff (and `DEMO_MODE`) | the product table's rows as JSON; the same query as the export |
 | `/api/admin/import` | staff | small signed-upload control messages; CSV bytes go to private Storage |
-| `/api/payment-proofs/[id]` | signed-in staff, the order's rep, its signed-in customer | one receipt, streamed from the private bucket; 404 to everyone else, including pay-link holders and DEMO_MODE visitors |
-| `/api/cron/fx-rate` | scheduler | evening exchange-rate reading; `Authorization: Bearer $CRON_SECRET` |
+| `/api/payment-proofs/[id]` | signed-in staff, the order's rep, its signed-in customer | one receipt, streamed from the private bucket; images open in place, a PDF is always a download; 404 to everyone else, including pay-link holders, DEMO_MODE visitors and a rep still on a temporary password |
+| `/api/cron/fx-rate` | scheduler | evening exchange-rate reading, then the deadline sweep and the tidy-up (`db/pruneQueries.ts`: carts empty for 30 days, email-log rows older than a year); `Authorization: Bearer $CRON_SECRET` |
 
 `(panel)` is a route group — it does not appear in URLs. Its `layout.tsx`
 checks the session too, which is why `/admin/login` sits **outside** it: a
@@ -209,7 +209,12 @@ from `invoiced`, for a payment with no upload. Files are judged by their first b
 (`lib/paymentProof.ts`), stored in a private Storage bucket the app creates
 itself (`payment-proofs`), and only ever read through the route above — there
 is no public URL. `payment_review` holds stock like `received` and `invoiced`
-(`HELD_STATUSES`); every on-hold query lists all three.
+(`HELD_STATUSES`); every on-hold query lists all three. That hold is not
+open-ended: a receipt is any image a guest uploads, so `RECEIPT_HOLD_DAYS`
+(five) after the first one the sweep releases the stock and turns the lines
+into back-order lines. The order stays in `payment_review` for staff to
+confirm; it is never cancelled by the clock, because the money may have left
+the customer's bank.
 
 **Order status transitions are guarded twice**: `assertTransition` for legality,
 and `WHERE id = $1 AND status = <source>` with a row-count check for
@@ -247,7 +252,9 @@ accountant's sequence has no gaps. "Is there a document" is therefore
 means: `received` — staff have five days to quote before held stock is
 released (the request stays open, its lines become back-order lines);
 `quoted` — the customer has five days to accept; `invoiced` — 24 hours to pay.
-A receipt clears it. The hosting plan runs scheduled jobs once a day, so
+A receipt clears it; the five-day limit on a receipt's stock hold runs off
+`payment_submitted_at` instead, because every order page and pish-factor shows
+`expires_at` as the customer's own deadline. The hosting plan runs scheduled jobs once a day, so
 `sweepExpiredOrders` (`db/expiryQueries.ts`) runs when someone looks instead:
 forced at checkout submit and quote acceptance, throttled to once a minute per
 instance on the cart, checkout, order and queue pages, and once a day from the
@@ -460,6 +467,34 @@ to" line, from three characters, so the client book cannot be paged through.
 An unassigned customer is never in the rep's own list, which is paged at 50;
 the search and the delivered-order list are not measured at thousands of rows
 yet (see FOLLOW-UPS).
+
+## What reaches the browser
+
+**Browser components outside the admin panel never import the dictionary.**
+`getDict` in a `"use client"` file ships both languages' full text (about
+38 KB compressed) to every visitor. The server component that renders one
+picks its few words with `textFor` (`lib/clientText.ts`, one key list per
+component) and passes them as the `t` prop; language helpers that carry no
+wording live in `lib/locale.ts`. `clientText.test.ts` fails on a violation.
+The not-found and error pages, which Next requires to find their own language
+in the browser, have their own small wording file (`lib/i18nSystem.ts`).
+
+**The cart is asked for only when there is one.** The cart cookie is httpOnly,
+so `ensureCart` sets a second, readable cookie beside it that says only "has a
+cart" (`lib/cartMarker.ts`). `CartSync` skips its per-navigation request when
+that marker is absent — most visitors and every crawler that runs scripts. A
+refused add or remove is reported once, by `CartNotice` in the layout, through
+`cartClient`.
+
+**A dead link is a real 404 in the visitor's language.**
+`[locale]/not-found.tsx` answers `notFound()`, and the catch-all
+`[locale]/[...rest]` sends every unmatched address under a language to it.
+There is deliberately no `loading.tsx` above pages that call `notFound()`: it
+starts the response before the page can answer, and every 404 becomes a 200.
+
+**A refused checkout or sign-up keeps what was typed** (`FormDraft`): the
+values live in the tab's session storage and are put back only when the page
+returns with `?error=`. Passwords and hidden fields are never kept.
 
 ## Catalog data and Persian display
 
