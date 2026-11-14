@@ -4338,19 +4338,32 @@ select.mtx-input.mtx-select.is-invalid {
 }
 
 /* iOS zooms the page when a focused input is under 16px. The desktop UI is
-   deliberately 13px, so bump form controls only at phone widths. */
+   deliberately 13px, so bump form controls only at phone widths.
+
+   Every control that takes typing, by exclusion rather than by list: the list
+   this replaced named seven input types, so a date or time field added later
+   would have stayed at 13px and zoomed. `!important` because the rule has to
+   hold whatever a component's own selector says — `.product-table
+   .product-cell-input` and `.taxonomy-create-form .admin-input` both outrank a
+   plain element selector, and the next compact editor will too (review R-7).
+   Not `maximum-scale` or `user-scalable=no` in the viewport: that stops the
+   zoom by taking pinch-zoom away from people who need it. */
 @media (max-width: 1023px) {
-  input:not([type]),
-  input[type="text"],
-  input[type="number"],
-  input[type="email"],
-  input[type="url"],
-  input[type="tel"],
-  input[type="password"],
-  input[type="search"],
+  input:not(
+      [type="checkbox"],
+      [type="radio"],
+      [type="file"],
+      [type="hidden"],
+      [type="range"],
+      [type="color"],
+      [type="submit"],
+      [type="button"],
+      [type="reset"],
+      [type="image"]
+    ),
   textarea,
   select {
-    font-size: 16px;
+    font-size: 16px !important;
   }
 }
 
