@@ -30,6 +30,8 @@ export type CustomerRow = {
   origin: CustomerOrigin;
   originRepId: string | null;
   choseOwnPassword: boolean;
+  /** The address has been proved by an emailed code, so it can open the account. */
+  emailVerified: boolean;
   nextFollowUpOn: string | null;
   createdAt: string;
 };
@@ -57,6 +59,7 @@ const COLS = sql`u.id, u.customer_code AS "customerCode", u.company,
   u.default_po_number AS "defaultPoNumber", u.locale, ${leadRepSql()} AS "repId",
   (${leadRepSql()} IS NOT NULL AND u.commission_rate_bp IS DISTINCT FROM 0) AS "repEarnsCommission", u.origin,
   u.origin_rep_id AS "originRepId", u.chose_own_password AS "choseOwnPassword",
+  (u.email_verified_at IS NOT NULL) AS "emailVerified",
   u.next_follow_up_on::text AS "nextFollowUpOn", u.created_at AS "createdAt"`;
 
 function escapeLike(value: string): string {
@@ -265,6 +268,16 @@ export async function createCustomerForRep(
   throw new Error("Could not allocate a unique customer ID");
 }
 
+/**
+ * A rep's edit of a customer on their list. The email is the exception: it is
+ * written only for an account this rep created that has neither chosen its own
+ * password nor proved an address (review R-1). Anywhere else the address is
+ * the key to the account — "email me a code" signs in whoever reads that
+ * inbox and has them choose a new password — so a rep who could change it
+ * could sign in as the customer and lock them out, which is exactly what
+ * `resetCustomerPasswordForRep` refuses. The rule is in the statement, so no
+ * caller can skip it; `repMayEditEmail` is the same rule for the form.
+ */
 export async function updateCustomerForRep(
   repId: string,
   customerId: string,
@@ -274,7 +287,13 @@ export async function updateCustomerForRep(
     const result = await sql`
       UPDATE users u
       SET company = ${input.company}, contact_name = ${input.contactName}, phone = ${input.phone},
-          email = ${input.email}, address = ${input.address}, city = ${input.city}
+          email = CASE
+            WHEN u.origin = 'rep' AND u.origin_rep_id = ${repId}
+                 AND NOT u.chose_own_password AND u.email_verified_at IS NULL
+              THEN ${input.email}
+            ELSE u.email
+          END,
+          address = ${input.address}, city = ${input.city}
       WHERE u.id = ${customerId} AND ${onMyList(repId)}
     `;
     return result.count === 0 ? "not-found" : "ok";

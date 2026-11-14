@@ -25,7 +25,7 @@ import { siteOrigin } from "@/lib/siteOrigin";
 import { getFxRate } from "@/lib/fx";
 import { tehranToday } from "@/lib/persianCalendar";
 import { isUuid } from "@/lib/ids";
-import { repMayResetPassword } from "@/lib/repAccount";
+import { repMayEditEmail, repMayResetPassword } from "@/lib/repAccount";
 import { isLocale, getDict, type Locale } from "@/lib/i18n";
 import { fillMessage } from "@/lib/fillMessage";
 
@@ -147,7 +147,7 @@ export default async function RepCustomerPage({
         <form action={updateCustomerAction} className="grid max-w-[680px] gap-3 sm:grid-cols-2">
           <input type="hidden" name="locale" value={l} />
           <input type="hidden" name="customerId" value={id} />
-          <CustomerFields t={t} values={customer} />
+          <CustomerFields t={t} values={customer} emailLocked={!repMayEditEmail(customer, rep.id)} />
           <button type="submit" className="btn-small justify-self-start sm:col-span-2">
             {t.save}
           </button>

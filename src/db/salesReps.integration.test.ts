@@ -871,6 +871,35 @@ test("a rep resets only a customer they created who has never chosen a password"
     assert.equal(await assignCustomer(moved.id, a.id, false), "ok");
     assert.equal(await resetCustomerPasswordForRep(a.id, moved.id, "temp-4"), null);
 
+    // The email follows the same rule (review R-1): it is what "email me a
+    // code" signs in with, so a rep who could change it could take the
+    // account. Every edit below succeeds and saves the company; only an
+    // account the rep created, still without its own password or a proved
+    // address, takes the new email.
+    const emailOf = async (id: string) =>
+      (await sql<{ email: string | null }[]>`SELECT email FROM users WHERE id = ${id}`)[0].email;
+    const edit = (id: string, email: string) =>
+      updateCustomerForRep(a.id, id, { ...input, company: `Edited ${suffix}`, phone: "1", email });
+    const selfEmail = await emailOf(self.id);
+    const repInbox = `${randomUUID()}@example.invalid`;
+    assert.equal(await edit(own.id, repInbox), "ok"); // chose their own password above
+    assert.equal(await emailOf(own.id), null);
+    assert.equal(await edit(self.id, repInbox), "ok");
+    assert.equal(await emailOf(self.id), selfEmail);
+    assert.equal(await edit(moved.id, repInbox), "ok");
+    assert.equal(await emailOf(moved.id), null);
+    const fresh = await createCustomerForRep(a.id, {
+      ...input, company: `Fresh ${suffix}`, phone: randomPhone(), codeChoice: "random", passwordHash: "x", locale: "fa",
+    });
+    if (fresh.kind !== "created") throw new Error(fresh.kind);
+    userIds.push(fresh.id);
+    assert.equal(await edit(fresh.id, repInbox), "ok");
+    assert.equal(await emailOf(fresh.id), repInbox);
+    // Once that address is proved by a code, it is the customer's.
+    await sql`UPDATE users SET email_verified_at = now() WHERE id = ${fresh.id}`;
+    assert.equal(await edit(fresh.id, `${randomUUID()}@example.invalid`), "ok");
+    assert.equal(await emailOf(fresh.id), repInbox);
+
     // Nothing refused changed a password.
     const hashes = await sql<{ id: string; hash: string }[]>`
       SELECT id, password_hash AS hash FROM users WHERE id = ANY(${[own.id, self.id, moved.id]})`;
