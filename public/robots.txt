@@ -27,6 +27,10 @@ Disallow: /en/quote
 Disallow: /fa/quote
 Disallow: /en/search
 Disallow: /fa/search
+# Rep referral links: each is a redirect that costs a database read, and no
+# page links to one, so only a crawler guessing codes would fetch them.
+Disallow: /en/r/
+Disallow: /fa/r/
 # Filtered family views, for the same reason as search: each filter link opens
 # a URL carrying more filter links, so the combinations never run out, and the
 # family route reads its query string, so every one is rendered from the
