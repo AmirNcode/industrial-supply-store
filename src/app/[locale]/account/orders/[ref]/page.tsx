@@ -8,23 +8,24 @@ import { OrderView } from "@/components/OrderView";
 import { getBankDetails } from "@/lib/bankSettings";
 import { isLocale, getDict, type Locale } from "@/lib/i18n";
 import { customerCurrencyFor } from "@/lib/money";
-import { acceptsPaymentProof } from "@/lib/orders";
+import { acceptsPaymentProof, customerCanCancel } from "@/lib/orders";
+import { CancelOrderForm } from "@/components/CancelOrderForm";
 import { listPaymentProofs } from "@/db/paymentProofQueries";
 import { PaymentProofSection } from "@/components/PaymentProofSection";
 import { Deadline, deadlineNow } from "@/components/Deadline";
 import { ErrorBanner, SuccessBanner } from "@/components/Banners";
 import { runExpirySweep } from "@/lib/orderFlow";
 import { fillMessage } from "@/lib/fillMessage";
-import { acceptQuoteAction, reorderAction, uploadPaymentProofAction } from "../../actions";
+import { acceptQuoteAction, cancelOrderAction, reorderAction, uploadPaymentProofAction } from "../../actions";
 
 /**
  * One order, as its customer sees it.
  *
- * The one thing a customer can do here is upload a payment receipt while the
- * order is invoiced or being checked — which moves `invoiced` to
- * `payment_review`. Every other transition (pricing, confirming payment,
- * shipping, cancelling) belongs to staff, and an Approve or Cancel button here
- * would quietly undo that rule.
+ * A customer can do three things here: accept a quote, upload a payment
+ * receipt (which moves `invoiced` to `payment_review`), and cancel the order
+ * until a receipt exists (`customerCanCancel`). Every other transition —
+ * pricing, confirming payment, shipping, cancelling once money may have
+ * moved — belongs to staff.
  */
 export default async function AccountOrderPage({
   params,
@@ -85,6 +86,8 @@ export default async function AccountOrderPage({
 
       {ok === "accepted" && <SuccessBanner>{t.quoteAccepted}</SuccessBanner>}
       {error === "accept" && <ErrorBanner>{t.acceptFailed}</ErrorBanner>}
+      {ok === "cancelled" && <SuccessBanner>{t.orderCancelledOk}</SuccessBanner>}
+      {error === "cancel" && <ErrorBanner>{t.cancelFailed}</ErrorBanner>}
       {error === "cart-full" && <ErrorBanner>{t.reorderCartFull}</ErrorBanner>}
       {error === "rate-limit" && <ErrorBanner>{t.rateLimited}</ErrorBanner>}
       {order.status === "cancelled" && order.expiredAt !== null && (
@@ -100,6 +103,9 @@ export default async function AccountOrderPage({
             {t.acceptQuote}
           </button>
         </form>
+      )}
+      {customerCanCancel(order.status, (proofs.get(order.id) ?? []).length) && (
+        <CancelOrderForm locale={l} action={cancelOrderAction} hidden={{ ref: order.ref }} />
       )}
       {order.siblingRef && (
         <p className="mb-3 text-[12px]">

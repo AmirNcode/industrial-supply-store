@@ -2,7 +2,8 @@
 
 import { redirect } from "next/navigation";
 import { safeLocale } from "@/lib/i18n";
-import { acceptQuote } from "@/lib/orderFlow";
+import { acceptQuote, cancelOrderForCustomer } from "@/lib/orderFlow";
+import { REQUEST_LIMITS, boundedString } from "@/lib/requestLimits";
 import { getOrderByPayToken } from "@/db/accountQueries";
 import { acceptsPaymentProof } from "@/lib/orders";
 import { isPayToken } from "@/lib/payToken";
@@ -43,4 +44,21 @@ export async function acceptQuoteWithKeyAction(token: string, formData: FormData
   if (!found || found.order.status !== "quoted") redirect(page);
   const outcome = await acceptQuote(found.order.id, { kind: "customer", id: null });
   redirect(outcome === "issued" ? `${page}?ok=accepted` : `${page}?error=accept`);
+}
+
+/**
+ * Cancel from the pay link — the only door a guest checkout has. Same
+ * authority as accepting a quote: whoever holds the link placed the order.
+ */
+export async function cancelOrderWithKeyAction(token: string, formData: FormData): Promise<void> {
+  const locale = safeLocale(formData);
+  if (DEMO_MODE || typeof token !== "string" || !isPayToken(token)) redirect(`/${locale}`);
+  const page = `/${locale}/pay/${token}`;
+  const limit = await consumeRateLimit("proof:upload", RATE_LIMITS.proofUpload, { accountId: token });
+  if (!limit.allowed) redirect(`${page}?error=rate-limit`);
+  const found = await getOrderByPayToken(token);
+  if (!found) redirect(page);
+  const reason = boundedString(formData.get("reason"), REQUEST_LIMITS.cancelReasonChars) ?? "";
+  const ok = await cancelOrderForCustomer(found.order.id, { kind: "customer", id: null }, reason);
+  redirect(ok ? `${page}?ok=cancelled` : `${page}?error=cancel`);
 }

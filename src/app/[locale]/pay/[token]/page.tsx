@@ -10,14 +10,15 @@ import { OrderView } from "@/components/OrderView";
 import { OrderStatusPill } from "@/components/OrderStatusPill";
 import { getDict, isLocale, type Locale } from "@/lib/i18n";
 import { customerCurrencyFor } from "@/lib/money";
-import { acceptsPaymentProof, type OrderStatus } from "@/lib/orders";
+import { acceptsPaymentProof, customerCanCancel, type OrderStatus } from "@/lib/orders";
 import { listPaymentProofs } from "@/db/paymentProofQueries";
 import { PaymentProofSection } from "@/components/PaymentProofSection";
 import { Deadline, deadlineNow } from "@/components/Deadline";
 import { ErrorBanner, SuccessBanner } from "@/components/Banners";
 import { runExpirySweep } from "@/lib/orderFlow";
 import { fillMessage } from "@/lib/fillMessage";
-import { acceptQuoteWithKeyAction, uploadPaymentProofWithKeyAction } from "./actions";
+import { acceptQuoteWithKeyAction, cancelOrderWithKeyAction, uploadPaymentProofWithKeyAction } from "./actions";
+import { CancelOrderForm } from "@/components/CancelOrderForm";
 
 /**
  * Kept out of search results, and the page sends no referrer: the URL is the
@@ -104,6 +105,8 @@ export default async function PayPage({
       {placedMessage && <SuccessBanner>{placedMessage}</SuccessBanner>}
       {ok === "accepted" && <SuccessBanner>{t.quoteAccepted}</SuccessBanner>}
       {error === "accept" && <ErrorBanner>{t.acceptFailed}</ErrorBanner>}
+      {ok === "cancelled" && <SuccessBanner>{t.orderCancelledOk}</SuccessBanner>}
+      {error === "cancel" && <ErrorBanner>{t.cancelFailed}</ErrorBanner>}
       {error === "rate-limit" && <ErrorBanner>{t.rateLimited}</ErrorBanner>}
       <p className="mb-3 text-[13px]">{message[order.status]}</p>
       <Deadline locale={l} status={order.status} expiresAt={order.expiresAt} now={now} />
@@ -115,6 +118,9 @@ export default async function PayPage({
             {t.acceptQuote}
           </button>
         </form>
+      )}
+      {!DEMO_MODE && customerCanCancel(order.status, (proofs.get(order.id) ?? []).length) && (
+        <CancelOrderForm locale={l} action={cancelOrderWithKeyAction.bind(null, token)} />
       )}
       {order.siblingPayToken && order.siblingRef && (
         <p className="mb-3 text-[12px]">

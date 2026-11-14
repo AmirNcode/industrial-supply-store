@@ -5,7 +5,9 @@ import { getOrderForMail } from "@/db/orderMailQueries";
 import { issuePishFactor, type IssueOutcome } from "@/db/invoiceQueries";
 import type { PlacedOrder } from "@/db/orderSubmissionQueries";
 import { emailOrigin, sendEmail } from "./email";
+import { cancelOrderByCustomer, orderRepEmails } from "@/db/customerCancelQueries";
 import {
+  orderCancelledByCustomerEmail,
   orderExpiredEmail,
   paymentConfirmedEmail,
   pishFactorEmail,
@@ -232,6 +234,48 @@ export async function acceptQuote(orderId: number, actor: AuditActor): Promise<I
     if (order) await sendPishFactor(order);
   }
   return outcome;
+}
+
+/**
+ * A customer cancelling their own unpaid order, then — after the transaction
+ * commits — one email to each staff address and each rep on the order. The
+ * reps' link is their portal; staff get the admin queue.
+ */
+export async function cancelOrderForCustomer(
+  orderId: number,
+  actor: { kind: "customer"; id: string | null },
+  reason: string,
+): Promise<boolean> {
+  const outcome = await cancelOrderByCustomer(orderId, actor, reason);
+  if (!outcome.ok) return false;
+  const order = await mailOrder(orderId);
+  if (!order) return true;
+  const origin = await emailOrigin();
+  const facts = {
+    ref: order.ref,
+    company: order.company,
+    contactName: order.contactName,
+    phone: order.phone,
+    reason,
+  };
+  const [staff, reps] = await Promise.all([staffAddresses(), orderRepEmails(orderId)]);
+  for (const to of staff) {
+    await sendEmail({
+      kind: "staff-order-cancelled",
+      to,
+      orderId,
+      ...orderCancelledByCustomerEmail({ ...facts, url: `${origin}/fa/admin/orders` }),
+    });
+  }
+  for (const to of reps) {
+    await sendEmail({
+      kind: "rep-order-cancelled",
+      to,
+      orderId,
+      ...orderCancelledByCustomerEmail({ ...facts, url: `${origin}/fa/rep/orders/${order.ref}` }),
+    });
+  }
+  return true;
 }
 
 /**

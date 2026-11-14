@@ -6,6 +6,7 @@ import { submitOrderFromCart, type QuoteContact, type SubmitOrderResult } from "
 import { issuePishFactor, sendQuote } from "./invoiceQueries";
 import { addPaymentProof, confirmPayment } from "./paymentProofQueries";
 import { sweepExpiredOrders } from "./expiryQueries";
+import { cancelOrderByCustomer } from "./customerCancelQueries";
 import { findShortfalls } from "./inventoryQueries";
 import { issueLoginCode, redeemLoginCode } from "./loginCodeQueries";
 import {
@@ -763,5 +764,40 @@ test("staff emails: add, refuse duplicates and junk, remove", async () => {
   } finally {
     await sql`DELETE FROM app_settings WHERE key = 'staff_notify_emails'`;
     if (saved) await sql`INSERT INTO app_settings (key, value) VALUES ('staff_notify_emails', ${saved.value})`;
+  }
+});
+
+test("a customer cancels an unpaid order, stock comes back; after a receipt they cannot", async () => {
+  assertLocalDatabase();
+  const fx = await fixture([{ priceCents: 100, available: 10 }]);
+  try {
+    const a = created(await fx.submit([{ product: 0, qty: 4 }]));
+    const b = created(await fx.submit([{ product: 0, qty: 3 }]));
+    const [aId, bId] = [a, b].map((r) => r.orders[0].id);
+    assert.deepEqual(await fx.stock(0), { available: 3, onHold: 7, sold: 0 });
+
+    assert.deepEqual(await cancelOrderByCustomer(aId, { kind: "customer", id: null }, "ordered twice"), {
+      ok: true,
+      from: "invoiced",
+    });
+    const cancelled = await fx.order(a.ref);
+    assert.equal(cancelled.status, "cancelled");
+    assert.equal(cancelled.expiresIn, null);
+    assert.equal(cancelled.expiredAt, null, "a customer cancel is not an expiry");
+    assert.deepEqual(await fx.stock(0), { available: 7, onHold: 3, sold: 0 });
+    // A second press, or a stale tab, changes nothing.
+    assert.deepEqual(await cancelOrderByCustomer(aId, { kind: "customer", id: null }, ""), { ok: false });
+    assert.deepEqual(await fx.stock(0), { available: 7, onHold: 3, sold: 0 });
+
+    // Once a receipt exists, only staff can cancel.
+    assert.equal(
+      await addPaymentProof(bId, { path: `test/${fx.marker}/c.jpg`, type: "image/jpeg", size: 10 }, { kind: "customer" }),
+      "added",
+    );
+    assert.deepEqual(await cancelOrderByCustomer(bId, { kind: "customer", id: null }, ""), { ok: false });
+    assert.equal((await fx.order(b.ref)).status, "payment_review");
+    await fx.assertLedger();
+  } finally {
+    await fx.cleanup();
   }
 });

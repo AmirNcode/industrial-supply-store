@@ -33,6 +33,7 @@ export const REQUEST_LIMITS = {
   taxIdChars: 20,
   addressLabelChars: 60,
   notesChars: 4_000,
+  cancelReasonChars: 500,
   courierChars: 80,
   trackingNumberChars: 120,
   /**

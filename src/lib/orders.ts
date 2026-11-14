@@ -80,6 +80,17 @@ export function acceptsPaymentProof(status: OrderStatus): boolean {
   return status === "invoiced" || status === "payment_review";
 }
 
+/**
+ * What a customer may withdraw themselves: anything not yet paid for, until a
+ * receipt is uploaded. After that, staff are checking money that may have
+ * left the customer's bank, so only staff can cancel (and settle it).
+ */
+export const CUSTOMER_CANCELLABLE_STATUSES = ["received", "quoted", "invoiced"] as const satisfies readonly OrderStatus[];
+
+export function customerCanCancel(status: OrderStatus, receiptCount: number): boolean {
+  return receiptCount === 0 && (CUSTOMER_CANCELLABLE_STATUSES as readonly string[]).includes(status);
+}
+
 /** How long a pish-factor stays payable. */
 export const PISH_FACTOR_TTL_HOURS = 24;
 /** How long staff have to quote before held stock is released, and how long a quote stands. */

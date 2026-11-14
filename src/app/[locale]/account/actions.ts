@@ -43,7 +43,7 @@ import { addAddress, deleteAddress, setDefaultAddress, updateAddress } from "@/d
 import { isUuid } from "@/lib/ids";
 import { CartCapacityError, addLines } from "@/lib/cart";
 import { getReorderLinesForUser } from "@/db/accountQueries";
-import { acceptQuote } from "@/lib/orderFlow";
+import { acceptQuote, cancelOrderForCustomer } from "@/lib/orderFlow";
 import { recordSignInFailure, rememberSignInDevice, signInLocked } from "@/lib/signInGuard";
 import { REQUEST_LIMITS, boundedString } from "@/lib/requestLimits";
 import { parseLogin, type LoginIdentifier } from "@/lib/customerCode";
@@ -580,4 +580,24 @@ export async function acceptQuoteAction(formData: FormData): Promise<void> {
   if (!found || found.order.status !== "quoted") redirect(back);
   const outcome = await acceptQuote(found.order.id, { kind: "customer", id: user.id });
   redirect(outcome === "issued" ? `${back}?ok=accepted` : `${back}?error=accept`);
+}
+
+/**
+ * Cancel one of the signed-in customer's own orders, before any receipt is
+ * uploaded. The status and receipt rule is enforced again inside the
+ * database write; this only finds the order and refuses someone else's.
+ */
+export async function cancelOrderAction(formData: FormData): Promise<void> {
+  const locale = safeLocale(formData);
+  const user = await currentUser();
+  if (!user) redirect(`/${locale}/account/signin`);
+  const ref = (boundedString(formData.get("ref"), 20) ?? "").slice(0, 20);
+  const back = `/${locale}/account/orders/${ref}`;
+  const limit = await consumeRateLimit("account:write", RATE_LIMITS.accountWrite, { accountId: user.id });
+  if (!limit.allowed) redirect(`${back}?error=rate-limit`);
+  const found = await getOrderForUser(user.id, ref);
+  if (!found) redirect(back);
+  const reason = boundedString(formData.get("reason"), REQUEST_LIMITS.cancelReasonChars) ?? "";
+  const ok = await cancelOrderForCustomer(found.order.id, { kind: "customer", id: user.id }, reason);
+  redirect(ok ? `${back}?ok=cancelled` : `${back}?error=cancel`);
 }

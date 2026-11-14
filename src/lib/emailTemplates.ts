@@ -291,3 +291,30 @@ export function staffNewOrderEmail(o: {
     action: { label: "باز کردن صف سفارش‌ها", url: o.adminUrl },
   });
 }
+
+/**
+ * To staff and the order's reps when a customer cancels before paying. In
+ * Persian, like the other staff mail: it goes to the team, not the customer.
+ */
+export function orderCancelledByCustomerEmail(o: {
+  ref: string;
+  company: string;
+  contactName: string;
+  phone: string;
+  reason: string;
+  url: string;
+}): EmailContent {
+  return render({
+    locale: "fa",
+    subject: `سفارش ${o.ref} توسط مشتری لغو شد`,
+    intro: ["مشتری این سفارش را پیش از ارسال رسید پرداخت لغو کرد. کالای نگه‌داشته‌شده برای آن آزاد شد."],
+    rows: [
+      ["شماره", o.ref],
+      ["شرکت", o.company],
+      ["نام", o.contactName],
+      ["تلفن", o.phone],
+      ["دلیل", o.reason || "—"],
+    ],
+    action: { label: "مشاهده سفارش", url: o.url },
+  });
+}
