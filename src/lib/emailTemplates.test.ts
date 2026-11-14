@@ -5,7 +5,7 @@ import { loginCodeEmail, pishFactorEmail, staffNewOrderEmail } from "./emailTemp
 const facts = {
   ref: "ORD-ABC234",
   company: "Pars <Pump> & Co",
-  total: "1,200,000 IRR",
+  total: "1,200,000 Rials",
   payUrl: "https://temex.ir/en/pay/abc",
   deadline: "12 Nov 2026, 14:00",
   hours: 24,
@@ -16,7 +16,7 @@ test("the pish-factor email carries the amount, deadline and pay link in both fo
   const mail = pishFactorEmail({ ...facts, locale: "en" });
   for (const body of [mail.text, mail.html]) {
     assert.match(body, /ORD-ABC234/);
-    assert.match(body, /1,200,000 IRR/);
+    assert.match(body, /1,200,000 Rials/);
     assert.match(body, /12 Nov 2026, 14:00/);
     assert.match(body, /https:\/\/temex\.ir\/en\/pay\/abc/);
     assert.match(body, /Delivery[\s\S]*Free/);

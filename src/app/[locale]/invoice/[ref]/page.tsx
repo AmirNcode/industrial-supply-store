@@ -14,7 +14,7 @@ import { PrintButton } from "@/components/PrintButton";
 import { InvoiceDocument } from "@/components/InvoiceDocument";
 import { isLocale, getDict, type Locale } from "@/lib/i18n";
 import { getPriceDisplayMode } from "@/lib/fx";
-import { invoiceCurrencyFor, type Currency } from "@/lib/money";
+import { currencyLabel, invoiceCurrencyFor, type Currency } from "@/lib/money";
 
 /**
  * The invoice document.
@@ -147,14 +147,14 @@ export default async function InvoicePage({
         </span>
         <span className="flex items-center gap-2">
           <span className="font-bold">{t.invoiceCurrency}:</span>
-          <span className="tech">{currency}</span>
+          <span className="tech">{currencyLabel(currency, l)}</span>
           {priceDisplayMode === "both" && (
             <Link
               href={`/${l}/invoice/${order.ref}${withKey({ cur: otherCurrency })}`}
               prefetch={false}
               className="tech"
             >
-              {otherCurrency}
+              {currencyLabel(otherCurrency, l)}
             </Link>
           )}
         </span>

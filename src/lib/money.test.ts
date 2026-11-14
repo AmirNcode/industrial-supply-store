@@ -12,6 +12,7 @@ import {
   isPriceDisplayMode,
   isPriceOnRequest,
   parseRialAmount,
+  currencyLabel,
 } from "./money";
 
 const RATE = 1_100_000;
@@ -48,14 +49,14 @@ test("USD prices ignore the Rial rate in either language", () => {
 });
 
 test("Rial prices use the supplied rate and locale-appropriate digits", () => {
-  assert.equal(formatPrice(35, "IRR", "en", RATE), "385,000 IRR");
+  assert.equal(formatPrice(35, "IRR", "en", RATE), "385,000 Rials");
   assert.equal(formatPrice(35, "IRR", "fa", RATE), "۳۸۵٬۰۰۰ ریال");
   assert.equal(formatPriceBare(35, "IRR", "en", RATE), "385,000");
 });
 
 test("catalog Rial amounts round to the nearest thousand", () => {
-  assert.equal(formatPrice(36, "IRR", "en", 1_101_000), "396,000 IRR");
-  assert.equal(formatPrice(37, "IRR", "en", RATE), "407,000 IRR");
+  assert.equal(formatPrice(36, "IRR", "en", 1_101_000), "396,000 Rials");
+  assert.equal(formatPrice(37, "IRR", "en", RATE), "407,000 Rials");
 });
 
 test("a zero price formats rather than throwing", () => {
@@ -71,15 +72,15 @@ test("a zero price is a quote, not a free part", () => {
 test("invoice currency and language are independent", () => {
   assert.equal(formatMoneyExact(35, "USD", "en", 1_450_000), "$0.35");
   assert.equal(formatMoneyExact(35, "USD", "fa", 1_450_000), "$0.35");
-  assert.equal(formatMoneyExact(35, "IRR", "en", 1_450_000), "507,500 IRR");
+  assert.equal(formatMoneyExact(35, "IRR", "en", 1_450_000), "507,500 Rials");
   assert.equal(formatMoneyExact(35, "IRR", "fa", 1_450_000), "۵۰۷٬۵۰۰ ریال");
 });
 
 test("an invoice priced in Rial keeps whole-Rial precision", () => {
   const line = formatMoneyExact(33, "IRR", "en", 1_450_000);
   const three = formatMoneyExact(99, "IRR", "en", 1_450_000);
-  assert.equal(line, "478,500 IRR");
-  assert.equal(three, "1,435,500 IRR");
+  assert.equal(line, "478,500 Rials");
+  assert.equal(three, "1,435,500 Rials");
 });
 
 test("isCurrency accepts ISO USD and IRR only", () => {
@@ -91,9 +92,9 @@ test("isCurrency accepts ISO USD and IRR only", () => {
 });
 
 test("a whole-rial amount reads with the reader's digits and unit", () => {
-  assert.equal(formatRial(1234567, "en"), "1,234,567 IRR");
+  assert.equal(formatRial(1234567, "en"), "1,234,567 Rials");
   assert.equal(formatRial(1234567, "fa"), "۱٬۲۳۴٬۵۶۷ ریال");
-  assert.equal(formatRial(0, "en"), "0 IRR");
+  assert.equal(formatRial(0, "en"), "0 Rials");
 });
 
 test("a typed rial amount: any keyboard, any thousands separator, whole numbers only", () => {
@@ -106,4 +107,10 @@ test("a typed rial amount: any keyboard, any thousands separator, whole numbers 
   assert.equal(parseRialAmount(""), null);
   assert.equal(parseRialAmount("abc"), null);
   assert.equal(parseRialAmount("1".repeat(16)), null);
+});
+
+test("the rial is named in words in both languages, never by its ISO code", () => {
+  assert.equal(currencyLabel("IRR", "en"), "Rials");
+  assert.equal(currencyLabel("IRR", "fa"), "ریال");
+  assert.equal(currencyLabel("USD", "en"), "USD");
 });

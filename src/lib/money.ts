@@ -64,10 +64,9 @@ function rialNumber(value: number, locale: Locale): string {
 }
 
 function rialWithUnit(value: number, locale: Locale): string {
-  return locale === "fa"
-    ? `${rialNumber(value, locale)} ریال`
-    : `${rialNumber(value, locale)} IRR`;
+  return `${rialNumber(value, locale)} ${currencyLabel("IRR", locale)}`;
 }
+
 
 /**
  * Catalog Rial amounts run to seven or eight digits, so sub-1,000 precision is
@@ -148,7 +147,9 @@ export function formatPriceBare(
 
 export function currencyLabel(currency: Currency, locale: Locale): string {
   if (currency === "USD") return "USD";
-  return locale === "fa" ? "ریال" : "IRR";
+  // Spelled out in English too: "IRR" is a banking code most buyers do not
+  // recognise. `Currency` values stay ISO codes — they are URL parameters.
+  return locale === "fa" ? "ریال" : "Rials";
 }
 
 /**

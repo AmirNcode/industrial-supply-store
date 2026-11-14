@@ -12,7 +12,7 @@ import { DEMO_MODE } from "@/lib/demo";
 import { invoiceAmounts, subtotalCents } from "@/lib/invoice";
 import { draftLinePrices, draftQuery, priceParamName, priceParamValue } from "@/lib/invoiceDraft";
 import { isOrderStatus } from "@/lib/orders";
-import { formatAmount, invoiceCurrencyFor } from "@/lib/money";
+import { currencyLabel, formatAmount, invoiceCurrencyFor } from "@/lib/money";
 import { isLocale, getDict, type Locale } from "@/lib/i18n";
 import { InvoiceDocument } from "@/components/InvoiceDocument";
 import { InvoiceDraft } from "@/components/InvoiceDraft";
@@ -127,7 +127,7 @@ export default async function AdminInvoiceDraftPage({
               })}`}
               className="tech"
             >
-              {otherCurrency}
+              {currencyLabel(otherCurrency, l)}
             </Link>
           )}
         </>

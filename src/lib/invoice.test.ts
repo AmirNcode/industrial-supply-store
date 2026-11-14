@@ -120,7 +120,7 @@ test("rounded for the order pages, the rows still add up", () => {
 test("a list shows VAT only on invoices that carry a rate", () => {
   // Not invoiced yet, or invoiced before VAT existed: exactly as before.
   assert.equal(formatOrderTotal(1155, null, "IRR", "en", 1_094_889), formatPrice(1155, "IRR", "en", 1_094_889));
-  assert.equal(formatOrderTotal(1155, 1000, "IRR", "en", 1_094_889), "13,911,000 IRR");
+  assert.equal(formatOrderTotal(1155, 1000, "IRR", "en", 1_094_889), "13,911,000 Rials");
   assert.equal(formatOrderTotal(1155, 1000, "USD", "en", 1_094_889), "$12.71");
 });
 

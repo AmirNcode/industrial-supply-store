@@ -202,7 +202,7 @@ for (const locale of locales) {
     );
 
     await rep.goto(`/${locale}/rep`);
-    // Whole-text comparisons: "84,350 IRR" contains the substring "0 IRR".
+    // Whole-text comparisons: "84,350 Rials" contains the substring "0 Rials".
     await expect(rep.getByTestId("tile-sales-to-date")).not.toHaveText(
       formatRial(0, locale),
     );
