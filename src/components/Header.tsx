@@ -110,14 +110,18 @@ export async function Header({ locale }: { locale: Locale }) {
                 tall enough to fill the row beside the search rather than
                 floating in the middle of it. */}
             <div className="mt-1 flex items-center justify-end gap-4">
-              <CartLink locale={locale} />
+              {/* The home page is the catalog. The logo links there too, but
+                  not every visitor knows a logo is a link. */}
               <Link
                 prefetch={false}
-                href={`/${locale}/quick-order`}
+                href={`/${locale}`}
                 className="text-[14px] font-semibold uppercase tracking-[0.08em] !text-white"
               >
-                {t.quickOrder}
+                {t.catalog}
               </Link>
+              <CartLink locale={locale} />
+              {/* Quick Order is hidden from the bar for now (2026-11-13); the
+                  page itself still works at /quick-order. */}
               {/* Unconditional: reading the session here would make every
                   cached catalog page dynamic. /account decides for itself
                   whether to show orders or a sign-in prompt. */}

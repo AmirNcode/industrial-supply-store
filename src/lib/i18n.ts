@@ -54,7 +54,7 @@ const en = {
   browseCatalog: "BROWSE CATALOG",
   search: "Search",
   searchPlaceholder: "Search",
-  order: "ORDER",
+  order: "CART",
   allCategories: "All Categories",
   chooseCategory: "Choose a Category",
   filterBy: "Filter by",
@@ -116,6 +116,7 @@ const en = {
   itemsInOrder: "items",
   reviewOrder: "Review order",
   // Quick order
+  catalog: "Catalog",
   quickOrder: "Quick Order",
   quickOrderHelp:
     "Paste one part number per line, followed by a comma and the quantity. Example: 91290A115, 25",
@@ -1037,7 +1038,7 @@ const fa: typeof en = {
   browseCatalog: "مرور کاتالوگ",
   search: "جستجو",
   searchPlaceholder: "جستجو",
-  order: "سفارش",
+  order: "سبد خرید",
   allCategories: "همه دسته‌بندی‌ها",
   chooseCategory: "انتخاب دسته‌بندی",
   filterBy: "فیلتر بر اساس",
@@ -1103,6 +1104,7 @@ const fa: typeof en = {
     "در هر سطر یک کد کالا وارد کنید، سپس ویرگول و تعداد. نمونه: ‎91290A115, 25",
   quickOrderPlaceholder: "91290A115, 25\n9452K12, 10",
   addAllToOrder: "افزودن همه به سفارش",
+  catalog: "کاتالوگ",
   notFound: "یافت نشد",
   added: "افزوده شد",
   requestTooLarge: "حجم درخواست بیش از حد مجاز است. آن را به بخش‌های کوچک‌تر تقسیم کنید.",

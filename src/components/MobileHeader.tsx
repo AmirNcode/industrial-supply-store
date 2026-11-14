@@ -72,11 +72,13 @@ export function MobileHeader({
     return () => header.removeAttribute("data-menu-open");
   }, [menuOpen]);
 
-  // No "Your Order" here: the ORDER control sits in the bar above with its own
+  // No "Your Order" here: the CART control sits in the bar above with its own
   // count badge, and two routes to the same page in one header is noise.
   const menuLinks = [
-    { href: `/${locale}/quick-order`, label: t.quickOrder },
-    { href: `/${locale}`, label: t.allCategories },
+    // Same word as the desktop bar, first in the list: the logo also goes
+    // home, but visitors do not reliably know a logo is a link.
+    { href: `/${locale}`, label: t.catalog },
+    // Quick Order hidden for now (2026-11-13); the page still works.
     // Account, not Admin. This menu is customer-facing; staff enter the
     // protected admin area from its direct URL.
     { href: `/${locale}/account`, label: t.account },
