@@ -6,6 +6,7 @@ import type { SpecBag, PriceTier } from "@/db/schema";
 import { REQUEST_LIMITS } from "./requestLimits";
 import { unitPriceAt } from "./priceTiers";
 import { FAMILY_VISIBLE } from "@/db/queries";
+import { CART_MARKER_COOKIE } from "./cartMarker";
 
 const COOKIE = "isupply_cart";
 const YEAR = 60 * 60 * 24 * 365;
@@ -45,6 +46,23 @@ export async function getCartId(): Promise<string | null> {
 }
 
 /**
+ * Sets the readable "this visitor has a cart" cookie beside the httpOnly one
+ * (`cartMarker.ts`). Called from the cart GET as well as from `ensureCart`, so
+ * a cart made before the marker existed gains it the first time the cart page
+ * is opened. Only callable where cookies may be written.
+ */
+export async function markCartPresent(): Promise<void> {
+  const jar = await cookies();
+  if (jar.get(CART_MARKER_COOKIE)?.value === "1") return;
+  jar.set(CART_MARKER_COOKIE, "1", {
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: YEAR,
+  });
+}
+
+/**
  * Creates the cart row and sets the cookie. Only callable from a Server Action
  * or Route Handler, since Next forbids mutating cookies during a page render.
  */
@@ -55,7 +73,10 @@ export async function ensureCart(): Promise<string> {
   if (existing) {
     // Guard against a cookie that outlived its row (e.g. after a reseed).
     const rows = await sql<{ id: string }[]>`SELECT id FROM carts WHERE id = ${existing}`;
-    if (rows.length > 0) return existing;
+    if (rows.length > 0) {
+      await markCartPresent();
+      return existing;
+    }
   }
   const [row] = await sql<{ id: string }[]>`INSERT INTO carts DEFAULT VALUES RETURNING id`;
   jar.set(COOKIE, row.id, {
@@ -66,6 +87,7 @@ export async function ensureCart(): Promise<string> {
     path: "/",
     maxAge: YEAR,
   });
+  await markCartPresent();
   return row.id;
 }
 

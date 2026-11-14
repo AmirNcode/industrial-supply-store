@@ -1,6 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
+import { hasCartMarker } from "./cartMarker";
 
 /**
  * One client-side copy of the cart, shared by every row on the page.
@@ -37,8 +38,22 @@ function subscribe(fn: () => void) {
 
 type CartResponse = { count?: number; qtys?: Record<string, number> };
 
-/** Replaces the local copy with what the server actually holds. */
-export async function refreshCart(): Promise<void> {
+/**
+ * Replaces the local copy with what the server actually holds.
+ *
+ * A visitor without the marker cookie has no cart, so the answer is known
+ * without asking: the request is skipped and the badge settles on empty. The
+ * cart page passes `force` because it is where a cart that predates the marker
+ * is given one.
+ */
+export async function refreshCart({ force = false } = {}): Promise<void> {
+  if (!force && !hasCartMarker(document.cookie)) {
+    if (!state.hydrated || state.count !== 0) {
+      state = { count: 0, qtys: {}, hydrated: true };
+      emit();
+    }
+    return;
+  }
   try {
     const res = await fetch("/api/cart", { cache: "no-store" });
     if (!res.ok) return;

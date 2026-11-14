@@ -10,7 +10,9 @@ import { refreshCart } from "@/lib/cartClient";
  * It refetches on every path change rather than only on mount because the cart
  * page edits quantities through Server Actions: without this, walking from the
  * cart back into the catalog would show "In Cart" numbers that were true a
- * screen ago. One small no-store request per navigation buys that correctness.
+ * screen ago. One small no-store request per navigation buys that correctness
+ * — and only for visitors who have a cart: `refreshCart` skips the request when
+ * the marker cookie is absent (`lib/cartMarker.ts`).
  */
 export function CartSync() {
   const pathname = usePathname();
