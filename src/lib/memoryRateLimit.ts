@@ -19,10 +19,13 @@ export function createMemoryRateLimit(policy: { limit: number; windowSeconds: nu
   return function allow(key: string, nowMs = Date.now()): { allowed: boolean; retryAfter: number } {
     let window = windows.get(key);
     if (!window || window.resetAt <= nowMs) {
-      // Bounded: drop lapsed windows first, and everything if that is not enough.
+      // Bounded: drop lapsed windows first. If it is still full, a visitor not
+      // seen before is refused until one lapses — never the whole table
+      // cleared, which would hand everyone over their limit a fresh count just
+      // by flooding it with new addresses.
       if (windows.size >= MAX_KEYS) {
         for (const [k, w] of windows) if (w.resetAt <= nowMs) windows.delete(k);
-        if (windows.size >= MAX_KEYS) windows.clear();
+        if (windows.size >= MAX_KEYS) return { allowed: false, retryAfter: policy.windowSeconds };
       }
       window = { count: 0, resetAt: nowMs + policy.windowSeconds * 1000 };
       windows.set(key, window);

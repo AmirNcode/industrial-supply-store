@@ -14,7 +14,14 @@ test("allows up to the limit per key, then refuses until the window ends", () =>
   assert.equal(allow("a", 60_000).allowed, true);
 });
 
-test("never holds more than its ceiling of visitors", () => {
+test("a full table refuses new visitors instead of forgetting the ones over their limit", () => {
   const allow = createMemoryRateLimit({ limit: 1, windowSeconds: 60 });
-  for (let i = 0; i < 12_000; i++) assert.equal(allow(`k${i}`, 0).allowed, true);
+  assert.equal(allow("heavy", 0).allowed, true);
+  assert.equal(allow("heavy", 0).allowed, false);
+  for (let i = 0; i < 4_999; i++) assert.equal(allow(`k${i}`, 0).allowed, true);
+  // Full: a new address is refused, and flooding did not reset the heavy one.
+  assert.equal(allow("newcomer", 1_000).allowed, false);
+  assert.equal(allow("heavy", 1_000).allowed, false);
+  // Once the windows lapse there is room again.
+  assert.equal(allow("newcomer", 60_000).allowed, true);
 });
