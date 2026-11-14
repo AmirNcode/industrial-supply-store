@@ -76,26 +76,72 @@ function applyLine(productId: number, qty: number, count: number) {
   emit();
 }
 
+/**
+ * Why the last add or remove did not happen, for the one notice in the layout
+ * (`CartNotice`). Before this a refused add simply did nothing, and the buyer
+ * could not tell the item was not in the order (review R-12). `at` makes two
+ * identical failures in a row two notices rather than one that never refreshes.
+ */
+export type CartFailure = { reason: "full" | "busy" | "failed"; at: number };
+
+let failure: CartFailure | null = null;
+
+function fail(status: number | null): false {
+  failure = {
+    reason: status === 409 ? "full" : status === 429 ? "busy" : "failed",
+    at: Date.now(),
+  };
+  emit();
+  return false;
+}
+
+export function clearCartFailure() {
+  if (!failure) return;
+  failure = null;
+  emit();
+}
+
+export function useCartFailure(): CartFailure | null {
+  return useSyncExternalStore(
+    subscribe,
+    () => failure,
+    () => null,
+  );
+}
+
 export async function addToCart(productId: number, qty: number): Promise<boolean> {
-  const res = await fetch("/api/cart", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ productId, qty }),
-  });
-  if (!res.ok) return false;
+  let res: Response;
+  try {
+    res = await fetch("/api/cart", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ productId, qty }),
+    });
+  } catch {
+    // Connection dropped: the same notice as a server failure.
+    return fail(null);
+  }
+  if (!res.ok) return fail(res.status);
   const data = (await res.json()) as { count: number; qty: number };
+  clearCartFailure();
   applyLine(productId, data.qty, data.count);
   return true;
 }
 
 export async function removeFromCart(productId: number): Promise<boolean> {
-  const res = await fetch("/api/cart", {
-    method: "DELETE",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ productId }),
-  });
-  if (!res.ok) return false;
+  let res: Response;
+  try {
+    res = await fetch("/api/cart", {
+      method: "DELETE",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ productId }),
+    });
+  } catch {
+    return fail(null);
+  }
+  if (!res.ok) return fail(res.status);
   const data = (await res.json()) as { count: number };
+  clearCartFailure();
   applyLine(productId, 0, data.count);
   return true;
 }

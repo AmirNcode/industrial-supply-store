@@ -5,6 +5,9 @@ import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { DemoBanner } from "@/components/DemoBanner";
 import { CartSync } from "@/components/CartSync";
+import { CartNotice } from "@/components/CartNotice";
+import { REQUEST_LIMITS } from "@/lib/requestLimits";
+import { formatInt } from "@/lib/money";
 import { Analytics } from "@vercel/analytics/next";
 import { isLocale, dir, locales, getDict, type Locale } from "@/lib/i18n";
 
@@ -59,6 +62,14 @@ export default async function LocaleLayout({
           {t.products}
         </a>
         <CartSync />
+        <CartNotice
+          messages={{
+            full: t.cartFailFull.replace("{max}", formatInt(REQUEST_LIMITS.cartLines, l)),
+            busy: t.cartFailBusy,
+            failed: t.cartFailGeneric,
+          }}
+          dismissLabel={t.cartFailDismiss}
+        />
         <DemoBanner locale={l} />
         <Header locale={l} />
         <div id="main">{children}</div>

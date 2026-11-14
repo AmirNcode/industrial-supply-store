@@ -20,6 +20,11 @@ export const checkoutEn = {
   cartQuoteOnlyNote:
     "Nothing in this order can be bought straight away, so it goes to our sales team for a quote. There is nothing to pay until you accept the quote.",
   cartVatNote: "Prices exclude VAT. VAT is added at checkout.",
+  // Shown when an add or remove is refused (CartNotice).
+  cartFailFull: "Not added: an order can hold {max} different items. Remove one to add another.",
+  cartFailBusy: "Not saved: too many changes in a short time. Wait a minute and try again.",
+  cartFailGeneric: "Not saved: the order could not be updated. Check your connection and try again.",
+  cartFailDismiss: "Dismiss",
   cartNeedsQuoteNote:
     "Some items need a quote. At checkout you can pay now for what is in stock, or wait and pay for everything together.",
   cartCheckoutNote: "Place the order to get your pro forma invoice with bank details straight away.",
@@ -195,6 +200,10 @@ export const checkoutFa: typeof checkoutEn = {
   cartQuoteOnlyNote:
     "هیچ‌یک از اقلام این سفارش را نمی‌توان بلافاصله خرید؛ سفارش برای استعلام به کارشناسان فروش ارسال می‌شود. تا زمانی که استعلام را تأیید نکنید، نیازی به پرداخت نیست.",
   cartVatNote: "قیمت‌ها بدون مالیات بر ارزش افزوده است و مالیات هنگام تسویه اضافه می‌شود.",
+  cartFailFull: "اضافه نشد: هر سفارش حداکثر {max} قلم کالای متفاوت می‌پذیرد. برای افزودن، یک قلم را حذف کنید.",
+  cartFailBusy: "ثبت نشد: تعداد تغییرها در زمان کوتاه زیاد بود. یک دقیقه صبر کنید و دوباره تلاش کنید.",
+  cartFailGeneric: "ثبت نشد: سفارش به‌روزرسانی نشد. اتصال اینترنت را بررسی و دوباره تلاش کنید.",
+  cartFailDismiss: "بستن",
   cartNeedsQuoteNote:
     "برخی اقلام نیاز به استعلام دارند. هنگام تسویه می‌توانید اقلام موجود را همین حالا پرداخت کنید یا منتظر استعلام بمانید و همه را یک‌جا بپردازید.",
   cartCheckoutNote: "با ثبت سفارش، پیش‌فاکتور همراه با اطلاعات حساب بانکی بلافاصله صادر می‌شود.",
