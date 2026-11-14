@@ -116,6 +116,10 @@ nothing important; padding it hides the times there is.
 - **Email only through `lib/email.ts`** (Resend by `fetch`, from `mail.temexpro.com` only); without `RESEND_API_KEY` nothing is sent and `/admin/emails` is the inbox. Send after the transaction commits.
 - **New checkout/account wording goes in `src/lib/i18nCheckout.ts`**, both objects.
 - `npm run db:seed:checkout` (local only) sets seller contact, a fake bank account, VAT and stock on four families so every checkout path can be walked.
+- **Phone inputs are 16px by one `!important` rule at the end of `globals.css`** (iOS zooms below that); never fix zoom with `maximum-scale`/`user-scalable`. `e2e/phone-input-size.spec.ts` fails on any smaller field.
+- **Per-address rate limits count an IPv6 visitor by /64** (`rateLimitAddressKey`); a per-email limit keys on `mailboxKey()`, not the typed text.
+- **A rep may change a customer's email only under the reset rule** (`repMayEditEmail`, enforced in `updateCustomerForRep`'s UPDATE): the email is what code sign-in trusts.
+- **Open review findings live in [`docs/REVIEW-2026-11.md`](docs/REVIEW-2026-11.md)** — start at "Resume here".
 - **Keep this file current.** When you discover a non-obvious convention,
   gotcha, or command, propose a CLAUDE.md update at task end. Keep entries one
   line. Don't add what's obvious from code.
