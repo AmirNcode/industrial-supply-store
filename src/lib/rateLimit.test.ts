@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { clientAddress, rateLimitIdentityHash, trustedAddressHeader } from "./rateLimit";
+import { clientAddress, rateLimitAddressKey, rateLimitIdentityHash, trustedAddressHeader } from "./rateLimit";
 
 test("clientAddress reads only the one trusted header", () => {
   const spoofed = new Headers({
@@ -35,4 +35,23 @@ test("rate-limit identities are stable, scoped by kind, and do not expose the ad
   assert.notEqual(first, rateLimitIdentityHash("account", "198.51.100.9"));
   assert.equal(first.length, 64);
   assert.ok(!first.includes("198.51.100.9"));
+});
+
+test("an IPv6 client is counted by its /64, so changing address does not reset a limit", () => {
+  const key = rateLimitAddressKey("2001:db8:12:3400:aaaa:bbbb:cccc:dddd");
+  assert.equal(key, "2001:db8:12:3400::/64");
+  assert.equal(rateLimitAddressKey("2001:0db8:0012:3400::1"), key);
+  assert.equal(rateLimitAddressKey("2001:DB8:12:3400:ffff:ffff:ffff:ffff"), key);
+  assert.notEqual(rateLimitAddressKey("2001:db8:12:3401::1"), key);
+  // Compressed forms: the missing groups are zeros.
+  assert.equal(rateLimitAddressKey("2001:db8::1"), "2001:db8:0:0::/64");
+  assert.equal(rateLimitAddressKey("::1"), "0:0:0:0::/64");
+  assert.equal(rateLimitAddressKey("fe80::1%eth0"), "fe80:0:0:0::/64");
+  // IPv4 is one address, however the proxy writes it.
+  assert.equal(rateLimitAddressKey("198.51.100.9"), "198.51.100.9");
+  assert.equal(rateLimitAddressKey("::ffff:198.51.100.9"), "198.51.100.9");
+  assert.equal(rateLimitAddressKey("::FFFF:198.51.100.9"), "198.51.100.9");
+  assert.equal(rateLimitAddressKey("::ffff:c633:6409"), "198.51.100.9");
+  assert.equal(rateLimitAddressKey("0:0:0:0:0:ffff:c633:6409"), "198.51.100.9");
+  assert.equal(rateLimitAddressKey("unknown"), "unknown");
 });

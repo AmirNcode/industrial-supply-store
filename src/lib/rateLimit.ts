@@ -97,6 +97,38 @@ export function clientAddress(source: HeaderSource, header = trustedAddressHeade
   return candidate && isIP(candidate) ? candidate : "unknown";
 }
 
+/**
+ * What a per-address limit counts by. An IPv4 address is itself. An IPv6
+ * address is its /64: one home or mobile connection is handed a whole /64, so
+ * counting each address apart gave a single client 2^64 fresh counters and
+ * every per-address limit — sign-in, sign-up, checkout, uploads — could be
+ * walked around by changing address per request (review R-4). An IPv4-mapped
+ * address (`::ffff:192.0.2.1`) counts as that IPv4 address, so a client is one
+ * visitor whichever way the proxy writes it.
+ */
+export function rateLimitAddressKey(address: string): string {
+  if (isIP(address) !== 6) return address;
+  let [bare] = address.toLowerCase().split("%", 1);
+  // A dotted IPv4 tail is two groups; write it as such so every address
+  // expands to eight.
+  const dotted = /^(.*:)(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(bare);
+  if (dotted) {
+    const [a, b, c, d] = dotted.slice(2).map(Number);
+    bare = `${dotted[1]}${((a << 8) | b).toString(16)}:${((c << 8) | d).toString(16)}`;
+  }
+  const [head, tail] = bare.split("::", 2);
+  const left = head === "" ? [] : head.split(":");
+  const right = tail === undefined || tail === "" ? [] : tail.split(":");
+  const zeros = tail === undefined ? 0 : 8 - left.length - right.length;
+  if (zeros < 0) return address;
+  const groups = [...left, ...Array<string>(zeros).fill("0"), ...right].map((group) => parseInt(group, 16));
+  if (groups.length !== 8 || groups.some((group) => !Number.isInteger(group))) return address;
+  if (groups.slice(0, 5).every((group) => group === 0) && groups[5] === 0xffff) {
+    return `${groups[6] >> 8}.${groups[6] & 255}.${groups[7] >> 8}.${groups[7] & 255}`;
+  }
+  return `${groups.slice(0, 4).map((group) => group.toString(16)).join(":")}::/64`;
+}
+
 export function rateLimitIdentityHash(kind: "ip" | "account", value: string): string {
   return createHmac("sha256", AUTH_SECRET)
     .update(`isupply-rate-limit-v1\0${kind}\0${value}`)
@@ -205,7 +237,7 @@ export async function consumeRateLimit(
   options: { headers?: HeaderSource; accountId?: string | null } = {},
 ): Promise<RateLimitResult> {
   const source = options.headers ?? (await nextHeaders());
-  const identities = [rateLimitIdentityHash("ip", clientAddress(source))];
+  const identities = [rateLimitIdentityHash("ip", rateLimitAddressKey(clientAddress(source)))];
   if (options.accountId) {
     identities.push(rateLimitIdentityHash("account", options.accountId));
   }
