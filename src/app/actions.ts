@@ -22,6 +22,7 @@ import { getOrderableCustomerForRep } from "@/db/customerQueries";
 import { clearOrderingFor } from "@/lib/repOrderContext";
 import { isUuid } from "@/lib/ids";
 import { RATE_LIMITS, consumeAccountCounter, consumeRateLimit } from "@/lib/rateLimit";
+import { mailboxKey } from "@/lib/mailboxKey";
 import { boundedString, parseQuickOrder } from "@/lib/requestLimits";
 import { getPriceDisplayMode } from "@/lib/fx";
 import { customerCurrencyFor } from "@/lib/money";
@@ -187,7 +188,7 @@ export async function submitQuoteAction(formData: FormData) {
     const perEmail = await consumeAccountCounter(
       "quote:guest-email",
       RATE_LIMITS.guestOrdersPerEmail,
-      contact.email.toLowerCase(),
+      mailboxKey(contact.email),
     );
     if (perEmail > RATE_LIMITS.guestOrdersPerEmail.limit) redirect(`/${locale}/quote?error=rate-limit`);
   }
