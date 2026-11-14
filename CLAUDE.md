@@ -128,7 +128,8 @@ nothing important; padding it hides the times there is.
 - **Small settings are one read per request** (`lib/appSettings.ts`); a new large `app_settings` value must be excluded there like `fx_market_state`.
 - **Error messages carry `role="alert"`**; a browser test that looks for an alert must filter by text.
 - **The daily job deletes data** (`db/pruneQueries.ts`): carts empty for 30 days, email-log rows older than a year.
-- **The admin corrects a customer's email with `setCustomerEmailAdmin`**: it unverifies the address, ends the account's sessions and kills live sign-in codes — keep all three if you touch it.
+- **Any change to a customer's email** (`setCustomerEmailAdmin`, `updateCustomerForRep`) ends the account's sessions and kills live sign-in codes; the admin's also unverifies the address. A new path that writes `users.email` must do the same.
+- **Every customer receipt upload counts against `proofUploadDaily`** (pay link per address; signed-in per address and account); a new upload path must too.
 - **Cheap public reads are limited in memory** (`lib/memoryRateLimit.ts`, search suggestions); sign-in, checkout and uploads stay on the database limiter.
 - **A rep's wider customer search goes through `repCustomerSearchAllowed`** (per rep, per minute and per day), never a bare `consumeRateLimit`.
 - **Open review findings live in [`docs/REVIEW-2026-11.md`](docs/REVIEW-2026-11.md)** — start at "Resume here".

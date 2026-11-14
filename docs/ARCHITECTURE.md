@@ -208,7 +208,9 @@ settled by phone or the order cancelled. The admin can also confirm straight
 from `invoiced`, for a payment with no upload. Files are judged by their first bytes, not their name
 (`lib/paymentProof.ts`), stored in a private Storage bucket the app creates
 itself (`payment-proofs`), and only ever read through the route above — there
-is no public URL. `payment_review` holds stock like `received` and `invoiced`
+is no public URL. Customer uploads are capped at 30 a day (`proofUploadDaily`)
+on both doors — per address on a pay link, per address and account when signed
+in — because the free file storage is 1 GB. `payment_review` holds stock like `received` and `invoiced`
 (`HELD_STATUSES`); every on-hold query lists all three. That hold is not
 open-ended: a receipt is any image a guest uploads, so `RECEIPT_HOLD_DAYS`
 (five) after the first one the sweep releases the stock and turns the lines
