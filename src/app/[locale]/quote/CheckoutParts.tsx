@@ -60,7 +60,10 @@ export function Field({
         maxLength={maxLength}
         defaultValue={defaultValue}
         inputMode={inputMode}
-        dir={ltr || type === "email" || type === "tel" ? "ltr" : undefined}
+        // "auto" lets the text set its own direction from its first letter, so
+        // a company name typed in English on the Persian site runs left to
+        // right instead of being reordered into an RTL box (and vice versa).
+        dir={ltr || type === "email" || type === "tel" ? "ltr" : "auto"}
         className="w-full"
       />
     </label>
@@ -180,7 +183,7 @@ export function NotesField({ locale }: { locale: Locale }) {
       <span className="mb-0.5 block font-bold">
         {t.notes} <span className="font-normal text-[var(--color-ink-faint)]">({t.optional})</span>
       </span>
-      <textarea name="notes" rows={3} maxLength={REQUEST_LIMITS.notesChars} className="w-full" />
+      <textarea name="notes" rows={3} maxLength={REQUEST_LIMITS.notesChars} dir="auto" className="w-full" />
     </label>
   );
 }
