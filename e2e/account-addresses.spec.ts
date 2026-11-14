@@ -44,9 +44,17 @@ for (const locale of locales) {
     await expect(saved).toHaveCount(2);
     await expect(saved.first()).toBeChecked();
     await expect(customer.getByText(addressName)).toBeVisible();
-    await expect(customer.getByText(street)).toBeVisible();
-    await expect(customer.getByText(t.addressChoiceNew)).toBeVisible();
-    await expect(customer.locator('input[name="address"]')).not.toHaveAttribute("required", "");
+    // The chosen address unfolds its details; the typed fields stay hidden
+    // until "a different address" is picked.
+    await expect(customer.getByText(street, { exact: true })).toBeVisible();
+    await expect(customer.getByText("E2E Receiver", { exact: true })).toBeVisible();
+    const typedAddress = customer.locator('input[name="address"]');
+    await expect(typedAddress).toBeHidden();
+    await expect(typedAddress).not.toHaveAttribute("required", "");
+    await customer.getByText(t.addressChoiceNew).click();
+    await expect(typedAddress).toBeVisible();
+    await expect(customer.getByText("E2E Receiver", { exact: true })).toBeHidden();
+    await saved.first().check();
     await expectNoAccessibilityViolations(customer, testInfo);
 
     await Promise.all([adminContext.close(), customerContext.close()]);

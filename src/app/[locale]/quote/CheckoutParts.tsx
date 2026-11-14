@@ -75,6 +75,12 @@ export function Field({
  * "new" radio and are never `required`: a browser would otherwise refuse to
  * submit a saved choice because the unused boxes are empty, and there is no
  * script to switch the attribute. The server validates whichever was chosen.
+ *
+ * The same no-script rule is why the typed fields are hidden with CSS `:has()`
+ * rather than state: they appear only while "a different address" is checked,
+ * and the checked saved address unfolds its full details in place. Without
+ * `:has()` support (very old browsers) the fields simply stay hidden behind a
+ * saved choice, which still submits correctly.
  */
 export function DeliveryFields({
   locale,
@@ -91,15 +97,16 @@ export function DeliveryFields({
   const hasSaved = saved.length > 0;
   const checkedId = (saved.find((a) => a.isDefault) ?? saved[0])?.id;
   const need = hasSaved ? undefined : true;
+  const gridCols = "grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]";
   return (
-    <fieldset className="col-span-full m-0 grid gap-3 border-0 p-0 [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]">
-      <legend className="mb-1 border-b border-[var(--color-rule)] pb-0.5 text-[12px] font-bold">
+    <fieldset className="group/delivery col-span-full m-0 grid gap-3 border-0 p-0">
+      <legend className="mb-1 w-full border-b border-[var(--color-rule)] pb-0.5 text-[12px] font-bold">
         {t.deliveryHeading}
       </legend>
       {hasSaved && (
-        <div className="col-span-full grid gap-1.5 text-[12px]">
+        <div className="grid gap-1.5 text-[12px]">
           {saved.map((a) => (
-            <label key={a.id} className="flex items-start gap-2">
+            <label key={a.id} className="group/opt flex items-start gap-2">
               <input
                 type="radio"
                 name="addressChoice"
@@ -107,12 +114,35 @@ export function DeliveryFields({
                 defaultChecked={a.id === checkedId}
                 className="mt-0.5"
               />
-              <span>
+              <span className="min-w-0">
                 {a.label ? <strong>{a.label}</strong> : null}
                 {a.label ? " — " : ""}
                 <bdi>
                   {a.city}، {a.address}
                 </bdi>
+                <span className="mt-1 hidden border border-[var(--color-rule)] bg-[var(--color-panel-alt)] px-2 py-1.5 text-[11.5px] leading-relaxed group-has-checked/opt:block">
+                  {a.recipient && (
+                    <span className="block">
+                      {t.recipient}: <bdi>{a.recipient}</bdi>
+                    </span>
+                  )}
+                  {a.phone && (
+                    <span className="block">
+                      {t.phone}: <bdi className="tech" dir="ltr">{a.phone}</bdi>
+                    </span>
+                  )}
+                  <span className="block">
+                    {t.address}: <bdi>{a.address}</bdi>
+                  </span>
+                  <span className="block">
+                    {t.city}: <bdi>{a.city}</bdi>
+                  </span>
+                  {a.postalCode && (
+                    <span className="block">
+                      {t.postalCode}: <bdi className="tech" dir="ltr">{a.postalCode}</bdi>
+                    </span>
+                  )}
+                </span>
               </span>
             </label>
           ))}
@@ -122,36 +152,45 @@ export function DeliveryFields({
           </label>
         </div>
       )}
-      <label className="col-span-full block text-[12px]">
-        <span className="mb-0.5 block font-bold">
-          {t.address}
-          {need && <span className="text-[#a3312a]"> *</span>}
-        </span>
-        <input
-          type="text"
-          name="address"
-          required={need}
-          maxLength={REQUEST_LIMITS.addressChars}
-          defaultValue={defaults?.address}
-          className="w-full"
-        />
-      </label>
-      <Field name="city" label={t.city} maxLength={REQUEST_LIMITS.cityChars} required={need} defaultValue={defaults?.city} />
-      <Field
-        name="postalCode"
-        label={t.postalCode}
-        maxLength={REQUEST_LIMITS.postalCodeChars}
-        optional={t.optional}
-        ltr
-        inputMode="numeric"
-        defaultValue={defaults?.postalCode}
-      />
-      {canSave && (
-        <label className="col-span-full flex items-center gap-2 text-[12px]">
-          <input type="checkbox" name="saveAddress" />
-          <span>{t.saveAddressLabel}</span>
+      <div
+        className={
+          hasSaved
+            ? `${gridCols} hidden group-has-[input[name=addressChoice][value=new]:checked]/delivery:grid`
+            : gridCols
+        }
+      >
+        <label className="col-span-full block text-[12px]">
+          <span className="mb-0.5 block font-bold">
+            {t.address}
+            {need && <span className="text-[#a3312a]"> *</span>}
+          </span>
+          <input
+            type="text"
+            name="address"
+            required={need}
+            maxLength={REQUEST_LIMITS.addressChars}
+            defaultValue={defaults?.address}
+            dir="auto"
+            className="w-full"
+          />
         </label>
-      )}
+        <Field name="city" label={t.city} maxLength={REQUEST_LIMITS.cityChars} required={need} defaultValue={defaults?.city} />
+        <Field
+          name="postalCode"
+          label={t.postalCode}
+          maxLength={REQUEST_LIMITS.postalCodeChars}
+          optional={t.optional}
+          ltr
+          inputMode="numeric"
+          defaultValue={defaults?.postalCode}
+        />
+        {canSave && (
+          <label className="col-span-full flex items-center gap-2 text-[12px]">
+            <input type="checkbox" name="saveAddress" />
+            <span>{t.saveAddressLabel}</span>
+          </label>
+        )}
+      </div>
     </fieldset>
   );
 }
