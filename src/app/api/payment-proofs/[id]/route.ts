@@ -25,7 +25,10 @@ const notFound = () => new Response("Not found", { status: 404 });
  */
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [admin, uid, rep] = await Promise.all([isAdmin(), currentUserId(), currentRep()]);
+  const [admin, uid, signedInRep] = await Promise.all([isAdmin(), currentUserId(), currentRep()]);
+  // A rep still on a temporary password has not finished signing in: every
+  // rep page sends them to the password form first, and so does this.
+  const rep = signedInRep && !signedInRep.mustChangePassword ? signedInRep : null;
   if (!admin && !uid && !rep) return notFound();
 
   const proof = await getProofAccess(Number(id));
@@ -46,7 +49,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   return new Response(bytes as BodyInit, {
     headers: {
       "Content-Type": proof.contentType,
-      "Content-Disposition": `inline; filename="receipt-${Number(id)}.${proofExtension(proof.contentType)}"`,
+      // A PDF is downloaded, never opened in the page: a PDF can carry script,
+      // and opened inline it would run on the site's own address inside a
+      // signed-in staff session. Images are inert and stay viewable in place.
+      "Content-Disposition": `${proof.contentType === "application/pdf" ? "attachment" : "inline"}; filename="receipt-${Number(id)}.${proofExtension(proof.contentType)}"`,
+      // Whatever the file claims to be, it may load and run nothing.
+      "Content-Security-Policy": "default-src 'none'; sandbox",
       // Personal financial data: never stored by a shared cache, never sniffed
       // into another type, never announced to the next site by referrer.
       "Cache-Control": "private, no-store",
