@@ -55,6 +55,7 @@ export default async function SignUpPage({
           <input
             type="email"
             name="email"
+            autoComplete="email"
             dir="ltr"
             maxLength={REQUEST_LIMITS.emailChars}
             required
@@ -71,6 +72,7 @@ export default async function SignUpPage({
           <input
             type="text"
             name="company"
+            autoComplete="organization"
             maxLength={REQUEST_LIMITS.companyChars}
             required
             className="w-full"
@@ -86,6 +88,7 @@ export default async function SignUpPage({
             <input
               type="text"
               name="contactName"
+              autoComplete="name"
               maxLength={REQUEST_LIMITS.contactNameChars}
               required
               className="w-full"
@@ -99,6 +102,7 @@ export default async function SignUpPage({
             <input
               type="tel"
               name="phone"
+              autoComplete="tel"
               dir="ltr"
               maxLength={REQUEST_LIMITS.phoneChars}
               required

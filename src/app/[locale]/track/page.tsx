@@ -85,6 +85,7 @@ export default async function TrackPage({
           <input
             type="email"
             name="email"
+            autoComplete="email"
             dir="ltr"
             defaultValue={email ?? ""}
             maxLength={REQUEST_LIMITS.emailChars}

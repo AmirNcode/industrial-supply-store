@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AUTOFILL } from "@/lib/autofill";
 import { getDict, type Locale } from "@/lib/i18n";
 import { formatAmount, formatInt, formatPrice, type Currency } from "@/lib/money";
 import { invoiceAmounts, roundedForDisplay } from "@/lib/invoice";
@@ -60,6 +61,7 @@ export function Field({
         maxLength={maxLength}
         defaultValue={defaultValue}
         inputMode={inputMode}
+        autoComplete={AUTOFILL[name]}
         // "auto" lets the text set its own direction from its first letter, so
         // a company name typed in English on the Persian site runs left to
         // right instead of being reordered into an RTL box (and vice versa).
@@ -167,6 +169,7 @@ export function DeliveryFields({
           <input
             type="text"
             name="address"
+            autoComplete={AUTOFILL.address}
             required={need}
             maxLength={REQUEST_LIMITS.addressChars}
             defaultValue={defaults?.address}
