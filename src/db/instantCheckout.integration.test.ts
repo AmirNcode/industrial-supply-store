@@ -464,6 +464,51 @@ test("expiry sweep: invoiced and quoted cancel, a receipt protects, received let
   }
 });
 
+test("a receipt holds stock for five days; after that the order stays open and the stock is released", async () => {
+  assertLocalDatabase();
+  const fx = await fixture([{ priceCents: 100, available: 10 }]);
+  try {
+    const placed = created(await fx.submit([{ product: 0, qty: 4 }]));
+    const id = placed.orders[0].id;
+    assert.equal(
+      await addPaymentProof(id, { path: `test/${fx.marker}/1.jpg`, type: "image/jpeg", size: 10 }, { kind: "customer" }),
+      "added",
+    );
+    const age = (days: number) => sql`
+      UPDATE orders
+      SET created_at = now() - make_interval(days => ${days}, hours => 2),
+          invoiced_at = now() - make_interval(days => ${days}, hours => 1),
+          payment_submitted_at = now() - make_interval(days => ${days})
+      WHERE id = ${id}
+    `;
+
+    // Four days in: still held.
+    await age(4);
+    await sweepExpiredOrders({ force: true });
+    assert.deepEqual(await fx.stock(0), { available: 6, onHold: 4, sold: 0 });
+
+    // Past five: the stock is back on sale, the order is still staff's to confirm.
+    await age(6);
+    await sweepExpiredOrders({ force: true });
+    const order = await fx.order(placed.ref);
+    assert.equal(order.status, "payment_review");
+    assert.equal(order.expiredAt, null);
+    assert.deepEqual((await fx.lines(id)).map((l) => [l.qty, l.backorder]), [[4, true]]);
+    assert.deepEqual(await fx.stock(0), { available: 10, onHold: 0, sold: 0 });
+
+    // Sweeping again does nothing, and a late confirmation still goes through
+    // without touching a shelf the order no longer holds.
+    await sweepExpiredOrders({ force: true });
+    assert.deepEqual(await fx.stock(0), { available: 10, onHold: 0, sold: 0 });
+    assert.equal(await confirmPayment(id, "payment_review"), true);
+    assert.equal((await fx.order(placed.ref)).status, "preparing");
+    assert.deepEqual(await fx.stock(0), { available: 10, onHold: 0, sold: 0 });
+    await fx.assertLedger();
+  } finally {
+    await fx.cleanup();
+  }
+});
+
 test("the invoice number is issued on payment, so an order that expires unpaid uses none", async () => {
   assertLocalDatabase();
   const fx = await fixture([{ priceCents: 100, available: 20 }]);
