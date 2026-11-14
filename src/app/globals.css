@@ -4379,6 +4379,37 @@ select.mtx-input.mtx-select.is-invalid {
   }
 }
 
+/* Small controls keep their drawn size on phones but answer a 44px touch
+   (review R-15): the "×" on an in-cart quantity is about 22×16 and the "+"
+   about 30, which a thumb misses. An invisible box centred on the control
+   takes the tap, so no row or masthead has to grow to make room. */
+@media (pointer: coarse) {
+  .in-cart-x,
+  .qty-add button,
+  .hit-44 {
+    position: relative;
+  }
+  .in-cart-x::after,
+  .qty-add button::after,
+  .hit-44::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: max(100%, 44px);
+    height: max(100%, 44px);
+    transform: translate(-50%, -50%);
+  }
+  /* The stepper clips its children, so its buttons grow for real instead. */
+  .qty-step button {
+    width: 44px;
+    height: 44px;
+  }
+  .qty-step input {
+    height: 44px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

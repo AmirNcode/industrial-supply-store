@@ -166,7 +166,7 @@ export function MobileHeader({
           aria-expanded={menuOpen}
           aria-controls={menuOpen ? menuId : undefined}
           aria-label={t.browseCatalog}
-          className="tap flex h-[35px] w-[35px] shrink-0 items-center justify-center text-white"
+          className="tap hit-44 flex h-[35px] w-[35px] shrink-0 items-center justify-center text-white"
         >
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             {menuOpen ? (
