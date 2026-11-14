@@ -901,6 +901,10 @@ const en = {
   adminSplitErrorMixed: "Fill every share or leave them all blank.",
   adminSplitErrorDuplicate: "A rep can be listed once.",
   adminSplitErrorTooMany: "At most 5 reps per account.",
+  adminCustomerEmailChange: "Change email",
+  adminCustomerEmailHint:
+    "Sign-in codes and order emails go to this address. The customer confirms a new address the next time they sign in with a code.",
+  adminCustomerEmailSaved: "Email saved.",
   adminSplitErrorRep: "That rep is inactive and cannot be added.",
   adminSplitErrorRepMissing: "Choose a rep in every row, or remove the row.",
   adminAddRep: "Add rep",
@@ -1870,6 +1874,10 @@ const fa: typeof en = {
   adminSplitErrorMixed: "همهٔ سهم‌ها را پر کنید یا همه را خالی بگذارید.",
   adminSplitErrorDuplicate: "هر نماینده فقط یک بار.",
   adminSplitErrorTooMany: "حداکثر ۵ نماینده برای هر حساب.",
+  adminCustomerEmailChange: "تغییر ایمیل",
+  adminCustomerEmailHint:
+    "کد ورود و ایمیل‌های سفارش به این نشانی فرستاده می‌شود. مشتری نشانی جدید را در ورود بعدی با کد تأیید می‌کند.",
+  adminCustomerEmailSaved: "ایمیل ذخیره شد.",
   adminSplitErrorRep: "این نماینده غیرفعال است و قابل افزودن نیست.",
   adminSplitErrorRepMissing: "در هر ردیف یک نماینده انتخاب کنید یا ردیف را حذف کنید.",
   adminAddRep: "افزودن نماینده",

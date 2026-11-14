@@ -460,6 +460,41 @@ export async function resetCustomerPasswordAdmin(
   });
 }
 
+/**
+ * The admin corrects a customer's email — the one way a self-registered
+ * customer's wrong or changed address can be fixed, since a rep may only edit
+ * the email of an account they created that has never signed in (review R-1,
+ * R-32). The address is what code sign-in trusts, so a new one starts
+ * unverified and any code already sent to the old one stops working. The admin
+ * can already issue any customer a temporary password, so this gives the
+ * shared admin sign-in no power over an account it did not have.
+ */
+export async function setCustomerEmailAdmin(
+  customerId: string,
+  email: string,
+): Promise<"ok" | "not-found" | "email-taken"> {
+  try {
+    return await sql.begin(async (tx) => {
+      const [before] = await tx<{ email: string | null }[]>`
+        SELECT email FROM users WHERE id = ${customerId} FOR UPDATE
+      `;
+      if (!before) return "not-found";
+      if (before.email === email) return "ok";
+      await tx`UPDATE users SET email = ${email}, email_verified_at = NULL WHERE id = ${customerId}`;
+      await tx`UPDATE login_codes SET consumed_at = now() WHERE user_id = ${customerId} AND consumed_at IS NULL`;
+      await recordAudit(tx, {
+        actor: { kind: "admin" },
+        action: "customer.email-changed",
+        subject: { kind: "customer", id: customerId },
+      });
+      return "ok";
+    });
+  } catch (err) {
+    if (uniqueViolation(err) === "users_email_lower_key") return "email-taken";
+    throw err;
+  }
+}
+
 export async function setFollowUpAdmin(customerId: string, date: string | null): Promise<boolean> {
   const result = await sql`
     UPDATE users SET next_follow_up_on = ${date}::date WHERE id = ${customerId}

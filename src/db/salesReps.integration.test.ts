@@ -30,6 +30,7 @@ import {
   resetCustomerPasswordForRep,
   setFollowUpForRep,
   updateCustomerForRep,
+  setCustomerEmailAdmin,
 } from "./customerQueries";
 import { addNoteForRep, listNotes } from "./noteQueries";
 import { listAccountReps, setAccountReps } from "./accountRepQueries";
@@ -899,6 +900,18 @@ test("a rep resets only a customer they created who has never chosen a password"
     await sql`UPDATE users SET email_verified_at = now() WHERE id = ${fresh.id}`;
     assert.equal(await edit(fresh.id, `${randomUUID()}@example.invalid`), "ok");
     assert.equal(await emailOf(fresh.id), repInbox);
+
+    // The admin is the one who can correct it (review R-32): the address is
+    // replaced, starts unproved, and cannot take another account's email.
+    const corrected = `${randomUUID()}@example.invalid`;
+    assert.equal(await setCustomerEmailAdmin(fresh.id, corrected), "ok");
+    assert.equal(await emailOf(fresh.id), corrected);
+    const [{ verified }] = await sql<{ verified: string | null }[]>`
+      SELECT email_verified_at AS verified FROM users WHERE id = ${fresh.id}`;
+    assert.equal(verified, null);
+    assert.equal(await setCustomerEmailAdmin(self.id, corrected), "email-taken");
+    assert.equal(await emailOf(self.id), selfEmail);
+    assert.equal(await setCustomerEmailAdmin(randomUUID(), corrected), "not-found");
 
     // Nothing refused changed a password.
     const hashes = await sql<{ id: string; hash: string }[]>`

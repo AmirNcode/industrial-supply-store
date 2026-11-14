@@ -11,6 +11,7 @@ import {
   addCustomerNoteAdminAction,
   setAccountRepsAction,
   resetCustomerPasswordAdminAction,
+  setCustomerEmailAdminAction,
   setFollowUpAdminAction,
 } from "../actions";
 import { originLabel } from "../originLabel";
@@ -26,6 +27,7 @@ import { siteOrigin } from "@/lib/siteOrigin";
 import { getFxRate } from "@/lib/fx";
 import { tehranToday } from "@/lib/persianCalendar";
 import { isUuid } from "@/lib/ids";
+import { REQUEST_LIMITS } from "@/lib/requestLimits";
 import { isLocale, getDict, type Locale } from "@/lib/i18n";
 import { fillMessage } from "@/lib/fillMessage";
 import { commissionPercentLabel, formatCommissionPercent } from "@/lib/repAccount";
@@ -38,11 +40,14 @@ const ERROR_KEY = {
   mixed: "adminSplitErrorMixed",
   duplicate: "adminSplitErrorDuplicate",
   "too-many": "adminSplitErrorTooMany",
+  email: "siteContactInvalidEmail",
+  "email-taken": "emailTaken",
 } as const;
 
 const OK_KEY = {
   assigned: "assignmentSaved",
   note: "noteAdded",
+  email: "adminCustomerEmailSaved",
 } as const;
 
 export default async function AdminCustomerPage({
@@ -178,6 +183,29 @@ export default async function AdminCustomerPage({
             </div>
           ))}
         </dl>
+        {/* The only place a customer's email can be corrected once they have
+            signed in themselves (review R-32). */}
+        <form action={setCustomerEmailAdminAction} className="mt-3 flex max-w-[680px] flex-wrap items-end gap-2 text-[12px]">
+          <input type="hidden" name="locale" value={l} />
+          <input type="hidden" name="customerId" value={id} />
+          <label className="min-w-[220px] flex-1">
+            <span className="mb-0.5 block font-bold">{t.adminCustomerEmailChange}</span>
+            <input
+              type="email"
+              name="email"
+              dir="ltr"
+              required
+              autoComplete="off"
+              defaultValue={customer.email ?? ""}
+              maxLength={REQUEST_LIMITS.emailChars}
+              className="w-full"
+            />
+          </label>
+          <button type="submit" className="btn-small" disabled={DEMO_MODE}>
+            {t.save}
+          </button>
+          <p className="basis-full text-[11px] text-[var(--color-ink-muted)]">{t.adminCustomerEmailHint}</p>
+        </form>
       </section>
 
       <FollowUpControl
