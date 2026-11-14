@@ -1,3 +1,4 @@
+import { FormDraft } from "@/components/FormDraft";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { signUpAction } from "../actions";
@@ -46,6 +47,7 @@ export default async function SignUpPage({
 
       <form action={signUpAction} className="grid gap-3">
         <input type="hidden" name="locale" value={l} />
+        <FormDraft storageKey="signup" restore={Boolean(error)} />
 
         <label className="block text-[12px]">
           <span className="mb-0.5 block font-bold">
