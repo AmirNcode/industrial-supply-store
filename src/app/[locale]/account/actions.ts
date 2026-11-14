@@ -71,7 +71,8 @@ import { receivePaymentProof, type ProofUploadResult } from "@/lib/paymentProofU
 /** Emails the account a fresh code. The caller has already rate-limited. */
 async function sendLoginCode(user: { id: string; email: string | null }, locale: Locale): Promise<void> {
   if (!user.email) return;
-  const code = await issueLoginCode(user.id);
+  const code = await issueLoginCode(user.id, user.email);
+  if (code === null) return;
   const mail = loginCodeEmail({ locale, code, minutes: LOGIN_CODE_TTL_MINUTES });
   await sendEmail({ kind: "login-code", to: user.email, secret: true, ...mail });
 }

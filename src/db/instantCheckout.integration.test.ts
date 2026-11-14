@@ -628,6 +628,13 @@ async function userWith(fx: { marker: string; userIds: string[] }, tag: string) 
 
 const wrongOf = (code: string) => (code === "000000" ? "111111" : "000000");
 
+/** A code that must exist: the account does, and no address is being checked. */
+async function issue(userId: string): Promise<string> {
+  const code = await issueLoginCode(userId);
+  if (code === null) throw new Error("no code issued");
+  return code;
+}
+
 test("sign-in codes: right code once, wrong codes counted, a newer code replaces the older", async () => {
   assertLocalDatabase();
   const fx = await fixture([]);
@@ -645,14 +652,14 @@ test("sign-in codes: right code once, wrong codes counted, a newer code replaces
     // No code issued yet.
     assert.equal(await redeemLoginCode(user.id, "123456"), "expired");
 
-    const code = await issueLoginCode(user.id);
+    const code = await issue(user.id);
     assert.match(code, /^\d{6}$/);
     assert.equal(await redeemLoginCode(user.id, code), "ok");
     assert.ok(await verified());
     assert.equal(await redeemLoginCode(user.id, code), "expired", "a code works once");
 
     // Wrong guesses are counted; at the limit the code is spent, even for the right one.
-    const second = await issueLoginCode(user.id);
+    const second = await issue(user.id);
     for (let n = 1; n < LOGIN_CODE_MAX_ATTEMPTS; n++) {
       assert.equal(await redeemLoginCode(user.id, wrongOf(second)), "wrong", `attempt ${n}`);
     }
@@ -660,21 +667,24 @@ test("sign-in codes: right code once, wrong codes counted, a newer code replaces
     assert.equal(await redeemLoginCode(user.id, second), "expired");
 
     // A newer code invalidates the older one.
-    let older = await issueLoginCode(user.id);
-    let newer = await issueLoginCode(user.id);
-    while (newer === older) newer = await issueLoginCode(user.id);
+    let older = await issue(user.id);
+    let newer = await issue(user.id);
+    while (newer === older) newer = await issue(user.id);
     assert.equal(await redeemLoginCode(user.id, older), "wrong");
     assert.equal(await redeemLoginCode(user.id, newer), "ok");
 
     // A lapsed code is expired.
-    older = await issueLoginCode(user.id);
+    older = await issue(user.id);
     await sql`UPDATE login_codes SET expires_at = now() - interval '1 minute' WHERE user_id = ${user.id} AND consumed_at IS NULL`;
     assert.equal(await redeemLoginCode(user.id, older), "expired");
 
+    // No code is issued for an address the account no longer has.
+    assert.equal(await issueLoginCode(user.id, "someone-else@example.invalid"), null);
+
     // One account's code never opens another's.
     const other = await userWith(fx, "other");
-    const mine = await issueLoginCode(user.id);
-    await issueLoginCode(other.id);
+    const mine = await issue(user.id);
+    await issue(other.id);
     assert.notEqual(await redeemLoginCode(other.id, mine), "ok");
 
     // After a code sign-in the old password and every old session stop working.

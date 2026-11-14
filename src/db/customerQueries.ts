@@ -480,7 +480,13 @@ export async function setCustomerEmailAdmin(
       `;
       if (!before) return "not-found";
       if (before.email === email) return "ok";
-      await tx`UPDATE users SET email = ${email}, email_verified_at = NULL WHERE id = ${customerId}`;
+      // Every signed-in browser is signed out too: whoever reached the account
+      // through the old address should not stay in it after the correction.
+      await tx`
+        UPDATE users
+        SET email = ${email}, email_verified_at = NULL, session_version = session_version + 1
+        WHERE id = ${customerId}
+      `;
       await tx`UPDATE login_codes SET consumed_at = now() WHERE user_id = ${customerId} AND consumed_at IS NULL`;
       await recordAudit(tx, {
         actor: { kind: "admin" },

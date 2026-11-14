@@ -14,18 +14,30 @@ import {
  * newest email is always the one that counts and an old one cannot be tried
  * alongside it. Returns the code for the caller to email — it is stored only
  * as a hash.
+ *
+ * `forEmail` is the address the caller is about to send it to. The account row
+ * is locked and the address re-read, so a code can never be issued for an
+ * address the admin replaced a moment ago (`setCustomerEmailAdmin` takes the
+ * same lock): redeeming a code marks the account's current address as proved,
+ * and that must be the address the code actually went to. Null means it
+ * changed; nothing was written and nothing should be sent.
  */
-export async function issueLoginCode(userId: string): Promise<string> {
+export async function issueLoginCode(userId: string, forEmail?: string): Promise<string | null> {
   const code = newLoginCode();
-  await sql.begin(async (tx) => {
+  return sql.begin(async (tx) => {
+    const [account] = await tx<{ email: string | null }[]>`
+      SELECT email FROM users WHERE id = ${userId} FOR UPDATE
+    `;
+    if (!account) return null;
+    if (forEmail !== undefined && account.email?.toLowerCase() !== forEmail.toLowerCase()) return null;
     await tx`UPDATE login_codes SET consumed_at = now() WHERE user_id = ${userId} AND consumed_at IS NULL`;
     await tx`
       INSERT INTO login_codes (user_id, code_hash, expires_at)
       VALUES (${userId}, ${hashLoginCode(userId, code, AUTH_SECRET)},
               now() + make_interval(mins => ${LOGIN_CODE_TTL_MINUTES}))
     `;
+    return code;
   });
-  return code;
 }
 
 export type CodeCheck = "ok" | "wrong" | "expired";
