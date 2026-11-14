@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { sql } from "./index";
 import type { SpecBag, PriceTier, ProductDocument } from "./schema";
 import type { SoldBy } from "@/lib/soldBy";
@@ -143,14 +144,15 @@ const CATEGORY_VISIBLE = sql`
 /** Exported for Reorder, which must refuse what quick order refuses. Aliases `f` and `c`. */
 export const FAMILY_VISIBLE = sql`f.is_visible AND ${CATEGORY_VISIBLE}`;
 
-export async function getTopCategories(): Promise<CategoryRow[]> {
+/** Once per request: the home page and the category rail both ask (review R-24). */
+export const getTopCategories = cache(async (): Promise<CategoryRow[]> => {
   return sql<CategoryRow[]>`
     SELECT ${CATEGORY_COLS}
     FROM categories c
     WHERE c.depth = 0 AND ${CATEGORY_VISIBLE}
     ORDER BY c.sort
   `;
-}
+});
 
 /**
  * The one category read that also carries the description and its diagram.

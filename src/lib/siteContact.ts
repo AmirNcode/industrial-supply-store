@@ -1,6 +1,7 @@
 import "server-only";
 
 import { cache } from "react";
+import { getSmallSettings } from "./appSettings";
 import { sql } from "@/db";
 import {
   PLACEHOLDER_CONTACT_EMAIL,
@@ -26,12 +27,7 @@ function fallbackPhone(): string {
 
 /** One settings read per request, shared by the header and invoice when both render. */
 export const getSiteContact = cache(async (): Promise<SiteContact> => {
-  const rows = await sql<{ key: string; value: string }[]>`
-    SELECT key, value
-    FROM app_settings
-    WHERE key IN (${KEY_EMAIL}, ${KEY_PHONE})
-  `;
-  const values = new Map(rows.map((row) => [row.key, row.value]));
+  const values = await getSmallSettings();
   const email = normalizeContactEmail(values.get(KEY_EMAIL) ?? "") ?? fallbackEmail();
   const phone = normalizeContactPhone(values.get(KEY_PHONE) ?? "") ?? fallbackPhone();
 

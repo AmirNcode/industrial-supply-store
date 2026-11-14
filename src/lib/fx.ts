@@ -1,5 +1,6 @@
 import "server-only";
 import { cache } from "react";
+import { getSmallSettings } from "./appSettings";
 import { sql } from "@/db";
 import {
   envFxRate,
@@ -38,11 +39,7 @@ type PricingSettings = FxSettings & { priceDisplayMode: PriceDisplayMode };
  * visible on the next render rather than after a restart.
  */
 const getPricingSettings = cache(async (): Promise<PricingSettings> => {
-  const rows = await sql<{ key: string; value: string }[]>`
-    SELECT key, value FROM app_settings
-    WHERE key IN (${KEY_MODE}, ${KEY_RATE}, ${KEY_PRICE_DISPLAY}, ${KEY_MARKET_RATE})
-  `;
-  const bag = new Map(rows.map((r) => [r.key, r.value]));
+  const bag = await getSmallSettings();
 
   const rawMode = bag.get(KEY_MODE) ?? "auto";
   const rawPriceDisplay = bag.get(KEY_PRICE_DISPLAY) ?? DEFAULT_PRICE_DISPLAY_MODE;
