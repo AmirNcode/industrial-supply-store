@@ -6,6 +6,7 @@ import { submitOrderFromCart, type QuoteContact, type SubmitOrderResult } from "
 import { issuePishFactor, sendQuote } from "./invoiceQueries";
 import { addPaymentProof, confirmPayment } from "./paymentProofQueries";
 import { sweepExpiredOrders } from "./expiryQueries";
+import { pruneStaleRows } from "./pruneQueries";
 import { cancelOrderByCustomer } from "./customerCancelQueries";
 import { findShortfalls } from "./inventoryQueries";
 import { issueLoginCode, redeemLoginCode } from "./loginCodeQueries";
@@ -807,6 +808,42 @@ test("ledger: back-order lines count as neither held nor sold, and a wrong count
     assert.equal(await sql.begin((tx) => reconcileInventoryForProducts(tx, [fx.products[0].id])), 1);
     assert.deepEqual(await fx.stock(0), { available: 0, onHold: 0, sold: 3 });
   } finally {
+    await fx.cleanup();
+  }
+});
+
+test("the daily tidy-up deletes long-empty carts and year-old email text, nothing else", async () => {
+  assertLocalDatabase();
+  const fx = await fixture([{ priceCents: 100, available: 10 }]);
+  const cartIds: string[] = [];
+  const marker = `prune-${randomUUID()}`;
+  try {
+    const cart = async (age: string, withItem: boolean) => {
+      const [row] = await sql<{ id: string }[]>`
+        INSERT INTO carts (created_at, updated_at) VALUES (now() - ${age}::interval, now() - ${age}::interval) RETURNING id`;
+      cartIds.push(row.id);
+      if (withItem) await sql`INSERT INTO cart_items (cart_id, product_id, qty) VALUES (${row.id}, ${fx.products[0].id}, 1)`;
+      return row.id;
+    };
+    const oldEmpty = await cart("40 days", false);
+    const oldFull = await cart("40 days", true);
+    const newEmpty = await cart("2 days", false);
+    const email = (age: string) => sql`
+      INSERT INTO email_log (kind, to_email, subject, body_text, status, created_at)
+      VALUES ('test', ${marker}, 's', 'b', 'logged', now() - ${age}::interval)`;
+    await email("400 days");
+    await email("300 days");
+
+    const pruned = await pruneStaleRows();
+    assert.ok(pruned.carts >= 1 && pruned.emails >= 1);
+    const left = await sql<{ id: string }[]>`SELECT id FROM carts WHERE id = ANY(${cartIds}::uuid[])`;
+    assert.deepEqual(left.map((r) => r.id).sort(), [oldFull, newEmpty].sort());
+    assert.ok(!left.some((r) => r.id === oldEmpty));
+    const [{ n }] = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM email_log WHERE to_email = ${marker}`;
+    assert.equal(n, 1);
+  } finally {
+    await sql`DELETE FROM carts WHERE id = ANY(${cartIds}::uuid[])`;
+    await sql`DELETE FROM email_log WHERE to_email = ${marker}`;
     await fx.cleanup();
   }
 });
