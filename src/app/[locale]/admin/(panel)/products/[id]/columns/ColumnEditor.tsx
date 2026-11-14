@@ -191,7 +191,7 @@ export function ColumnEditor({
         </p>
       )}
       {(state?.kind === "error" || state?.kind === "newColumn") && (
-        <p className="mb-2 border border-[#e0b4b0] bg-[#fdf2f1] px-2.5 py-1.5 text-[12px] text-[var(--color-danger)]">
+        <p role="alert" className="mb-2 border border-[#e0b4b0] bg-[#fdf2f1] px-2.5 py-1.5 text-[12px] text-[var(--color-danger)]">
           {state.kind === "error"
             ? state.message
             : state.error.code === "builtin"

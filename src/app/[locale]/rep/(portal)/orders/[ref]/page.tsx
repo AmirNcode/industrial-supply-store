@@ -90,7 +90,7 @@ export default async function RepOrderPage({
   return (
     <>
       <p className="mb-2 text-[12px]">
-        <Link href={`/${l}/rep/orders`}>← {t.ordersTab}</Link>
+        <Link href={`/${l}/rep/orders`}><span aria-hidden="true" className="inline-block rtl:rotate-180">←</span> {t.ordersTab}</Link>
       </p>
       <div className="mb-3 flex flex-wrap items-center gap-3 border-b border-[var(--color-ink)] pb-1">
         <h1 className="tech text-[17px] font-bold" dir="ltr">

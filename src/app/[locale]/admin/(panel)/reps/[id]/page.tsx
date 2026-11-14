@@ -84,7 +84,7 @@ export default async function AdminRepPage({
   return (
     <>
       <p className="mb-2 text-[12px]">
-        <Link href={`/${l}/admin/reps`}>← {t.salesReps}</Link>
+        <Link href={`/${l}/admin/reps`}><span aria-hidden="true" className="inline-block rtl:rotate-180">←</span> {t.salesReps}</Link>
       </p>
       <div className="mb-3 flex flex-wrap items-baseline gap-3 border-b border-[var(--color-ink)] pb-1">
         <h1 className="text-[17px] font-bold">{rep.name}</h1>

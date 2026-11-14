@@ -21,7 +21,7 @@ export function Breadcrumb({
 }) {
   return (
     <nav
-      aria-label="Breadcrumb"
+      aria-label={locale === "fa" ? "مسیر صفحه" : "Breadcrumb"}
       className="mb-2 flex flex-wrap items-baseline gap-x-1.5 text-[12px] text-[var(--color-ink-muted)]"
     >
       {count !== undefined && (
@@ -32,7 +32,7 @@ export function Breadcrumb({
       )}
       {trail.map((c, i) => (
         <span key={c.id} className="flex items-baseline gap-1.5">
-          {i > 0 && <span aria-hidden="true">&gt;</span>}
+          {i > 0 && <span aria-hidden="true" className="inline-block rtl:rotate-180">&gt;</span>}
           <Link href={`/${locale}/c/${c.path}`} prefetch={false}>
             {pick(c, "name", locale)}
           </Link>
@@ -40,7 +40,7 @@ export function Breadcrumb({
       ))}
       {current && (
         <span className="flex items-baseline gap-1.5">
-          {trail.length > 0 && <span aria-hidden="true">&gt;</span>}
+          {trail.length > 0 && <span aria-hidden="true" className="inline-block rtl:rotate-180">&gt;</span>}
           <span className="text-[var(--color-ink)]">{current}</span>
         </span>
       )}

@@ -40,7 +40,7 @@ export default async function SignUpPage({
       <p className="mb-4 text-[12px] text-[var(--color-ink-muted)]">{t.signUpPrompt}</p>
 
       {messageKey && (
-        <p className="mb-3 border border-[#e0b4b0] bg-[#fdf2f1] px-3 py-2 text-[12px] text-[var(--color-danger)]">
+        <p role="alert" className="mb-3 border border-[#e0b4b0] bg-[#fdf2f1] px-3 py-2 text-[12px] text-[var(--color-danger)]">
           {t[messageKey]}
         </p>
       )}

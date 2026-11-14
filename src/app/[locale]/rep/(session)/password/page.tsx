@@ -42,7 +42,7 @@ export default async function RepPasswordPage({
       {forced && <p className="mb-3 text-[12px]">{t.tempPasswordForced}</p>}
 
       {errorKey && (
-        <p className="mb-3 border border-[#e0b4b0] bg-[#fdf2f1] px-3 py-2 text-[12px] text-[var(--color-danger)]">
+        <p role="alert" className="mb-3 border border-[#e0b4b0] bg-[#fdf2f1] px-3 py-2 text-[12px] text-[var(--color-danger)]">
           {t[errorKey]}
         </p>
       )}
@@ -72,7 +72,7 @@ export default async function RepPasswordPage({
         </form>
       ) : (
         <p className="mt-4 text-[12px]">
-          <Link href={`/${l}/rep`}>← {t.repHome}</Link>
+          <Link href={`/${l}/rep`}><span aria-hidden="true" className="inline-block rtl:rotate-180">←</span> {t.repHome}</Link>
         </p>
       )}
     </main>

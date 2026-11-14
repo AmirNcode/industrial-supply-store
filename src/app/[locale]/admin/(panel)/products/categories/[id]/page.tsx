@@ -41,7 +41,7 @@ export default async function CatalogCategoryEditPage({
   return (
     <>
       <Link className="mb-2 inline-block text-[11px]" href={`/${l}/admin/products`}>
-        ← {t.catalogEditBack}
+        <span aria-hidden="true" className="inline-block rtl:rotate-180">←</span> {t.catalogEditBack}
       </Link>
 
       {DEMO_MODE && (

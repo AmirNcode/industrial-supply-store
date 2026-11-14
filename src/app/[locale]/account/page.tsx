@@ -209,7 +209,7 @@ export default async function AccountPage({
         <div className="px-3 pb-3 pt-3">
           {ok === "address" && <Ok>{t.addressSaved}</Ok>}
           {addressErrorKey && (
-            <p className="mb-3 border border-[#e0b4b0] bg-[#fdf2f1] px-3 py-2 text-[12px] text-[var(--color-danger)]">
+            <p role="alert" className="mb-3 border border-[#e0b4b0] bg-[#fdf2f1] px-3 py-2 text-[12px] text-[var(--color-danger)]">
               {t[addressErrorKey]}
             </p>
           )}
@@ -298,7 +298,7 @@ export default async function AccountPage({
           {ok === "profile" && <Ok>{t.profileSaved}</Ok>}
           {ok === "password" && <Ok>{t.passwordChanged}</Ok>}
           {errorKey && (
-            <p className="mb-3 border border-[#e0b4b0] bg-[#fdf2f1] px-3 py-2 text-[12px] text-[var(--color-danger)]">
+            <p role="alert" className="mb-3 border border-[#e0b4b0] bg-[#fdf2f1] px-3 py-2 text-[12px] text-[var(--color-danger)]">
               {t[errorKey]}
             </p>
           )}

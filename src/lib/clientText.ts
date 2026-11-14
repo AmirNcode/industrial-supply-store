@@ -48,6 +48,7 @@ export const MOBILE_FILTER_TEXT = [
 export const PRINT_BUTTON_TEXT = ["invoiceDownload"] as const satisfies Keys;
 export const QUICK_ORDER_TEXT = [
   "quickOrderPlaceholder",
+  "quickOrder",
   "addAllToOrder",
   "yourOrder",
   "requestTooLarge",

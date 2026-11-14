@@ -33,6 +33,7 @@ export function QuickOrderForm({
           name="lines"
           rows={10}
           placeholder={t.quickOrderPlaceholder}
+          aria-label={t.quickOrder}
           maxLength={REQUEST_LIMITS.quickOrderBytes}
           spellCheck={false}
           dir="ltr"
@@ -51,7 +52,7 @@ export function QuickOrderForm({
       {state && (
         <div className="mt-4 border-t border-[var(--color-rule)] pt-3">
           {state.error && (
-            <p className="mb-3 border border-[#e0b4b0] bg-[#fdf2f1] px-3 py-2 text-[12px] text-[var(--color-danger)]">
+            <p role="alert" className="mb-3 border border-[#e0b4b0] bg-[#fdf2f1] px-3 py-2 text-[12px] text-[var(--color-danger)]">
               {state.error === "too-large"
                 ? t.requestTooLarge
                 : state.error === "cart-full"

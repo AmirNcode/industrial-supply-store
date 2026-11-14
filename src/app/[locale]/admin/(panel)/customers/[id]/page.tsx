@@ -110,7 +110,7 @@ export default async function AdminCustomerPage({
   return (
     <>
       <p className="mb-2 text-[12px]">
-        <Link href={`/${l}/admin/customers`}>← {t.customers}</Link>
+        <Link href={`/${l}/admin/customers`}><span aria-hidden="true" className="inline-block rtl:rotate-180">←</span> {t.customers}</Link>
       </p>
       <div className="mb-3 flex flex-wrap items-baseline gap-3 border-b border-[var(--color-ink)] pb-1">
         <h1 className="text-[17px] font-bold">{customer.company}</h1>

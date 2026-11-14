@@ -17,11 +17,17 @@ import { isLocale, dir, locales, getDict, type Locale } from "@/lib/i18n";
  * L-3): the title number showed in every browser tab and search result. The
  * seal itself is in the footer and needs none of them.
  */
-export const metadata: Metadata = {
-  title: "TEMEX — Tools, Equipment & Materials Express",
-  description:
-    "Industrial parts catalog: fasteners, sealing, bearings, pipe fittings and more.",
-};
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}): Promise<Metadata> {
+  // In the page's language: the tab title and the search-result snippet were
+  // English on the Persian pages (review R-30).
+  const { locale } = await params;
+  const t = getDict(isLocale(locale) ? locale : "en");
+  return { title: `${t.brand} — ${t.tagline}`, description: t.metaDescription };
+}
 
 /**
  * Hard ceiling on every page and Server Action under this layout. The platform

@@ -62,7 +62,7 @@ export default async function RepInvoiceDraftPage({
     <>
       <p className="mb-2 text-[12px]">
         <Link href={orderPage} dir="ltr">
-          ← {order.ref}
+          <span aria-hidden="true" className="inline-block rtl:rotate-180">←</span> {order.ref}
         </Link>
       </p>
       <InvoiceDraft

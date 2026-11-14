@@ -82,7 +82,7 @@ export default async function RepCustomersPage({
       {limited && <ErrorBanner>{t.rateLimited}</ErrorBanner>}
 
       {customers.length === 0 ? (
-        <p className="text-[12px] text-[var(--color-ink-muted)]">{t.noCustomersYet}</p>
+        <p className="text-[12px] text-[var(--color-ink-muted)]">{longEnough ? t.repNoCustomerMatch : t.noCustomersYet}</p>
       ) : (
         <div className="overflow-x-auto">
           <table className="spec-table">

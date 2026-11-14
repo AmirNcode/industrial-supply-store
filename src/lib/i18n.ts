@@ -13,6 +13,7 @@ const en = {
   ...checkoutEn,
   brand: "TEMEX",
   tagline: "Tools, Equipment & Materials Express",
+  metaDescription: "Industrial parts catalog: fasteners, sealing, bearings, pipe fittings and more.",
   brandPromise:
     "Quality tools, equipment and materials, delivered fast — with a money-back guarantee on everything we sell.",
   browseCatalog: "BROWSE CATALOG",
@@ -811,6 +812,7 @@ const en = {
   createCustomer: "Create customer",
   customerSearchPlaceholder: "ID, company or phone",
   noCustomersYet: "No customers yet.",
+  repNoCustomerMatch: "No customer matches this search.",
   lastOrder: "Last order",
   nextFollowUp: "Next follow-up",
   customerCodeChoice: "Customer ID",
@@ -1009,6 +1011,7 @@ const fa: typeof en = {
   ...checkoutFa,
   brand: "TEMEX",
   tagline: "ابزار، تجهیزات و مواد اکسپرس",
+  metaDescription: "کاتالوگ قطعات صنعتی: پیچ و مهره، آب‌بندی، بلبرینگ، اتصالات لوله و موارد دیگر.",
   brandPromise:
     "ابزار، تجهیزات و مواد باکیفیت، با ارسال سریع — و ضمانت بازگشت وجه روی تمام کالاها.",
   browseCatalog: "مرور کاتالوگ",
@@ -1786,6 +1789,7 @@ const fa: typeof en = {
   createCustomer: "ایجاد مشتری",
   customerSearchPlaceholder: "کد، نام شرکت یا تلفن",
   noCustomersYet: "هنوز مشتری‌ای ندارید.",
+  repNoCustomerMatch: "مشتری‌ای با این جستجو پیدا نشد.",
   lastOrder: "آخرین سفارش",
   nextFollowUp: "پیگیری بعدی",
   customerCodeChoice: "کد مشتری",

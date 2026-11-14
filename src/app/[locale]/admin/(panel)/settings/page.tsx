@@ -394,7 +394,7 @@ export default async function AdminSettingsPage({
 
 function ErrorBanner({ children }: { children: React.ReactNode }) {
   return (
-    <p className="mb-2 border border-[var(--color-danger)] bg-[#fdf2f1] px-3 py-2 text-[12px] text-[var(--color-danger)]">
+    <p role="alert" className="mb-2 border border-[var(--color-danger)] bg-[#fdf2f1] px-3 py-2 text-[12px] text-[var(--color-danger)]">
       {children}
     </p>
   );

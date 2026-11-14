@@ -36,7 +36,7 @@ export default async function NewProductPage({
       {/* The phone layout has its own top bar; globals.css hides this one. */}
       <div className="new-product-desktop-head">
         <Link href={backHref} className="text-[11px]">
-          ← {t.columnsBack}
+          <span aria-hidden="true" className="inline-block rtl:rotate-180">←</span> {t.columnsBack}
         </Link>
         <h1 className="mt-1 mb-1 border-b border-[var(--color-ink)] pb-1 text-[17px] font-bold">
           {t.newProductTitle.replace("{family}", pick(family, "name", l))}
