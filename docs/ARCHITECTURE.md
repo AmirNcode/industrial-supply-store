@@ -677,6 +677,33 @@ send. The rep is credited (an unassigned customer's order is credited only once
 the admin confirms payment), and the order counts toward their numbers once it
 is delivered.
 
+**Visitor statistics go to self-hosted Umami, through this site only.**
+`lib/statsTracker.ts` is the map. The tracker (`public/stats/script.js`) and
+the replay/heatmap recorder (`public/stats/recorder.js`) are pinned copies of
+Umami 3.5, so the stats server — a laptop at the owner's home — never runs
+code in these pages; visitors' browsers talk to `/stats/api/*` here, which
+forwards an allow-listed header set and never cookies. What is sent:
+
+- Page views, with every query parameter dropped except `utm_*` and ad click
+  IDs (`temexStatsBeforeSend`), and staff pages not counted.
+- Shop events from `lib/statsEvents.ts` (`trackStat`, `StatsEvent`):
+  cart adds and removes, quick order, search (term through
+  `searchTermForStats`), order placed, quote accepted, payment sent (the
+  first receipt carries the pre-VAT value in USD as revenue — the customer's
+  claim, not a confirmed payment). The account page identifies the visit by
+  the user's random ID.
+- Replays and heatmaps, sampled as set in Umami. Every page that shows a
+  customer's own details or staff tools sits under a `ReplayBlocked` layout
+  (`rr-block`), which the recorder draws as an empty box; inputs are masked
+  everywhere. `/stats/api/record` runs each upload through
+  `scrubRecorderUpload` (pay links, order references, `?key=` and staff
+  addresses reduced to their shape) and the loader never starts on staff
+  pages or off www.temex.ir.
+
+A new page that shows a customer's details needs `ReplayBlocked` (a segment
+`layout.tsx`, or `rr-block` on the element); a new address that carries a key
+needs a rule in `scrubStatsString` and in the before-send filter.
+
 ## Where things live
 
 ```
