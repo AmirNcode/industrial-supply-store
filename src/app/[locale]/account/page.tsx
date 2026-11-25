@@ -8,6 +8,7 @@ import { getRepContactForUser } from "@/db/userQueries";
 import { latinDigits } from "@/lib/digits";
 import { getFxRate, getPriceDisplayMode } from "@/lib/fx";
 import { OrderStatusPill } from "@/components/OrderStatusPill";
+import { StatsIdentify } from "@/components/StatsEvent";
 import { MIN_PASSWORD_LENGTH } from "@/lib/password";
 import {
   signOutAction,
@@ -93,6 +94,10 @@ export default async function AccountPage({
 
   return (
     <main className="mx-auto max-w-[900px] px-3 pt-3 pb-16">
+      {/* Here rather than site-wide: knowing who is signed in on every page
+          would make the cached catalog pages dynamic. Once per visit is
+          enough, since Umami keeps the ID on the whole visit. */}
+      <StatsIdentify customerId={user.id} />
       <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2 border-b border-[var(--color-ink)] pb-1">
         <h1 className="text-[17px] font-bold">{t.account}</h1>
         <div className="flex items-baseline gap-3 text-[11px] text-[var(--color-ink-muted)]">

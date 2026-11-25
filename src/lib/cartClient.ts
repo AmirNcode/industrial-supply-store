@@ -2,6 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 import { hasCartMarker } from "./cartMarker";
+import { trackStat } from "./statsEvents";
 
 /**
  * One client-side copy of the cart, shared by every row on the page.
@@ -125,6 +126,7 @@ export async function addToCart(productId: number, qty: number): Promise<boolean
   const data = (await res.json()) as { count: number; qty: number };
   clearCartFailure();
   applyLine(productId, data.qty, data.count);
+  trackStat("add_to_cart", { product_id: productId, qty });
   return true;
 }
 
@@ -143,6 +145,7 @@ export async function removeFromCart(productId: number): Promise<boolean> {
   const data = (await res.json()) as { count: number };
   clearCartFailure();
   applyLine(productId, 0, data.count);
+  trackStat("remove_from_cart", { product_id: productId });
   return true;
 }
 

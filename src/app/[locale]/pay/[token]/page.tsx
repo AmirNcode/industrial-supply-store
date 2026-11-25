@@ -19,6 +19,7 @@ import { runExpirySweep } from "@/lib/orderFlow";
 import { fillMessage } from "@/lib/fillMessage";
 import { acceptQuoteWithKeyAction, cancelOrderWithKeyAction, uploadPaymentProofWithKeyAction } from "./actions";
 import { CancelOrderForm } from "@/components/CancelOrderForm";
+import { StatsEvent } from "@/components/StatsEvent";
 
 /**
  * Kept out of search results, and the page sends no referrer: the URL is the
@@ -102,6 +103,13 @@ export default async function PayPage({
         <span className="tech text-[13px]">{order.ref}</span>
         <OrderStatusPill locale={l} status={order.status} />
       </div>
+      {/* Reported from the page the action lands on, not the action: the
+          tracker lives in the visitor's browser. A reload of the same address
+          reports again, which a funnel counts once per visit anyway. */}
+      {placed === "1" && (
+        <StatsEvent name="order_placed" data={{ status: order.status, lines: items.length }} />
+      )}
+      {ok === "accepted" && <StatsEvent name="quote_accepted" />}
       {placedMessage && <SuccessBanner>{placedMessage}</SuccessBanner>}
       {ok === "accepted" && <SuccessBanner>{t.quoteAccepted}</SuccessBanner>}
       {error === "accept" && <ErrorBanner>{t.acceptFailed}</ErrorBanner>}
@@ -142,6 +150,7 @@ export default async function PayPage({
             proofs={proofs.get(order.id) ?? []}
             linked={false}
             upload={takesProof ? uploadPaymentProofWithKeyAction.bind(null, token) : undefined}
+            statsRevenueUsd={order.totalCents / 100}
           />
         }
         estimate={order.status === "received"}

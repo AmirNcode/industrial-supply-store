@@ -87,8 +87,10 @@ export default async function CartPage({
           </span>
         )}
       </h1>
+      {/* rr-block: the customer a rep is ordering for stays out of session
+          replays (src/lib/statsTracker.ts). */}
       {rep && (
-        <p className="mb-3 flex flex-wrap items-baseline gap-3 border border-[var(--color-rule)] px-3 py-2 text-[12px]">
+        <p className="rr-block mb-3 flex flex-wrap items-baseline gap-3 border border-[var(--color-rule)] px-3 py-2 text-[12px]">
           <span className="font-bold">
             {orderingFor
               ? t.orderingForName.replace(

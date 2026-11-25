@@ -11,6 +11,9 @@ const eslintConfig = [
       "out/**",
       "build/**",
       "next-env.d.ts",
+      // Umami's tracker and recorder, copied as built (minified) from the
+      // stats server; checked by being copied unchanged, not by lint.
+      "public/stats/**",
       // Playwright's output. The HTML report embeds the trace viewer, whose
       // bundles are large enough that Babel gives up on styling them and the
       // run appears to hang — several minutes of work on files nobody wrote.

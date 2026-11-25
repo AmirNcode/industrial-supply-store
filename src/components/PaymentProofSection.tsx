@@ -19,6 +19,7 @@ export function PaymentProofSection({
   hint,
   linked = true,
   showUploader = false,
+  statsRevenueUsd,
   children,
 }: {
   locale: Locale;
@@ -29,6 +30,11 @@ export function PaymentProofSection({
   /** False on the pay page, whose link does not open receipts. */
   linked?: boolean;
   showUploader?: boolean;
+  /**
+   * The order's value before VAT, in USD, for the statistics' Revenue report
+   * when a customer sends their first receipt. Left out on staff pages.
+   */
+  statsRevenueUsd?: number;
   /** Extra controls, e.g. a rep's Confirm payment. */
   children?: ReactNode;
 }) {
@@ -52,6 +58,7 @@ export function PaymentProofSection({
           upload={upload}
           hasProofs={proofs.length > 0}
           hint={hint ?? t.proofHint}
+          statsRevenueUsd={statsRevenueUsd}
         />
       )}
       {(proofs.length > 0 || !upload) && (

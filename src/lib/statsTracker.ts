@@ -1,3 +1,5 @@
+import { latinDigits } from "./digits";
+
 /**
  * Visitor statistics: self-hosted Umami on the owner's home server
  * (https://stats.datafort.ca), chosen 2026-11-25 over US analytics services,
@@ -31,17 +33,32 @@ export const STATS_BEFORE_SEND = "temexStatsBeforeSend";
 /**
  * Runs in the browser before every event leaves the page.
  *
- * - Staff pages (admin, rep portal) are not counted at all.
+ * - Staff pages (admin, rep portal) are not counted. The one report let
+ *   through is the visit's "staff" tag (`tagStaffSession`), rebuilt from
+ *   scratch so nothing of the staff page (address, title) goes with it.
+ * - Order references are removed from page titles ("Invoice ORD-…").
  * - Paths that carry a key or an order reference are reduced to their shape:
  *   a pay link is a bearer key, so storing it in the stats database would
  *   hand anyone who can sign in there the ability to pay or view the order.
- * - Query strings are already dropped by `data-exclude-search` (invoice keys
- *   travel as `?key=`); this strips them again from the referrer.
+ * - Query strings are dropped except campaign tags (`utm_*`) and ad click
+ *   IDs, which Umami reads from the page address for its Campaigns and
+ *   Attribution reports. Everything else goes: invoice keys travel as
+ *   `?key=`, and search terms are reported as an event instead. This
+ *   replaces `data-exclude-search`, which dropped the campaign tags too.
+ *   The referrer keeps no query string at all.
  *
  * A string, not a function, because it is printed into the page as-is;
  * `statsTracker.test.ts` runs it to prove each rule.
  */
 export const STATS_BEFORE_SEND_JS = `window.${STATS_BEFORE_SEND} = function (type, payload) {
+  var campaign = function (u) {
+    var q = u.replace(/#.*$/, "").split("?")[1];
+    if (!q) return "";
+    var kept = q.split("&").filter(function (p) {
+      return /^(utm_(source|medium|campaign|term|content)|gclid|fbclid|msclkid)=[^&]{1,200}$/.test(p);
+    });
+    return kept.length ? "?" + kept.join("&") : "";
+  };
   var shape = function (u) {
     if (typeof u !== "string" || !u) return u;
     return u
@@ -51,8 +68,24 @@ export const STATS_BEFORE_SEND_JS = `window.${STATS_BEFORE_SEND} = function (typ
       .replace(/\\/(en|fa)\\/account\\/orders\\/[^/]+/, "/$1/account/orders/[order]")
       .replace(/\\/(en|fa)\\/r\\/[^/]+/, "/$1/r/[code]");
   };
-  if (/^(https?:\\/\\/[^/]+)?\\/(en|fa)\\/(admin|rep)(\\/|$)/.test(payload.url || "")) return null;
-  payload.url = shape(payload.url);
+  var staff = /^(https?:\\/\\/[^/]+)?\\/(en|fa)\\/(admin|rep)(\\/|$|\\?|#)/.exec(payload.url || "");
+  if (staff) {
+    if (type !== "identify") return null;
+    return {
+      website: payload.website,
+      hostname: payload.hostname,
+      screen: payload.screen,
+      language: payload.language,
+      url: "/" + staff[2] + "/[staff]",
+      referrer: "",
+      title: "",
+      data: { role: "staff" }
+    };
+  }
+  if (typeof payload.title === "string") {
+    payload.title = payload.title.replace(/\\b(ORD|RFQ)-[A-Za-z0-9]{4,}\\b/g, "$1-[ref]");
+  }
+  payload.url = typeof payload.url === "string" && payload.url ? shape(payload.url) + campaign(payload.url) : payload.url;
   payload.referrer = shape(payload.referrer);
   return payload;
 };`;
@@ -80,3 +113,153 @@ export function statsForwardHeaders(incoming: Pick<Headers, "get">, visitorAddre
   if (visitorAddress && visitorAddress !== "unknown") out.set("x-forwarded-for", visitorAddress);
   return out;
 }
+
+/**
+ * Session replays and heatmaps (Umami's recorder, `public/stats/recorder.js`).
+ *
+ * The recorder has no before-send hook, so what `temexStatsBeforeSend` does
+ * for page views happens here, on the way through `app/stats/api/record`:
+ *
+ * - Private pages (pay links, invoices, the customer account, checkout,
+ *   order tracking, admin, rep portal) are wrapped in `rr-block`
+ *   (`ReplayBlocked`), which the recorder draws as an empty box: their
+ *   contents never leave the browser. Form fields everywhere are masked by
+ *   the recorder itself.
+ * - Addresses inside a recording still name those pages, and a pay link is
+ *   a bearer key, so every string in a recording is passed through
+ *   `scrubStatsString` before it reaches the stats server.
+ * - Heatmap clicks on staff pages are dropped; the loader in the layout
+ *   does not start the recorder on them in the first place.
+ */
+
+/** One recorder upload is at most ~500 KB of rrweb events (a page snapshot). */
+export const STATS_MAX_RECORD_BYTES = 600 * 1024;
+
+/** The recorder's settings fields; anything else in the answer is dropped. */
+export const STATS_RECORDER_FIELDS = [
+  "enabled",
+  "replayEnabled",
+  "heatmapEnabled",
+  "sampleRate",
+  "heatmapSampleRate",
+  "maskLevel",
+  "maxDuration",
+  "blockSelector",
+] as const;
+
+const STAFF_PATH = /^(https?:\/\/[^/]+)?\/(en|fa)\/(admin|rep)(\/|$|\?|#)/;
+
+/**
+ * Reduces keys, order references and staff addresses inside any string to
+ * their shape. Addresses are also matched percent-encoded (a link inside
+ * another link's query string), since a replay stores attributes as written.
+ *
+ * Not caught: a key split across two fragments of one oversized replay event
+ * (over ~500 KB, a page snapshot). The pages that show keys are blocked
+ * (\`ReplayBlocked\`), so no recorded page carries one to split.
+ */
+export function scrubStatsString(s: string): string {
+  return s
+    // Query strings: only campaign tags and ad click IDs are kept, as in the
+    // before-send filter. Order tracking (?ref=…&email=…), search (?q=…) and
+    // anything added later go. Percent-encoded queries inside another link
+    // go whole.
+    .replace(/\?([a-z0-9_.-]+=[^\s"'<>#\\]*)/gi, (_m, query: string) => {
+      const kept = query
+        .split("&")
+        .filter((p) => /^(utm_(source|medium|campaign|term|content)|gclid|fbclid|msclkid)=/.test(p));
+      return kept.length ? "?" + kept.join("&") : "";
+    })
+    .replace(/%3F[a-z0-9_.-]+%3D[^\s"'<>#&\\]*/gi, "")
+    // Order references anywhere, page titles included ("Invoice ORD-…").
+    .replace(/\b(ORD|RFQ)-[A-Z0-9]{4,}\b/gi, "$1-[ref]")
+    .replace(/%2F(en|fa)%2F(pay|invoice|r)%2F[^%&?#"'\s\\<>]+/gi, "%2F$1%2F$2%2F[x]")
+    .replace(/%2F(en|fa)%2Faccount%2Forders%2F[^%&?#"'\s\\<>]+/gi, "%2F$1%2Faccount%2Forders%2F[x]")
+    .replace(/%2F(en|fa)%2F(admin|rep)%2F[^&?#"'\s\\<>]+/gi, "%2F$1%2F$2%2F[staff]")
+    .replace(/\/(en|fa)\/(admin|rep)(\/[^?#"'\s\\<>]*)?(?=[?#"'\s\\<>]|$)/g, "/$1/$2/[staff]")
+    .replace(/\/(en|fa)\/pay\/[^/?#"'\s\\<>]+/g, "/$1/pay/[link]")
+    .replace(/\/(en|fa)\/invoice\/[^/?#"'\s\\<>]+/g, "/$1/invoice/[order]")
+    .replace(/\/(en|fa)\/account\/orders\/[^/?#"'\s\\<>]+/g, "/$1/account/orders/[order]")
+    .replace(/\/(en|fa)\/r\/[^/?#"'\s\\<>]+/g, "/$1/r/[code]")
+    .replace(/([?&]|&amp;)key=[^&#"'\s\\<>]*/g, "$1key=[x]")
+    .replace(/(%3F|%26)key%3D[^%&#"'\s\\<>]*/gi, "$1key%3D[x]");
+}
+
+function scrubDeep(value: unknown): unknown {
+  if (typeof value === "string") return scrubStatsString(value);
+  if (Array.isArray(value)) return value.map(scrubDeep);
+  if (value && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value)) out[k] = scrubDeep(v);
+    return out;
+  }
+  return value;
+}
+
+/**
+ * The recorder upload as it may reach the stats server, or null to drop it.
+ * Only the two upload types the recorder sends are accepted.
+ */
+export function scrubRecorderUpload(body: string): string | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== "object") return null;
+  const { type, payload } = parsed as { type?: unknown; payload?: { events?: unknown } };
+  if ((type !== "record" && type !== "heatmap") || !payload || !Array.isArray(payload.events)) return null;
+  let events = payload.events;
+  if (type === "heatmap") {
+    events = events.filter(
+      (e) => !(e && typeof e === "object" && typeof (e as { url?: unknown }).url === "string" && STAFF_PATH.test((e as { url: string }).url)),
+    );
+    if (events.length === 0) return null;
+  }
+  return JSON.stringify(scrubDeep({ type, payload: { ...payload, events } }));
+}
+
+/** Keeps the known settings and never lets masking drop below form fields. */
+export function recorderSettings(upstream: unknown): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (!upstream || typeof upstream !== "object") return { enabled: false };
+  for (const key of STATS_RECORDER_FIELDS) {
+    const v = (upstream as Record<string, unknown>)[key];
+    if (v !== undefined) out[key] = v;
+  }
+  out.maskLevel = out.maskLevel === "strict" ? "strict" : "moderate";
+  return out;
+}
+
+/** Started by the layout instead of a plain script tag, so staff pages never record. */
+export const STATS_RECORDER_LOADER_JS = `(function () {
+  if (${JSON.stringify(STATS_DOMAINS.split(","))}.indexOf(location.hostname) < 0) return;
+  if (${STAFF_PATH}.test(location.pathname)) return;
+  var s = document.createElement("script");
+  s.src = "/stats/recorder.js";
+  s.defer = true;
+  s.setAttribute("data-website-id", ${JSON.stringify(STATS_WEBSITE_ID)});
+  document.head.appendChild(s);
+})();`;
+
+/**
+ * A search term as it may be stored with the `search` event. People paste
+ * whatever they have into a search box — an order reference, a pay link, a
+ * phone or card number, their email — and the term is kept for anyone who can sign
+ * in to Umami, so those are replaced by what they were. Part numbers (short
+ * letters, digits and dashes) pass through: they are the point of the event.
+ */
+export function searchTermForStats(raw: string): string {
+  return scrubStatsString(latinDigits(raw).trim().toLowerCase().replace(/\b(ord|rfq)-[a-z0-9]+/g, "[order]"))
+    .replace(/[^\s@]+@[^\s@]+/g, "[email]")
+    // Any run of 10 or more digits, however many spaces, dashes, dots or
+    // brackets sit between them, and whatever touches
+    // it: phone numbers in every spelling (+98, 0098, 09…, without the 0,
+    // "tel0912…"), bank cards, national IDs. Part numbers with a run that
+    // long are lost with them; shorter runs are kept.
+    .replace(/\+?\(?\d(?:[\s().-]*\d){9,}/g, "[number]")
+    .replace(/[a-z0-9_-]{24,}/g, "[token]")
+    .slice(0, 100);
+}
+

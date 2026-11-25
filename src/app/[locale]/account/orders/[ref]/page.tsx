@@ -12,6 +12,7 @@ import { acceptsPaymentProof, customerCanCancel } from "@/lib/orders";
 import { CancelOrderForm } from "@/components/CancelOrderForm";
 import { listPaymentProofs } from "@/db/paymentProofQueries";
 import { PaymentProofSection } from "@/components/PaymentProofSection";
+import { StatsEvent } from "@/components/StatsEvent";
 import { Deadline, deadlineNow } from "@/components/Deadline";
 import { ErrorBanner, SuccessBanner } from "@/components/Banners";
 import { runExpirySweep } from "@/lib/orderFlow";
@@ -84,6 +85,7 @@ export default async function AccountOrderPage({
         )}
       </div>
 
+      {ok === "accepted" && <StatsEvent name="quote_accepted" />}
       {ok === "accepted" && <SuccessBanner>{t.quoteAccepted}</SuccessBanner>}
       {error === "accept" && <ErrorBanner>{t.acceptFailed}</ErrorBanner>}
       {ok === "cancelled" && <SuccessBanner>{t.orderCancelledOk}</SuccessBanner>}
@@ -127,6 +129,7 @@ export default async function AccountOrderPage({
             locale={l}
             proofs={proofs.get(order.id) ?? []}
             upload={takesProof ? uploadPaymentProofAction.bind(null, order.ref) : undefined}
+            statsRevenueUsd={order.totalCents / 100}
           />
         }
         estimate={order.status === "received"}

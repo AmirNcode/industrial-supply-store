@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState } from "react";
+import { useActionState, useEffect } from "react";
 import { quickOrderAction, type QuickOrderResult } from "@/app/actions";
 import type { Locale } from "@/lib/locale";
 import type { QUICK_ORDER_TEXT, TextFor } from "@/lib/clientText";
 import { formatInt } from "@/lib/money";
 import { REQUEST_LIMITS } from "@/lib/requestLimits";
+import { trackStat } from "@/lib/statsEvents";
 
 /**
  * Procurement teams paste straight out of a spreadsheet, so the result panel
@@ -25,6 +26,13 @@ export function QuickOrderForm({
     quickOrderAction,
     null,
   );
+
+  // Counts, not part numbers: how much of a pasted list matched is what says
+  // whether the catalog covers what buyers come looking for.
+  useEffect(() => {
+    if (!state || state.error) return;
+    trackStat("quick_order", { added: state.added.length, not_found: state.notFound.length });
+  }, [state]);
 
   return (
     <>
