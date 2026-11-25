@@ -254,6 +254,29 @@ export async function getFeaturedFamilies(
   `;
 }
 
+/**
+ * Every page the sitemap lists: visible categories and families that have at
+ * least one product. Empty ones are left out so a half-built catalog does not
+ * hand Google pages with nothing on them; they appear on the sitemap's next
+ * refresh after their first product is imported.
+ */
+export async function getSitemapCatalog(): Promise<{ categoryPaths: string[]; familySlugs: string[] }> {
+  const [categories, families] = await Promise.all([
+    sql<{ path: string }[]>`
+      SELECT c.path FROM categories c
+      WHERE c.product_count > 0 AND ${CATEGORY_VISIBLE}
+      ORDER BY c.path
+    `,
+    sql<{ slug: string }[]>`
+      SELECT f.slug FROM product_families f
+      JOIN categories c ON c.id = f.category_id
+      WHERE f.product_count > 0 AND ${FAMILY_VISIBLE}
+      ORDER BY f.slug
+    `,
+  ]);
+  return { categoryPaths: categories.map((r) => r.path), familySlugs: families.map((r) => r.slug) };
+}
+
 export async function getFamilyBySlug(slug: string): Promise<FamilyDetailRow | null> {
   const rows = await sql<FamilyDetailRow[]>`
     SELECT ${FAMILY_COLS}, c.path AS "categoryPath"

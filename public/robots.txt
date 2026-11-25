@@ -61,3 +61,7 @@ Disallow: /
 # group, so this one is out of the whole site.
 User-agent: GPTBot
 Disallow: /
+
+# One sitemap per language (src/lib/siteDomains.ts sets each one's domain).
+Sitemap: https://www.temex.ir/sitemap/fa.xml
+Sitemap: https://www.temex.ir/sitemap/en.xml
