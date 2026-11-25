@@ -152,6 +152,9 @@ test("search terms keep part numbers but lose personal details and keys", () => 
   assert.equal(searchTermForStats("  6205-2RS Bearing "), "6205-2rs bearing");
   assert.equal(searchTermForStats("abc1234567890"), "abc[number]");
   assert.equal(searchTermForStats("tel09121234567"), "tel[number]");
+  assert.equal(searchTermForStats("0912 - 123 - 4567"), "[number]");
+  assert.equal(searchTermForStats("(0912) 123.4567"), "[number]");
+  assert.equal(searchTermForStats("6037  9918  1234  5678"), "[number]");
   assert.equal(searchTermForStats("skf 6205-2rsh/c3 x123456789"), "skf 6205-2rsh/c3 x123456789");
   assert.equal(searchTermForStats("6205 2rs 12"), "6205 2rs 12");
   assert.equal(searchTermForStats("1234567890"), "[number]");

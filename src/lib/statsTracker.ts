@@ -222,11 +222,12 @@ export function searchTermForStats(raw: string): string {
   return scrubStatsString(latinDigits(raw).trim().toLowerCase())
     .replace(/[^\s@]+@[^\s@]+/g, "[email]")
     .replace(/\b(ord|rfq)-[a-z0-9]+/g, "[order]")
-    // Any run of 10 or more digits, separators ignored and whatever touches
+    // Any run of 10 or more digits, however many spaces, dashes, dots or
+    // brackets sit between them, and whatever touches
     // it: phone numbers in every spelling (+98, 0098, 09…, without the 0,
     // "tel0912…"), bank cards, national IDs. Part numbers with a run that
     // long are lost with them; shorter runs are kept.
-    .replace(/\+?\d(?:[\s-]?\d){9,}/g, "[number]")
+    .replace(/\+?\(?\d(?:[\s().-]*\d){9,}/g, "[number]")
     .replace(/[a-z0-9_-]{24,}/g, "[token]")
     .slice(0, 100);
 }
