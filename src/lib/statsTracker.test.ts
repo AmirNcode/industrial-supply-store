@@ -6,6 +6,7 @@ import {
   STATS_RECORDER_LOADER_JS,
   recorderSettings,
   scrubRecorderUpload,
+  searchTermForStats,
   statsForwardHeaders,
 } from "./statsTracker";
 
@@ -145,4 +146,39 @@ test("the recorder loader runs only on the live site and never on staff pages", 
   assert.equal(run("www.temex.ir", "/fa/admin"), 0);
   assert.equal(run("www.temex.ir", "/en/rep/customers"), 0);
   assert.equal(run("preview.vercel.app", "/fa"), 0);
+});
+
+test("search terms keep part numbers but lose personal details and keys", () => {
+  assert.equal(searchTermForStats("  6205-2RS Bearing "), "6205-2rs bearing");
+  assert.equal(searchTermForStats("1234567890"), "1234567890");
+  assert.equal(searchTermForStats("ORD-ABC234"), "[order]");
+  assert.equal(searchTermForStats("buyer@example.com valve"), "[email] valve");
+  assert.equal(searchTermForStats("09121234567"), "[number]");
+  assert.equal(searchTermForStats("۰۹۱۲ ۱۲۳ ۴۵۶۷"), "[number]");
+  assert.equal(searchTermForStats("021-88776655"), "[number]");
+  assert.equal(searchTermForStats("+98 912 123 4567"), "[number]");
+  assert.equal(searchTermForStats("https://www.temex.ir/fa/pay/9f8e7d6c5b4a3f2e1d"), "https://www.temex.ir/fa/pay/[link]");
+  assert.equal(searchTermForStats("abcdefghijklmnopqrstuvwxyz0123"), "[token]");
+  assert.equal(searchTermForStats("x".repeat(300)).length <= 100, true);
+});
+
+test("recordings lose staff addresses and percent-encoded keys too", () => {
+  const out = scrubRecorderUpload(
+    JSON.stringify({
+      type: "record",
+      payload: {
+        events: [
+          { type: 4, data: { href: "https://www.temex.ir/fa/admin/orders/12" } },
+          { type: 5, data: { payload: { url: "https://www.temex.ir/en/rep/customers/77" } } },
+          { type: 2, data: { href: "https://t.me/share?url=https%3A%2F%2Fwww.temex.ir%2Ffa%2Fpay%2F9f8e7d6c5b4a" } },
+          { type: 2, data: { href: "/x?u=%2Fen%2Finvoice%2FORD-ABC234%3Fkey%3Dsecret" } },
+        ],
+      },
+    }),
+  );
+  assert.ok(out);
+  for (const leaked of ["orders/12", "customers/77", "9f8e7d6c5b4a", "ORD-ABC234", "secret"]) {
+    assert.ok(!out.includes(leaked), leaked);
+  }
+  assert.ok(out.includes("/fa/admin/[staff]"));
 });

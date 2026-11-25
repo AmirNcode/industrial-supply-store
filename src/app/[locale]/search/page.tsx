@@ -4,6 +4,7 @@ import { search, type SearchResults } from "@/db/queries";
 import { CategorySidebar } from "@/components/CategorySidebar";
 import { CatalogImage } from "@/components/CatalogImage";
 import { StatsEvent } from "@/components/StatsEvent";
+import { searchTermForStats } from "@/lib/statsTracker";
 import { isLocale, getDict, pick, type Locale } from "@/lib/i18n";
 import { customerCurrencyFor, formatInt, formatPrice, isPriceOnRequest } from "@/lib/money";
 import { getFxRate, getPriceDisplayMode } from "@/lib/fx";
@@ -52,7 +53,7 @@ export default async function SearchPage({
           <StatsEvent
             key={q}
             name="search"
-            data={{ term: q.trim().toLowerCase().slice(0, 100), results: results.total, found: results.total > 0 }}
+            data={{ term: searchTermForStats(q), results: results.total, found: results.total > 0 }}
           />
         )}
 

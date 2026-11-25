@@ -1,3 +1,5 @@
+import { latinDigits } from "./digits";
+
 /**
  * Visitor statistics: self-hosted Umami on the owner's home server
  * (https://stats.datafort.ca), chosen 2026-11-25 over US analytics services,
@@ -128,14 +130,27 @@ export const STATS_RECORDER_FIELDS = [
 
 const STAFF_PATH = /^(https?:\/\/[^/]+)?\/(en|fa)\/(admin|rep)(\/|$|\?|#)/;
 
-/** Reduces keys and order references inside any string to their shape. */
+/**
+ * Reduces keys, order references and staff addresses inside any string to
+ * their shape. Addresses are also matched percent-encoded (a link inside
+ * another link's query string), since a replay stores attributes as written.
+ *
+ * Not caught: a key split across two fragments of one oversized replay event
+ * (over ~500 KB, a page snapshot). The pages that show keys are blocked
+ * (\`ReplayBlocked\`), so no recorded page carries one to split.
+ */
 export function scrubStatsString(s: string): string {
   return s
+    .replace(/%2F(en|fa)%2F(pay|invoice|r)%2F[^%&?#"'\s\\<>]+/gi, "%2F$1%2F$2%2F[x]")
+    .replace(/%2F(en|fa)%2Faccount%2Forders%2F[^%&?#"'\s\\<>]+/gi, "%2F$1%2Faccount%2Forders%2F[x]")
+    .replace(/%2F(en|fa)%2F(admin|rep)%2F[^&?#"'\s\\<>]+/gi, "%2F$1%2F$2%2F[staff]")
+    .replace(/\/(en|fa)\/(admin|rep)\/[^?#"'\s\\<>]+/g, "/$1/$2/[staff]")
     .replace(/\/(en|fa)\/pay\/[^/?#"'\s\\<>]+/g, "/$1/pay/[link]")
     .replace(/\/(en|fa)\/invoice\/[^/?#"'\s\\<>]+/g, "/$1/invoice/[order]")
     .replace(/\/(en|fa)\/account\/orders\/[^/?#"'\s\\<>]+/g, "/$1/account/orders/[order]")
     .replace(/\/(en|fa)\/r\/[^/?#"'\s\\<>]+/g, "/$1/r/[code]")
-    .replace(/([?&]|&amp;)key=[^&#"'\s\\<>]*/g, "$1key=[x]");
+    .replace(/([?&]|&amp;)key=[^&#"'\s\\<>]*/g, "$1key=[x]")
+    .replace(/(%3F|%26)key%3D[^%&#"'\s\\<>]*/gi, "$1key%3D[x]");
 }
 
 function scrubDeep(value: unknown): unknown {
@@ -195,3 +210,23 @@ export const STATS_RECORDER_LOADER_JS = `(function () {
   s.setAttribute("data-website-id", ${JSON.stringify(STATS_WEBSITE_ID)});
   document.head.appendChild(s);
 })();`;
+
+/**
+ * A search term as it may be stored with the `search` event. People paste
+ * whatever they have into a search box — an order reference, a pay link, a
+ * phone number, their email — and the term is kept for anyone who can sign
+ * in to Umami, so those are replaced by what they were. Part numbers (short
+ * letters, digits and dashes) pass through: they are the point of the event.
+ */
+export function searchTermForStats(raw: string): string {
+  return scrubStatsString(latinDigits(raw).trim().toLowerCase())
+    .replace(/[^\s@]+@[^\s@]+/g, "[email]")
+    .replace(/\b(ord|rfq)-[a-z0-9]+/g, "[order]")
+    // Phone numbers: international, and Iranian mobiles and landlines with
+    // their leading 0. Long numeric part numbers without that shape survive.
+    .replace(/\+\d[\d\s-]{8,}\d/g, "[number]")
+    .replace(/(^|[^\d])0\d{2,3}[\s-]?\d{3,4}[\s-]?\d{4}(?!\d)/g, "$1[number]")
+    .replace(/[a-z0-9_-]{24,}/g, "[token]")
+    .slice(0, 100);
+}
+
