@@ -6,6 +6,7 @@ import type { Locale } from "@/lib/locale";
 import type { PROOF_UPLOAD_TEXT, TextFor } from "@/lib/clientText";
 import { PROOF_IMAGE_MAX_SIDE, PROOF_MAX_BYTES, isProofType } from "@/lib/paymentProof";
 import type { ProofUploadProblem, ProofUploadResult } from "@/lib/paymentProofUpload";
+import { trackStat } from "@/lib/statsEvents";
 
 /**
  * The receipt upload: one large button, because this is the step customers
@@ -22,12 +23,15 @@ export function PaymentProofUpload({
   upload,
   hasProofs,
   hint,
+  statsRevenueUsd,
 }: {
   locale: Locale;
   t: TextFor<typeof PROOF_UPLOAD_TEXT>;
   upload: (formData: FormData) => Promise<ProofUploadResult>;
   hasProofs: boolean;
   hint: string;
+  /** See PaymentProofSection. */
+  statsRevenueUsd?: number;
 }) {
   const router = useRouter();
   const input = useRef<HTMLInputElement>(null);
@@ -59,6 +63,15 @@ export function PaymentProofUpload({
         const result = await upload(data);
         if (result.ok) {
           setMessage({ ok: true, text: t.proofUploaded });
+          // The customer's word that they paid, not a confirmed payment: the
+          // shop confirms on the bank statement later. Only the first
+          // receipt carries the value, so a second photo is not a second sale.
+          if (statsRevenueUsd !== undefined) {
+            trackStat(
+              "payment_sent",
+              hasProofs ? { first: false } : { first: true, revenue: statsRevenueUsd, currency: "USD" },
+            );
+          }
           router.refresh();
         } else {
           setMessage({ ok: false, text: problemText[result.problem] });

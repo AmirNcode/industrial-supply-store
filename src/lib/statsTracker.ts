@@ -35,13 +35,25 @@ export const STATS_BEFORE_SEND = "temexStatsBeforeSend";
  * - Paths that carry a key or an order reference are reduced to their shape:
  *   a pay link is a bearer key, so storing it in the stats database would
  *   hand anyone who can sign in there the ability to pay or view the order.
- * - Query strings are already dropped by `data-exclude-search` (invoice keys
- *   travel as `?key=`); this strips them again from the referrer.
+ * - Query strings are dropped except campaign tags (`utm_*`) and ad click
+ *   IDs, which Umami reads from the page address for its Campaigns and
+ *   Attribution reports. Everything else goes: invoice keys travel as
+ *   `?key=`, and search terms are reported as an event instead. This
+ *   replaces `data-exclude-search`, which dropped the campaign tags too.
+ *   The referrer keeps no query string at all.
  *
  * A string, not a function, because it is printed into the page as-is;
  * `statsTracker.test.ts` runs it to prove each rule.
  */
 export const STATS_BEFORE_SEND_JS = `window.${STATS_BEFORE_SEND} = function (type, payload) {
+  var campaign = function (u) {
+    var q = u.replace(/#.*$/, "").split("?")[1];
+    if (!q) return "";
+    var kept = q.split("&").filter(function (p) {
+      return /^(utm_(source|medium|campaign|term|content)|gclid|fbclid|msclkid)=[^&]{1,200}$/.test(p);
+    });
+    return kept.length ? "?" + kept.join("&") : "";
+  };
   var shape = function (u) {
     if (typeof u !== "string" || !u) return u;
     return u
@@ -52,7 +64,7 @@ export const STATS_BEFORE_SEND_JS = `window.${STATS_BEFORE_SEND} = function (typ
       .replace(/\\/(en|fa)\\/r\\/[^/]+/, "/$1/r/[code]");
   };
   if (/^(https?:\\/\\/[^/]+)?\\/(en|fa)\\/(admin|rep)(\\/|$)/.test(payload.url || "")) return null;
-  payload.url = shape(payload.url);
+  payload.url = typeof payload.url === "string" && payload.url ? shape(payload.url) + campaign(payload.url) : payload.url;
   payload.referrer = shape(payload.referrer);
   return payload;
 };`;

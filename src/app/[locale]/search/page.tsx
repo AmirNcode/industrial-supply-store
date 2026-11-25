@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { search, type SearchResults } from "@/db/queries";
 import { CategorySidebar } from "@/components/CategorySidebar";
 import { CatalogImage } from "@/components/CatalogImage";
+import { StatsEvent } from "@/components/StatsEvent";
 import { isLocale, getDict, pick, type Locale } from "@/lib/i18n";
 import { customerCurrencyFor, formatInt, formatPrice, isPriceOnRequest } from "@/lib/money";
 import { getFxRate, getPriceDisplayMode } from "@/lib/fx";
@@ -43,6 +44,17 @@ export default async function SearchPage({
         <h1 className="mb-3 border-b border-[var(--color-ink)] pb-1 text-[13px] font-bold">
           {t.resultsFor} &ldquo;{q}&rdquo;
         </h1>
+
+        {/* What people search for, and above all what finds nothing, is the
+            catalog's to-do list. The term travels as event data because the
+            page address loses its query string before it is reported. */}
+        {q.trim() && !limited && (
+          <StatsEvent
+            key={q}
+            name="search"
+            data={{ term: q.trim().toLowerCase().slice(0, 100), results: results.total, found: results.total > 0 }}
+          />
+        )}
 
         {results.total === 0 && (
           <p className="py-6 text-[13px] text-[var(--color-ink-muted)]">

@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { STATS_BEFORE_SEND, STATS_BEFORE_SEND_JS, statsForwardHeaders } from "./statsTracker";
+import {
+  STATS_BEFORE_SEND,
+  STATS_BEFORE_SEND_JS,
+  statsForwardHeaders,
+} from "./statsTracker";
 
 type Payload = { url?: string; referrer?: string; title?: string };
 
@@ -34,6 +38,34 @@ test("keys and order references are reduced to the page's shape", () => {
     send("event", { url: "/fa/f/x", referrer: "https://www.temex.ir/fa/pay/abc?x=1" })?.referrer,
     "https://www.temex.ir/fa/pay/[link]",
   );
+});
+
+test("campaign tags and ad click IDs survive; every other query parameter goes", () => {
+  const send = beforeSend();
+  assert.equal(
+    send("event", { url: "https://www.temex.ir/fa/f/gate-valve?utm_source=instagram&q=x&utm_campaign=yalda#top" })?.url,
+    "https://www.temex.ir/fa/f/gate-valve?utm_source=instagram&utm_campaign=yalda",
+  );
+  assert.equal(send("event", { url: "/en?gclid=abc123" })?.url, "/en?gclid=abc123");
+  assert.equal(send("event", { url: "/fa/search?q=valve" })?.url, "/fa/search");
+  // A pay link with campaign tags is still reduced to its shape, and its key never kept.
+  assert.equal(
+    send("event", { url: "/fa/pay/9f8e7d6c5b4a?utm_source=sms&key=secret" })?.url,
+    "/fa/pay/[link]?utm_source=sms",
+  );
+  // Look-alike names are not campaign tags.
+  assert.equal(send("event", { url: "/en?utm_sourcex=1&xutm_source=2&utm_source=" })?.url, "/en");
+  // The referrer keeps no query string, tags included.
+  assert.equal(
+    send("event", { url: "/en", referrer: "https://t.me/temex?utm_source=tg" })?.referrer,
+    "https://t.me/temex",
+  );
+});
+
+test("payloads without an address pass through", () => {
+  const out = beforeSend()("error", { title: "x" });
+  assert.equal(out?.title, "x");
+  assert.equal(out?.url, undefined);
 });
 
 test("only the allow-listed headers reach the stats server, never cookies", () => {

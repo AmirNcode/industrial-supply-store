@@ -112,8 +112,8 @@ export default async function LocaleLayout({
               strategy="afterInteractive"
               data-website-id={STATS_WEBSITE_ID}
               data-domains={STATS_DOMAINS}
-              data-exclude-search="true"
               data-exclude-hash="true"
+              data-performance="true"
               data-before-send={STATS_BEFORE_SEND}
             />
           </>

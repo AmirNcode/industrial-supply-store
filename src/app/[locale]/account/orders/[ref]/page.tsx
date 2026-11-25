@@ -127,6 +127,7 @@ export default async function AccountOrderPage({
             locale={l}
             proofs={proofs.get(order.id) ?? []}
             upload={takesProof ? uploadPaymentProofAction.bind(null, order.ref) : undefined}
+            statsRevenueUsd={order.totalCents / 100}
           />
         }
         estimate={order.status === "received"}
