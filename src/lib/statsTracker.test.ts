@@ -11,7 +11,7 @@ import {
   statsForwardHeaders,
 } from "./statsTracker";
 
-type Payload = { url?: string; referrer?: string; title?: string };
+type Payload = { url?: string; referrer?: string; title?: string; id?: string };
 
 function beforeSend(): (type: string, p: Payload) => Payload | null {
   const window: Record<string, unknown> = {};
@@ -199,9 +199,23 @@ test("staff pages with a query string are not counted; only the staff tag passes
   assert.equal(send("event", { url: "/fa/rep?year=2026" }), null);
   assert.equal(send("event", { url: "https://www.temex.ir/fa/admin?x=1" }), null);
   assert.equal(send("event", { url: "/en/rep#top" }), null);
-  const tag = send("identify", { url: "/fa/admin/orders/12", referrer: "https://www.temex.ir/fa/rep/customers/7" });
-  assert.equal(tag?.url, "/fa/[staff]");
-  assert.equal(tag?.referrer, "");
+  const tag = send("identify", {
+    url: "/fa/admin/orders/12",
+    referrer: "https://www.temex.ir/fa/rep/customers/7",
+    title: "Order ORD-ABC234 · Acme Co",
+    id: "someone",
+  } as Payload);
+  assert.deepEqual(tag, {
+    website: undefined,
+    hostname: undefined,
+    screen: undefined,
+    language: undefined,
+    url: "/fa/[staff]",
+    referrer: "",
+    title: "",
+    data: { role: "staff" },
+  });
+  assert.equal(send("event", { url: "/en/invoice/ORD-ABC234", title: "Invoice ORD-ABC234" })?.title, "Invoice ORD-[ref]");
 });
 
 test("recordings keep no query string but campaign tags, and no order reference anywhere", () => {

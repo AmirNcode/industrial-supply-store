@@ -34,8 +34,9 @@ export const STATS_BEFORE_SEND = "temexStatsBeforeSend";
  * Runs in the browser before every event leaves the page.
  *
  * - Staff pages (admin, rep portal) are not counted. The one report let
- *   through is the visit's "staff" tag (`tagStaffSession`), with the page
- *   address reduced to `/fa/[staff]`.
+ *   through is the visit's "staff" tag (`tagStaffSession`), rebuilt from
+ *   scratch so nothing of the staff page (address, title) goes with it.
+ * - Order references are removed from page titles ("Invoice ORD-…").
  * - Paths that carry a key or an order reference are reduced to their shape:
  *   a pay link is a bearer key, so storing it in the stats database would
  *   hand anyone who can sign in there the ability to pay or view the order.
@@ -70,9 +71,19 @@ export const STATS_BEFORE_SEND_JS = `window.${STATS_BEFORE_SEND} = function (typ
   var staff = /^(https?:\\/\\/[^/]+)?\\/(en|fa)\\/(admin|rep)(\\/|$|\\?|#)/.exec(payload.url || "");
   if (staff) {
     if (type !== "identify") return null;
-    payload.url = "/" + staff[2] + "/[staff]";
-    payload.referrer = "";
-    return payload;
+    return {
+      website: payload.website,
+      hostname: payload.hostname,
+      screen: payload.screen,
+      language: payload.language,
+      url: "/" + staff[2] + "/[staff]",
+      referrer: "",
+      title: "",
+      data: { role: "staff" }
+    };
+  }
+  if (typeof payload.title === "string") {
+    payload.title = payload.title.replace(/\\b(ORD|RFQ)-[A-Za-z0-9]{4,}\\b/g, "$1-[ref]");
   }
   payload.url = typeof payload.url === "string" && payload.url ? shape(payload.url) + campaign(payload.url) : payload.url;
   payload.referrer = shape(payload.referrer);
