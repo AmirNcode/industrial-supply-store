@@ -214,7 +214,7 @@ export const STATS_RECORDER_LOADER_JS = `(function () {
 /**
  * A search term as it may be stored with the `search` event. People paste
  * whatever they have into a search box — an order reference, a pay link, a
- * phone number, their email — and the term is kept for anyone who can sign
+ * phone or card number, their email — and the term is kept for anyone who can sign
  * in to Umami, so those are replaced by what they were. Part numbers (short
  * letters, digits and dashes) pass through: they are the point of the event.
  */
@@ -222,10 +222,13 @@ export function searchTermForStats(raw: string): string {
   return scrubStatsString(latinDigits(raw).trim().toLowerCase())
     .replace(/[^\s@]+@[^\s@]+/g, "[email]")
     .replace(/\b(ord|rfq)-[a-z0-9]+/g, "[order]")
-    // Phone numbers: international, and Iranian mobiles and landlines with
-    // their leading 0. Long numeric part numbers without that shape survive.
-    .replace(/\+\d[\d\s-]{8,}\d/g, "[number]")
-    .replace(/(^|[^\d])0\d{2,3}[\s-]?\d{3,4}[\s-]?\d{4}(?!\d)/g, "$1[number]")
+    // Any standalone number of 10 or more digits, separators ignored:
+    // phone numbers in every spelling (+98, 0098, 09…, without the 0), bank
+    // cards, national IDs. A part number that is nothing but a long number
+    // is lost with them; part numbers with letters in them are kept.
+    .replace(/(?<![a-z0-9])\+?\d[\d\s-]*\d(?![a-z0-9])/g, (m) =>
+      m.replace(/\D/g, "").length >= 10 ? "[number]" : m,
+    )
     .replace(/[a-z0-9_-]{24,}/g, "[token]")
     .slice(0, 100);
 }
