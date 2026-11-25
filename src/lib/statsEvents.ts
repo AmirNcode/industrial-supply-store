@@ -8,7 +8,10 @@
  *
  * Nothing personal goes in: no names, emails, phone numbers, order
  * references or pay links. The staff filter in `temexStatsBeforeSend` drops
- * events from admin and rep pages like it drops their page views.
+ * events from admin and rep pages like it drops their page views. Staff
+ * also use the public catalog and cart (a rep building a customer's order);
+ * those visits are counted but tagged `role: staff` (`tagStaffSession`), so a
+ * segment in Umami can show or hide them.
  */
 
 export type StatsEventName =
@@ -24,7 +27,7 @@ export type StatsEventData = Record<string, string | number | boolean>;
 
 type Umami = {
   track: (name: string, data?: StatsEventData) => unknown;
-  identify: (id: string, data?: StatsEventData) => unknown;
+  identify: (id: string | StatsEventData, data?: StatsEventData) => unknown;
 };
 
 /**
@@ -59,3 +62,15 @@ export function trackStat(name: StatsEventName, data?: StatsEventData): void {
 export function identifyStat(customerId: string): void {
   withUmami((umami) => umami.identify(`customer-${customerId}`));
 }
+
+/**
+ * Marks this visit as staff's. Session data, not an ID: the visit stays
+ * anonymous, and a staff member's catalog and cart activity in the same
+ * visit can be filtered out of customer numbers in Umami (segment
+ * "role is staff"). Staff pages themselves are never reported, so the tag
+ * reaches Umami with the next public page.
+ */
+export function tagStaffSession(): void {
+  withUmami((umami) => umami.identify({ role: "staff" }));
+}
+

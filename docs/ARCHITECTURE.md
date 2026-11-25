@@ -691,13 +691,16 @@ forwards an allow-listed header set and never cookies. What is sent:
   `searchTermForStats`), order placed, quote accepted, payment sent (the
   first receipt carries the pre-VAT value in USD as revenue — the customer's
   claim, not a confirmed payment). The account page identifies the visit by
-  the user's random ID.
+  the user's random ID; opening the admin or rep area tags the visit
+  `role: staff`, so a rep building an order on the catalog can be filtered
+  out with an Umami segment.
 - Replays and heatmaps, sampled as set in Umami. Every page that shows a
   customer's own details or staff tools sits under a `ReplayBlocked` layout
   (`rr-block`), which the recorder draws as an empty box; inputs are masked
   everywhere. `/stats/api/record` runs each upload through
-  `scrubRecorderUpload` (pay links, order references, `?key=` and staff
-  addresses reduced to their shape) and the loader never starts on staff
+  `scrubRecorderUpload` (every query parameter but campaign tags dropped;
+  pay links, order references — page titles included — and staff addresses
+  reduced to their shape) and the loader never starts on staff
   pages or off www.temex.ir.
 
 A new page that shows a customer's details needs `ReplayBlocked` (a segment

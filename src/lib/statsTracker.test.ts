@@ -6,6 +6,7 @@ import {
   STATS_RECORDER_LOADER_JS,
   recorderSettings,
   scrubRecorderUpload,
+  scrubStatsString,
   searchTermForStats,
   statsForwardHeaders,
 } from "./statsTracker";
@@ -113,7 +114,7 @@ test("recordings lose pay keys and order references, wherever they appear", () =
   assert.ok(!out.includes("ORD-ABC234"));
   assert.ok(!out.includes("ORD-XYZ"));
   assert.ok(out.includes("/fa/pay/[link]"));
-  assert.ok(out.includes("key=[x]&utm_source=x"));
+  assert.ok(out.includes("/en/invoice/[order]?utm_source=x"));
 });
 
 test("heatmap clicks on staff pages are dropped; other uploads are refused", () => {
@@ -192,3 +193,37 @@ test("recordings lose staff addresses and percent-encoded keys too", () => {
   }
   assert.ok(out.includes("/fa/admin/[staff]"));
 });
+
+test("staff pages with a query string are not counted; only the staff tag passes", () => {
+  const send = beforeSend();
+  assert.equal(send("event", { url: "/fa/rep?year=2026" }), null);
+  assert.equal(send("event", { url: "https://www.temex.ir/fa/admin?x=1" }), null);
+  assert.equal(send("event", { url: "/en/rep#top" }), null);
+  const tag = send("identify", { url: "/fa/admin/orders/12", referrer: "https://www.temex.ir/fa/rep/customers/7" });
+  assert.equal(tag?.url, "/fa/[staff]");
+  assert.equal(tag?.referrer, "");
+});
+
+test("recordings keep no query string but campaign tags, and no order reference anywhere", () => {
+  const out = scrubRecorderUpload(
+    JSON.stringify({
+      type: "heatmap",
+      payload: {
+        events: [
+          { type: "click", url: "https://www.temex.ir/fa/track?ref=ORD-ABC234&email=buyer@example.com" },
+          { type: "click", url: "https://www.temex.ir/fa/search?q=09121234567&utm_source=tg" },
+          { type: "click", url: "https://www.temex.ir/en/x?next=%2Fen%2Ftrack%3Fref%3DORD-XYZ789%26email%3Da%40b.c" },
+        ],
+      },
+    }),
+  );
+  assert.ok(out);
+  for (const leaked of ["ORD-ABC234", "buyer@example.com", "09121234567", "ORD-XYZ789", "a%40b.c"]) {
+    assert.ok(!out.includes(leaked), leaked);
+  }
+  assert.ok(out.includes("/fa/search?utm_source=tg"));
+  assert.equal(scrubStatsString("Invoice ORD-ABC234 · TEMEX"), "Invoice ORD-[ref] · TEMEX");
+  assert.equal(scrubStatsString("https://www.temex.ir/fa/rep"), "https://www.temex.ir/fa/rep/[staff]");
+  assert.equal(scrubStatsString("Need help? Call us"), "Need help? Call us");
+});
+

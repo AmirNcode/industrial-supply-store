@@ -33,7 +33,9 @@ export const STATS_BEFORE_SEND = "temexStatsBeforeSend";
 /**
  * Runs in the browser before every event leaves the page.
  *
- * - Staff pages (admin, rep portal) are not counted at all.
+ * - Staff pages (admin, rep portal) are not counted. The one report let
+ *   through is the visit's "staff" tag (`tagStaffSession`), with the page
+ *   address reduced to `/fa/[staff]`.
  * - Paths that carry a key or an order reference are reduced to their shape:
  *   a pay link is a bearer key, so storing it in the stats database would
  *   hand anyone who can sign in there the ability to pay or view the order.
@@ -65,7 +67,13 @@ export const STATS_BEFORE_SEND_JS = `window.${STATS_BEFORE_SEND} = function (typ
       .replace(/\\/(en|fa)\\/account\\/orders\\/[^/]+/, "/$1/account/orders/[order]")
       .replace(/\\/(en|fa)\\/r\\/[^/]+/, "/$1/r/[code]");
   };
-  if (/^(https?:\\/\\/[^/]+)?\\/(en|fa)\\/(admin|rep)(\\/|$)/.test(payload.url || "")) return null;
+  var staff = /^(https?:\\/\\/[^/]+)?\\/(en|fa)\\/(admin|rep)(\\/|$|\\?|#)/.exec(payload.url || "");
+  if (staff) {
+    if (type !== "identify") return null;
+    payload.url = "/" + staff[2] + "/[staff]";
+    payload.referrer = "";
+    return payload;
+  }
   payload.url = typeof payload.url === "string" && payload.url ? shape(payload.url) + campaign(payload.url) : payload.url;
   payload.referrer = shape(payload.referrer);
   return payload;
@@ -141,10 +149,23 @@ const STAFF_PATH = /^(https?:\/\/[^/]+)?\/(en|fa)\/(admin|rep)(\/|$|\?|#)/;
  */
 export function scrubStatsString(s: string): string {
   return s
+    // Query strings: only campaign tags and ad click IDs are kept, as in the
+    // before-send filter. Order tracking (?ref=…&email=…), search (?q=…) and
+    // anything added later go. Percent-encoded queries inside another link
+    // go whole.
+    .replace(/\?([a-z0-9_.-]+=[^\s"'<>#\\]*)/gi, (_m, query: string) => {
+      const kept = query
+        .split("&")
+        .filter((p) => /^(utm_(source|medium|campaign|term|content)|gclid|fbclid|msclkid)=/.test(p));
+      return kept.length ? "?" + kept.join("&") : "";
+    })
+    .replace(/%3F[a-z0-9_.-]+%3D[^\s"'<>#&\\]*/gi, "")
+    // Order references anywhere, page titles included ("Invoice ORD-…").
+    .replace(/\b(ORD|RFQ)-[A-Z0-9]{4,}\b/gi, "$1-[ref]")
     .replace(/%2F(en|fa)%2F(pay|invoice|r)%2F[^%&?#"'\s\\<>]+/gi, "%2F$1%2F$2%2F[x]")
     .replace(/%2F(en|fa)%2Faccount%2Forders%2F[^%&?#"'\s\\<>]+/gi, "%2F$1%2Faccount%2Forders%2F[x]")
     .replace(/%2F(en|fa)%2F(admin|rep)%2F[^&?#"'\s\\<>]+/gi, "%2F$1%2F$2%2F[staff]")
-    .replace(/\/(en|fa)\/(admin|rep)\/[^?#"'\s\\<>]+/g, "/$1/$2/[staff]")
+    .replace(/\/(en|fa)\/(admin|rep)(\/[^?#"'\s\\<>]*)?(?=[?#"'\s\\<>]|$)/g, "/$1/$2/[staff]")
     .replace(/\/(en|fa)\/pay\/[^/?#"'\s\\<>]+/g, "/$1/pay/[link]")
     .replace(/\/(en|fa)\/invoice\/[^/?#"'\s\\<>]+/g, "/$1/invoice/[order]")
     .replace(/\/(en|fa)\/account\/orders\/[^/?#"'\s\\<>]+/g, "/$1/account/orders/[order]")
@@ -219,9 +240,8 @@ export const STATS_RECORDER_LOADER_JS = `(function () {
  * letters, digits and dashes) pass through: they are the point of the event.
  */
 export function searchTermForStats(raw: string): string {
-  return scrubStatsString(latinDigits(raw).trim().toLowerCase())
+  return scrubStatsString(latinDigits(raw).trim().toLowerCase().replace(/\b(ord|rfq)-[a-z0-9]+/g, "[order]"))
     .replace(/[^\s@]+@[^\s@]+/g, "[email]")
-    .replace(/\b(ord|rfq)-[a-z0-9]+/g, "[order]")
     // Any run of 10 or more digits, however many spaces, dashes, dots or
     // brackets sit between them, and whatever touches
     // it: phone numbers in every spelling (+98, 0098, 09…, without the 0,

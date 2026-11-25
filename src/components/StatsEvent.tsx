@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { identifyStat, trackStat, type StatsEventData, type StatsEventName } from "@/lib/statsEvents";
+import { identifyStat, tagStaffSession, trackStat, type StatsEventData, type StatsEventName } from "@/lib/statsEvents";
 
 /**
  * Renders nothing; reports one event when a server-rendered page shows an
@@ -26,3 +26,12 @@ export function StatsIdentify({ customerId }: { customerId: string }) {
   }, [customerId]);
   return null;
 }
+
+/** Renders nothing; tags the visit as staff's (see tagStaffSession). */
+export function StatsStaffTag() {
+  useEffect(() => {
+    tagStaffSession();
+  }, []);
+  return null;
+}
+
