@@ -133,6 +133,9 @@ nothing important; padding it hides the times there is.
 - **Cheap public reads are limited in memory** (`lib/memoryRateLimit.ts`, search suggestions); sign-in, checkout and uploads stay on the database limiter.
 - **A rep's wider customer search goes through `repCustomerSearchAllowed`** (per rep, per minute and per day), never a bare `consumeRateLimit`.
 - **Open review findings live in [`docs/REVIEW-2026-11.md`](docs/REVIEW-2026-11.md)** — start at "Resume here".
+- **www.temex.ir is the only site address** (`lib/siteDomains.ts` feeds the sitemaps and anything search-facing); temexpro.com and industroshop.com are Vercel 308 redirects to it.
+- **Visitor stats (Umami, `lib/statsTracker.ts`):** the tracker is a pinned copy in `public/stats/script.js` — recopy after an Umami upgrade; reports go through `app/stats/api/send` with an allow-listed header set. Never proxy `/stats` with a rewrite: it forwards visitors' cookies.
+- **Metadata routes (`sitemap.ts` etc.) prerender at build and hit the build's capped DB session pool** (`EMAXCONNSESSION` failed a deploy); serve database-backed files from a route handler with `s-maxage`.
 - **Keep this file current.** When you discover a non-obvious convention,
   gotcha, or command, propose a CLAUDE.md update at task end. Keep entries one
   line. Don't add what's obvious from code.
