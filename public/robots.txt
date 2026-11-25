@@ -13,6 +13,9 @@
 # never fetches the page to see it, so it could still list the bare URL.
 User-agent: *
 Disallow: /api/
+# Visitor statistics: the tracker script and its reports, forwarded to the
+# stats server (src/lib/statsTracker.ts). Nothing for a search engine there.
+Disallow: /stats/
 Disallow: /en/admin
 Disallow: /fa/admin
 Disallow: /en/rep

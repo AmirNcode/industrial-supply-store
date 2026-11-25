@@ -9,6 +9,13 @@ import { CartNotice } from "@/components/CartNotice";
 import { REQUEST_LIMITS } from "@/lib/requestLimits";
 import { formatInt } from "@/lib/money";
 import { Analytics } from "@vercel/analytics/next";
+import Script from "next/script";
+import {
+  STATS_BEFORE_SEND,
+  STATS_BEFORE_SEND_JS,
+  STATS_DOMAINS,
+  STATS_WEBSITE_ID,
+} from "@/lib/statsTracker";
 import { isLocale, dir, locales, getDict, type Locale } from "@/lib/i18n";
 
 /**
@@ -92,6 +99,25 @@ export default async function LocaleLayout({
             sense the docs mean. */}
         {/* Vercel serves the script; anywhere else it 404s on every page (L-14). */}
         {process.env.VERCEL ? <Analytics /> : null}
+        {/* Visitor statistics (lib/statsTracker.ts). The filter must exist
+            before the tracker runs, so it is inline and loads first; the
+            tracker reports only from www.temex.ir (`data-domains`). */}
+        {STATS_WEBSITE_ID ? (
+          <>
+            <Script id="stats-filter" strategy="afterInteractive">
+              {STATS_BEFORE_SEND_JS}
+            </Script>
+            <Script
+              src="/stats/script.js"
+              strategy="afterInteractive"
+              data-website-id={STATS_WEBSITE_ID}
+              data-domains={STATS_DOMAINS}
+              data-exclude-search="true"
+              data-exclude-hash="true"
+              data-before-send={STATS_BEFORE_SEND}
+            />
+          </>
+        ) : null}
       </body>
     </html>
   );
