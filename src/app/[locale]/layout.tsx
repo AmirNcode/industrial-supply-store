@@ -26,7 +26,12 @@ export async function generateMetadata({
   // English on the Persian pages (review R-30).
   const { locale } = await params;
   const t = getDict(isLocale(locale) ? locale : "en");
-  return { title: `${t.brand} — ${t.tagline}`, description: t.metaDescription };
+  // Catalog pages set their own title (`lib/pageMeta.ts`); the template adds
+  // the brand so it is never repeated by hand or forgotten.
+  return {
+    title: { default: `${t.brand} — ${t.tagline}`, template: `%s | ${t.brand}` },
+    description: t.metaDescription,
+  };
 }
 
 /**

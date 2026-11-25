@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { Fragment } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -22,6 +23,7 @@ import { ProductDetails } from "@/components/ProductDetails";
 import { CatalogHeadReveal } from "@/components/CatalogHeadReveal";
 import { calloutArt, paragraphs } from "@/lib/catalogCallout";
 import { isLocale, getDict, pick, type Locale } from "@/lib/i18n";
+import { familyDescription } from "@/lib/pageMeta";
 import { MOBILE_FILTER_TEXT, textFor } from "@/lib/clientText";
 import {
   formatInt,
@@ -52,6 +54,23 @@ import {
 import { RATE_LIMITS, consumeRateLimit } from "@/lib/rateLimit";
 import { boundedString } from "@/lib/requestLimits";
 import { displayPackQty, type SoldBy } from "@/lib/soldBy";
+
+/** The family's own name and line in search results, not the site's (lib/pageMeta.ts). */
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ locale: string; slug: string }>;
+}): Promise<Metadata> {
+  const { locale, slug } = await params;
+  if (!isLocale(locale)) return {};
+  const family = await getFamilyBySlug(slug);
+  if (!family) return {};
+  const t = getDict(locale);
+  return {
+    title: pick(family, "name", locale),
+    description: familyDescription(t.metaFamily, pick(family, "desc", locale), formatInt(family.productCount, locale)),
+  };
+}
 
 /**
  * A bounded family table with an explicit whole-document escape hatch.

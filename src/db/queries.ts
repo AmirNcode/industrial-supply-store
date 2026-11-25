@@ -156,9 +156,10 @@ export const getTopCategories = cache(async (): Promise<CategoryRow[]> => {
 
 /**
  * The one category read that also carries the description and its diagram.
- * Every other category query stays lean — see `CategoryDetailRow`.
+ * Every other category query stays lean — see `CategoryDetailRow`. Cached per
+ * request: the page and its search-result title both read it.
  */
-export async function getCategoryByPath(path: string): Promise<CategoryDetailRow | null> {
+export const getCategoryByPath = cache(async (path: string): Promise<CategoryDetailRow | null> => {
   const rows = await sql<CategoryDetailRow[]>`
     SELECT ${CATEGORY_COLS},
            c.about_en AS "aboutEn", c.about_fa AS "aboutFa",
@@ -168,7 +169,7 @@ export async function getCategoryByPath(path: string): Promise<CategoryDetailRow
     LIMIT 1
   `;
   return rows[0] ?? null;
-}
+});
 
 export async function getChildren(parentId: number): Promise<CategoryRow[]> {
   return sql<CategoryRow[]>`
@@ -277,7 +278,12 @@ export async function getSitemapCatalog(): Promise<{ categoryPaths: string[]; fa
   return { categoryPaths: categories.map((r) => r.path), familySlugs: families.map((r) => r.slug) };
 }
 
-export async function getFamilyBySlug(slug: string): Promise<FamilyDetailRow | null> {
+/**
+ * Cached per request: the page and its search-result title both read it, and
+ * family pages are rendered per request, so a second read would double the
+ * busiest query on the site.
+ */
+export const getFamilyBySlug = cache(async (slug: string): Promise<FamilyDetailRow | null> => {
   const rows = await sql<FamilyDetailRow[]>`
     SELECT ${FAMILY_COLS}, c.path AS "categoryPath"
     FROM product_families f
@@ -286,7 +292,7 @@ export async function getFamilyBySlug(slug: string): Promise<FamilyDetailRow | n
     LIMIT 1
   `;
   return rows[0] ?? null;
-}
+});
 
 export async function getSpecDefs(familyId: number): Promise<SpecDefRow[]> {
   return sql<SpecDefRow[]>`

@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
@@ -12,6 +13,7 @@ import { CatalogImage } from "@/components/CatalogImage";
 import { isLocale, getDict, pick, type Locale } from "@/lib/i18n";
 import { categorySpine } from "@/lib/categoryColor";
 import { formatInt } from "@/lib/money";
+import { clampDescription, fillMeta } from "@/lib/pageMeta";
 import { CategoryHeader } from "./CategoryHeader";
 
 export const revalidate = 3600;
@@ -38,6 +40,29 @@ export const revalidate = 3600;
  */
 export async function generateStaticParams() {
   return [];
+}
+
+/**
+ * The category's name in search results, and its own description where the
+ * catalog has one; otherwise a line built from its name and part count.
+ */
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ locale: string; slug: string[] }>;
+}): Promise<Metadata> {
+  const { locale, slug } = await params;
+  if (!isLocale(locale)) return {};
+  const category = await getCategoryByPath(slug.join("/"));
+  if (!category) return {};
+  const name = pick(category, "name", locale);
+  const about = pick(category, "about", locale);
+  return {
+    title: name,
+    description: clampDescription(
+      about || fillMeta(getDict(locale).metaCategory, { name, count: formatInt(category.productCount, locale) }),
+    ),
+  };
 }
 
 /**

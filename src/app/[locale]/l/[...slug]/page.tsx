@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
@@ -8,12 +9,31 @@ import {
 } from "@/db/queries";
 import { CategorySidebar } from "@/components/CategorySidebar";
 import { ProductCardList } from "@/components/ProductCardList";
-import { isLocale, type Locale } from "@/lib/i18n";
+import { isLocale, getDict, pick, type Locale } from "@/lib/i18n";
+import { clampDescription, fillMeta } from "@/lib/pageMeta";
 import { customerCurrencyFor, formatInt } from "@/lib/money";
 import { getFxRate, getPriceDisplayMode } from "@/lib/fx";
 import { CategoryHeader } from "../../c/[...slug]/CategoryHeader";
 
 const LIST_PAGE_SIZE = 100;
+
+/** Named apart from the category page it lists, so the two are not duplicates. */
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ locale: string; slug: string[] }>;
+}): Promise<Metadata> {
+  const { locale, slug } = await params;
+  if (!isLocale(locale)) return {};
+  const category = await getCategoryByPath(slug.join("/"));
+  if (!category) return {};
+  const t = getDict(locale);
+  const name = pick(category, "name", locale);
+  return {
+    title: fillMeta(t.metaListTitle, { name }),
+    description: clampDescription(fillMeta(t.metaCategory, { name, count: formatInt(category.productCount, locale) })),
+  };
+}
 
 /**
  * "View as: list of products" — every SKU under a category, paginated.

@@ -14,6 +14,10 @@ const en = {
   brand: "TEMEX",
   tagline: "Tools, Equipment & Materials Express",
   metaDescription: "Industrial parts catalog: fasteners, sealing, bearings, pipe fittings and more.",
+  // Search-result snippets (lib/pageMeta.ts). {count} is the number of parts.
+  metaFamily: "{desc}. {count} sizes and models with full specs and prices — order online from TEMEX.",
+  metaCategory: "{name}: {count} industrial parts with full specs and prices — order online from TEMEX.",
+  metaListTitle: "All {name} products",
   brandPromise:
     "Quality tools, equipment and materials, delivered fast — with a money-back guarantee on everything we sell.",
   browseCatalog: "BROWSE CATALOG",
@@ -1012,6 +1016,9 @@ const fa: typeof en = {
   brand: "TEMEX",
   tagline: "ابزار، تجهیزات و مواد اکسپرس",
   metaDescription: "کاتالوگ قطعات صنعتی: پیچ و مهره، آب‌بندی، بلبرینگ، اتصالات لوله و موارد دیگر.",
+  metaFamily: "{desc}. {count} سایز و مدل با مشخصات فنی کامل و قیمت — سفارش آنلاین از TEMEX.",
+  metaCategory: "{name}: {count} قطعه صنعتی با مشخصات فنی کامل و قیمت — سفارش آنلاین از TEMEX.",
+  metaListTitle: "همه محصولات {name}",
   brandPromise:
     "ابزار، تجهیزات و مواد باکیفیت، با ارسال سریع — و ضمانت بازگشت وجه روی تمام کالاها.",
   browseCatalog: "مرور کاتالوگ",
