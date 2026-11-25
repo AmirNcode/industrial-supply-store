@@ -3,6 +3,9 @@ import { test } from "node:test";
 import {
   STATS_BEFORE_SEND,
   STATS_BEFORE_SEND_JS,
+  STATS_RECORDER_LOADER_JS,
+  recorderSettings,
+  scrubRecorderUpload,
   statsForwardHeaders,
 } from "./statsTracker";
 
@@ -87,4 +90,59 @@ test("only the allow-listed headers reach the stats server, never cookies", () =
   // The visitor's address comes from the trusted header, not the one the browser sent.
   assert.equal(out.get("x-forwarded-for"), "203.0.113.7");
   assert.equal(statsForwardHeaders(new Headers(), "unknown").get("x-forwarded-for"), null);
+});
+
+test("recordings lose pay keys and order references, wherever they appear", () => {
+  const body = JSON.stringify({
+    type: "record",
+    payload: {
+      website: "w",
+      timestamp: 1,
+      events: [
+        { type: 4, data: { href: "https://www.temex.ir/fa/pay/9f8e7d6c5b4a?placed=1" } },
+        { type: 2, data: { node: { attributes: { href: "/en/invoice/ORD-ABC234?key=secret&utm_source=x" } } } },
+        { type: "umami:rrweb-event-fragment", data: { value: '{"href":"/fa/account/orders/ORD-XYZ"}' } },
+      ],
+    },
+  });
+  const out = scrubRecorderUpload(body);
+  assert.ok(out);
+  assert.ok(!out.includes("9f8e7d6c5b4a"));
+  assert.ok(!out.includes("secret"));
+  assert.ok(!out.includes("ORD-ABC234"));
+  assert.ok(!out.includes("ORD-XYZ"));
+  assert.ok(out.includes("/fa/pay/[link]"));
+  assert.ok(out.includes("key=[x]&utm_source=x"));
+});
+
+test("heatmap clicks on staff pages are dropped; other uploads are refused", () => {
+  const heatmap = (urls: string[]) =>
+    JSON.stringify({ type: "heatmap", payload: { website: "w", events: urls.map((url) => ({ type: "click", url })) } });
+  assert.equal(scrubRecorderUpload(heatmap(["https://www.temex.ir/fa/admin/orders"])), null);
+  const kept = scrubRecorderUpload(heatmap(["https://www.temex.ir/en/rep", "https://www.temex.ir/fa/f/gate-valve"]));
+  assert.equal(JSON.parse(kept ?? "{}").payload.events.length, 1);
+  assert.equal(scrubRecorderUpload(JSON.stringify({ type: "event", payload: { events: [] } })), null);
+  assert.equal(scrubRecorderUpload("not json"), null);
+});
+
+test("recorder settings keep known fields and never mask less than form fields", () => {
+  assert.deepEqual(recorderSettings({ enabled: true, maskLevel: "none", secret: "x" }), { enabled: true, maskLevel: "moderate" });
+  assert.equal(recorderSettings({ maskLevel: "strict" }).maskLevel, "strict");
+  assert.deepEqual(recorderSettings(null), { enabled: false });
+});
+
+test("the recorder loader runs only on the live site and never on staff pages", () => {
+  const run = (hostname: string, pathname: string) => {
+    const added: unknown[] = [];
+    const document = {
+      createElement: () => ({ setAttribute() {} }),
+      head: { appendChild: (s: unknown) => added.push(s) },
+    };
+    new Function("location", "document", STATS_RECORDER_LOADER_JS)({ hostname, pathname }, document);
+    return added.length;
+  };
+  assert.equal(run("www.temex.ir", "/fa/f/gate-valve"), 1);
+  assert.equal(run("www.temex.ir", "/fa/admin"), 0);
+  assert.equal(run("www.temex.ir", "/en/rep/customers"), 0);
+  assert.equal(run("preview.vercel.app", "/fa"), 0);
 });

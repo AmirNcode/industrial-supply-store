@@ -14,6 +14,7 @@ import {
   STATS_BEFORE_SEND,
   STATS_BEFORE_SEND_JS,
   STATS_DOMAINS,
+  STATS_RECORDER_LOADER_JS,
   STATS_WEBSITE_ID,
 } from "@/lib/statsTracker";
 import { isLocale, dir, locales, getDict, type Locale } from "@/lib/i18n";
@@ -116,6 +117,11 @@ export default async function LocaleLayout({
               data-performance="true"
               data-before-send={STATS_BEFORE_SEND}
             />
+            {/* Session replays and heatmaps; starts only after the tracker,
+                whose visit it joins, and never on staff pages. */}
+            <Script id="stats-recorder" strategy="lazyOnload">
+              {STATS_RECORDER_LOADER_JS}
+            </Script>
           </>
         ) : null}
       </body>

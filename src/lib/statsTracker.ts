@@ -92,3 +92,106 @@ export function statsForwardHeaders(incoming: Pick<Headers, "get">, visitorAddre
   if (visitorAddress && visitorAddress !== "unknown") out.set("x-forwarded-for", visitorAddress);
   return out;
 }
+
+/**
+ * Session replays and heatmaps (Umami's recorder, `public/stats/recorder.js`).
+ *
+ * The recorder has no before-send hook, so what `temexStatsBeforeSend` does
+ * for page views happens here, on the way through `app/stats/api/record`:
+ *
+ * - Private pages (pay links, invoices, the customer account, checkout,
+ *   order tracking, admin, rep portal) are wrapped in `rr-block`
+ *   (`ReplayBlocked`), which the recorder draws as an empty box: their
+ *   contents never leave the browser. Form fields everywhere are masked by
+ *   the recorder itself.
+ * - Addresses inside a recording still name those pages, and a pay link is
+ *   a bearer key, so every string in a recording is passed through
+ *   `scrubStatsString` before it reaches the stats server.
+ * - Heatmap clicks on staff pages are dropped; the loader in the layout
+ *   does not start the recorder on them in the first place.
+ */
+
+/** One recorder upload is at most ~500 KB of rrweb events (a page snapshot). */
+export const STATS_MAX_RECORD_BYTES = 600 * 1024;
+
+/** The recorder's settings fields; anything else in the answer is dropped. */
+export const STATS_RECORDER_FIELDS = [
+  "enabled",
+  "replayEnabled",
+  "heatmapEnabled",
+  "sampleRate",
+  "heatmapSampleRate",
+  "maskLevel",
+  "maxDuration",
+  "blockSelector",
+] as const;
+
+const STAFF_PATH = /^(https?:\/\/[^/]+)?\/(en|fa)\/(admin|rep)(\/|$|\?|#)/;
+
+/** Reduces keys and order references inside any string to their shape. */
+export function scrubStatsString(s: string): string {
+  return s
+    .replace(/\/(en|fa)\/pay\/[^/?#"'\s\\<>]+/g, "/$1/pay/[link]")
+    .replace(/\/(en|fa)\/invoice\/[^/?#"'\s\\<>]+/g, "/$1/invoice/[order]")
+    .replace(/\/(en|fa)\/account\/orders\/[^/?#"'\s\\<>]+/g, "/$1/account/orders/[order]")
+    .replace(/\/(en|fa)\/r\/[^/?#"'\s\\<>]+/g, "/$1/r/[code]")
+    .replace(/([?&]|&amp;)key=[^&#"'\s\\<>]*/g, "$1key=[x]");
+}
+
+function scrubDeep(value: unknown): unknown {
+  if (typeof value === "string") return scrubStatsString(value);
+  if (Array.isArray(value)) return value.map(scrubDeep);
+  if (value && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value)) out[k] = scrubDeep(v);
+    return out;
+  }
+  return value;
+}
+
+/**
+ * The recorder upload as it may reach the stats server, or null to drop it.
+ * Only the two upload types the recorder sends are accepted.
+ */
+export function scrubRecorderUpload(body: string): string | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== "object") return null;
+  const { type, payload } = parsed as { type?: unknown; payload?: { events?: unknown } };
+  if ((type !== "record" && type !== "heatmap") || !payload || !Array.isArray(payload.events)) return null;
+  let events = payload.events;
+  if (type === "heatmap") {
+    events = events.filter(
+      (e) => !(e && typeof e === "object" && typeof (e as { url?: unknown }).url === "string" && STAFF_PATH.test((e as { url: string }).url)),
+    );
+    if (events.length === 0) return null;
+  }
+  return JSON.stringify(scrubDeep({ type, payload: { ...payload, events } }));
+}
+
+/** Keeps the known settings and never lets masking drop below form fields. */
+export function recorderSettings(upstream: unknown): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (!upstream || typeof upstream !== "object") return { enabled: false };
+  for (const key of STATS_RECORDER_FIELDS) {
+    const v = (upstream as Record<string, unknown>)[key];
+    if (v !== undefined) out[key] = v;
+  }
+  out.maskLevel = out.maskLevel === "strict" ? "strict" : "moderate";
+  return out;
+}
+
+/** Started by the layout instead of a plain script tag, so staff pages never record. */
+export const STATS_RECORDER_LOADER_JS = `(function () {
+  if (${JSON.stringify(STATS_DOMAINS.split(","))}.indexOf(location.hostname) < 0) return;
+  if (${STAFF_PATH}.test(location.pathname)) return;
+  var s = document.createElement("script");
+  s.src = "/stats/recorder.js";
+  s.defer = true;
+  s.setAttribute("data-website-id", ${JSON.stringify(STATS_WEBSITE_ID)});
+  document.head.appendChild(s);
+})();`;
