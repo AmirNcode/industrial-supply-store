@@ -150,7 +150,9 @@ test("the recorder loader runs only on the live site and never on staff pages", 
 
 test("search terms keep part numbers but lose personal details and keys", () => {
   assert.equal(searchTermForStats("  6205-2RS Bearing "), "6205-2rs bearing");
-  assert.equal(searchTermForStats("abc1234567890"), "abc1234567890");
+  assert.equal(searchTermForStats("abc1234567890"), "abc[number]");
+  assert.equal(searchTermForStats("tel09121234567"), "tel[number]");
+  assert.equal(searchTermForStats("skf 6205-2rsh/c3 x123456789"), "skf 6205-2rsh/c3 x123456789");
   assert.equal(searchTermForStats("6205 2rs 12"), "6205 2rs 12");
   assert.equal(searchTermForStats("1234567890"), "[number]");
   assert.equal(searchTermForStats("00989121234567"), "[number]");
