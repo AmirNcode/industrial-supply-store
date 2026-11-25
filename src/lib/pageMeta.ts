@@ -26,7 +26,12 @@ export function fillMeta(template: string, values: Record<string, string>): stri
   return template.replace(/\{(\w+)\}/g, (hole, key: string) => values[key] ?? hole);
 }
 
-/** A family's one-line description, without the full stop the template adds. */
-export function familyDescription(template: string, desc: string, count: string): string {
-  return clampDescription(fillMeta(template, { desc: desc.trim().replace(/[.。]+$/, ""), count }));
+/**
+ * A family's one-line description, without the full stop the template adds.
+ * Families imported without a short description fall back to their name;
+ * the live catalog has some, and they read ". 10 sizes…" otherwise.
+ */
+export function familyDescription(template: string, desc: string, name: string, count: string): string {
+  const lead = (desc.trim() || name.trim()).replace(/[.。]+$/, "");
+  return clampDescription(fillMeta(template, { desc: lead, count }));
 }

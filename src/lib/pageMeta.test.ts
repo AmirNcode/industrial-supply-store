@@ -19,7 +19,14 @@ test("dictionary holes are filled and unknown ones left visible", () => {
 
 test("a family description does not end up with two full stops", () => {
   assert.equal(
-    familyDescription("{desc}. {count} models.", "Bourdon-tube dial gauges.", "40"),
+    familyDescription("{desc}. {count} models.", "Bourdon-tube dial gauges.", "Pressure Gauges", "40"),
     "Bourdon-tube dial gauges. 40 models.",
+  );
+});
+
+test("a family with no short description is described by its name", () => {
+  assert.equal(
+    familyDescription("{desc}. {count} models.", "  ", "API 6A Gate Valve", "10"),
+    "API 6A Gate Valve. 10 models.",
   );
 });

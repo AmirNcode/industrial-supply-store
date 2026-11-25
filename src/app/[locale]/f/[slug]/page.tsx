@@ -68,7 +68,14 @@ export async function generateMetadata({
   const t = getDict(locale);
   return {
     title: pick(family, "name", locale),
-    description: familyDescription(t.metaFamily, pick(family, "desc", locale), formatInt(family.productCount, locale)),
+    description: familyDescription(
+      t.metaFamily,
+      // Not `pick`: it falls back to English, and an English line under a
+      // Persian title is worse than the name.
+      locale === "fa" ? family.descFa : family.descEn,
+      pick(family, "name", locale),
+      formatInt(family.productCount, locale),
+    ),
   };
 }
 
