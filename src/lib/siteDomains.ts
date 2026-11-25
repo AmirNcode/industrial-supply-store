@@ -61,3 +61,23 @@ export function sitemapEntries(locale: Locale, catalog: SitemapCatalog): Sitemap
     return { url: localeUrl(locale, path), alternates: { languages } };
   });
 }
+
+const xmlEscape = (s: string) =>
+  s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+/** The sitemap document for `sitemapEntries`, with each page's language links. */
+export function sitemapXml(entries: SitemapEntry[]): string {
+  const urls = entries.map((e) => {
+    const links = Object.entries(e.alternates.languages)
+      .map(([lang, href]) => `<xhtml:link rel="alternate" hreflang="${lang}" href="${xmlEscape(href)}" />`)
+      .join("\n");
+    return `<url>\n<loc>${xmlEscape(e.url)}</loc>\n${links}\n</url>`;
+  });
+  return [
+    `<?xml version="1.0" encoding="UTF-8"?>`,
+    `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">`,
+    ...urls,
+    `</urlset>`,
+    "",
+  ].join("\n");
+}
