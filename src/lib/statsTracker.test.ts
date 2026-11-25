@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { STATS_BEFORE_SEND, STATS_BEFORE_SEND_JS } from "./statsTracker";
+import { STATS_BEFORE_SEND, STATS_BEFORE_SEND_JS, statsForwardHeaders } from "./statsTracker";
 
 type Payload = { url?: string; referrer?: string; title?: string };
 
@@ -34,4 +34,25 @@ test("keys and order references are reduced to the page's shape", () => {
     send("event", { url: "/fa/f/x", referrer: "https://www.temex.ir/fa/pay/abc?x=1" })?.referrer,
     "https://www.temex.ir/fa/pay/[link]",
   );
+});
+
+test("only the allow-listed headers reach the stats server, never cookies", () => {
+  const out = statsForwardHeaders(
+    new Headers({
+      cookie: "isupply_session=secret; admin=secret",
+      authorization: "Bearer secret",
+      "user-agent": "Mozilla/5.0",
+      "content-type": "application/json",
+      "x-forwarded-for": "6.6.6.6",
+      "x-umami-cache": "token",
+    }),
+    "203.0.113.7",
+  );
+  assert.equal(out.get("cookie"), null);
+  assert.equal(out.get("authorization"), null);
+  assert.equal(out.get("user-agent"), "Mozilla/5.0");
+  assert.equal(out.get("x-umami-cache"), "token");
+  // The visitor's address comes from the trusted header, not the one the browser sent.
+  assert.equal(out.get("x-forwarded-for"), "203.0.113.7");
+  assert.equal(statsForwardHeaders(new Headers(), "unknown").get("x-forwarded-for"), null);
 });

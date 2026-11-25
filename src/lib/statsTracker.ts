@@ -3,11 +3,16 @@
  * (https://stats.datafort.ca), chosen 2026-11-25 over US analytics services,
  * which may refuse or forbid Iranian visitors under sanctions.
  *
- * Visitors' browsers never talk to that server. The tracker loads from
- * `/stats/script.js` and reports to `/stats/api/send` on this site, and
- * `next.config.ts` forwards both. That keeps ad blockers and Iranian network
- * filtering out of the picture, and keeps the home server's address out of
- * the page.
+ * Visitors' browsers never talk to that server, which keeps ad blockers and
+ * Iranian network filtering out of the picture and the home server's address
+ * out of the page:
+ *
+ * - The tracker is a copy in `public/stats/script.js`, not loaded from the
+ *   stats server. It runs on every page, admin included; loaded from a laptop
+ *   at home, anyone who took over that laptop could run code in the admin.
+ *   Upgrading Umami does not change it — copy the new `script.js` over it.
+ * - Reports go to `/stats/api/send` here (`app/stats/api/send/route.ts`),
+ *   which passes on the body and the headers below — never cookies.
  */
 export const STATS_ORIGIN = "https://stats.datafort.ca";
 
@@ -51,3 +56,27 @@ export const STATS_BEFORE_SEND_JS = `window.${STATS_BEFORE_SEND} = function (typ
   payload.referrer = shape(payload.referrer);
   return payload;
 };`;
+
+/** A page-view report is a few hundred bytes; anything near this is not one. */
+export const STATS_MAX_BODY_BYTES = 16 * 1024;
+
+/**
+ * The only request headers passed to the stats server. Cookie and
+ * Authorization are absent on purpose: the site's sign-in cookies are sent
+ * with every same-site request, the report included.
+ *
+ * `x-forwarded-for` carries the visitor's own address, read from the
+ * platform's trusted header — the stats server places visitors by its first
+ * entry (CLIENT_IP_HEADER=x-forwarded-for there).
+ */
+const STATS_FORWARDED = ["content-type", "user-agent", "accept-language", "x-umami-cache"] as const;
+
+export function statsForwardHeaders(incoming: Pick<Headers, "get">, visitorAddress: string): Headers {
+  const out = new Headers();
+  for (const name of STATS_FORWARDED) {
+    const value = incoming.get(name);
+    if (value) out.set(name, value);
+  }
+  if (visitorAddress && visitorAddress !== "unknown") out.set("x-forwarded-for", visitorAddress);
+  return out;
+}

@@ -1,5 +1,4 @@
 import type { NextConfig } from "next";
-import { STATS_ORIGIN } from "./src/lib/statsTracker";
 
 /**
  * Our Storage host — exactly the project the build is given, never a
@@ -139,18 +138,6 @@ const nextConfig: NextConfig = {
         source: "/:locale/invoice/:path*",
         headers: [...protectedPage, { key: "Referrer-Policy", value: "no-referrer" }],
       },
-    ];
-  },
-  /**
-   * Visitor statistics (`src/lib/statsTracker.ts`): the tracker and its
-   * reports go through this site to the Umami server, so a visitor's browser
-   * only ever talks to www.temex.ir. Only these two paths are forwarded —
-   * Umami's sign-in and dashboard stay reachable at its own address alone.
-   */
-  async rewrites() {
-    return [
-      { source: "/stats/script.js", destination: `${STATS_ORIGIN}/script.js` },
-      { source: "/stats/api/send", destination: `${STATS_ORIGIN}/api/send` },
     ];
   },
   async redirects() {
