@@ -37,13 +37,36 @@ export type SitemapEntry = {
 };
 
 /**
+ * A page's address in every language. The language links are what keeps
+ * Google from treating /fa/f/x and /en/f/x as unrelated pages that happen to
+ * share a layout. `x-default` (the page for a searcher whose language is
+ * neither) is the Persian one, since the buyers are in Iran.
+ */
+function languageLinks(path: string): Record<string, string> {
+  const languages: Record<string, string> = {};
+  for (const l of locales) languages[l] = localeUrl(l, path);
+  languages["x-default"] = localeUrl("fa", path);
+  return languages;
+}
+
+/**
+ * The `alternates` for a catalog page's metadata: its canonical address and
+ * its language twins, the same ones its sitemap entry carries.
+ *
+ * Without one, Search Console reported ~1,600 pages as "duplicate without
+ * user-selected canonical". Pass the bare path, never the request's query
+ * string. It settles the duplicates Google can still fetch (any unbarred
+ * query, e.g. `?utm_…` on a category). It does nothing for the `?f_…`/`?pn=…`
+ * family views — robots.txt bars them, so Google never reads their tag and
+ * drops them in its own time — nor for temexpro.com, which is a redirect.
+ */
+export function pageAlternates(locale: Locale, path: string) {
+  return { canonical: localeUrl(locale, path), languages: languageLinks(path) };
+}
+
+/**
  * One language's sitemap: the home page, every category and every family,
  * each pointing at its twin in the other language.
- *
- * The language links are what keeps Google from treating /fa/f/x and /en/f/x
- * as unrelated pages that happen to share a layout. `x-default` (the page for
- * a searcher whose language is neither) is the Persian one, since the buyers
- * are in Iran.
  *
  * Paths are the bare pages only: filtered family views and list pages past the
  * first are barred in robots.txt, and listing them here would contradict it.
@@ -54,12 +77,7 @@ export function sitemapEntries(locale: Locale, catalog: SitemapCatalog): Sitemap
     ...catalog.categoryPaths.map((p) => `c/${p}`),
     ...catalog.familySlugs.map((s) => `f/${s}`),
   ];
-  return paths.map((path) => {
-    const languages: Record<string, string> = {};
-    for (const l of locales) languages[l] = localeUrl(l, path);
-    languages["x-default"] = localeUrl("fa", path);
-    return { url: localeUrl(locale, path), alternates: { languages } };
-  });
+  return paths.map((path) => ({ url: localeUrl(locale, path), alternates: { languages: languageLinks(path) } }));
 }
 
 const xmlEscape = (s: string) =>

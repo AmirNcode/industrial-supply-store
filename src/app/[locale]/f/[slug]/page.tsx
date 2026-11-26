@@ -24,6 +24,7 @@ import { CatalogHeadReveal } from "@/components/CatalogHeadReveal";
 import { calloutArt, paragraphs } from "@/lib/catalogCallout";
 import { isLocale, getDict, pick, type Locale } from "@/lib/i18n";
 import { familyDescription } from "@/lib/pageMeta";
+import { pageAlternates } from "@/lib/siteDomains";
 import { MOBILE_FILTER_TEXT, textFor } from "@/lib/clientText";
 import {
   formatInt,
@@ -68,6 +69,8 @@ export async function generateMetadata({
   const t = getDict(locale);
   return {
     title: pick(family, "name", locale),
+    // The bare family page, whatever filter or part the request carries.
+    alternates: pageAlternates(locale, `f/${slug}`),
     description: familyDescription(
       t.metaFamily,
       // Not `pick`: it falls back to English, and an English line under a

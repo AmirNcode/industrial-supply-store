@@ -13,6 +13,7 @@ import { CatalogImage } from "@/components/CatalogImage";
 import { isLocale, getDict, pick, type Locale } from "@/lib/i18n";
 import { categorySpine } from "@/lib/categoryColor";
 import { formatInt } from "@/lib/money";
+import { pageAlternates } from "@/lib/siteDomains";
 import { clampDescription, fillMeta } from "@/lib/pageMeta";
 import { CategoryHeader } from "./CategoryHeader";
 
@@ -59,6 +60,7 @@ export async function generateMetadata({
   const about = pick(category, "about", locale);
   return {
     title: name,
+    alternates: pageAlternates(locale, `c/${slug.join("/")}`),
     description: clampDescription(
       about || fillMeta(getDict(locale).metaCategory, { name, count: formatInt(category.productCount, locale) }),
     ),

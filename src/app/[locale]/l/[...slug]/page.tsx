@@ -10,6 +10,7 @@ import {
 import { CategorySidebar } from "@/components/CategorySidebar";
 import { ProductCardList } from "@/components/ProductCardList";
 import { isLocale, getDict, pick, type Locale } from "@/lib/i18n";
+import { pageAlternates } from "@/lib/siteDomains";
 import { clampDescription, fillMeta } from "@/lib/pageMeta";
 import { customerCurrencyFor, formatInt } from "@/lib/money";
 import { getFxRate, getPriceDisplayMode } from "@/lib/fx";
@@ -31,6 +32,8 @@ export async function generateMetadata({
   const name = pick(category, "name", locale);
   return {
     title: fillMeta(t.metaListTitle, { name }),
+    // The first page; later pages (`?page=N`) are barred in robots.txt.
+    alternates: pageAlternates(locale, `l/${slug.join("/")}`),
     description: clampDescription(fillMeta(t.metaCategory, { name, count: formatInt(category.productCount, locale) })),
   };
 }

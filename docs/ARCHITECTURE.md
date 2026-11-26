@@ -48,6 +48,16 @@ connects to either hosted Supabase project.
 | `/api/payment-proofs/[id]` | signed-in staff, the order's rep, its signed-in customer | one receipt, streamed from the private bucket; images open in place, a PDF is always a download; 404 to everyone else, including pay-link holders, DEMO_MODE visitors and a rep still on a temporary password |
 | `/api/cron/fx-rate` | scheduler | evening exchange-rate reading, then the deadline sweep and the tidy-up (`db/pruneQueries.ts`: carts empty for 30 days, email-log rows older than a year); `Authorization: Bearer $CRON_SECRET` |
 
+**Search engines see one address per catalog page.** Home, `/c/`, `/f/` and
+`/l/` set `alternates` from `pageAlternates` (`lib/siteDomains.ts`, the same
+source as the sitemaps): a canonical on www.temex.ir for the bare path — never
+the request's query string — plus the other language and `x-default` (Persian).
+It sits in each page, not the locale layout, because a layout's `alternates`
+reach every page under it. Filtered and paged views stay barred in
+`public/robots.txt`, so Google never reads their canonical: old `?pn=`/`?f_…`
+URLs leave Search Console only as Google drops them, and unbarring them to
+speed that up would bring back the per-request database reads.
+
 `(panel)` is a route group — it does not appear in URLs. Its `layout.tsx`
 checks the session too, which is why `/admin/login` sits **outside** it: a
 check wrapping the login page would redirect the login page to itself.

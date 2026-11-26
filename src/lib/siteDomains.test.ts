@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { localeUrl, sitemapEntries, sitemapXml } from "./siteDomains";
+import { localeUrl, pageAlternates, sitemapEntries, sitemapXml } from "./siteDomains";
 
 test("both languages live on temex.ir", () => {
   assert.equal(localeUrl("fa"), "https://www.temex.ir/fa");
@@ -40,4 +40,16 @@ test("the sitemap document carries each page and its language links", () => {
   assert.match(xml, /<xhtml:link rel="alternate" hreflang="en" href="https:\/\/www\.temex\.ir\/en\/f\/a&amp;b" \/>/);
   assert.equal(xml.match(/<url>/g)?.length, 2);
   assert.ok(xml.trimEnd().endsWith("</urlset>"));
+});
+
+test("a page's canonical is its bare address, linked to its twins", () => {
+  assert.deepEqual(pageAlternates("en", "f/gate-valve"), {
+    canonical: "https://www.temex.ir/en/f/gate-valve",
+    languages: {
+      fa: "https://www.temex.ir/fa/f/gate-valve",
+      en: "https://www.temex.ir/en/f/gate-valve",
+      "x-default": "https://www.temex.ir/fa/f/gate-valve",
+    },
+  });
+  assert.equal(pageAlternates("fa", "").canonical, "https://www.temex.ir/fa");
 });

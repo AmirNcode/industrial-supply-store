@@ -135,6 +135,7 @@ nothing important; padding it hides the times there is.
 - **Open review findings live in [`docs/REVIEW-2026-11.md`](docs/REVIEW-2026-11.md)** — start at "Resume here".
 - **www.temex.ir is the only site address** (`lib/siteDomains.ts` feeds the sitemaps and anything search-facing); temexpro.com and industroshop.com are Vercel 308 redirects to it.
 - **Visitor stats (Umami, `lib/statsTracker.ts`, ARCHITECTURE "What reaches the browser"):** tracker and replay recorder are pinned copies in `public/stats/` (lint-ignored) — recopy both after an Umami upgrade; everything goes through `app/stats/api/*` with an allow-listed header set. Never proxy `/stats` with a rewrite: it forwards visitors' cookies. **A new page showing a customer's details needs `ReplayBlocked`** (segment layout) or it is recorded in session replays; a new keyed address needs a rule in `scrubStatsString` and the before-send filter. Events and replays only fire on www.temex.ir, so they can be confirmed only after deploy.
+- **A new public catalog page needs `alternates: pageAlternates(locale, barePath)`** in its own `generateMetadata` (never the locale layout, never with the query string), or Search Console counts it as a duplicate.
 - **Metadata routes (`sitemap.ts` etc.) prerender at build and hit the build's capped DB session pool** (`EMAXCONNSESSION` failed a deploy); serve database-backed files from a route handler with `s-maxage`.
 - **Keep this file current.** When you discover a non-obvious convention,
   gotcha, or command, propose a CLAUDE.md update at task end. Keep entries one
