@@ -54,8 +54,9 @@ source as the sitemaps): a canonical on www.temex.ir for the bare path — never
 the request's query string — plus the other language and `x-default` (Persian).
 It sits in each page, not the locale layout, because a layout's `alternates`
 reach every page under it. Filtered and paged views stay barred in
-`public/robots.txt`; the canonical covers copies Google already holds (the
-former temexpro.com twin, old `?pn=`/`?f_…` links).
+`public/robots.txt`, so Google never reads their canonical: old `?pn=`/`?f_…`
+URLs leave Search Console only as Google drops them, and unbarring them to
+speed that up would bring back the per-request database reads.
 
 `(panel)` is a route group — it does not appear in URLs. Its `layout.tsx`
 checks the session too, which is why `/admin/login` sits **outside** it: a

@@ -53,11 +53,12 @@ function languageLinks(path: string): Record<string, string> {
  * The `alternates` for a catalog page's metadata: its canonical address and
  * its language twins, the same ones its sitemap entry carries.
  *
- * Without a canonical, Google picked one itself among every address that
- * served the page — temexpro.com and temex.ir both did until 2026-11-24, plus
- * each `?f_…`/`?pn=…` variant — and Search Console reported ~1,600 pages as
- * "duplicate without user-selected canonical". Pass the bare path, never the
- * request's query string: the filtered views are the duplicates.
+ * Without one, Search Console reported ~1,600 pages as "duplicate without
+ * user-selected canonical". Pass the bare path, never the request's query
+ * string. It settles the duplicates Google can still fetch (any unbarred
+ * query, e.g. `?utm_…` on a category). It does nothing for the `?f_…`/`?pn=…`
+ * family views — robots.txt bars them, so Google never reads their tag and
+ * drops them in its own time — nor for temexpro.com, which is a redirect.
  */
 export function pageAlternates(locale: Locale, path: string) {
   return { canonical: localeUrl(locale, path), languages: languageLinks(path) };
