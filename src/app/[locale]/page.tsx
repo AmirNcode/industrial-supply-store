@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getTopCategories, getFeaturedFamilies, type FamilyRow } from "@/db/queries";
@@ -6,6 +7,7 @@ import { CatalogImage } from "@/components/CatalogImage";
 import { isLocale, getDict, pick, type Locale } from "@/lib/i18n";
 import { categorySpine } from "@/lib/categoryColor";
 import { formatInt } from "@/lib/money";
+import { pageAlternates } from "@/lib/siteDomains";
 
 /** Categories change only when the catalog is reseeded, so cache the page. */
 export const revalidate = 3600;
@@ -19,6 +21,20 @@ export const revalidate = 3600;
  * actually sold, and "View all" carries anyone who wants the full tree.
  */
 const TILES_PER_CATEGORY = 5;
+
+/**
+ * Here and not in the locale layout: a layout's `alternates` reach every page
+ * under it, so each one without its own would claim to be the home page.
+ */
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}): Promise<Metadata> {
+  const { locale } = await params;
+  if (!isLocale(locale)) return {};
+  return { alternates: pageAlternates(locale, "") };
+}
 
 export default async function HomePage({
   params,
